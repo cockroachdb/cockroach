@@ -611,7 +611,7 @@ func columnBackfillInTxn(
 	// All the FKs here are guaranteed to be created in the same transaction
 	// or else this table would be created in the ADD state.
 	for k := range fkTables {
-		if !tc.isCreatedTable(k) {
+		if t := tc.getUncommittedTableByID(k); t == nil || !t.IsNewTable() {
 			return errors.Errorf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
