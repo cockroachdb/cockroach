@@ -1170,7 +1170,7 @@ ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
-	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
+	$(NODE_RUN) -C pkg/ui $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
