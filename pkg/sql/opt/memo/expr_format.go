@@ -154,12 +154,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *LookupJoinExpr:
 		fmt.Fprintf(f.Buffer, "%v (lookup", t.JoinType)
-		formatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), physical)
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
-		formatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), physical)
 
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
@@ -452,7 +452,7 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	if private != nil {
 		f.Buffer.WriteRune(':')
-		formatPrivate(f, private, &props.Physical{})
+		FormatPrivate(f, private, &props.Physical{})
 	}
 }
 
@@ -536,7 +536,8 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 	f.Buffer.WriteByte(')')
 }
 
-func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical) {
+// FormatPrivate outputs a description of the private to f.Buffer.
+func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical) {
 	if private == nil {
 		return
 	}
@@ -557,7 +558,11 @@ func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
 		}
-		if _, reverse := t.CanProvideOrdering(f.Memo.Metadata(), &physProps.Ordering); reverse {
+		ok, reverse := t.CanProvideOrdering(f.Memo.Metadata(), &physProps.Ordering)
+		if !ok {
+			panic("scan cannot provide required ordering")
+		}
+		if reverse {
 			f.Buffer.WriteString(",rev")
 		}
 
