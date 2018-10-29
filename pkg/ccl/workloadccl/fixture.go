@@ -320,7 +320,11 @@ func csvServerPaths(
 			`version`:   []string{gen.Meta().Version},
 		}
 		if f, ok := gen.(workload.Flagser); ok {
-			f.Flags().VisitAll(func(f *pflag.Flag) {
+			flags := f.Flags()
+			flags.VisitAll(func(f *pflag.Flag) {
+				if flags.Meta[f.Name].RuntimeOnly {
+					return
+				}
 				params[f.Name] = append(params[f.Name], f.Value.String())
 			})
 		}
