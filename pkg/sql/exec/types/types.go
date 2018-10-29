@@ -137,6 +137,8 @@ func (t T) GoTypeName() string {
 		return "bool"
 	case Bytes:
 		return "[]byte"
+	case Decimal:
+		return "apd.Decimal"
 	case Int8:
 		return "int8"
 	case Int16:
@@ -153,20 +155,3 @@ func (t T) GoTypeName() string {
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
-
-// EqualityFunction returns the name of the non-infix equality function for a
-// given type, if it exists. For example, the type Int64 has an infix equality
-// method, ==, so it doesn't have a case for EqualityFunction. But Bytes, since
-// it's implemented with the Go type []byte, is compared with bytes.Equal, so
-// it has a definition here.
-func (t T) EqualityFunction() string {
-	switch t {
-	case Bytes:
-		return "bytes.Equal"
-	}
-	return ""
-}
-
-// Suppress unused warning - we use this function in template code, which the
-// unused checker doesn't notice.
-var _ = Unhandled.EqualityFunction

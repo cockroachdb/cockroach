@@ -26,7 +26,10 @@ package exec
 import (
 	"bytes"
 
+	"github.com/cockroachdb/apd"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
 
@@ -55,6 +58,12 @@ func NewOrderedDistinct(input Operator, distinctCols []uint32, typs []types.T) (
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
 
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
+
 // _GOTYPE is the template Go type variable for this operator. It will be
 // replaced by the Go type equivalent for each type in types.T, for example
 // int64 for types.Int64.
@@ -64,9 +73,9 @@ type _GOTYPE interface{}
 // types.Foo for each type Foo in the types.T type.
 const _TYPES_T = Unhandled
 
-// _EQUALITY_FN is the template equality function for types that have an
-// equality function and not an infix operator.
-func _EQUALITY_FN(_ interface{}, _ interface{}) bool {
+// _ASSIGN_NE is the template equality function for assigning the first input
+// to the result of the second input != the third input.
+func _ASSIGN_NE(_, _, _ string) bool {
 	panic("")
 }
 
@@ -155,11 +164,7 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 			// Note that not inlining this unique var actually makes a non-trivial
 			// performance difference.
 			var unique bool
-			// {{if eq .EqualityFunction ""}}
-			unique = v != lastVal
-			// {{else}}
-			unique = !_EQUALITY_FN(v, lastVal)
-			// {{end}}
+			_ASSIGN_NE("unique", "v", "lastVal")
 			outputCol[i] = outputCol[i] || unique
 			lastVal = v
 		}
@@ -172,11 +177,7 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 			// Note that not inlining this unique var actually makes a non-trivial
 			// performance difference.
 			var unique bool
-			// {{if eq .EqualityFunction ""}}
-			unique = v != lastVal
-			// {{else}}
-			unique = !_EQUALITY_FN(v, lastVal)
-			// {{end}}
+			_ASSIGN_NE("unique", "v", "lastVal")
 			outputCol[i] = outputCol[i] || unique
 			lastVal = v
 		}

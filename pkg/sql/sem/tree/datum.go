@@ -365,10 +365,15 @@ func (d *DBool) Compare(ctx *EvalContext, other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if !*d && *v {
+	return CompareBools(bool(*d), bool(*v))
+}
+
+// CompareBools compares the input bools according to the SQL comparison rules.
+func CompareBools(d, v bool) int {
+	if !d && v {
 		return -1
 	}
-	if *d && !*v {
+	if d && !v {
 		return 1
 	}
 	return 0
@@ -919,6 +924,12 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
+	return CompareDecimals(&d.Decimal, v)
+}
+
+// CompareDecimals compares 2 apd.Decimals according to the SQL comparison
+// rules, making sure that NaNs sort first.
+func CompareDecimals(d *apd.Decimal, v *apd.Decimal) int {
 	// NaNs sort first in SQL.
 	if dn, vn := d.Form == apd.NaN, v.Form == apd.NaN; dn && !vn {
 		return -1
