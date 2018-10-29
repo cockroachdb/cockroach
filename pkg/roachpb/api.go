@@ -965,23 +965,19 @@ func (*ConditionalPutRequest) flags() int {
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
 // It also may return the actual data read on ConditionFailedErrors,
-// so must update the timestamp cache on errors.
-//
-// Unlike CPut, InitPuts require a refresh because they may execute
-// successfully without leaving an intent (i.e., when the existing
-// value is equal to the proposed value).
-// TODO(nvanbenschoten): As of #27302, this is no longer true. We
-// can remove needsRefresh in v2.2, at which point no node in a
-// cluster can be running a binary without the referenced change.
+// so must update the timestamp cache on errors. InitPuts do not require
+// a refresh because on write-too-old errors, they return an error
+// immediately instead of continuing a serializable transaction to be
+// retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | needsRefresh | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
 }
 
 // Increment reads the existing value, but always leaves an intent so
-// it does not need to update the timestamp cache. It also does not
-// require refresh because on write-too-old errors experienced during
-// serializable transactions, increment returns the error instead of
-// continuing the transaction.
+// it does not need to update the timestamp cache. Increments do not
+// require a refresh because on write-too-old errors, they return an
+// error immediately instead of continuing a serializable transaction
+// to be retried at end transaction.
 func (*IncrementRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache
 }
