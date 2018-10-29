@@ -394,15 +394,14 @@ func (f *Flow) makeProcessor(
 	return proc, nil
 }
 
-func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
-	f.spec = spec
-
-	// First step: setup the input synchronizers for all processors.
-	inputSyncs := make([][]RowSource, len(spec.Processors))
-	for pIdx, ps := range spec.Processors {
+// setupInputSyncs populates a slice of input syncs, one for each Processor in
+// f.Spec, each containing one RowSource for each input to that Processor.
+func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
+	inputSyncs := make([][]RowSource, len(f.spec.Processors))
+	for pIdx, ps := range f.spec.Processors {
 		for _, is := range ps.Input {
 			if len(is.Streams) == 0 {
-				return errors.Errorf("input sync with no streams")
+				return nil, errors.Errorf("input sync with no streams")
 			}
 			var sync RowSource
 			switch is.Type {
@@ -411,7 +410,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
 					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
-						return err
+						return nil, err
 					}
 				}
 				sync = mrc
@@ -422,29 +421,37 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 					rowChan := &RowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
-						return err
+						return nil, err
 					}
 					streams[i] = rowChan
 				}
 				var err error
 				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
 				if err != nil {
-					return err
+					return nil, err
 				}
 
 			default:
-				return errors.Errorf("unsupported input sync type %s", is.Type)
+				return nil, errors.Errorf("unsupported input sync type %s", is.Type)
 			}
 			inputSyncs[pIdx] = append(inputSyncs[pIdx], sync)
 		}
 	}
+	return inputSyncs, nil
+}
 
-	f.processors = make([]Processor, 0, len(spec.Processors))
+// setupProcessors creates processors for each spec in f.spec, fusing processors
+// together when possible (when an upstream processor implements RowSource, only
+// has one output, and that output is a simple PASS_THROUGH output), and
+// populates f.processors with all created processors that weren't fused to and
+// thus need their own goroutine.
+func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) error {
+	f.processors = make([]Processor, 0, len(f.spec.Processors))
 
 	// Populate f.processors: see which processors need their own goroutine and
 	// which are fused with their consumer.
-	for i := range spec.Processors {
-		pspec := &spec.Processors[i]
+	for i := range f.spec.Processors {
+		pspec := &f.spec.Processors[i]
 		p, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
 		if err != nil {
 			return err
@@ -474,7 +481,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 				return false
 			}
 
-			for pIdx, ps := range spec.Processors {
+			for pIdx, ps := range f.spec.Processors {
 				if pIdx <= i {
 					// Skip processors which have already been created.
 					continue
@@ -504,6 +511,18 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 		}
 	}
 	return nil
+}
+
+func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
+	f.spec = spec
+
+	// First step: setup the input synchronizers for all processors.
+	inputSyncs, err := f.setupInputSyncs(ctx)
+	if err != nil {
+		return err
+	}
+	// Then, populate f.processors.
+	return f.setupProcessors(ctx, inputSyncs)
 }
 
 // startInternal starts the flow. All processors apart from the last one are
