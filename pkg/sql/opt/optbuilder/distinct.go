@@ -88,7 +88,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			)})
 		}
-		seen.Add(int(col))
+		seen.Add(int(col.ID()))
 		if seen.Equals(distinctOnCols) {
 			// All DISTINCT ON columns showed up; other columns are allowed in the
 			// rest of the ORDER BY (case 2 above).
