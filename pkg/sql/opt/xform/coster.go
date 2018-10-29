@@ -17,6 +17,7 @@ package xform
 import (
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -48,6 +49,12 @@ type Coster interface {
 // tree.
 type coster struct {
 	mem *memo.Memo
+
+	// perturbation indicates how much to randomly perturb the cost. It is used
+	// to generate alternative plans for testing. For example, if perturbation is
+	// 0.5, and the estimated cost of an expression is c, the cost returned by
+	// ComputeCost will be in the range [c - 0.5 * c, c + 0.5 * c).
+	perturbation float64
 }
 
 const (
@@ -67,8 +74,9 @@ const (
 )
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(mem *memo.Memo) {
+func (c *coster) Init(mem *memo.Memo, perturbation float64) {
 	c.mem = mem
+	c.perturbation = perturbation
 }
 
 // computeCost calculates the estimated cost of the candidate best expression,
@@ -145,6 +153,23 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 		// MaxCost is added to the memo, it can lead to an obscure crash with an
 		// unknown node. We'd rather detect this early.
 		panic(fmt.Sprintf("node %s with MaxCost added to the memo", candidate.Op()))
+	}
+
+	if c.perturbation != 0 {
+		// Don't perturb the cost if we are forcing an index.
+		if cost != hugeCost {
+			// Get a random value in the range [-1.0, 1.0)
+			multiplier := 2*rand.Float64() - 1
+
+			// If perturbation is p, and the estimated cost of an expression is c,
+			// the new cost is in the range [max(0, c - pc), c + pc). For example,
+			// if p=1.5, the new cost is in the range [0, c + 1.5 * c).
+			cost += cost * memo.Cost(c.perturbation*multiplier)
+			// The cost must always be >= 0.
+			if cost < 0 {
+				cost = 0
+			}
+		}
 	}
 
 	return cost
