@@ -90,7 +90,8 @@ render                    ·            ·                (sum)            ·
                 │         aggregate 1  sum(w)           ·                ·
                 │         aggregate 2  any_not_null(v)  ·                ·
                 │         group by     @1               ·                ·
-                └── scan  ·            ·                (k, v, w)        ·
+                │         ordered      @1               ·                ·
+                └── scan  ·            ·                (k, v, w)        +k
 ·                         table        t@primary        ·                ·
 ·                         spans        ALL              ·                ·
 
