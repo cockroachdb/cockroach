@@ -967,12 +967,12 @@
   revision = "9f7362b77ad333b26c01c99de52a11bdb650ded2"
 
 [[projects]]
-  digest = "1:01d14b98fe26a79cbf04700df53981bfa10eee3e5fe5fd265be40c191a1df274"
+  digest = "1:b8fec21376a4bd20257eacd61d9aaafa6ca0ca6276bcc120c0a8627f4d75bdd5"
   name = "github.com/marusama/semaphore"
   packages = ["."]
   pruneopts = "UT"
-  revision = "567f17206eaa3f28bd73e209620e2abaa65d7405"
-  version = "2.1.1"
+  revision = "edd5217b5829b6bfbb01fcff1c8b4b4335c3fca6"
+  version = "2.2.0"
 
 [[projects]]
   digest = "1:d4d17353dbd05cb52a2a52b7fe1771883b682806f68db442b436294926bbfafb"
