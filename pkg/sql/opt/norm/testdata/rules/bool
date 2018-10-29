@@ -362,41 +362,41 @@ FROM a
 WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT(s NOT ILIKE 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s NOT LIKE 'foo' [type=bool, outer=(4)]
-      ├── s LIKE 'foo' [type=bool, outer=(4)]
-      ├── s NOT ILIKE 'foo' [type=bool, outer=(4)]
-      └── s ILIKE 'foo' [type=bool, outer=(4)]
+      ├── s NOT LIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s LIKE 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── s NOT ILIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      └── s ILIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
 
 # SimilarTo comparisons.
 opt expect=NegateComparison
 SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s NOT SIMILAR TO 'foo' [type=bool, outer=(4)]
-      └── s SIMILAR TO 'foo' [type=bool, outer=(4)]
+      ├── s NOT SIMILAR TO 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      └── s SIMILAR TO 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # RegMatch comparisons.
 opt expect=NegateComparison
 SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND NOT (s !~* 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -404,10 +404,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s !~ 'foo' [type=bool, outer=(4)]
-      ├── s ~ 'foo' [type=bool, outer=(4)]
-      ├── s !~* 'foo' [type=bool, outer=(4)]
-      └── s ~* 'foo' [type=bool, outer=(4)]
+      ├── s !~ 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s ~ 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s !~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      └── s ~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
 
 opt expect-not=NegateComparison
 SELECT * FROM a WHERE

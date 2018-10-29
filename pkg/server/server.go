@@ -1599,6 +1599,7 @@ func (s *Server) Start(ctx context.Context) error {
 		ui.Handler(ui.Config{
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         s.cfg.RequireWebSession(),
+			NodeID:               &s.nodeIDContainer,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u
