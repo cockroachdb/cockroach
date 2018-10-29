@@ -61,12 +61,13 @@ project
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-sort
+distinct-on
  ├── columns: y:2(int) z:3(float)
+ ├── grouping columns: y:2(int) z:3(float)
  ├── ordering: +3
- └── distinct-on
+ └── sort
       ├── columns: y:2(int) z:3(float)
-      ├── grouping columns: y:2(int) z:3(float)
+      ├── ordering: +3
       └── project
            ├── columns: y:2(int) z:3(float)
            └── scan xyz
@@ -75,12 +76,13 @@ sort
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
-sort
+distinct-on
  ├── columns: y:2(int) z:3(float)
+ ├── grouping columns: y:2(int) z:3(float)
  ├── ordering: +2
- └── distinct-on
+ └── sort
       ├── columns: y:2(int) z:3(float)
-      ├── grouping columns: y:2(int) z:3(float)
+      ├── ordering: +2
       └── project
            ├── columns: y:2(int) z:3(float)
            └── scan xyz
@@ -89,12 +91,13 @@ sort
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
-sort
+distinct-on
  ├── columns: y:2(int) z:3(float)
+ ├── grouping columns: y:2(int) z:3(float)
  ├── ordering: +2,+3
- └── distinct-on
+ └── sort
       ├── columns: y:2(int) z:3(float)
-      ├── grouping columns: y:2(int) z:3(float)
+      ├── ordering: +2,+3
       └── project
            ├── columns: y:2(int) z:3(float)
            └── scan xyz
@@ -103,12 +106,13 @@ sort
 build
 SELECT DISTINCT y + x AS r FROM xyz ORDER by (y + x)
 ----
-sort
+distinct-on
  ├── columns: r:4(int)
+ ├── grouping columns: r:4(int)
  ├── ordering: +4
- └── distinct-on
+ └── sort
       ├── columns: r:4(int)
-      ├── grouping columns: r:4(int)
+      ├── ordering: +4
       └── project
            ├── columns: r:4(int)
            ├── scan xyz
@@ -121,12 +125,13 @@ sort
 build
 SELECT DISTINCT y + x AS r FROM xyz ORDER BY y + x
 ----
-sort
+distinct-on
  ├── columns: r:4(int)
+ ├── grouping columns: r:4(int)
  ├── ordering: +4
- └── distinct-on
+ └── sort
       ├── columns: r:4(int)
-      ├── grouping columns: r:4(int)
+      ├── ordering: +4
       └── project
            ├── columns: r:4(int)
            ├── scan xyz
@@ -345,12 +350,13 @@ TABLE abcd
 build
 SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
 ----
-sort
+distinct-on
  ├── columns: x:5(int!null) d:4(int!null) b:2(int!null)
+ ├── grouping columns: b:2(int!null) d:4(int!null) x:5(int!null)
  ├── ordering: +4,+2
- └── distinct-on
+ └── sort
       ├── columns: b:2(int!null) d:4(int!null) x:5(int!null)
-      ├── grouping columns: b:2(int!null) d:4(int!null) x:5(int!null)
+      ├── ordering: +4,+2
       └── project
            ├── columns: x:5(int!null) b:2(int!null) d:4(int!null)
            ├── scan abcd

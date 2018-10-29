@@ -537,7 +537,8 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	}
 
 	var ep execPlan
-	groupingCols := ev.Private().(*memo.GroupByDef).GroupingCols
+	def := ev.Private().(*memo.GroupByDef)
+	groupingCols := def.GroupingCols
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(i, len(groupingColIdx))
@@ -581,7 +582,9 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	if ev.Operator() == opt.ScalarGroupByOp {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
-		orderedInputCols := input.getColumnOrdinalSet(aggOrderedCols(ev.Child(0), groupingCols))
+		orderedInputCols := input.getColumnOrdinalSet(
+			def.StreamingAggCols(&ev.Physical().Ordering),
+		)
 		reqOrdering := ep.reqOrdering(ev.Physical())
 		ep.root, err = b.factory.ConstructGroupBy(
 			input.root, groupingColIdx, orderedInputCols, aggInfos, reqOrdering,
@@ -601,7 +604,7 @@ func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
 
 	def := ev.Private().(*memo.GroupByDef)
 	distinctCols := input.getColumnOrdinalSet(def.GroupingCols)
-	orderedCols := input.getColumnOrdinalSet(aggOrderedCols(ev.Child(0), def.GroupingCols))
+	orderedCols := input.getColumnOrdinalSet(def.StreamingAggCols(&ev.Physical().Ordering))
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
 	if err != nil {
 		return execPlan{}, err
@@ -654,28 +657,6 @@ func (b *Builder) buildGroupByInput(ev memo.ExprView) (execPlan, error) {
 	}
 	input.outputCols = newOutputCols
 	return input, nil
-}
-
-// aggOrderedCols returns (as ordinals) the set of columns in the input of an
-// aggregation operator on which there is an ordering.
-func aggOrderedCols(inputExpr memo.ExprView, groupingCols opt.ColSet) opt.ColSet {
-	// Use the ordering that we require on the child (this is the more restrictive
-	// between GroupByDef.Ordering and the ordering required on the aggregation
-	// operator itself).
-	ordering := inputExpr.Physical().Ordering
-	var res opt.ColSet
-	for i := range ordering.Columns {
-		g := ordering.Columns[i].Group
-		g = g.Intersection(groupingCols)
-		if !g.Intersects(groupingCols) {
-			// This group refers to a column that is not a grouping column.
-			// The rest of the ordering is not useful.
-			break
-		}
-		res.UnionWith(g)
-	}
-	res.IntersectionWith(groupingCols)
-	return res
 }
 
 func (b *Builder) buildSetOp(ev memo.ExprView) (execPlan, error) {

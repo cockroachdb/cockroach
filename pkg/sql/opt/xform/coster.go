@@ -156,17 +156,18 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	// Add the CPU cost of emitting the rows.
+	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
+	// The constant term is necessary for cases where the estimated row count is
+	// very small.
+	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
+	// certain amount of memory is used, distsql switches to a disk-based sort
+	// with a temp RocksDB store.
 	rowCount := logical.Relational.Stats.RowCount
-	cost := memo.Cost(rowCount) * cpuCostFactor
-
+	physical := c.mem.LookupPhysicalProps(candidate.Required())
+	perRowCost := c.rowSortCost(len(physical.Ordering.Columns))
+	cost := memo.Cost(rowCount) * perRowCost
 	if rowCount > 1 {
-		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
-		// certain amount of memory is used, distsql switches to a disk-based sort
-		// with a temp RocksDB store.
-		physical := c.mem.LookupPhysicalProps(candidate.Required())
-		perRowCost := c.rowSortCost(len(physical.Ordering.Columns))
-		cost += memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
+		cost *= (1 + memo.Cost(math.Log2(rowCount)))
 	}
 
 	return cost + c.computeChildrenCost(candidate)
@@ -364,8 +365,21 @@ func (c *coster) computeGroupByCost(candidate *memo.BestExpr, logical *props.Log
 	groupingColCount := def.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	// TODO(radu): take into account how many grouping columns we have an ordering
-	// on for DistinctOn.
+	if groupingColCount > 0 {
+		// Add a cost that reflects the use of a hash table - unless we are doing a
+		// streaming aggregation where all the grouping columns are ordered; we
+		// interpolate linearly if only part of the grouping columns are ordered.
+		//
+		// The cost is chosen so that it's always less than the cost to sort the
+		// input.
+		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
+		physical := c.mem.LookupPhysicalProps(candidate.Required())
+		n := def.StreamingAggCols(&physical.Ordering).Len()
+		// n = 0:                factor = 1
+		// n = groupingColCount: factor = 0
+		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
+		cost += hashCost
+	}
 
 	return cost + c.computeChildrenCost(candidate)
 }

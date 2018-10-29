@@ -8,7 +8,7 @@
 (ScalarGroupBy
     $input:*
     (Aggregations [(Min $variable:(Variable $col:*))] $cols:*)
-    $def:*
+    $def:* & (IsCanonicalGroupBy $def)
 )
 =>
 (ScalarGroupBy
@@ -32,7 +32,7 @@
 (ScalarGroupBy
     $input:*
     (Aggregations [(Max $variable:(Variable $col:*))] $cols:*)
-    $def:*
+    $def:* & (IsCanonicalGroupBy $def)
 )
 =>
 (ScalarGroupBy
@@ -47,3 +47,16 @@
     (Aggregations [(ConstAgg $variable)] $cols)
     $def
 )
+
+# GenerateStreamingGroupBy creates variants of a GroupBy or DistinctOn which
+# require more specific orderings on the grouping columns, using the interesting
+# orderings property. When we have orderings on grouping columns, we can execute
+# aggregations in a streaming fashion which is more efficient.
+[GenerateStreamingGroupBy, Explore]
+(GroupBy | DistinctOn
+    $input:*
+    $aggs:*
+    $def:* & (IsCanonicalGroupBy $def)
+)
+=>
+(GenerateStreamingGroupBy (OpName) $input $aggs $def)

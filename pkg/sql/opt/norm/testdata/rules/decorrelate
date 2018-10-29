@@ -320,12 +320,14 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(10)
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(9)
+ │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
  │    │    │    ├── key: (1)
@@ -397,12 +399,14 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(10)
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(9)
+ │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
  │    │    │    ├── key: (1)
@@ -445,12 +449,14 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,10)
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) i:2(int) x:6(int) y:7(int) notnull:9(bool)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2), (6)-->(7), (7)~~>(9), (1,6)-->(9)
+ │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    │    ├── key: (1)
@@ -491,6 +497,7 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(9,11)
@@ -499,6 +506,7 @@ project
  │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
+ │    │    ├── ordering: +1
  │    │    ├── project
  │    │    │    ├── columns: scalar:9(decimal) k:1(int!null)
  │    │    │    ├── side-effects
@@ -735,12 +743,14 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) sum:11(decimal)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(11)
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) column10:10(int)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(10)
+ │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
  │    │    │    ├── key: (1)
@@ -883,12 +893,14 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) count_rows:10(int)
       │    ├── grouping columns: k:1(int!null)
+      │    ├── internal-ordering: +1
       │    ├── key: (1)
       │    ├── fd: (1)-->(10)
       │    ├── left-join (merge)
       │    │    ├── columns: k:1(int!null) x:6(int) u:8(int)
       │    │    ├── key: (1,8)
       │    │    ├── fd: (6)==(8), (8)==(6)
+      │    │    ├── ordering: +1
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null)
       │    │    │    ├── key: (1)
@@ -3044,12 +3056,14 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int)
       │    ├── grouping columns: k:1(int!null)
+      │    ├── internal-ordering: +1
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,8)
       │    ├── left-join (merge)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) u:6(int)
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2-5)
+      │    │    ├── ordering: +1
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
@@ -3143,12 +3157,14 @@ project
       │    ├── group-by
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) bool_or:9(bool)
       │    │    ├── grouping columns: k:1(int!null)
+      │    │    ├── internal-ordering: +1
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-5,9)
       │    │    ├── left-join (merge)
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) notnull:8(bool)
       │    │    │    ├── key: (1,6)
       │    │    │    ├── fd: (1)-->(2-5), (6)-->(7), (7)~~>(8), (1,6)-->(8)
+      │    │    │    ├── ordering: +1
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    │    ├── key: (1)
@@ -3217,6 +3233,7 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) s:4(string) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,9,11)
@@ -3225,6 +3242,7 @@ project
  │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(4,9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
+ │    │    ├── ordering: +1
  │    │    ├── project
  │    │    │    ├── columns: scalar:9(decimal) k:1(int!null) s:4(string)
  │    │    │    ├── side-effects
