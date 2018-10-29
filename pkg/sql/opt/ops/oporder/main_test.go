@@ -19,16 +19,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func selectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
-	// Select operator can always pass through ordering to its input.
-	return true
+type dummyRelExpr struct {
+	// We embed a nil memo.Expr, which causes any methods that are not
+	// specifically overridden to panic.
+	memo.RelExpr
+
+	r props.Relational
 }
 
-func selectBuildChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
-	if childIdx != 0 {
-		return props.OrderingChoice{}
-	}
-	return *required
+var _ memo.RelExpr = &dummyRelExpr{}
+
+func newDummyRelExpr(r props.Relational) memo.RelExpr {
+	return &dummyRelExpr{r: r}
+}
+
+func (d *dummyRelExpr) Relational() *props.Relational {
+	return &d.r
 }

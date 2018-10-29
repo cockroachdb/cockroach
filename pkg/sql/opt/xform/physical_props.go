@@ -46,7 +46,7 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
 	switch e.Op() {
-	case opt.ScanOp, opt.SelectOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp:
 		return oporder.CanProvideOrdering(e, required)
 	}
 
@@ -55,7 +55,7 @@ func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingC
 	}
 
 	switch e.Op() {
-	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
+	case opt.IndexJoinOp, opt.LookupJoinOp:
 		// These operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
 		return o.isOrderingBoundBy(e.Child(0).(memo.RelExpr), required)
@@ -118,13 +118,13 @@ func (o *Optimizer) buildChildPhysicalProps(
 	var childProps props.Physical
 
 	switch parent.Op() {
-	case opt.ScanOp, opt.SelectOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp:
 		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 	}
 
 	switch parent.Op() {
 
-	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
+	case opt.IndexJoinOp, opt.LookupJoinOp:
 		// These ops may need to remove ordering columns that are not output
 		// by their input expression.
 		if nth == 0 {
@@ -133,17 +133,6 @@ func (o *Optimizer) buildChildPhysicalProps(
 			if !childProps.Ordering.SubsetOfCols(childOutCols) {
 				childProps.Ordering = childProps.Ordering.Copy()
 				childProps.Ordering.ProjectCols(childOutCols)
-			}
-
-			// Project can prune input columns, which can cause its FD set to be
-			// pruned as well. Check the ordering to see if it can be simplified
-			// with respect to the input FD set.
-			if project, ok := parent.(*memo.ProjectExpr); ok {
-				fdset := &project.Input.Relational().FuncDeps
-				if childProps.Ordering.CanSimplify(fdset) {
-					childProps.Ordering = childProps.Ordering.Copy()
-					childProps.Ordering.Simplify(fdset)
-				}
 			}
 		}
 

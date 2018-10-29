@@ -63,6 +63,10 @@ func init() {
 		canProvideOrdering:    selectCanProvideOrdering,
 		buildChildReqOrdering: selectBuildChildReqOrdering,
 	}
+	funcMap[opt.ProjectOp] = funcs{
+		canProvideOrdering:    projectCanProvideOrdering,
+		buildChildReqOrdering: projectBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
