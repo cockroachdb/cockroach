@@ -164,7 +164,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	d := paymentData{
-		dID: rand.Intn(10) + 1,
+		dID: rng.Intn(10) + 1,
 		// hAmount is randomly selected within [1.00..5000.00]
 		hAmount: float64(randInt(rng, 100, 500000)) / float64(100.0),
 		hDate:   timeutil.Now(),
@@ -172,24 +172,24 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
 	// remote.
-	if rand.Intn(100) < 85 {
+	if rng.Intn(100) < 85 {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
-		d.cWID = rand.Intn(p.config.warehouses)
+		d.cWID = p.config.wPart.randActive(rng)
 		// Find a cWID != w_id if there's more than 1 configured warehouse.
-		for d.cWID == wID && p.config.warehouses > 1 {
-			d.cWID = rand.Intn(p.config.warehouses)
+		for d.cWID == wID && p.config.activeWarehouses > 1 {
+			d.cWID = p.config.wPart.randActive(rng)
 		}
 		p.config.auditor.Lock()
 		p.config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
 		p.config.auditor.Unlock()
-		d.cDID = rand.Intn(10) + 1
+		d.cDID = rng.Intn(10) + 1
 	}
 
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
-	if rand.Intn(100) < 60 {
+	if rng.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
 		atomic.AddUint64(&p.config.auditor.paymentsByLastName, 1)
 	} else {

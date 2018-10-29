@@ -432,9 +432,9 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
-	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --split --scatter "+
-		"--ramp=%s --duration=1ms --tolerate-errors %s {pgurl%s}",
-		b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --split --scatter "+
+		"--wait=false --duration=%s --tolerate-errors %s {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}

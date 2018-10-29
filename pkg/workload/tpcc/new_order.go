@@ -162,7 +162,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.4.1.4: A fixed 1% of the New-Order transactions are chosen at random to
 	// simulate user data entry errors and exercise the performance of rolling
 	// back update transactions.
-	rollback := rand.Intn(100) == 0
+	rollback := rng.Intn(100) == 0
 
 	// allLocal tracks whether any of the items were from a remote warehouse.
 	allLocal := 1
@@ -170,7 +170,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 		item := orderItem{
 			olNumber: i + 1,
 			// 2.4.1.5.3: order has a quantity [1..10]
-			olQuantity: rand.Intn(10) + 1,
+			olQuantity: rng.Intn(10) + 1,
 		}
 		// 2.4.1.5.1 an order item has a random item number, unless rollback is true
 		// and it's the last item in the items list.
@@ -187,15 +187,15 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 		}
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
-		item.remoteWarehouse = rand.Intn(100) == 0
+		item.remoteWarehouse = rng.Intn(100) == 0
 		item.olSupplyWID = wID
-		if item.remoteWarehouse && n.config.warehouses > 1 {
+		if item.remoteWarehouse && n.config.activeWarehouses > 1 {
 			allLocal = 0
 			// To avoid picking the local warehouse again, randomly choose among n-1
 			// warehouses and swap in the nth if necessary.
-			item.olSupplyWID = rand.Intn(n.config.warehouses - 1)
-			if item.olSupplyWID == wID {
-				item.olSupplyWID = n.config.warehouses - 1
+			item.olSupplyWID = n.config.wPart.randActive(rng)
+			for item.olSupplyWID == wID {
+				item.olSupplyWID = n.config.wPart.randActive(rng)
 			}
 			n.config.auditor.Lock()
 			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
