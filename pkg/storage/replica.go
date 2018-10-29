@@ -5106,29 +5106,52 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
+	if msg.Type == raftpb.MsgAppResp && msg.Reject {
+		r.mu.RLock()
+		desc := r.Desc()
+		ticks := r.mu.ticks
+		r.mu.RUnlock()
+
+		if !desc.IsInitialized() && len(desc.Replicas) == 0 && msg.RejectHint == 0 && ticks < 10 {
+			// This replica is not initialized and has zero state (i.e. its last
+			// index is zero). This happens in two cases:
+			//
+			// 1. a rebalance operation is adding a new replica of the range to this node.
+			//    We always send a preemptive snapshot before attempting to do so, so we
+			//    wouldn't enter this branch as desc.Replicas would be nonempty.
+			//
+			// 2. a split executed that created this replica as its right hand side, but
+			//    this node's pre-split replica hasn't executed the split trigger (yet).
+			//    The expectation is that it will do so momentarily, however if we don't
+			//    drop this rejection, the Raft leader will try to catch us up via a snapshot.
+			//    In 99.9% of cases this is a wasted effort since the pre-split replica already
+			//    contains the data this replica will hold.
+			//
+			//    The remaining 0.01% constitute the case in which our local
+			//    replica of the pre-split range requires a snapshot which catches
+			//    it up "past" the split trigger, in which case the trigger will
+			//    never be executed (the snapshot instead wipes out the data the
+			//    split trigger would've tried to put into this range).
+			//    A similar scenario occurs if there's a rebalance operation
+			//    that rapidly removes the pre-split replica, so that it never
+			//    catches up (nor via log nor via snapshot); in that case too,
+			//    the Raft snapshot is required to materialize the split's right
+			//    hand side replica (i.e. this one).
+			//
+			// NB: at the time of writing, the default tick interval is 200ms.
+			//
+			// TODO(tschottdorf): preemptive snapshots may also be
+			// garbage-collected before the replica addition is complete. In
+			// such a case, we need to accept the Raft snapshot ASAP.
+			log.Warningf(ctx, "dropping rejection from %d to %d", msg.Index, msg.RejectHint)
+			return
+		}
+	}
+
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
-		r.mu.Lock()
-		desc := r.descRLocked()
-		raftStatus := r.raftStatusRLocked()
-		ticks := r.mu.ticks
-		r.mu.Unlock()
-
-		recentlyCreatedViaSplit := desc.IsInitialized() && (desc.Generation == nil || *desc.Generation == 0) &&
-			raftStatus != nil && raftStatus.Progress[msg.To].Match == 0 &&
-			ticks <= 15
-
-		if recentlyCreatedViaSplit {
-			r.withRaftGroup(false, func(rn *raft.RawNode) (bool, error) {
-				rn.ReportSnapshot(msg.To, raft.SnapshotFinish)
-				return false, nil
-			})
-		} else {
-			log.Warningf(ctx, "TSX snapshot for replicaID %d %+v with raftStatus %+v and %d ticks", msg.To, desc, raftStatus, ticks)
-			log.Warning(ctx, desc.IsInitialized(), desc.Generation != nil && *desc.Generation == 0, raftStatus != nil && raftStatus.Progress[msg.To].Match == 0, ticks <= 15)
-			if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
-				log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
-			}
+		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
+			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
 		return
 	}
