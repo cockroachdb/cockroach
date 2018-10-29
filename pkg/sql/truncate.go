@@ -191,7 +191,7 @@ func (p *planner) truncateTable(
 		return err
 	}
 	tableDesc.DropJobID = dropJobID
-	newTableDesc := NewMutableTableDescriptor(tableDesc.TableDescriptor)
+	newTableDesc := NewMutableTableDescriptor(tableDesc.TableDescriptor, sqlbase.TableDescriptor{})
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
 	}
@@ -273,8 +273,6 @@ func (p *planner) truncateTable(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
 	}
-
-	p.Tables().addCreatedTable(newID)
 
 	// Copy the zone config.
 	b = &client.Batch{}

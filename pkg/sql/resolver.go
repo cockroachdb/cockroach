@@ -157,7 +157,8 @@ func resolveExistingObjectImpl(
 		if mutDesc, ok := descI.(*MutableTableDescriptor); ok {
 			return mutDesc, nil
 		}
-		return NewMutableTableDescriptor(*descI.(*TableDescriptor)), nil
+		tbl := *descI.(*TableDescriptor)
+		return NewMutableTableDescriptor(tbl, tbl), nil
 	}
 
 	return obj.TableDesc(), nil

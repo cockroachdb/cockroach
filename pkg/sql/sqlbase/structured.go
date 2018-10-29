@@ -107,6 +107,9 @@ type MutationID uint32
 // going through mutations.
 type MutableTableDescriptor struct {
 	TableDescriptor
+
+	// ClusterVersion represents the version of the table descriptor read from the store.
+	ClusterVersion TableDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -2116,6 +2119,12 @@ func (desc *TableDescriptor) Dropped() bool {
 // Adding returns true if the table is being added.
 func (desc *TableDescriptor) Adding() bool {
 	return desc.State == TableDescriptor_ADD
+}
+
+// IsNewTable returns true if the table was created in the current
+// transaction.
+func (desc *MutableTableDescriptor) IsNewTable() bool {
+	return desc.ClusterVersion.ID == InvalidID
 }
 
 // HasDrainingNames returns true if a draining name exists.
