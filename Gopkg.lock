@@ -26,12 +26,12 @@
   version = "0.1.7"
 
 [[projects]]
-  branch = "master"
-  digest = "1:44ccea63fc921ce3e49bb0832df9b3a3bca219f3990e76d58f7b7f2884e0ebdc"
+  digest = "1:c4a5edf3b0f38e709a78dcc945997678a364c2b5adfd48842a3dd349c352f833"
   name = "github.com/Azure/azure-storage-blob-go"
-  packages = ["2017-07-29/azblob"]
+  packages = ["azblob"]
   pruneopts = "UT"
-  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
+  revision = "5152f14ace1c6db66bd9cb57840703a8358fa7bc"
+  version = "0.3.0"
 
 [[projects]]
   branch = "master"
@@ -1638,7 +1638,7 @@
   analyzer-version = 1
   input-imports = [
     "cloud.google.com/go/storage",
-    "github.com/Azure/azure-storage-blob-go/2017-07-29/azblob",
+    "github.com/Azure/azure-storage-blob-go/azblob",
     "github.com/MichaelTJones/walk",
     "github.com/PuerkitoBio/goquery",
     "github.com/Shopify/sarama",
