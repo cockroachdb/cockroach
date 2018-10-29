@@ -16,7 +16,6 @@ package tree
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -177,50 +176,35 @@ func (node *RollbackTransaction) Format(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION")
 }
 
-// RestartSavepointName is the only savepoint name that we accept, modulo
-// capitalization.
-const RestartSavepointName string = "COCKROACH_RESTART"
-
-// ValidateRestartCheckpoint checks that a checkpoint name is our magic restart
-// value.
-// We accept everything with the desired prefix because at least the C++ libpqxx
-// appends sequence numbers to the savepoint name specified by the user.
-func ValidateRestartCheckpoint(savepoint string) error {
-	if !strings.HasPrefix(strings.ToUpper(savepoint), RestartSavepointName) {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "SAVEPOINT not supported except for %s", RestartSavepointName)
-	}
-	return nil
-}
-
 // Savepoint represents a SAVEPOINT <name> statement.
 type Savepoint struct {
-	Name string
+	Name Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Savepoint) Format(ctx *FmtCtx) {
 	ctx.WriteString("SAVEPOINT ")
-	ctx.WriteString(node.Name)
+	node.Name.Format(ctx)
 }
 
 // ReleaseSavepoint represents a RELEASE SAVEPOINT <name> statement.
 type ReleaseSavepoint struct {
-	Savepoint string
+	Savepoint Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ReleaseSavepoint) Format(ctx *FmtCtx) {
 	ctx.WriteString("RELEASE SAVEPOINT ")
-	ctx.WriteString(node.Savepoint)
+	node.Savepoint.Format(ctx)
 }
 
 // RollbackToSavepoint represents a ROLLBACK TO SAVEPOINT <name> statement.
 type RollbackToSavepoint struct {
-	Savepoint string
+	Savepoint Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *RollbackToSavepoint) Format(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
-	ctx.WriteString(node.Savepoint)
+	node.Savepoint.Format(ctx)
 }

@@ -41,9 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+// RestartSavepointName is the only savepoint ident that we accept.
+const RestartSavepointName string = "cockroach_restart"
+
 var errSavepointNotUsed = pgerror.NewErrorf(
 	pgerror.CodeSavepointExceptionError,
-	"savepoint %s has not been used", tree.RestartSavepointName)
+	"savepoint %s has not been used", RestartSavepointName)
 
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
@@ -221,7 +224,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 
 	case *tree.ReleaseSavepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+		if err := ex.validateSavepointName(s.Savepoint); err != nil {
 			return makeErrEvent(err)
 		}
 		if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
@@ -239,29 +242,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 
 	case *tree.Savepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Name); err != nil {
+		// Ensure that the user isn't trying to run BEGIN; SAVEPOINT; SAVEPOINT;
+		if ex.state.activeSavepointName != "" {
+			err := fmt.Errorf("SAVEPOINT may not be nested")
 			return makeErrEvent(err)
 		}
-		// We want to disallow SAVEPOINTs to be issued after a transaction has
+		if err := ex.validateSavepointName(s.Name); err != nil {
+			return makeErrEvent(err)
+		}
+		// We want to disallow SAVEPOINTs to be issued after a KV transaction has
 		// started running. The client txn's statement count indicates how many
-		// statements have been executed as part of this transaction.
+		// statements have been executed as part of this transaction. It is
+		// desirable to allow metadata queries against vtables to proceed
+		// before starting a SAVEPOINT for better ORM compatibility.
+		// See also:
+		// https://github.com/cockroachdb/cockroach/issues/15012
 		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
 		if meta.CommandCount > 0 {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a "+
-				"transaction", tree.RestartSavepointName)
+				"transaction", RestartSavepointName)
 			return makeErrEvent(err)
 		}
+		ex.state.activeSavepointName = s.Name
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
 		return eventRetryIntentSet{}, nil /* payload */, nil
 
 	case *tree.RollbackToSavepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+		if err := ex.validateSavepointName(s.Savepoint); err != nil {
 			return makeErrEvent(err)
 		}
 		if !os.RetryIntent.Get() {
 			return makeErrEvent(errSavepointNotUsed)
 		}
+		ex.state.activeSavepointName = ""
 
 		res.ResetStmtType((*tree.Savepoint)(nil))
 		return eventTxnRestart{}, nil /* payload */, nil
@@ -573,6 +587,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	ex.state.activeSavepointName = ""
 	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
 		isRelease = true
@@ -595,6 +610,7 @@ func (ex *connExecutor) commitSQLTransaction(
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
 // rolled-back and an event is produced.
 func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
+	ex.state.activeSavepointName = ""
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
@@ -1073,6 +1089,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 			ev, payload := ex.rollbackSQLTransaction(ctx)
 			return ev, payload
 		}
+		ex.state.activeSavepointName = ""
 
 		// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		res.ResetStmtType((*tree.RollbackTransaction)(nil))
@@ -1082,21 +1099,35 @@ func (ex *connExecutor) execStmtInAbortedState(
 		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
 		// "SAVEPOINT cockroach_restart" commands to indicate client intent to
 		// retry a transaction in a RestartWait state.
-		var spName string
+		var spName tree.Name
+		var isRollback bool
 		switch n := s.(type) {
 		case *tree.RollbackToSavepoint:
 			spName = n.Savepoint
+			isRollback = true
 		case *tree.Savepoint:
 			spName = n.Name
 		default:
 			panic("unreachable")
 		}
-		if err := tree.ValidateRestartCheckpoint(spName); err != nil {
+		// If the user issued a SAVEPOINT in the abort state, validate
+		// as though there were no active savepoint.
+		if !isRollback {
+			ex.state.activeSavepointName = ""
+		}
+		if err := ex.validateSavepointName(spName); err != nil {
 			ev := eventNonRetriableErr{IsCommit: fsm.False}
 			payload := eventNonRetriableErrPayload{
 				err: err,
 			}
 			return ev, payload
+		}
+		// Either clear or reset the current savepoint name so that
+		// ROLLBACK TO; SAVEPOINT; works.
+		if isRollback {
+			ex.state.activeSavepointName = ""
+		} else {
+			ex.state.activeSavepointName = spName
 		}
 
 		if !(inRestartWait || ex.machine.CurState().(stateAborted).RetryIntent.Get()) {
@@ -1353,4 +1384,26 @@ func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
 	if !ex.stmtCounterDisabled {
 		ex.server.StatementCounters.incrementCount(stmt.AST)
 	}
+}
+
+// validateSavepointName validates that it is that the provided ident
+// matches the active savepoint name, begins with RestartSavepointName,
+// or that force_savepoint_restart==true. We accept everything with the
+// desired prefix because at least the C++ libpqxx appends sequence
+// numbers to the savepoint name specified by the user.
+func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
+	if ex.state.activeSavepointName != "" {
+		if savepoint == ex.state.activeSavepointName {
+			return nil
+		}
+		return pgerror.NewErrorf(pgerror.CodeInvalidSavepointSpecificationError,
+			`SAVEPOINT %q is in use`, tree.ErrString(&ex.state.activeSavepointName))
+	}
+	if !ex.sessionData.ForceSavepointRestart && !strings.HasPrefix(string(savepoint), RestartSavepointName) {
+		return pgerror.UnimplementedWithIssueHintError(10735,
+			"SAVEPOINT not supported except for "+RestartSavepointName,
+			"Retryable transactions with arbitrary SAVEPOINT names can be enabled "+
+				"with SET force_savepoint_restart=true")
+	}
+	return nil
 }
