@@ -56,6 +56,7 @@ func registerTests(r *registry) {
 	registerSchemaChangeTPCC(r)
 	registerSyncTest(r)
 	registerTPCC(r)
+	registerUniformLoadSplits(r)
 	registerUpgrade(r)
 	registerVersion(r)
 	registerYCSB(r)
