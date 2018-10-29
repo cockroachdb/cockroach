@@ -1044,7 +1044,7 @@ func updateRangeDescriptor(
 	var newValue interface{}
 	if newDesc != nil {
 		if err := newDesc.Validate(); err != nil {
-			return err
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
 		}
 		newBytes, err := protoutil.Marshal(newDesc)
 		if err != nil {
@@ -1072,6 +1072,12 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
+
+	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
+	// since we'll mutate it in the loop below.
+	rangeDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), rangeDesc.Replicas...)
+	startKey := rangeDesc.StartKey.AsRawKey()
+
 	// Step 1: Compute which replicas are to be added and which are to be removed.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the
@@ -1128,7 +1134,7 @@ func (s *Store) AdminRelocateRange(
 
 	transferLease := func() {
 		if err := s.DB().AdminTransferLease(
-			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+			ctx, startKey, targets[0].StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %s", err)
 		}
@@ -1146,10 +1152,6 @@ func (s *Store) AdminRelocateRange(
 	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
-	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
-	// since we'll mutate it in the loop below.
-	desc := rangeDesc
-	desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 	rangeInfo := RangeInfo{Desc: &rangeDesc}
 
 	// Step 2: Repeatedly add a replica then remove a replica until we reach the
@@ -1204,7 +1206,7 @@ func (s *Store) AdminRelocateRange(
 				StoreID: targetStore.StoreID,
 			}
 			if err := s.DB().AdminChangeReplicas(
-				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
+				ctx, startKey, roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
 			); err != nil {
 				returnErr := errors.Wrapf(err, "while adding target %v", target)
 				if !canRetry(err) {
@@ -1242,7 +1244,7 @@ func (s *Store) AdminRelocateRange(
 			// the leaseholder now, so we can always transfer the lease there.
 			transferLease()
 			if err := s.DB().AdminChangeReplicas(
-				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
+				ctx, startKey, roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
 			); err != nil {
 				log.Warningf(ctx, "while removing target %v: %s", target, err)
 				if !canRetry(err) {
