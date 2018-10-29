@@ -767,6 +767,15 @@ func registerTPCCBench(r *registry) {
 			EstimatedMax:   12000,
 			LoadConfig:     singlePartitionedLoadgen,
 		},
+
+		// Requested by @awoods87.
+		{
+			Nodes: 11,
+			CPUs:  32,
+
+			LoadWarehouses: 10000,
+			EstimatedMax:   8000,
+		},
 	}
 
 	for _, b := range specs {
