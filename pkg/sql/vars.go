@@ -325,6 +325,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_vectorize`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_vectorize`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetVectorize(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.Vectorize)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(VectorizeClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`optimizer`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.OptimizerModeFromString(s)
