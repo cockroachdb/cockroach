@@ -182,7 +182,7 @@ SELECT sum(kv.w) FROM kv GROUP BY lower(s) HAVING lower(kv.s) LIKE 'test%'
 project
  ├── columns: sum:5(decimal)
  └── select
-      ├── columns: sum:5(decimal) column6:6(string)
+      ├── columns: sum:5(decimal) column6:6(string!null)
       ├── group-by
       │    ├── columns: sum:5(decimal) column6:6(string)
       │    ├── grouping columns: column6:6(string)

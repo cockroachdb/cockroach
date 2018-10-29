@@ -16,6 +16,8 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 
+import { getDataFromServer } from "src/util/dataFromServer";
+import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
 import { PanelSection, PanelTitle, PanelPair, Panel } from "src/views/shared/components/panelSection";
@@ -23,6 +25,8 @@ import { PanelSection, PanelTitle, PanelPair, Panel } from "src/views/shared/com
 import "./debug.styl";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
+
+const NODE_ID = getDataFromServer().NodeID;
 
 function DebugTableLink(props: { name: string, url: string, note?: string }) {
   return (
@@ -96,8 +100,9 @@ export default function Debug() {
           </p>
         </InfoBox>
 
-        <div className="debug-header__license-type">
+        <div className="debug-header__annotations">
           <LicenseType />
+          <DebugAnnotation label="Web server" value={ `n${NODE_ID}` } />
         </div>
       </div>
       <PanelSection>
