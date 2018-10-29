@@ -5685,8 +5685,8 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, enginepb.SERIALIZABLE, tc.Clock())
-		pusher := newTransaction("pusher", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, roachpb.MaxUserPriority, enginepb.SERIALIZABLE, tc.Clock())
+		pusher := newTransaction("pusher", key, roachpb.MinUserPriority, enginepb.SERIALIZABLE, tc.Clock())
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		if test.heartbeat != (hlc.Timestamp{}) {
