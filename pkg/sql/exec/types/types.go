@@ -82,6 +82,15 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 	return Unhandled
 }
 
+// FromColumnTypes returns the Ts that corresponds to the input ColumnTypes.
+func FromColumnTypes(cts []sqlbase.ColumnType) []T {
+	ret := make([]T, len(cts))
+	for i := range cts {
+		ret[i] = FromColumnType(cts[i])
+	}
+	return ret
+}
+
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
 // runtime.
 func FromGoType(v interface{}) T {
