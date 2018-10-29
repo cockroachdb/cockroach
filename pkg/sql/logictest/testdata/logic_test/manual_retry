@@ -77,3 +77,54 @@ query I
 SELECT id FROM t
 ----
 1
+
+subtest rename_savepoint
+
+query T
+show session force_savepoint_restart
+----
+off
+
+statement ok
+SET force_savepoint_restart = true
+
+query T
+show session force_savepoint_restart
+----
+on
+
+# We can now use anything that we want.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT something_else; COMMIT
+
+# Ensure that we can't mix-and-match names.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT foo
+
+statement error pq: SAVEPOINT "foo" is in use
+ROLLBACK TO SAVEPOINT bar
+
+# Verify we're doing the right thing for non-quoted idents
+statement ok
+ROLLBACK TO SAVEPOINT FOO
+
+# Verify use of quoted idents
+statement ok
+SAVEPOINT "Foo Bar"
+
+statement error pq: SAVEPOINT "Foo Bar" is in use
+ROLLBACK TO SAVEPOINT FooBar
+
+statement ok
+ROLLBACK TO SAVEPOINT "Foo Bar"
+
+statement ok
+ABORT
+
+statement ok
+RESET force_savepoint_restart
+
+query T
+show session force_savepoint_restart
+----
+off
