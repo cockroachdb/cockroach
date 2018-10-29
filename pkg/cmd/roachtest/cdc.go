@@ -46,6 +46,7 @@ type cdcTestArgs struct {
 	workloadDuration   string
 	initialScan        bool
 	kafkaChaos         bool
+	crdbChaos          bool
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
@@ -81,6 +82,13 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			sqlNodes:           crdbNodes,
 			workloadNodes:      workloadNode,
 			tpccWarehouseCount: args.tpccWarehouseCount,
+			// TODO(dan): Applying tolerateErrors to all tests is unfortunate, but we're
+			// seeing all sorts of "error in newOrder: missing stock row" from tpcc. I'm
+			// debugging it, but in the meantime, we need to be getting data from these
+			// roachtest runs. In ideal usage, this should only be enabled for tests
+			// with CRDB chaos enabled.
+			/* tolerateErrors */
+			tolerateErrors: true,
 		}
 		tpcc.install(ctx, c)
 
@@ -112,7 +120,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	}
 	defer changefeedLogger.close()
 	verifier := makeLatencyVerifier(
-		args.targetInitialScanLatency, args.targetSteadyLatency, changefeedLogger)
+		args.targetInitialScanLatency,
+		args.targetSteadyLatency,
+		changefeedLogger,
+		args.crdbChaos,
+	)
 	defer verifier.maybeLogLatencyHist()
 
 	m.Go(func(ctx context.Context) error {
@@ -145,6 +157,19 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			period, downTime := 2*time.Minute, 20*time.Second
 			return kafka.chaosLoop(ctx, period, downTime, workloadCompleteCh)
 		})
+	}
+
+	if args.crdbChaos {
+		chaosDuration, err := time.ParseDuration(args.workloadDuration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ch := Chaos{
+			Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
+			Target:  crdbNodes.randNode,
+			Stopper: time.After(chaosDuration),
+		}
+		m.Go(ch.Runner(c, m))
 	}
 	m.Wait()
 
@@ -325,6 +350,24 @@ func registerCDC(r *registry) {
 			})
 		},
 	})
+	r.Add(testSpec{
+		Name:       "cdc/w=100/init=false/crdbChaos=true",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              false,
+				kafkaChaos:               false,
+				crdbChaos:                true,
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      10 * time.Minute,
+			})
+		},
+	})
 	// TODO(mrtracy): This workload was designed with a certain tx/s load in mind,
 	// but the load level is not currently being requested or enforced. Add the
 	// necessary code to reach this level (575 tx/s).
@@ -465,6 +508,7 @@ type tpccWorkload struct {
 	workloadNodes      nodeListOption
 	sqlNodes           nodeListOption
 	tpccWarehouseCount int
+	tolerateErrors     bool
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
@@ -476,13 +520,13 @@ func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c *cluster, workloadDuration string) {
-	// TODO(dan): The --tolerate-errors here is unfortunate, but we're seeing
-	// all sorts of "error in newOrder: missing stock row" from tpcc. I'm
-	// debugging it, but in the meantime, we need to be getting data from these
-	// roachtest runs.
+	tolerateErrors := ""
+	if tw.tolerateErrors {
+		tolerateErrors = "--tolerate-errors"
+	}
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s --tolerate-errors`,
-		tw.tpccWarehouseCount, tw.sqlNodes, workloadDuration,
+		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
+		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
 	))
 }
 
@@ -510,6 +554,7 @@ type latencyVerifier struct {
 	statementTime            time.Time
 	targetSteadyLatency      time.Duration
 	targetInitialScanLatency time.Duration
+	tolerateErrors           bool
 	logger                   *logger
 
 	initialScanLatency   time.Duration
@@ -520,7 +565,10 @@ type latencyVerifier struct {
 }
 
 func makeLatencyVerifier(
-	targetInitialScanLatency time.Duration, targetSteadyLatency time.Duration, l *logger,
+	targetInitialScanLatency time.Duration,
+	targetSteadyLatency time.Duration,
+	l *logger,
+	tolerateErrors bool,
 ) *latencyVerifier {
 	const sigFigs, minLatency, maxLatency = 1, 100 * time.Microsecond, 100 * time.Second
 	hist := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
@@ -529,6 +577,7 @@ func makeLatencyVerifier(
 		targetSteadyLatency:      targetSteadyLatency,
 		logger:                   l,
 		latencyHist:              hist,
+		tolerateErrors:           tolerateErrors,
 	}
 }
 
@@ -580,9 +629,14 @@ func (lv *latencyVerifier) pollLatency(
 
 		info, err := getChangefeedInfo(db, jobID)
 		if err != nil {
+			if lv.tolerateErrors {
+				lv.logger.Printf("error getting changefeed info: %s", err)
+				continue
+			}
 			return err
 		}
 		if info.status != `running` {
+			lv.logger.Printf("unexpected status: %s, error: %s", info.status, info.errMsg)
 			return errors.Errorf(`unexpected status: %s`, info.status)
 		}
 		lv.noteHighwater(info.highwaterTime)
@@ -639,6 +693,7 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (
 
 type changefeedInfo struct {
 	status        string
+	errMsg        string
 	statementTime time.Time
 	highwaterTime time.Time
 }
@@ -667,6 +722,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (changefeedInfo, error) {
 	}
 	return changefeedInfo{
 		status:        status,
+		errMsg:        payload.Error,
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
 	}, nil

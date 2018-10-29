@@ -1560,3 +1560,73 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
+
+// TestChangefeedNodeShutdown ensures that an enterprise changefeed continues
+// running after the original job-coordinator node is shut down.
+func TestChangefeedNodeShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skip("#32232")
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	flushCh := make(chan struct{}, 1)
+	defer close(flushCh)
+	knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+		AfterSinkFlush: func() error {
+			select {
+			case flushCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	}}}
+
+	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "d",
+			Knobs:       knobs,
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(1)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+	// Create a factory which uses server 1 as the output of the Sink, but
+	// executes the CREATE CHANGEFEED statement on server 0.
+	f := makeTable(tc.Server(1), tc.ServerConn(0), flushCh)
+	foo := f.Feed(t, "CREATE CHANGEFEED FOR foo")
+	defer foo.Close(t)
+
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'second')`)
+	assertPayloads(t, foo, []string{
+		`foo: [0]->{"a": 0, "b": "initial"}`,
+		`foo: [1]->{"a": 1, "b": "second"}`,
+	})
+
+	// TODO(mrtracy): At this point we need to wait for a resolved timestamp,
+	// in order to ensure that there isn't a repeat when the job is picked up
+	// again. As an alternative, we could use a verifier instead of assertPayloads.
+
+	// Wait for the high-water mark on the job to be updated after the initial
+	// scan, to make sure we don't get the initial scan data again.
+
+	// Stop server 0, which is where the table feed connects.
+	tc.StopServer(0)
+
+	sqlDB.Exec(t, `UPSERT INTO foo VALUES(0, 'updated')`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'third')`)
+
+	assertPayloads(t, foo, []string{
+		`foo: [0]->{"a": 0, "b": "updated"}`,
+		`foo: [3]->{"a": 3, "b": "third"}`,
+	})
+
+}
