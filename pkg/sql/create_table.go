@@ -160,8 +160,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	params.p.Tables().addCreatedTable(id)
-
 	for _, index := range desc.AllNonDropIndexes() {
 		if len(index.Interleave.Ancestors) > 0 {
 			if err := params.p.finalizeInterleave(params.ctx, &desc, index); err != nil {
@@ -809,9 +807,16 @@ var CreatePartitioningCCL = func(
 }
 
 // NewMutableTableDescriptor returns a MutableTableDescriptor from the
-// given TableDescriptor.
-func NewMutableTableDescriptor(tbl sqlbase.TableDescriptor) *sqlbase.MutableTableDescriptor {
-	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl}
+// given TableDescriptor and cluster version of the table.
+func NewMutableTableDescriptor(
+	tbl sqlbase.TableDescriptor, clusterVer *sqlbase.TableDescriptor,
+) *sqlbase.MutableTableDescriptor {
+	desc := &sqlbase.MutableTableDescriptor{TableDescriptor: tbl}
+	if clusterVer != nil {
+		cpy := *clusterVer
+		desc.ClusterVer = &cpy
+	}
+	return desc
 }
 
 // InitTableDescriptor returns a blank TableDescriptor.
@@ -829,7 +834,7 @@ func InitTableDescriptor(
 		Version:          1,
 		ModificationTime: creationTime,
 		Privileges:       privileges,
-	})
+	}, nil /* clusterVer */)
 }
 
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table

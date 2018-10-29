@@ -153,10 +153,8 @@ type TableCollection struct {
 	// the table. These table descriptors are local to this
 	// TableCollection and invisible to other transactions. A dropped
 	// table is marked dropped.
-	uncommittedTables []*sqlbase.MutableTableDescriptor
-
-	// Map of tables created in the transaction.
-	createdTables map[sqlbase.ID]struct{}
+	uncommittedTables   map[sqlbase.ID]*sqlbase.MutableTableDescriptor
+	uncommittedTableIDs []sqlbase.ID
 
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
@@ -398,7 +396,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return NewMutableTableDescriptor(*table), nil
+	return NewMutableTableDescriptor(*table, table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -417,7 +415,7 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.releaseLeases(ctx)
 	tc.uncommittedTables = nil
-	tc.createdTables = nil
+	tc.uncommittedTableIDs = nil
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
 }
@@ -460,27 +458,24 @@ func (tc *TableCollection) hasUncommittedTables() bool {
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescriptor) {
-	for i, table := range tc.uncommittedTables {
-		if table.ID == desc.ID {
-			tc.uncommittedTables[i] = &desc
-			return
-		}
+	if tc.uncommittedTables == nil {
+		tc.uncommittedTables = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 	}
-	tc.uncommittedTables = append(tc.uncommittedTables, &desc)
-	tc.releaseAllDescriptors()
-}
+	if _, ok := tc.uncommittedTables[desc.ID]; !ok {
+		tc.uncommittedTableIDs = append(tc.uncommittedTableIDs, desc.ID)
+	}
 
-func (tc *TableCollection) addCreatedTable(id sqlbase.ID) {
-	if tc.createdTables == nil {
-		tc.createdTables = make(map[sqlbase.ID]struct{})
+	if desc.ClusterVer != nil {
+		cpy := *desc.ClusterVer
+		desc.ClusterVer = &cpy
 	}
-	tc.createdTables[id] = struct{}{}
+	tc.uncommittedTables[desc.ID] = &desc
 	tc.releaseAllDescriptors()
 }
 
 func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
-	_, ok := tc.createdTables[id]
-	return ok
+	mut := tc.getUncommittedTableByID(id)
+	return mut != nil && mut.ClusterVer == nil
 }
 
 // returns all the idVersion pairs that have undergone a schema change.
@@ -554,8 +549,11 @@ func (tc *TableCollection) getUncommittedTable(
 ) (refuseFurtherLookup bool, table *sqlbase.MutableTableDescriptor, err error) {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
-	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
-		table := tc.uncommittedTables[i]
+	for i := len(tc.uncommittedTableIDs) - 1; i >= 0; i-- {
+		table := tc.uncommittedTables[tc.uncommittedTableIDs[i]]
+		if table == nil {
+			continue
+		}
 		// If a table has gotten renamed we'd like to disallow using the old names.
 		// The renames could have happened in another transaction but it's still okay
 		// to disallow the use of the old name in this transaction because the other
@@ -597,15 +595,7 @@ func (tc *TableCollection) getUncommittedTable(
 }
 
 func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *sqlbase.MutableTableDescriptor {
-	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
-	// with the same name will result in the CREATE TABLE being seen.
-	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
-		table := tc.uncommittedTables[i]
-		if table.ID == id {
-			return table
-		}
-	}
-	return nil
+	return tc.uncommittedTables[id]
 }
 
 // getAllDescriptors returns all descriptors visible by the transaction,
