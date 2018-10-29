@@ -100,7 +100,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 	o.f.Init(evalCtx)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	o.defaultCoster.Init(o.mem)
+	o.defaultCoster.Init(o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
 	o.coster = &o.defaultCoster
 	o.stateMap = make(map[groupStateKey]*groupState)
 	o.matchedRule = nil

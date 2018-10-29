@@ -33,7 +33,7 @@ SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
 2
 
-query TITI
+query TITI rowsort
 SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
 ----
 a 1 a 1

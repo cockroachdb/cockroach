@@ -2401,6 +2401,10 @@ type EvalContextTestingKnobs struct {
 	// DisableOptimizerRuleProbability is the probability that any given
 	// transformation rule in the optimizer is disabled.
 	DisableOptimizerRuleProbability float64
+	// OptimizerCostPerturbation is used to randomly perturb the estimated
+	// cost of each expression in the query tree for the purpose of creating
+	// alternate query plans in the optimizer.
+	OptimizerCostPerturbation float64
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}

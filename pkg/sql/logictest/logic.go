@@ -365,6 +365,10 @@ var (
 	disableOptRuleProbability = flag.Float64(
 		"disable-opt-rule-probability", 0,
 		"disable transformation rules in the cost-based optimizer with the given probability.")
+	optimizerCostPerturbation = flag.Float64(
+		"optimizer-cost-perturbation", 0,
+		"randomly perturb the estimated cost of each expression in the query tree by at most the "+
+			"given fraction for the purpose of creating alternate query plans in the optimizer.")
 )
 
 type testClusterConfig struct {
@@ -953,6 +957,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					AssertUnaryExprReturnTypes:      true,
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
+					OptimizerCostPerturbation:       *optimizerCostPerturbation,
 				},
 				Upgrade: &server.UpgradeTestingKnobs{
 					DisableUpgrade: cfg.disableUpgrade,
