@@ -243,42 +243,6 @@ func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
 
-// CanProvideOrdering returns true if the row number operator returns rows that
-// can satisfy the given required ordering.
-func (r *RowNumberPrivate) CanProvideOrdering(required *props.OrderingChoice) bool {
-	// By construction, any prefix of the ordering required of the input is also
-	// ordered by the ordinality column. For example, if the required input
-	// ordering is +a,+b, then any of these orderings can be provided:
-	//
-	//   +ord
-	//   +a,+ord
-	//   +a,+b,+ord
-	//
-	// As long as the optimizer is enabled, it will have already reduced the
-	// ordering required of this operator to take into account that the ordinality
-	// column is a key, so there will never be ordering columns after the
-	// ordinality column in that case.
-	ordCol := opt.MakeOrderingColumn(r.ColID, false)
-	prefix := len(required.Columns)
-	for i := range required.Columns {
-		if required.MatchesAt(i, ordCol) {
-			if i == 0 {
-				return true
-			}
-			prefix = i
-			break
-		}
-	}
-
-	if prefix < len(required.Columns) {
-		truncated := required.Copy()
-		truncated.Truncate(prefix)
-		return r.Ordering.Implies(&truncated)
-	}
-
-	return r.Ordering.Implies(required)
-}
-
 // CanProvideOrdering returns true if the MergeJoin operator returns rows that
 // satisfy the given required ordering.
 func (m *MergeJoinPrivate) CanProvideOrdering(required *props.OrderingChoice) bool {
