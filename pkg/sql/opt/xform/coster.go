@@ -176,17 +176,17 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 }
 
 func (c *coster) computeSortCost(sort *memo.SortExpr, required *props.Physical) memo.Cost {
-	// Add the CPU cost of emitting the rows.
+	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
+	// certain amount of memory is used, distsql switches to a disk-based sort
+	// with a temp RocksDB store.
 	rowCount := sort.Relational().Stats.RowCount
 	cost := memo.Cost(rowCount) * cpuCostFactor
-
+	factor := memo.Cost(1)
 	if rowCount > 1 {
-		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
-		// certain amount of memory is used, distsql switches to a disk-based sort
-		// with a temp RocksDB store.
-		perRowCost := c.rowSortCost(len(required.Ordering.Columns))
-		cost += memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
+		factor += memo.Cost(math.Log2(rowCount))
 	}
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns))
+	cost += memo.Cost(rowCount) * perRowCost * factor
 
 	return cost
 }
@@ -334,8 +334,24 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
 	groupingColCount := private.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	// TODO(radu): take into account how many grouping columns we have an ordering
-	// on for DistinctOn.
+	// Add a cost that reflects the use of a hash table - unless we are doing a
+	// streaming aggregation where all the grouping columns are ordered; we
+	// interpolate linearly if only part of the grouping columns are ordered.
+	//
+	// The cost is chosen so that it's always less than the cost to sort the
+	// input.
+	hashCost := memo.Cost(inputRowCount) * cpuCostFactor
+	if !private.GroupingCols.SubsetOf(private.Ordering.Optional) {
+		unorderedCols := private.GroupingCols.Copy()
+		for i := range private.Ordering.Columns {
+			unorderedCols.DifferenceWith(private.Ordering.Columns[i].Group)
+		}
+		n := unorderedCols.Len()
+		// n = 0:                cost factor = 0
+		// n = groupingColCount: cost factor = 1
+		hashCost *= memo.Cost(n) / memo.Cost(groupingColCount)
+	}
+	cost += hashCost
 
 	return cost
 }

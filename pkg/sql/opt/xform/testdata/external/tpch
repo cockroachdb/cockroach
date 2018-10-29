@@ -2096,25 +2096,30 @@ project
  │    │    │    │    ├── group-by
  │    │    │    │    │    ├── columns: p_partkey:17(int!null) avg:42(float)
  │    │    │    │    │    ├── grouping columns: p_partkey:17(int!null)
+ │    │    │    │    │    ├── internal-ordering: +17 opt(20,23)
  │    │    │    │    │    ├── key: (17)
  │    │    │    │    │    ├── fd: (17)-->(42)
  │    │    │    │    │    ├── left-join (lookup lineitem)
  │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string!null) p_container:23(string!null) lineitem.l_partkey:27(int) lineitem.l_quantity:30(float)
  │    │    │    │    │    │    ├── key columns: [26 29] = [26 29]
  │    │    │    │    │    │    ├── fd: ()-->(20,23)
+ │    │    │    │    │    │    ├── ordering: +17 opt(20,23)
  │    │    │    │    │    │    ├── left-join (lookup lineitem@l_pk)
  │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string!null) p_container:23(string!null) lineitem.l_orderkey:26(int) lineitem.l_partkey:27(int) lineitem.l_linenumber:29(int)
  │    │    │    │    │    │    │    ├── key columns: [17] = [27]
  │    │    │    │    │    │    │    ├── key: (17,26,29)
  │    │    │    │    │    │    │    ├── fd: ()-->(20,23), (26,29)-->(27)
+ │    │    │    │    │    │    │    ├── ordering: +17 opt(20,23)
  │    │    │    │    │    │    │    ├── select
  │    │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string!null) p_container:23(string!null)
  │    │    │    │    │    │    │    │    ├── key: (17)
  │    │    │    │    │    │    │    │    ├── fd: ()-->(20,23)
+ │    │    │    │    │    │    │    │    ├── ordering: +17 opt(20,23)
  │    │    │    │    │    │    │    │    ├── scan part
  │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string!null) p_container:23(string!null)
  │    │    │    │    │    │    │    │    │    ├── key: (17)
- │    │    │    │    │    │    │    │    │    └── fd: (17)-->(20,23)
+ │    │    │    │    │    │    │    │    │    ├── fd: (17)-->(20,23)
+ │    │    │    │    │    │    │    │    │    └── ordering: +17 opt(20,23)
  │    │    │    │    │    │    │    │    └── filters
  │    │    │    │    │    │    │    │         ├── p_brand = 'Brand#23' [type=bool, outer=(20), constraints=(/20: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(20)]
  │    │    │    │    │    │    │    │         └── p_container = 'MED BOX' [type=bool, outer=(23), constraints=(/23: [/'MED BOX' - /'MED BOX']; tight), fd=()-->(23)]
@@ -2229,6 +2234,7 @@ limit
  │         │    │    │    │    ├── group-by
  │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:34(int!null) sum:50(float)
  │         │    │    │    │    │    ├── grouping columns: lineitem.l_orderkey:34(int!null)
+ │         │    │    │    │    │    ├── internal-ordering: +34
  │         │    │    │    │    │    ├── key: (34)
  │         │    │    │    │    │    ├── fd: (34)-->(50)
  │         │    │    │    │    │    ├── ordering: +34
