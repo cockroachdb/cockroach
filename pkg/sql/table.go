@@ -155,9 +155,6 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.MutableTableDescriptor
 
-	// Map of tables created in the transaction.
-	createdTables map[sqlbase.ID]struct{}
-
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
@@ -398,7 +395,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return NewMutableTableDescriptor(*table), nil
+	return NewMutableTableDescriptor(*table, *table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -417,7 +414,6 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.releaseLeases(ctx)
 	tc.uncommittedTables = nil
-	tc.createdTables = nil
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
 }
@@ -470,17 +466,9 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescript
 	tc.releaseAllDescriptors()
 }
 
-func (tc *TableCollection) addCreatedTable(id sqlbase.ID) {
-	if tc.createdTables == nil {
-		tc.createdTables = make(map[sqlbase.ID]struct{})
-	}
-	tc.createdTables[id] = struct{}{}
-	tc.releaseAllDescriptors()
-}
-
 func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
-	_, ok := tc.createdTables[id]
-	return ok
+	mut := tc.getUncommittedTableByID(id)
+	return mut != nil && mut.ClusterVer.ID == sqlbase.InvalidID
 }
 
 // returns all the idVersion pairs that have undergone a schema change.
@@ -803,7 +791,8 @@ func (p *planner) writeTableDescToBatch(
 		return pgerror.NewAssertionErrorf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
-	if p.Tables().isCreatedTable(tableDesc.ID) {
+	// Table is created in current transaction.
+	if tableDesc.ClusterVer.ID == sqlbase.InvalidID {
 		if err := runSchemaChangesInTxn(ctx,
 			p.txn,
 			p.Tables(),

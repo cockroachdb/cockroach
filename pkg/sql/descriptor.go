@@ -130,7 +130,7 @@ func (p *planner) createDescriptorWithID(
 		mutDesc = d
 		isTable = true
 	case *sqlbase.TableDescriptor:
-		mutDesc = NewMutableTableDescriptor(*d)
+		mutDesc = NewMutableTableDescriptor(*d, sqlbase.TableDescriptor{})
 		isTable = true
 	}
 

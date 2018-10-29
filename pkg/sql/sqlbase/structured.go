@@ -107,6 +107,8 @@ type MutationID uint32
 // going through mutations.
 type MutableTableDescriptor struct {
 	TableDescriptor
+
+	ClusterVer TableDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
