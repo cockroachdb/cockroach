@@ -15,9 +15,11 @@
 import React from "react";
 
 import spinner from "assets/spinner.gif";
+import "./index.styl";
 
 interface LoadingProps {
   loading: boolean;
+  error?: Error | null;
   className?: string;
   image?: string;
   render: () => React.ReactNode;
@@ -33,12 +35,22 @@ export default function Loading(props: LoadingProps) {
   const image = {
     "backgroundImage": `url(${imageURL})`,
   };
+  // Check for `error` before `loading`, since tests for `loading` often return
+  // true even if CachedDataReducer has an error and is no longer really "loading".
+  if (props.error) {
+    return (
+      <div className="loading-error">
+        <p>An error was encountered while loading this data:</p>
+        <pre>{props.error.message}</pre>
+      </div>
+    );
+  }
   if (props.loading) {
     return <div className={className} style={image} />;
   }
   return (
     <React.Fragment>
-      { props.render() }
+      {props.render()}
     </React.Fragment>
   );
 }
