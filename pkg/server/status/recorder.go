@@ -15,6 +15,7 @@
 package status
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -23,6 +24,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -52,7 +54,9 @@ import (
 )
 
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultCGroupMemRoot      = "/sys/fs/cgroup/memory"
+	defaultCGroupMemLimitFile = "memory.limit_in_bytes"
+	defaultCGroupSelfPath     = "/proc/self/cgroup"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -612,6 +616,32 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 	return memory, nil
 }
 
+// parseCurrentCGroup returns the cgroup for the given controller after
+// parsing the contents of a /proc/[pid]/cgroup file. The contents must conform
+// to the cgroup(7) format which is:
+//   hierarchy-ID:controller-list:cgroup-path
+// Example:
+//   5:cpuacct,cpu,cpuset:/daemons
+func parseCurrentCGroup(controller string, buf []byte) (string, error) {
+	var cgroup string
+	scanner := bufio.NewScanner(bytes.NewReader(buf))
+Loop:
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) < 3 {
+			return "", fmt.Errorf("invalid cgroup line: %s", line)
+		}
+		for _, c := range strings.Split(parts[1], ",") {
+			if c == controller {
+				cgroup = parts[2]
+				break Loop
+			}
+		}
+	}
+	return cgroup, scanner.Err()
+}
+
 // GetTotalMemoryWithoutLogging is the same as GetTotalMemory, but returns any warning
 // as a string instead of logging it.
 func GetTotalMemoryWithoutLogging() (int64, string, error) {
@@ -641,7 +671,24 @@ func GetTotalMemoryWithoutLogging() (int64, string, error) {
 	}
 
 	var buf []byte
-	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+	cgroup := "/"
+	// Try to determine what CGroup we're in for memory limits then fallback to
+	// global memory limit if not found. If this call errors, ignore the error
+	// since the file might just not exist.
+	if buf, err = ioutil.ReadFile(defaultCGroupSelfPath); err == nil {
+		if cgroup, err = parseCurrentCGroup("memory", buf); err != nil {
+			warning := fmt.Sprintf("can't determine current cgroup (%s), using system memory %s instead",
+				err, humanizeutil.IBytes(totalMem))
+			return checkTotal(totalMem, warning)
+		}
+		// If no cgroup for memory was found, default to trying the global one
+		if cgroup == "" {
+			cgroup = "/"
+		}
+	}
+
+	cgroupMemPath := path.Join(defaultCGroupMemRoot, cgroup, defaultCGroupMemLimitFile)
+	if buf, err = ioutil.ReadFile(cgroupMemPath); err != nil {
 		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
 			err, humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem, warning)

@@ -390,3 +390,33 @@ func TestMetricsRecorder(t *testing.T) {
 	wg.Wait()
 	recorder.mu.RUnlock()
 }
+
+func TestParseCurrentCGroup(t *testing.T) {
+	buf := []byte(`11:hugetlb:/
+10:memory:/user.slice
+9:blkio:/
+8:cpuacct,cpu:/user.slice
+7:perf_event:/
+6:cpuset:/
+5:net_prio,net_cls:/
+4:freezer:/
+3:devices:/
+2:pids:/
+1:name=systemd:/user.slice/user-1002.slice/session-6342.scope`)
+
+	check := func(controller, expected string) {
+		cgroup, err := parseCurrentCGroup(controller, buf)
+		if err != nil {
+			t.Fatal("couldn't parse cgroup contents", err)
+		}
+
+		if cgroup != expected {
+			t.Errorf("%s cgroup was not expected; got %s, expected %s", controller, cgroup, expected)
+		}
+	}
+
+	check("memory", "/user.slice")
+	check("cpu", "/user.slice")
+	check("cpuset", "/")
+	check("nothing", "")
+}
