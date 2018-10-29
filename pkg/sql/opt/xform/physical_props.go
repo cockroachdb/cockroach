@@ -46,7 +46,7 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
 	switch e.Op() {
-	case opt.ScanOp:
+	case opt.ScanOp, opt.SelectOp:
 		return oporder.CanProvideOrdering(e, required)
 	}
 
@@ -55,10 +55,6 @@ func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingC
 	}
 
 	switch e.Op() {
-	case opt.SelectOp:
-		// Select operator can always pass through ordering to its input.
-		return true
-
 	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		// These operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
@@ -122,15 +118,11 @@ func (o *Optimizer) buildChildPhysicalProps(
 	var childProps props.Physical
 
 	switch parent.Op() {
-	case opt.ScanOp:
+	case opt.ScanOp, opt.SelectOp:
 		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 	}
 
 	switch parent.Op() {
-	case opt.SelectOp:
-		if nth == 0 {
-			childProps.Ordering = parentProps.Ordering
-		}
 
 	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		// These ops may need to remove ordering columns that are not output

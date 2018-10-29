@@ -59,6 +59,10 @@ func init() {
 		canProvideOrdering:    scanCanProvideOrdering,
 		buildChildReqOrdering: noChildReqOrdering,
 	}
+	funcMap[opt.SelectOp] = funcs{
+		canProvideOrdering:    selectCanProvideOrdering,
+		buildChildReqOrdering: selectBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
