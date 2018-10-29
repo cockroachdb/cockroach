@@ -43,6 +43,7 @@ integer_datetimes                  on
 intervalstyle                      postgres
 max_index_keys                     32
 node_id                            1
+restart_savepoint_name             COCKROACH_RESTART
 search_path                        public
 server_encoding                    UTF8
 server_version                     9.5.0

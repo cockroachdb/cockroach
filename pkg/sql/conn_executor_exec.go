@@ -221,7 +221,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 
 	case *tree.ReleaseSavepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+		if err := tree.ValidateRestartCheckpoint(ex.sessionData, s.Savepoint); err != nil {
 			return makeErrEvent(err)
 		}
 		if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
@@ -239,7 +239,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 
 	case *tree.Savepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Name); err != nil {
+		if err := tree.ValidateRestartCheckpoint(ex.sessionData, s.Name); err != nil {
 			return makeErrEvent(err)
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
@@ -256,7 +256,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return eventRetryIntentSet{}, nil /* payload */, nil
 
 	case *tree.RollbackToSavepoint:
-		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+		if err := tree.ValidateRestartCheckpoint(ex.sessionData, s.Savepoint); err != nil {
 			return makeErrEvent(err)
 		}
 		if !os.RetryIntent.Get() {
@@ -1091,7 +1091,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 		default:
 			panic("unreachable")
 		}
-		if err := tree.ValidateRestartCheckpoint(spName); err != nil {
+		if err := tree.ValidateRestartCheckpoint(ex.sessionData, spName); err != nil {
 			ev := eventNonRetriableErr{IsCommit: fsm.False}
 			payload := eventNonRetriableErrPayload{
 				err: err,

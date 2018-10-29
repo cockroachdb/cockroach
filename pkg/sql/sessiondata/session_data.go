@@ -82,6 +82,11 @@ type SessionData struct {
 	DurationAdditionMode duration.AdditionMode
 	// Vectorize enables automatic planning of vectorized operators.
 	Vectorize bool
+	// RestartSavepointName overrides the default savepoint name, to allow
+	// compatibility with certain ORMs.  The value stored here should be
+	// run through strings.ToUpper().  This can be removed if general
+	// savepoint support is added.
+	RestartSavepointName string
 }
 
 // DataConversionConfig contains the parameters that influence

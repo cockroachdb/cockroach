@@ -433,7 +433,24 @@ var varGen = map[string]sessionVar{
 			return fmt.Sprintf("%d", evalCtx.NodeID)
 		},
 	},
-
+	// CockroachDB extension.
+	// https://github.com/cockroachdb/cockroach/issues/30588
+	`restart_savepoint_name`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.RestartSavepointName
+		},
+		Set: func(_ context.Context, m *sessionDataMutator, val string) error {
+			if val == "" {
+				return pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+					`restart_savepoint_name must not be empty`)
+			}
+			m.SetRestartSavepointName(strings.ToUpper(val))
+			return nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return tree.RestartSavepointName
+		},
+	},
 	// CockroachDB extension (inspired by MySQL).
 	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {

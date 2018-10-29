@@ -77,3 +77,37 @@ query I
 SELECT id FROM t
 ----
 1
+
+subtest rename_savepoint
+
+query T
+show session restart_savepoint_name
+----
+COCKROACH_RESTART
+
+statement ok
+SET restart_savepoint_name = 'something_else'
+
+query T
+show session restart_savepoint_name
+----
+SOMETHING_ELSE
+
+# The savepoint validation looks for prefixes, not exact matches.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT something_else_2; COMMIT
+
+# Verify error on name mismatch.
+statement error pq: SAVEPOINT not supported except for SOMETHING_ELSE
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart; COMMIT
+
+statement ok
+ABORT
+
+statement ok
+RESET restart_savepoint_name
+
+query T
+show session restart_savepoint_name
+----
+COCKROACH_RESTART

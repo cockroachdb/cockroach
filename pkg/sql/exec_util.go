@@ -1654,6 +1654,10 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
 }
 
+func (m *sessionDataMutator) SetRestartSavepointName(name string) {
+	m.data.RestartSavepointName = name
+}
+
 func (m *sessionDataMutator) SetReadOnly(val bool) {
 	*m.curTxnReadOnly = val
 }

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
@@ -182,12 +183,16 @@ func (node *RollbackTransaction) Format(ctx *FmtCtx) {
 const RestartSavepointName string = "COCKROACH_RESTART"
 
 // ValidateRestartCheckpoint checks that a checkpoint name is our magic restart
-// value.
+// value or one that was configured in the session variable.
 // We accept everything with the desired prefix because at least the C++ libpqxx
 // appends sequence numbers to the savepoint name specified by the user.
-func ValidateRestartCheckpoint(savepoint string) error {
-	if !strings.HasPrefix(strings.ToUpper(savepoint), RestartSavepointName) {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "SAVEPOINT not supported except for %s", RestartSavepointName)
+func ValidateRestartCheckpoint(data sessiondata.SessionData, savepoint string) error {
+	expected := data.RestartSavepointName
+	if expected == "" {
+		expected = RestartSavepointName
+	}
+	if !strings.HasPrefix(strings.ToUpper(savepoint), expected) {
+		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "SAVEPOINT not supported except for %s", expected)
 	}
 	return nil
 }
