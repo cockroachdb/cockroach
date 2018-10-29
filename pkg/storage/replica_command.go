@@ -1044,7 +1044,7 @@ func updateRangeDescriptor(
 	var newValue interface{}
 	if newDesc != nil {
 		if err := newDesc.Validate(); err != nil {
-			return err
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
 		}
 		newBytes, err := protoutil.Marshal(newDesc)
 		if err != nil {
