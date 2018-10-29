@@ -20,11 +20,142 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// partitioner encapsulates all logic related to partitioning discrete numbers
+// of warehouses into disjoint sets of roughly equal sizes. Partitions are then
+// evenly assigned "active" warehouses, which allows for an even split of live
+// warehouses across partitions without the need to repartition when the active
+// count is changed.
+type partitioner struct {
+	total  int // e.g. the total number of warehouses
+	active int // e.g. the active number of warehouses
+	parts  int // the number of partitions to break `total` into
+
+	partBounds   []int       // the boundary points between partitions
+	partElems    [][]int     // the elements active in each partition
+	partElemsMap map[int]int // mapping from element to partition index
+	totalElems   []int       // all active elements
+}
+
+func makePartitioner(total, active, parts int) (*partitioner, error) {
+	if total <= 0 {
+		return nil, errors.Errorf("total must be positive; %d", total)
+	}
+	if active <= 0 {
+		return nil, errors.Errorf("active must be positive; %d", active)
+	}
+	if parts <= 0 {
+		return nil, errors.Errorf("parts must be positive; %d", parts)
+	}
+	if active > total {
+		return nil, errors.Errorf("active > total; %d > %d", active, total)
+	}
+	if parts > total {
+		return nil, errors.Errorf("parts > total; %d > %d", parts, total)
+	}
+
+	// Partition boundary points.
+	//
+	// bounds contains the boundary points between partitions, where each point
+	// in the slice corresponds to the exclusive end element of one partition
+	// and and the inclusive start element of the next.
+	//
+	//  total  = 20
+	//  parts  = 3
+	//  bounds = [0, 6, 13, 20]
+	//
+	bounds := make([]int, parts+1)
+	for i := range bounds {
+		bounds[i] = (i * total) / parts
+	}
+
+	// Partition sizes.
+	//
+	// sizes contains the number of elements that are active in each partition.
+	//
+	//  active = 10
+	//  parts  = 3
+	//  sizes  = [3, 3, 4]
+	//
+	sizes := make([]int, parts)
+	for i := range sizes {
+		s := (i * active) / parts
+		e := ((i + 1) * active) / parts
+		sizes[i] = e - s
+	}
+
+	// Partitions.
+	//
+	// partElems enumerates the active elements in each partition.
+	//
+	//  total     = 20
+	//  active    = 10
+	//  parts     = 3
+	//  partElems = [[0, 1, 2], [6, 7, 8], [13, 14, 15, 16]]
+	//
+	partElems := make([][]int, parts)
+	for i := range partElems {
+		partAct := make([]int, sizes[i])
+		for j := range partAct {
+			partAct[j] = bounds[i] + j
+		}
+		partElems[i] = partAct
+	}
+
+	// Partition reverse mapping.
+	//
+	// partElemsMap maps each active element to its partition index.
+	//
+	//  total        = 20
+	//  active       = 10
+	//  parts        = 3
+	//  partElemsMap = {0:0, 1:0, 2:0, 6:1, 7:1, 8:1, 13:2, 14:2, 15:2, 16:2}
+	//
+	partElemsMap := make(map[int]int)
+	for p, elems := range partElems {
+		for _, elem := range elems {
+			partElemsMap[elem] = p
+		}
+	}
+
+	// Total elements.
+	//
+	// totalElems aggregates all active elements into a single slice.
+	//
+	//  total      = 20
+	//  active     = 10
+	//  parts      = 3
+	//  totalElems = [0, 1, 2, 6, 7, 8, 13, 14, 15, 16]
+	//
+	var totalElems []int
+	for _, elems := range partElems {
+		totalElems = append(totalElems, elems...)
+	}
+
+	return &partitioner{
+		total:  total,
+		active: active,
+		parts:  parts,
+
+		partBounds:   bounds,
+		partElems:    partElems,
+		partElemsMap: partElemsMap,
+		totalElems:   totalElems,
+	}, nil
+}
+
+// randActive returns a random active element.
+func (p *partitioner) randActive(rng *rand.Rand) int {
+	return p.totalElems[rng.Intn(len(p.totalElems))]
+}
 
 // configureZone sets up zone configs for previously created partitions. By default it adds constraints
 // in terms of racks, but if the zones flag is passed into tpcc, it will set the constraints based on the
@@ -54,12 +185,18 @@ func configureZone(db *pgx.ConnPool, table, partition string, constraint int, zo
 	}
 }
 
-func partitionWarehouse(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
+// partitionObject partitions the specified object (TABLE or INDEX) with the
+// provided name, given the partitioning. Callers of the function must specify
+// the associated table and the partition's number.
+func partitionObject(
+	db *pgx.ConnPool, p *partitioner, zones []string, obj, name, col, table string, idx int,
+) {
 	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE warehouse PARTITION BY RANGE (w_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, wIDs[i], wIDs[i+1])
-		if i+1 < partitions {
+	fmt.Fprintf(&buf, "ALTER %s %s PARTITION BY RANGE (%s) (\n", obj, name, col)
+	for i := 0; i < p.parts; i++ {
+		fmt.Fprintf(&buf, "  PARTITION p%d_%d VALUES FROM (%d) to (%d)",
+			idx, i, p.partBounds[i], p.partBounds[i+1])
+		if i+1 < p.parts {
 			buf.WriteString(",")
 		}
 		buf.WriteString("\n")
@@ -69,209 +206,79 @@ func partitionWarehouse(db *pgx.ConnPool, wIDs []int, partitions int, zones []st
 		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
 	}
 
-	for i := 0; i < partitions; i++ {
-		configureZone(db, "warehouse", fmt.Sprintf("p%d", i), i, zones)
+	for i := 0; i < p.parts; i++ {
+		configureZone(db, table, fmt.Sprintf("p%d_%d", idx, i), i, zones)
 	}
 }
 
-func partitionDistrict(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE district PARTITION BY RANGE (d_w_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, wIDs[i], wIDs[i+1])
-		if i+1 < partitions {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-	}
-
-	for i := 0; i < partitions; i++ {
-		configureZone(db, "district", fmt.Sprintf("p%d", i), i, zones)
-	}
+func partitionTable(db *pgx.ConnPool, p *partitioner, zones []string, table, col string, idx int) {
+	partitionObject(db, p, zones, "TABLE", table, col, table, idx)
 }
 
-func partitionNewOrder(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE new_order PARTITION BY RANGE (no_w_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, wIDs[i], wIDs[i+1])
-		if i+1 < partitions {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-	}
-
-	for i := 0; i < partitions; i++ {
-		configureZone(db, "new_order", fmt.Sprintf("p%d", i), i, zones)
-	}
+func partitionIndex(
+	db *pgx.ConnPool, p *partitioner, zones []string, table, index, col string, idx int,
+) {
+	indexStr := fmt.Sprintf("%s@%s", table, index)
+	partitionObject(db, p, zones, "INDEX", indexStr, col, table, idx)
 }
 
-func partitionOrder(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	targets := []string{
-		`TABLE "order"`,
-		`INDEX "order"@order_idx`,
-		`INDEX "order"@order_o_w_id_o_d_id_o_c_id_idx`,
-	}
-
-	for j, target := range targets {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "ALTER %s PARTITION BY RANGE (o_w_id) (\n", target)
-		for i := 0; i < partitions; i++ {
-			fmt.Fprintf(&buf, "  PARTITION p%d_%d VALUES FROM (%d) to (%d)", j, i, wIDs[i], wIDs[i+1])
-			if i+1 < partitions {
-				buf.WriteString(",")
-			}
-			buf.WriteString("\n")
-		}
-		buf.WriteString(")\n")
-		if _, err := db.Exec(buf.String()); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-		}
-	}
-
-	for i := 0; i < partitions; i++ {
-		for j := range targets {
-			configureZone(db, `"order"`, fmt.Sprintf("p%d_%d", j, i), i, zones)
-		}
-	}
+func partitionWarehouse(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "warehouse", "w_id", 0)
 }
 
-func partitionOrderLine(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	data := []struct {
-		target string
-		column string
-	}{
-		{`TABLE order_line`, `ol_w_id`},
-		{`INDEX order_line@order_line_fk`, `ol_supply_w_id`},
-	}
-
-	for j, d := range data {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "ALTER %s PARTITION BY RANGE (%s) (\n", d.target, d.column)
-		for i := 0; i < partitions; i++ {
-			fmt.Fprintf(&buf, "  PARTITION p%d_%d VALUES FROM (%d) to (%d)", j, i, wIDs[i], wIDs[i+1])
-			if i+1 < partitions {
-				buf.WriteString(",")
-			}
-			buf.WriteString("\n")
-		}
-		buf.WriteString(")\n")
-		if _, err := db.Exec(buf.String()); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-		}
-	}
-
-	for i := 0; i < partitions; i++ {
-		for j := range data {
-			configureZone(db, `order_line`, fmt.Sprintf("p%d_%d", j, i), i, zones)
-		}
-	}
+func partitionDistrict(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "district", "d_w_id", 0)
 }
 
-func partitionStock(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE stock PARTITION BY RANGE (s_w_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, wIDs[i], wIDs[i+1])
-		if i+1 < partitions {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-	}
-
-	// TODO(peter): remove duplication with partitionItem().
-	const nItems = 100000
-	iIDs := make([]int, partitions+1)
-	for i := 0; i < partitions; i++ {
-		iIDs[i] = i * (nItems / partitions)
-	}
-	iIDs[partitions] = nItems
-
-	buf.Reset()
-	buf.WriteString("ALTER INDEX stock@stock_s_i_id_idx PARTITION BY RANGE (s_i_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p1_%d VALUES FROM (%d) to (%d)", i, iIDs[i], iIDs[i+1])
-		if i+1 < partitions {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-	}
-
-	for i := 0; i < partitions; i++ {
-		configureZone(db, "stock", fmt.Sprintf("p%d", i), i, zones)
-		configureZone(db, "stock", fmt.Sprintf("p1_%d", i), i, zones)
-	}
+func partitionNewOrder(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "new_order", "no_w_id", 0)
 }
 
-func partitionCustomer(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
-	targets := []string{
-		`TABLE customer`,
-		`INDEX customer@customer_idx`,
-	}
-
-	for j, target := range targets {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "ALTER %s PARTITION BY RANGE (c_w_id) (\n", target)
-		for i := 0; i < partitions; i++ {
-			fmt.Fprintf(&buf, "  PARTITION p%d_%d VALUES FROM (%d) to (%d)", j, i, wIDs[i], wIDs[i+1])
-			if i+1 < partitions {
-				buf.WriteString(",")
-			}
-			buf.WriteString("\n")
-		}
-		buf.WriteString(")\n")
-		if _, err := db.Exec(buf.String()); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-		}
-	}
-
-	for i := 0; i < partitions; i++ {
-		for j := range targets {
-			configureZone(db, `customer`, fmt.Sprintf("p%d_%d", j, i), i, zones)
-		}
-	}
+func partitionOrder(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, `"order"`, "o_w_id", 0)
+	partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1)
+	partitionIndex(db, wPart, zones, `"order"`, "order_o_w_id_o_d_id_o_c_id_idx", "o_w_id", 2)
 }
 
-func partitionHistory(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
+func partitionOrderLine(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "order_line", "ol_w_id", 0)
+	partitionIndex(db, wPart, zones, "order_line", "order_line_fk", "ol_supply_w_id", 1)
+}
+
+func partitionStock(db *pgx.ConnPool, wPart, iPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "stock", "s_w_id", 0)
+	partitionIndex(db, iPart, zones, "stock", "stock_s_i_id_idx", "s_i_id", 1)
+}
+
+func partitionCustomer(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	partitionTable(db, wPart, zones, "customer", "c_w_id", 0)
+	partitionIndex(db, wPart, zones, "customer", "customer_idx", "c_w_id", 1)
+}
+
+func partitionHistory(db *pgx.ConnPool, wPart *partitioner, zones []string) {
 	const maxVal = math.MaxUint64
 	temp := make([]byte, 16)
-	rowids := make([]uuid.UUID, partitions+1)
-	for i := 0; i < partitions; i++ {
+	rowids := make([]uuid.UUID, wPart.parts+1)
+	for i := 0; i < wPart.parts; i++ {
 		var err error
 
 		// We're splitting the UUID rowid column evenly into N partitions. The
 		// column is sorted lexicographically on the bytes of the UUID which means
 		// we should put the partitioning values at the front of the UUID.
-		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(partitions)))
+		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(wPart.parts)))
 		rowids[i], err = uuid.FromBytes(temp)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	rowids[partitions], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	rowids[wPart.parts], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
 
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE history PARTITION BY RANGE (rowid) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM ('%s') to ('%s')", i, rowids[i], rowids[i+1])
-		if i+1 < partitions {
+	for i := 0; i < wPart.parts; i++ {
+		fmt.Fprintf(&buf, "  PARTITION p0_%d VALUES FROM ('%s') to ('%s')", i, rowids[i], rowids[i+1])
+		if i+1 < wPart.parts {
 			buf.WriteString(",")
 		}
 		buf.WriteString("\n")
@@ -281,89 +288,44 @@ func partitionHistory(db *pgx.ConnPool, wIDs []int, partitions int, zones []stri
 		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
 	}
 
-	data := []struct {
-		target string
-		column string
-	}{
-		{`INDEX history@history_h_w_id_h_d_id_idx`, `h_w_id`},
-		{`INDEX history@history_h_c_w_id_h_c_d_id_h_c_id_idx`, `h_c_w_id`},
+	for i := 0; i < wPart.parts; i++ {
+		configureZone(db, `history`, fmt.Sprintf("p0_%d", i), i, zones)
 	}
 
-	for j, d := range data {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "ALTER %s PARTITION BY RANGE (%s) (\n", d.target, d.column)
-		for i := 0; i < partitions; i++ {
-			fmt.Fprintf(&buf, "  PARTITION p%d_%d VALUES FROM (%d) to (%d)", j, i, wIDs[i], wIDs[i+1])
-			if i+1 < partitions {
-				buf.WriteString(",")
-			}
-			buf.WriteString("\n")
-		}
-		buf.WriteString(")\n")
-		if _, err := db.Exec(buf.String()); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
-		}
-	}
-
-	for i := 0; i < partitions; i++ {
-		configureZone(db, `history`, fmt.Sprintf("p%d", i), i, zones)
-		for j := range data {
-			configureZone(db, `history`, fmt.Sprintf("p%d_%d", j, i), i, zones)
-		}
-	}
+	partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1)
+	partitionIndex(db, wPart, zones, "history", "history_h_c_w_id_h_c_d_id_h_c_id_idx", "h_c_w_id", 2)
 }
 
-func partitionItem(db *pgx.ConnPool, partitions int, zones []string) {
+func partitionItem(db *pgx.ConnPool, iPart *partitioner, zones []string) {
+	partitionTable(db, iPart, zones, "item", "i_id", 0)
+}
+
+func partitionTables(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+	// Create a separate partitioning for the fixed-size items table and its
+	// associated indexes.
 	const nItems = 100000
-	iIDs := make([]int, partitions+1)
-	for i := 0; i < partitions; i++ {
-		iIDs[i] = i * (nItems / partitions)
-	}
-	iIDs[partitions] = nItems
-
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE item PARTITION BY RANGE (i_id) (\n")
-	for i := 0; i < partitions; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, iIDs[i], iIDs[i+1])
-		if i+1 < partitions {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
+	iPart, err := makePartitioner(nItems, nItems, wPart.parts)
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't create item partitioner: %s\n", err))
 	}
 
-	for i := 0; i < partitions; i++ {
-		configureZone(db, "item", fmt.Sprintf("p%d", i), i, zones)
-	}
-}
-
-func partitionTables(db *pgx.ConnPool, warehouses, partitions int, zones []string) {
-	wIDs := make([]int, partitions+1)
-	for i := 0; i < partitions; i++ {
-		wIDs[i] = i * (warehouses / partitions)
-	}
-	wIDs[partitions] = warehouses
-
-	partitionWarehouse(db, wIDs, partitions, zones)
-	partitionDistrict(db, wIDs, partitions, zones)
-	partitionNewOrder(db, wIDs, partitions, zones)
-	partitionOrder(db, wIDs, partitions, zones)
-	partitionOrderLine(db, wIDs, partitions, zones)
-	partitionStock(db, wIDs, partitions, zones)
-	partitionCustomer(db, wIDs, partitions, zones)
-	partitionHistory(db, wIDs, partitions, zones)
-	partitionItem(db, partitions, zones)
+	partitionWarehouse(db, wPart, zones)
+	partitionDistrict(db, wPart, zones)
+	partitionNewOrder(db, wPart, zones)
+	partitionOrder(db, wPart, zones)
+	partitionOrderLine(db, wPart, zones)
+	partitionStock(db, wPart, iPart, zones)
+	partitionCustomer(db, wPart, zones)
+	partitionHistory(db, wPart, zones)
+	partitionItem(db, iPart, zones)
 }
 
 func isTableAlreadyPartitioned(db *pgx.ConnPool) (bool, error) {
 	var count int
 	if err := db.QueryRow(
-		// Check for the existence of a partition named p0, which indicates that the
-		// table has been paritioned already.
-		`SELECT count(*) FROM crdb_internal.partitions where name = 'p0'`,
+		// Check for the existence of a partition named p0_0, which indicates that the
+		// table has been partitioned already.
+		`SELECT count(*) FROM crdb_internal.partitions where name = 'p0_0'`,
 	).Scan(&count); err != nil {
 		return false, err
 	}
