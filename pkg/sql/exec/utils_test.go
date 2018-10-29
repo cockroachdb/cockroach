@@ -269,8 +269,10 @@ func assertTuplesEquals(expected tuples, actual tuples) error {
 // repeatableBatchSource is an Operator that returns the same batch forever.
 type repeatableBatchSource struct {
 	internalBatch ColBatch
+	batchLen      uint16
 
-	batchLen uint16
+	batchesToReturn int
+	batchesReturned int
 }
 
 var _ Operator = &repeatableBatchSource{}
@@ -286,11 +288,21 @@ func newRepeatableBatchSource(batch ColBatch) *repeatableBatchSource {
 
 func (s *repeatableBatchSource) Next() ColBatch {
 	s.internalBatch.SetSelection(false)
-	s.internalBatch.SetLength(s.batchLen)
+	s.batchesReturned++
+	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
+		s.internalBatch.SetLength(0)
+	} else {
+		s.internalBatch.SetLength(s.batchLen)
+	}
 	return s.internalBatch
 }
 
 func (s *repeatableBatchSource) Init() {}
+
+func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
+	s.batchesToReturn = b
+	s.batchesReturned = 0
+}
 
 func TestOpTestInputOutput(t *testing.T) {
 	input := tuples{
