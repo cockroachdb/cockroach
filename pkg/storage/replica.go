@@ -1255,6 +1255,10 @@ func (r *Replica) IsFirstRange() bool {
 func (r *Replica) IsDestroyed() (DestroyReason, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.isDestroyedRLocked()
+}
+
+func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
@@ -4649,6 +4653,8 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
+	mergeInProgressRLocked() bool
+	isDestroyedRLocked() (DestroyReason, error)
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {
@@ -4691,6 +4697,10 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 	}
 }
 
+func (r *Replica) mergeInProgressRLocked() bool {
+	return r.mu.mergeComplete != nil
+}
+
 // shouldReplicaQuiesce determines if a replica should be quiesced. All of the
 // access to Replica internals are gated by the quiescer interface to
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
@@ -4704,6 +4714,18 @@ func shouldReplicaQuiesce(
 	if numProposals != 0 {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d pending commands", numProposals)
+		}
+		return nil, false
+	}
+	if q.mergeInProgressRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: merge in progress")
+		}
+		return nil, false
+	}
+	if _, err := q.isDestroyedRLocked(); err != nil {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: replica destroyed")
 		}
 		return nil, false
 	}
