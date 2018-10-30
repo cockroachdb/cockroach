@@ -195,6 +195,15 @@ func UnimplementedWithIssueError(issue int, msg string) error {
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
+// UnimplementedWithIssueDetailError constructs an error with the given message
+// and a link to the passed issue. Recorded as "#<issue>.detail" in tracking.
+// This is useful when we need an extra axis of information to drill down into.
+func UnimplementedWithIssueDetailError(issue int, detail, msg string) error {
+	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
+	err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+}
+
 const unimplementedErrorHint = `This feature is not yet implemented in CockroachDB.
 
 Please check https://github.com/cockroachdb/cockroach/issues to check

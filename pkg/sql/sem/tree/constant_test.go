@@ -199,7 +199,14 @@ func mustParseDBool(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDDate(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDDate(s, time.UTC)
+	d, err := tree.ParseDDate(nil, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDTime(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDTime(nil, s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +220,7 @@ func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDTimestampTZ(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestampTZ(s, time.UTC, time.Millisecond)
+	d, err := tree.ParseDTimestampTZ(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +246,7 @@ var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
 	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
 	types.Bool:        mustParseDBool,
 	types.Date:        mustParseDDate,
+	types.Time:        mustParseDTime,
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
@@ -277,11 +285,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal("2010-09-28 12:00:00.1"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("PT12H2M"),
