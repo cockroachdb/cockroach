@@ -1,12 +1,18 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package engineccl
+package engine
 
 import (
 	"io/ioutil"
@@ -14,19 +20,18 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engine.MVCCKeyValue) {
+func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
-		var kvs []engine.MVCCKeyValue
+		var kvs []MVCCKeyValue
 		for iter.Seek(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
@@ -35,8 +40,8 @@ func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engin
 			if !ok {
 				break
 			}
-			kv := engine.MVCCKeyValue{
-				Key: engine.MVCCKey{
+			kv := MVCCKeyValue{
+				Key: MVCCKey{
 					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
 					Timestamp: iter.UnsafeKey().Timestamp,
 				},
@@ -59,15 +64,15 @@ func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engin
 func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
+	sst, err := MakeRocksDBSstFileWriter()
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	defer sst.Close()
-	var allKVs []engine.MVCCKeyValue
+	var allKVs []MVCCKeyValue
 	for i := byte(0); i < 10; i++ {
-		kv := engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
+		kv := MVCCKeyValue{
+			Key: MVCCKey{
 				Key:       []byte{i},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
@@ -112,18 +117,18 @@ func TestSSTIterator(t *testing.T) {
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyAMetadata := engine.EncodeKey(engine.MVCCKey{
+	keyAMetadata := EncodeKey(MVCCKey{
 		Key: []byte("a"),
 	})
-	keyA2 := engine.EncodeKey(engine.MVCCKey{
+	keyA2 := EncodeKey(MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
-	keyA1 := engine.EncodeKey(engine.MVCCKey{
+	keyA1 := EncodeKey(MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
 	})
-	keyB2 := engine.EncodeKey(engine.MVCCKey{
+	keyB2 := EncodeKey(MVCCKey{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
