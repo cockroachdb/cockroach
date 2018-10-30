@@ -90,18 +90,8 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
   }
 
-  render() {
+  renderContent = () => {
     const { log } = this.props;
-
-    if (log && !_.isEmpty(log.lastError)) {
-      return (
-        <div>
-          <h2>Range Log</h2>
-          There was an error retrieving the range log:
-          {log.lastError}
-        </div>
-      );
-    }
 
     // Sort by descending timestamp.
     const events = _.orderBy(
@@ -111,36 +101,43 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
 
     return (
+      <table className="log-table">
+        <tbody>
+          <tr className="log-table__row log-table__row--header">
+            <th className="log-table__cell log-table__cell--header">Timestamp</th>
+            <th className="log-table__cell log-table__cell--header">Store</th>
+            <th className="log-table__cell log-table__cell--header">Event Type</th>
+            <th className="log-table__cell log-table__cell--header">Range</th>
+            <th className="log-table__cell log-table__cell--header">Other Range</th>
+            <th className="log-table__cell log-table__cell--header">Info</th>
+          </tr>
+          {_.map(events, (event, key) => (
+            <tr key={key} className="log-table__row">
+              <td className="log-table__cell log-table__cell--date">
+                {Print.Timestamp(event.event.timestamp)}
+              </td>
+              <td className="log-table__cell">s{event.event.store_id}</td>
+              <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
+              <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
+              <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
+              <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  render() {
+    const { log } = this.props;
+
+    return (
       <div>
         <h2>Range Log</h2>
         <Loading
           loading={!log || log.inFlight}
-          render={() => (
-            <table className="log-table">
-              <tbody>
-                <tr className="log-table__row log-table__row--header">
-                  <th className="log-table__cell log-table__cell--header">Timestamp</th>
-                  <th className="log-table__cell log-table__cell--header">Store</th>
-                  <th className="log-table__cell log-table__cell--header">Event Type</th>
-                  <th className="log-table__cell log-table__cell--header">Range</th>
-                  <th className="log-table__cell log-table__cell--header">Other Range</th>
-                  <th className="log-table__cell log-table__cell--header">Info</th>
-                </tr>
-                {_.map(events, (event, key) => (
-                  <tr key={key} className="log-table__row">
-                    <td className="log-table__cell log-table__cell--date">
-                      {Print.Timestamp(event.event.timestamp)}
-                    </td>
-                    <td className="log-table__cell">s{event.event.store_id}</td>
-                    <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
-                    <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
-                    <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
-                    <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          error={log && log.lastError}
+          render={this.renderContent}
         />
       </div>
     );

@@ -48,6 +48,39 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
     this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));
   }
 
+  renderContent = () => {
+    const logEntries = _.sortBy(this.props.logs.data.entries, (e) => e.time);
+    const columns = [
+      {
+        title: "Time",
+        cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
+      },
+      {
+        title: "Severity",
+        cell: (index: number) => protos.cockroach.util.log.Severity[logEntries[index].severity],
+      },
+      {
+        title: "Message",
+        cell: (index: number) => (
+          <pre className="sort-table__unbounded-column logs-table__message">
+              { logEntries[index].message }
+            </pre>
+        ),
+      },
+      {
+        title: "File:Line",
+        cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
+      },
+    ];
+    return (
+      <SortableTable
+        count={logEntries.length}
+        columns={columns}
+        className="logs-table"
+      />
+    );
+  }
+
   render() {
     const nodeAddress = this.props.currentNode
       ? this.props.currentNode.desc.address.address_field
@@ -76,40 +109,6 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
       );
     }
 
-    let content: React.ReactNode = "No data";
-
-    if (this.props.logs.data) {
-      const logEntries = _.sortBy(this.props.logs.data.entries, (e) => e.time);
-      const columns = [
-        {
-          title: "Time",
-          cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
-        },
-        {
-          title: "Severity",
-          cell: (index: number) => protos.cockroach.util.log.Severity[logEntries[index].severity],
-        },
-        {
-          title: "Message",
-          cell: (index: number) => (
-            <pre className="sort-table__unbounded-column logs-table__message">
-              { logEntries[index].message }
-            </pre>
-          ),
-        },
-        {
-          title: "File:Line",
-          cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
-        },
-      ];
-      content = (
-        <SortableTable
-          count={logEntries.length}
-          columns={columns}
-          className="logs-table"
-        />
-      );
-    }
     return (
       <div>
         <Helmet>
@@ -121,7 +120,8 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
         <section className="section">
           <Loading
             loading={ !this.props.logs.data }
-            render={() => content}
+            error={ this.props.logs.lastError }
+            render={ this.renderContent }
           />
         </section>
       </div>
