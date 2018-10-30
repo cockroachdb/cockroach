@@ -37,12 +37,14 @@ const fixtureTestGenRows = 10
 type fixtureTestGen struct {
 	flags workload.Flags
 	val   string
+	empty string
 }
 
 func makeTestWorkload() workload.Flagser {
 	g := &fixtureTestGen{}
 	g.flags.FlagSet = pflag.NewFlagSet(`fx`, pflag.ContinueOnError)
 	g.flags.StringVar(&g.val, `val`, `default`, `The value for each row`)
+	g.flags.StringVar(&g.empty, `empty`, ``, `An empty flag`)
 	return g
 }
 

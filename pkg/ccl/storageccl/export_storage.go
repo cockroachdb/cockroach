@@ -881,13 +881,7 @@ func parseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) 
 	}
 	for k, vs := range q {
 		for _, v := range vs {
-			var flag string
-			if len(v) > 0 {
-				flag = `--` + k + `=` + v
-			} else {
-				flag = `--` + k
-			}
-			c.Flags = append(c.Flags, flag)
+			c.Flags = append(c.Flags, `--`+k+`=`+v)
 		}
 	}
 	return c, nil
