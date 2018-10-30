@@ -546,10 +546,7 @@ func (o *Optimizer) enforceProps(
 	var enforcer memo.RelExpr
 	if !inner.Ordering.Any() {
 		inner.Ordering = props.OrderingChoice{}
-		if state.sort == nil {
-			state.sort = &memo.SortExpr{Input: member}
-		}
-		enforcer = state.sort
+		enforcer = &memo.SortExpr{Input: member}
 	} else {
 		// No remaining properties, so no more enforcers.
 		if inner.Defined() {
@@ -753,12 +750,6 @@ type groupState struct {
 	// expression for a given group and set of physical properties is the
 	// expression with the lowest cost.
 	cost memo.Cost
-
-	// sort is set if the group has been optimized with respect to some ordering.
-	// In that case, a sort enforcer is lazily created to enforce that ordering.
-	// It is cached here since it only needs to be created once, and can be
-	// reused thereafter.
-	sort *memo.SortExpr
 
 	// fullyOptimized is set to true once the lowest cost expression has been
 	// found for a memo group, with respect to the required properties. A lower
