@@ -198,7 +198,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <h1>Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
-          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          error={this.props.problemRanges && this.props.problemRanges.lastError}
           render={() => (
             <div>
               {this.renderReportBody()}
