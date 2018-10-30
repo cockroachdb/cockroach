@@ -110,15 +110,13 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 	}
 }
 
-// DetachMemo copies the memo from the optimizer to the given memo, and then
-// clears the optimizer's copy of the memo so that reuse of the optimizer will
-// not impact the detached copy. In addition, the optimizer is reinitialized so
-// that it cannot be used with a detached memo. This method is used to extract
-// a read-only memo during the PREPARE phase.
-func (o *Optimizer) DetachMemo(to *memo.Memo) {
-	*to = *o.mem
-	*o.mem = memo.Memo{}
+// DetachMemo extracts the memo from the optimizer, and then re-initializes the
+// optimizer so that its reuse will not impact the detached memo. This method is
+// used to extract a read-only memo during the PREPARE phase.
+func (o *Optimizer) DetachMemo() *memo.Memo {
+	detach := o.f.DetachMemo()
 	o.Init(o.evalCtx)
+	return detach
 }
 
 // Factory returns a factory interface that the caller uses to construct an

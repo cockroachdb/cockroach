@@ -71,7 +71,7 @@ type Factory struct {
 	evalCtx *tree.EvalContext
 
 	// mem is the Memo data structure that the factory builds.
-	mem memo.Memo
+	mem *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
 	// used by the normalization rules. It wraps an unnamed xfunc.CustomFuncs,
@@ -93,11 +93,26 @@ type Factory struct {
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
 func (f *Factory) Init(evalCtx *tree.EvalContext) {
-	f.evalCtx = evalCtx
+	// Initialize (or reinitialize) the memo.
+	if f.mem == nil {
+		f.mem = &memo.Memo{}
+	}
 	f.mem.Init(evalCtx)
+
+	f.evalCtx = evalCtx
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
+}
+
+// DetachMemo extracts the memo from the optimizer, and then re-initializes the
+// factory so that its reuse will not impact the detached memo. This method is
+// used to extract a read-only memo during the PREPARE phase.
+func (f *Factory) DetachMemo() *memo.Memo {
+	detach := f.mem
+	f.mem = nil
+	f.Init(f.evalCtx)
+	return detach
 }
 
 // DisableOptimizations disables all transformation rules. The unaltered input
@@ -125,7 +140,7 @@ func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 
 // Memo returns the memo structure that the factory is operating upon.
 func (f *Factory) Memo() *memo.Memo {
-	return &f.mem
+	return f.mem
 }
 
 // Metadata returns the query-specific metadata, which includes information
