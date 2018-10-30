@@ -46,7 +46,8 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
 	switch e.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp, opt.MergeJoinOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp,
+		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp:
 		return oporder.CanProvideOrdering(e, required)
 	}
 
@@ -56,7 +57,7 @@ func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingC
 
 	switch e.Op() {
 
-	case opt.LimitOp, opt.OffsetOp, opt.DistinctOnOp:
+	case opt.DistinctOnOp:
 		// These operators require a certain ordering of their input, but can also
 		// pass through a stronger ordering.
 		return required.Intersects(o.internalOrdering(e))
@@ -108,7 +109,8 @@ func (o *Optimizer) buildChildPhysicalProps(
 	var childProps props.Physical
 
 	switch parent.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp, opt.MergeJoinOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp,
+		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp:
 		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 
 	case opt.ScalarGroupByOp:
@@ -117,7 +119,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 			childProps.Ordering = *o.internalOrdering(parent)
 		}
 
-	case opt.LimitOp, opt.OffsetOp, opt.DistinctOnOp:
+	case opt.DistinctOnOp:
 		if nth == 0 {
 			// These ops require the ordering in their private, but can pass through a
 			// stronger ordering. For example:

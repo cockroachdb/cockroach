@@ -83,6 +83,14 @@ func init() {
 		canProvideOrdering:    mergeJoinCanProvideOrdering,
 		buildChildReqOrdering: mergeJoinBuildChildReqOrdering,
 	}
+	funcMap[opt.LimitOp] = funcs{
+		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
+		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
+	}
+	funcMap[opt.OffsetOp] = funcs{
+		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
+		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
