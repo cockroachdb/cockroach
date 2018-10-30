@@ -543,20 +543,15 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
-	var enforcer memo.RelExpr
-	if !inner.Ordering.Any() {
-		inner.Ordering = props.OrderingChoice{}
-		if state.sort == nil {
-			state.sort = &memo.SortExpr{Input: member}
-		}
-		enforcer = state.sort
-	} else {
+	if inner.Ordering.Any() {
 		// No remaining properties, so no more enforcers.
 		if inner.Defined() {
 			panic(fmt.Sprintf("unhandled physical property: %v", inner))
 		}
 		return true
 	}
+	inner.Ordering = props.OrderingChoice{}
+	enforcer := &memo.SortExpr{Input: member}
 
 	// Recursively optimize the same group, but now with respect to the "inner"
 	// properties (which are a subset of the required properties).
@@ -753,12 +748,6 @@ type groupState struct {
 	// expression for a given group and set of physical properties is the
 	// expression with the lowest cost.
 	cost memo.Cost
-
-	// sort is set if the group has been optimized with respect to some ordering.
-	// In that case, a sort enforcer is lazily created to enforce that ordering.
-	// It is cached here since it only needs to be created once, and can be
-	// reused thereafter.
-	sort *memo.SortExpr
 
 	// fullyOptimized is set to true once the lowest cost expression has been
 	// found for a memo group, with respect to the required properties. A lower
