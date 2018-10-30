@@ -136,7 +136,7 @@ export default function Debug() {
         <DebugPanelLink
           name="Localities"
           url="#/reports/localities"
-          note="Check node localities for your cluster."
+          note="Check node localities and locations for your cluster."
         />
       </PanelSection>
       <DebugTable heading="Even More Advanced Debugging">
