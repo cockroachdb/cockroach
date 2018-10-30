@@ -68,6 +68,7 @@ function AppLink(props: { app: string }) {
 
 interface StatementDetailsOwnProps {
   statement: SingleStatementStatistics;
+  statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
 }
@@ -180,7 +181,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
         <section className="section section--container">
           <Loading
             loading={_.isNil(this.props.statement)}
-            className="loading-image loading-image__spinner"
+            error={this.props.statementsError}
             render={this.renderContent}
           />
         </section>
@@ -441,6 +442,7 @@ export const selectStatement = createSelector(
 const StatementDetailsConnected = connect(
   (state: AdminUIState, props: RouterState) => ({
     statement: selectStatement(state, props),
+    statementsError: state.cachedData.statements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
   }),
   {
