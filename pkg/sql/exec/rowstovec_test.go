@@ -97,3 +97,26 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 		t.Errorf("expected vector %+v, got %+v", expected, vec)
 	}
 }
+
+func TestEncDatumRowsToColVecDecimal(t *testing.T) {
+	nRows := 3
+	rows := make(sqlbase.EncDatumRows, nRows)
+	expected := newMemColumn(types.Decimal, 3)
+	for i, s := range []string{"1.0000", "-3.12", "NaN"} {
+		var err error
+		dec, err := tree.ParseDDecimal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows[i] = sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: dec}}
+		expected.Decimal()[i] = dec.Decimal
+	}
+	vec := newMemColumn(types.Decimal, 3)
+	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(vec, expected) {
+		t.Errorf("expected vector %+v, got %+v", expected, vec)
+	}
+}
