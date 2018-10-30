@@ -1,20 +1,24 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+/// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package storageccl
+package batcheval
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -25,11 +29,12 @@ import (
 )
 
 func init() {
-	batcheval.RegisterCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
+	RegisterCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
 }
 
-func evalAddSSTable(
-	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+// EvalAddSSTable evaluates an AddSSTable command.
+func EvalAddSSTable(
+	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
@@ -88,7 +93,7 @@ func verifySSTable(
 	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
 	// Next, we're also verifying each KV pair. We explicitly check the first key
 	// is >= start and then that we do not find a key after end.
-	dataIter, err := engineccl.NewMemSSTIterator(data, true)
+	dataIter, err := engine.NewMemSSTIterator(data, true)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -111,7 +116,7 @@ func verifySSTable(
 	// ordering. So it's important that the sstable iterator comes after the one
 	// for the existing data (because the sstable will overwrite it when
 	// ingested).
-	mergedIter := engineccl.MakeMultiIterator([]engine.SimpleIterator{existingIter, dataIter})
+	mergedIter := engine.MakeMultiIterator([]engine.SimpleIterator{existingIter, dataIter})
 	defer mergedIter.Close()
 
 	stats, err := engine.ComputeStatsGo(mergedIter, start, end, nowNanos)
