@@ -204,11 +204,13 @@ class Certificates extends React.Component<CertificatesProps, {}> {
         </Helmet>
         <h1>Certificates</h1>
 
-        <Loading
-          loading={!this.props.certificates}
-          error={this.props.lastError}
-          render={this.renderContent}
-        />
+        <section className="section">
+          <Loading
+            loading={!this.props.certificates}
+            error={this.props.lastError}
+            render={this.renderContent}
+          />
+        </section>
       </div>
     );
   }
