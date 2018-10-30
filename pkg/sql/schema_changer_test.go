@@ -1018,8 +1018,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// The two drop cases (column and index) do not need to be tested here
 	// because the INSERT down below will not insert an entry for a dropped
-	// column or index, however, it's still nice to have them just in case
-	// INSERT gets messed up.
+	// column or index, however, it's still nice to have the column drop
+	// just in case INSERT gets messed up. The writes will never abort a
+	// drop index because it uses ClearRange, so it is not tested.
 	testCases := []struct {
 		sql string
 		// Each schema change adds/drops a schema element that affects the
@@ -1029,7 +1030,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
-		{"DROP INDEX t.test@foo CASCADE", 1},
 	}
 
 	for _, testCase := range testCases {
