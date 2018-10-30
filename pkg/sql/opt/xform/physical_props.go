@@ -107,10 +107,13 @@ func (o *Optimizer) buildChildPhysicalProps(
 	}
 
 	var childProps props.Physical
+	if parent.Op() == opt.ExplainOp {
+		childProps.Presentation = parent.(*memo.ExplainExpr).Props.Presentation
+	}
 
 	switch parent.Op() {
 	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp,
-		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp:
+		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp, opt.ExplainOp:
 		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 
 	case opt.ScalarGroupByOp:
@@ -146,11 +149,6 @@ func (o *Optimizer) buildChildPhysicalProps(
 			// check the ordering to see if it can be simplified with respect to the
 			// input FD set.
 			childProps.Ordering.Simplify(&groupBy.Input.Relational().FuncDeps)
-		}
-
-	case opt.ExplainOp:
-		if nth == 0 {
-			childProps = *parent.(*memo.ExplainExpr).Props
 		}
 
 		// ************************* WARNING *************************

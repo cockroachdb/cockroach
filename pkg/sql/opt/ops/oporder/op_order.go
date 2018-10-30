@@ -91,6 +91,10 @@ func init() {
 		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
 	}
+	funcMap[opt.ExplainOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: explainBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
