@@ -19,7 +19,7 @@ import "./index.styl";
 
 interface LoadingProps {
   loading: boolean;
-  error?: Error | null;
+  error?: Error | Error[] | null;
   className?: string;
   image?: string;
   render: () => React.ReactNode;
@@ -30,7 +30,7 @@ interface LoadingProps {
  * loading prop is true.
  */
 export default function Loading(props: LoadingProps) {
-  const className = props.className || "loading-image loading-image__spinner-left";
+  const className = props.className || "loading-image loading-image__spinner";
   const imageURL = props.image || spinner;
   const image = {
     "backgroundImage": `url(${imageURL})`,
@@ -38,6 +38,20 @@ export default function Loading(props: LoadingProps) {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (props.error) {
+    if (Array.isArray(props.error)) {
+      return (
+        <div className="loading-error">
+          <p>Multiple errors occurred while loading this page.</p>
+          <ul>
+            {props.error.map((error, idx) => (
+              <li key={idx}>
+                <pre>{error.message}</pre>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
     return (
       <div className="loading-error">
         <p>An error was encountered while loading this data:</p>
