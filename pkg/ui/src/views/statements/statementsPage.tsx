@@ -44,6 +44,7 @@ type RouteProps = RouteComponentProps<any, any>;
 
 interface StatementsPageProps {
   statements: AggregateStatistics[];
+  statementsError: Error | null;
   apps: string[];
   totalFingerprints: number;
   lastReset: string;
@@ -157,7 +158,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
         <Loading
           loading={_.isNil(this.props.statements)}
-          className="loading-image loading-image__spinner"
+          error={this.props.statementsError}
           render={this.renderStatements}
         />
       </React.Fragment>
@@ -259,6 +260,7 @@ export const selectLastReset = createSelector(
 const StatementsPageConnected = connect(
   (state: StatementsState, props: RouteProps) => ({
     statements: selectStatements(state, props),
+    statementsError: state.cachedData.statements.lastError,
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),

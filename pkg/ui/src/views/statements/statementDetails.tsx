@@ -180,7 +180,6 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
         <section className="section section--container">
           <Loading
             loading={_.isNil(this.props.statement)}
-            className="loading-image loading-image__spinner"
             render={this.renderContent}
           />
         </section>

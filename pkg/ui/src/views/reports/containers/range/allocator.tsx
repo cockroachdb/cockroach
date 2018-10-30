@@ -26,6 +26,38 @@ interface AllocatorOutputProps {
 }
 
 export default class AllocatorOutput extends React.Component<AllocatorOutputProps, {}> {
+  renderContent = () => {
+    const { allocator } = this.props;
+
+    if (allocator && (_.isEmpty(allocator.data) || _.isEmpty(allocator.data.dry_run))) {
+      return (
+        <div>
+          <h2>Simulated Allocator Output</h2>
+          No simulated allocator output was returned.
+        </div>
+      );
+    }
+
+    return (
+      <table className="allocator-table">
+        <tbody>
+          <tr className="allocator-table__row allocator-table__row--header">
+            <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
+            <th className="allocator-table__cell allocator-table__cell--header">Message</th>
+          </tr>
+          {
+            _.map(allocator.data.dry_run.events, (event, key) => (
+              <tr key={key} className="allocator-table__row">
+                <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
+                <td className="allocator-table__cell">{event.message}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    );
+  }
+
   render() {
     const { allocator } = this.props;
 
@@ -41,24 +73,6 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
       );
     }
 
-    if (allocator && !_.isNil(allocator.lastError)) {
-      return (
-        <div>
-          <h2>Simulated Allocator Output</h2>
-          {allocator.lastError.toString()}
-        </div>
-      );
-    }
-
-    if (allocator && (_.isEmpty(allocator.data) || _.isEmpty(allocator.data.dry_run))) {
-      return (
-        <div>
-          <h2>Simulated Allocator Output</h2>
-          No simulated allocator output was returned.
-        </div>
-      );
-    }
-
     let fromNodeID = "";
     if (allocator && !_.isEmpty(allocator.data)) {
       fromNodeID = ` (from n${allocator.data.node_id.toString()})`;
@@ -69,24 +83,8 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
         <h2>Simulated Allocator Output{fromNodeID}</h2>
         <Loading
           loading={!allocator || allocator.inFlight}
-          render={() => (
-            <table className="allocator-table">
-              <tbody>
-                <tr className="allocator-table__row allocator-table__row--header">
-                  <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
-                  <th className="allocator-table__cell allocator-table__cell--header">Message</th>
-                </tr>
-                {
-                  _.map(allocator.data.dry_run.events, (event, key) => (
-                    <tr key={key} className="allocator-table__row">
-                      <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
-                      <td className="allocator-table__cell">{event.message}</td>
-                    </tr>
-                  ))
-                }
-              </tbody>
-            </table>
-          )}
+          error={allocator && allocator.lastError}
+          render={this.renderContent}
         />
       </div>
     );

@@ -24,7 +24,12 @@ import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { refreshDataDistribution, refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import {
+  refreshDataDistribution,
+  refreshNodes,
+  refreshLiveness,
+  CachedDataReducerState,
+} from "src/redux/apiReducers";
 import { LocalityTree, selectLocalityTree } from "src/redux/localities";
 import ReplicaMatrix, { SchemaObject } from "./replicaMatrix";
 import { TreeNode, TreePath } from "./tree";
@@ -43,7 +48,7 @@ const ZONE_CONFIG_TEXT = (
 );
 
 interface DataDistributionProps {
-  dataDistribution: DataDistributionResponse;
+  dataDistribution: CachedDataReducerState<DataDistributionResponse>;
   localityTree: LocalityTree;
   sortedZoneConfigs: ZoneConfig$Properties[];
 }
@@ -69,7 +74,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   getCellValue = (dbPath: TreePath, nodePath: TreePath): number => {
     const [dbName, tableName] = dbPath;
     const nodeID = nodePath[nodePath.length - 1];
-    const databaseInfo = this.props.dataDistribution.database_info;
+    const databaseInfo = this.props.dataDistribution.data.database_info;
 
     const res = databaseInfo[dbName].table_info[tableName].replica_count_by_node_id[nodeID];
     if (!res) {
@@ -81,7 +86,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   render() {
     const nodeTree = nodeTreeFromLocalityTree("Cluster", this.props.localityTree);
 
-    const databaseInfo = this.props.dataDistribution.database_info;
+    const databaseInfo = this.props.dataDistribution.data.database_info;
     const dbTree: TreeNode<SchemaObject> = {
       name: "Cluster",
       data: {
@@ -137,7 +142,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
 }
 
 interface DataDistributionPageProps {
-  dataDistribution: DataDistributionResponse;
+  dataDistribution: CachedDataReducerState<DataDistributionResponse>;
   localityTree: LocalityTree;
   sortedZoneConfigs: ZoneConfig$Properties[];
   refreshDataDistribution: typeof refreshDataDistribution;
@@ -170,8 +175,8 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
         </section>
         <section className="section">
           <Loading
-            className="loading-image loading-image__spinner-left"
             loading={!this.props.dataDistribution || !this.props.localityTree}
+            error={this.props.dataDistribution.lastError} // TODO(vilterp): also show locality tree loading errors
             render={() => (
               <DataDistribution
                 localityTree={this.props.localityTree}
@@ -199,7 +204,7 @@ const sortedZoneConfigs = createSelector(
 // tslint:disable-next-line:variable-name
 const DataDistributionPageConnected = connect(
   (state: AdminUIState) => ({
-    dataDistribution: state.cachedData.dataDistribution.data,
+    dataDistribution: state.cachedData.dataDistribution,
     sortedZoneConfigs: sortedZoneConfigs(state),
     localityTree: selectLocalityTree(state),
   }),
