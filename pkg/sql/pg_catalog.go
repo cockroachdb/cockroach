@@ -31,6 +31,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -680,7 +681,20 @@ CREATE TABLE pg_catalog.pg_constraint (
 					confupdtype = fkActionNone
 					confdeltype = fkActionNone
 					confmatchtype = fkMatchTypeSimple
-					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+					columnIDs := con.Index.ColumnIDs
+					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
+						return pgerror.NewAssertionErrorf(
+							"foreign key %q's SharedPrefixLen (%d) is greater than the columns in the index (%d)",
+							con.FK.Name,
+							con.FK.SharedPrefixLen,
+							int32(len(columnIDs)),
+						)
+					}
+					sharedPrefixLen := len(columnIDs)
+					if int(con.FK.SharedPrefixLen) > 0 {
+						sharedPrefixLen = int(con.FK.SharedPrefixLen)
+					}
+					if conkey, err = colIDArrayToDatum(columnIDs[:sharedPrefixLen]); err != nil {
 						return err
 					}
 					if confkey, err = colIDArrayToDatum(con.ReferencedIndex.ColumnIDs); err != nil {
