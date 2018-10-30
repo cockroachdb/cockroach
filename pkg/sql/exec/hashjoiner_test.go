@@ -292,41 +292,73 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	batch.SetLength(ColBatchSize)
 
-	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(batch, nBatches)
-				rightSource := newRepeatableBatchSource(batch)
+	leftSource := newRepeatableBatchSource(batch)
+	rightSource := newRepeatableBatchSource(batch)
 
-				spec := hashJoinerSpec{
-					build: hashJoinerSourceSpec{
-						eqCols:      []int{0, 2},
-						outCols:     []int{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-					},
+	for _, coalesce := range []bool{false, true} {
+		b.Run(fmt.Sprintf("coalesce=%v", coalesce), func(b *testing.B) {
+			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+					// batch) * nCols (number of columns / row) * 2 (number of sources).
+					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						leftSource.resetBatchesToReturn(nBatches)
+						rightSource.resetBatchesToReturn(nBatches)
 
-					probe: hashJoinerSourceSpec{
-						eqCols:      []int{1, 3},
-						outCols:     []int{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-					},
-				}
+						spec := hashJoinerSpec{
+							build: hashJoinerSourceSpec{
+								eqCols:      []int{0, 2},
+								outCols:     []int{0, 1},
+								sourceTypes: sourceTypes,
+								source:      leftSource,
+							},
 
-				hj := &hashJoinEqInnerDistinctOp{
-					spec: spec,
-				}
+							probe: hashJoinerSourceSpec{
+								eqCols:      []int{1, 3},
+								outCols:     []int{2, 3},
+								sourceTypes: sourceTypes,
+								source:      rightSource,
+							},
+						}
 
-				hj.Init()
+						outColTypes := make([]types.T, len(spec.build.outCols)+len(spec.probe.outCols))
+						for i, colIdx := range spec.build.outCols {
+							outColTypes[i] = spec.build.sourceTypes[colIdx]
+						}
 
-				for i := 0; i < nBatches; i++ {
-					hj.Next()
-				}
+						for i, colIdx := range spec.probe.outCols {
+							outColTypes[i+len(spec.build.outCols)] = spec.probe.sourceTypes[colIdx]
+						}
+
+						hj := &hashJoinEqInnerDistinctOp{
+							spec: spec,
+						}
+
+						if coalesce {
+							coalescer := NewCoalescerOp(hj, outColTypes)
+							coalescer.Init()
+
+							for {
+								out := coalescer.Next()
+								if out.Length() == 0 {
+									break
+								}
+							}
+
+						} else {
+							hj.Init()
+
+							for {
+								out := hj.Next()
+								if out.Length() == 0 {
+									break
+								}
+							}
+						}
+					}
+				})
 			}
 		})
 	}

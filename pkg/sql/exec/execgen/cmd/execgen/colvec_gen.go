@@ -102,11 +102,7 @@ func (m *memColumn) CopyWithSlice(vec ColVec, colType types.T, lower uint16, upp
 		case types.{{.ExecType}}:
 			toCol := m.{{.ExecType}}()[:ColBatchSize]
 			fromCol := vec.{{.ExecType}}()[lower:upper]
-			fromLength := upper - lower
-
-			for i := uint16(0); i < fromLength; i++ {
-				toCol[i] = fromCol[i]
-			}
+			copy(toCol, fromCol)
 		{{end}}
 		default:
 			panic(fmt.Sprintf("unhandled type %d", colType))

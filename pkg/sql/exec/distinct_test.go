@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -85,16 +86,44 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	}
 	batch.SetLength(ColBatchSize)
 	source := newRepeatableBatchSource(batch)
-	source.Init()
 
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64})
-	if err != nil {
-		b.Fatal(err)
-	}
+	nCols := 3
 
-	// don't count the artificial zeroOp'd column in the throughput
-	b.SetBytes(int64(8 * ColBatchSize * 3))
-	for i := 0; i < b.N; i++ {
-		distinct.Next()
+	for _, coalesce := range []bool{false, true} {
+		b.Run(fmt.Sprintf("coalesce=%v", coalesce), func(b *testing.B) {
+			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+					// don't count the artificial zeroOp'd column in the throughput
+					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						source.resetBatchesToReturn(nBatches)
+
+						distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64})
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						if coalesce {
+							coalescer := NewCoalescerOp(distinct, []types.T{types.Int64, types.Int64, types.Int64})
+							for {
+								out := coalescer.Next()
+								if out.Length() == 0 {
+									break
+								}
+							}
+						} else {
+							distinct.Init()
+							for {
+								out := distinct.Next()
+								if out.Length() == 0 {
+									break
+								}
+							}
+						}
+					}
+				})
+			}
+		})
 	}
 }
