@@ -714,7 +714,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	}
 
 	if reason, err := repl.IsDestroyed(); err != nil {
-		if !bq.queueConfig.processDestroyedReplicas || reason != destroyReasonRemovalPending {
+		if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
 			if log.V(3) {
 				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
 			}
