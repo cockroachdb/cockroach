@@ -1,12 +1,18 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package engineccl
+package engine
 
 import (
 	"bytes"
@@ -18,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
@@ -32,7 +37,7 @@ type sstIterator struct {
 
 	valid   bool
 	err     error
-	mvccKey engine.MVCCKey
+	mvccKey MVCCKey
 
 	// For allocation avoidance in NextKey.
 	nextKeyStart []byte
@@ -46,13 +51,13 @@ type sstIterator struct {
 	verify bool
 }
 
-var _ engine.SimpleIterator = &sstIterator{}
+var _ SimpleIterator = &sstIterator{}
 
 // NewSSTIterator returns a SimpleIterator for a leveldb formatted sstable on
-// disk. It's compatible with sstables output by engine.RocksDBSstFileWriter,
+// disk. It's compatible with sstables output by RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewSSTIterator(path string) (engine.SimpleIterator, error) {
+func NewSSTIterator(path string) (SimpleIterator, error) {
 	file, err := db.DefaultFileSystem.Open(path)
 	if err != nil {
 		return nil, err
@@ -61,10 +66,10 @@ func NewSSTIterator(path string) (engine.SimpleIterator, error) {
 }
 
 // NewMemSSTIterator returns a SimpleIterator for a leveldb format sstable in
-// memory. It's compatible with sstables output by engine.RocksDBSstFileWriter,
+// memory. It's compatible with sstables output by RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewMemSSTIterator(data []byte, verify bool) (engine.SimpleIterator, error) {
+func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
 	fs := memfs.New()
 	const filename = "data.sst"
 	f, err := fs.Create(filename)
@@ -85,7 +90,7 @@ func NewMemSSTIterator(data []byte, verify bool) (engine.SimpleIterator, error) 
 	return &sstIterator{fs: fs, sst: table.NewReader(file, readerOpts), verify: verify}, nil
 }
 
-// Close implements the engine.SimpleIterator interface.
+// Close implements the SimpleIterator interface.
 func (r *sstIterator) Close() {
 	if r.iter != nil {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
@@ -95,23 +100,23 @@ func (r *sstIterator) Close() {
 	}
 }
 
-// Seek implements the engine.SimpleIterator interface.
-func (r *sstIterator) Seek(key engine.MVCCKey) {
+// Seek implements the SimpleIterator interface.
+func (r *sstIterator) Seek(key MVCCKey) {
 	if r.iter != nil {
 		if r.err = errors.Wrap(r.iter.Close(), "resetting sstable iterator"); r.err != nil {
 			return
 		}
 	}
-	r.iter = r.sst.Find(engine.EncodeKey(key), nil)
+	r.iter = r.sst.Find(EncodeKey(key), nil)
 	r.Next()
 }
 
-// Valid implements the engine.SimpleIterator interface.
+// Valid implements the SimpleIterator interface.
 func (r *sstIterator) Valid() (bool, error) {
 	return r.valid && r.err == nil, r.err
 }
 
-// Next implements the engine.SimpleIterator interface.
+// Next implements the SimpleIterator interface.
 func (r *sstIterator) Next() {
 	if r.valid = r.iter.Next(); !r.valid {
 		return
@@ -126,7 +131,7 @@ func (r *sstIterator) Next() {
 		return
 	}
 	seqAndValueType := binary.LittleEndian.Uint64(rocksdbInternalKey[len(rocksdbInternalKey)-8:])
-	if valueType := engine.BatchType(seqAndValueType & 0xff); valueType != engine.BatchTypeValue {
+	if valueType := BatchType(seqAndValueType & 0xff); valueType != BatchTypeValue {
 		r.err = errors.Errorf("value type not supported: %d", valueType)
 		return
 	}
@@ -147,7 +152,7 @@ func (r *sstIterator) Next() {
 	}
 }
 
-// NextKey implements the engine.SimpleIterator interface.
+// NextKey implements the SimpleIterator interface.
 func (r *sstIterator) NextKey() {
 	if !r.valid {
 		return
@@ -157,12 +162,12 @@ func (r *sstIterator) NextKey() {
 	}
 }
 
-// UnsafeKey implements the engine.SimpleIterator interface.
-func (r *sstIterator) UnsafeKey() engine.MVCCKey {
+// UnsafeKey implements the SimpleIterator interface.
+func (r *sstIterator) UnsafeKey() MVCCKey {
 	return r.mvccKey
 }
 
-// UnsafeValue implements the engine.SimpleIterator interface.
+// UnsafeValue implements the SimpleIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.iter.Value()
 }

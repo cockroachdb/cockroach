@@ -1,12 +1,18 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package engineccl
+package engine
 
 import (
 	"bytes"
@@ -15,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -23,7 +28,7 @@ import (
 func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rocksDB := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	rocksDB := NewInMem(roachpb.Attributes{}, 1<<20)
 	defer rocksDB.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new
@@ -75,7 +80,7 @@ func TestMultiIterator(t *testing.T) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
 		t.Run(name, func(t *testing.T) {
-			var iters []engine.SimpleIterator
+			var iters []SimpleIterator
 			for _, input := range test.inputs {
 				batch := rocksDB.NewBatch()
 				defer batch.Close()
@@ -96,11 +101,11 @@ func TestMultiIterator(t *testing.T) {
 						v = []byte{input[i+1]}
 					}
 					i += 2
-					if err := batch.Put(engine.MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+					if err := batch.Put(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
 						t.Fatalf("%+v", err)
 					}
 				}
-				iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
 				iters = append(iters, iter)
 			}
@@ -108,16 +113,16 @@ func TestMultiIterator(t *testing.T) {
 			subtests := []struct {
 				name     string
 				expected string
-				fn       func(engine.SimpleIterator)
+				fn       func(SimpleIterator)
 			}{
-				{"NextKey", test.expectedNextKey, (engine.SimpleIterator).NextKey},
-				{"Next", test.expectedNext, (engine.SimpleIterator).Next},
+				{"NextKey", test.expectedNextKey, (SimpleIterator).NextKey},
+				{"Next", test.expectedNext, (SimpleIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
+					for it.Seek(MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
 						ok, err := it.Valid()
 						if err != nil {
 							t.Fatalf("unexpected error: %+v", err)

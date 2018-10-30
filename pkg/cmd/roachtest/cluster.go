@@ -495,6 +495,14 @@ type nodeSpec struct {
 	Lifetime time.Duration
 }
 
+func (s *nodeSpec) String() string {
+	str := fmt.Sprintf("n%dcpu%d", s.Count, s.CPUs)
+	if s.Geo {
+		str += "-geo"
+	}
+	return str
+}
+
 func (s *nodeSpec) args() []string {
 	var args []string
 
