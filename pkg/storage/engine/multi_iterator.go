@@ -1,25 +1,30 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package engineccl
+package engine
 
 import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
 const invalidIdxSentinel = -1
 
-// multiIterator multiplexes iteration over a number of engine.Iterators.
+// multiIterator multiplexes iteration over a number of Iterators.
 type multiIterator struct {
-	iters []engine.SimpleIterator
+	iters []SimpleIterator
 	// The index into `iters` of the iterator currently being pointed at.
 	currentIdx int
 	// The indexes of every iterator with the same key as the one in currentIdx.
@@ -34,16 +39,16 @@ type multiIterator struct {
 	err error
 }
 
-var _ engine.SimpleIterator = &multiIterator{}
+var _ SimpleIterator = &multiIterator{}
 
 // MakeMultiIterator creates an iterator that multiplexes
-// engine.SimpleIterators. The caller is responsible for closing the passed
+// SimpleIterators. The caller is responsible for closing the passed
 // iterators after closing the returned multiIterator.
 //
 // If two iterators have an entry with exactly the same key and timestamp, the
 // one with a higher index in this constructor arg is preferred. The other is
 // skipped.
-func MakeMultiIterator(iters []engine.SimpleIterator) engine.SimpleIterator {
+func MakeMultiIterator(iters []SimpleIterator) SimpleIterator {
 	return &multiIterator{
 		iters:                        iters,
 		currentIdx:                   invalidIdxSentinel,
@@ -58,7 +63,7 @@ func (f *multiIterator) Close() {
 
 // Seek advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (f *multiIterator) Seek(key engine.MVCCKey) {
+func (f *multiIterator) Seek(key MVCCKey) {
 	for _, iter := range f.iters {
 		iter.Seek(key)
 	}
@@ -81,7 +86,7 @@ func (f *multiIterator) Valid() (bool, error) {
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
 // call to {NextKey,Seek}.
-func (f *multiIterator) UnsafeKey() engine.MVCCKey {
+func (f *multiIterator) UnsafeKey() MVCCKey {
 	return f.iters[f.currentIdx].UnsafeKey()
 }
 
@@ -135,7 +140,7 @@ func (f *multiIterator) advance() {
 		// Fill proposedMVCCKey with the mvcc key of the current best for the
 		// next value for currentIdx (or a sentinel that sorts after everything
 		// if this is the first non-exhausted iterator).
-		proposedMVCCKey := engine.MVCCKey{Key: keys.MaxKey}
+		proposedMVCCKey := MVCCKey{Key: keys.MaxKey}
 		if proposedNextIdx != invalidIdxSentinel {
 			proposedMVCCKey = f.iters[proposedNextIdx].UnsafeKey()
 		}

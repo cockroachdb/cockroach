@@ -17,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -164,7 +163,7 @@ func AddSSTable(ctx context.Context, db *client.DB, start, end roachpb.Key, sstB
 func addSplitSSTable(
 	ctx context.Context, db *client.DB, sstBytes []byte, start, splitKey roachpb.Key,
 ) error {
-	iter, err := engineccl.NewMemSSTIterator(sstBytes, false)
+	iter, err := engine.NewMemSSTIterator(sstBytes, false)
 	if err != nil {
 		return err
 	}
@@ -281,7 +280,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			}
 		}
 
-		iter, err := engineccl.NewMemSSTIterator(fileContents, false)
+		iter, err := engine.NewMemSSTIterator(fileContents, false)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +296,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	defer batcher.Close()
 
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
-	iter := engineccl.MakeMultiIterator(iters)
+	iter := engine.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
 

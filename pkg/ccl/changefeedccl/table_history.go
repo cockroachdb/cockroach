@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -251,7 +250,7 @@ func fetchTableDescriptorVersions(
 	var tableDescs []*sqlbase.TableDescriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
-			it, err := engineccl.NewMemSSTIterator(file.SST, false /* verify */)
+			it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
 			if err != nil {
 				return err
 			}
