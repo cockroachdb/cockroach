@@ -1188,15 +1188,17 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 	store, _ := createTestStore(t, stopper)
 	args := getArgs([]byte("a"))
 
-	_, respH, pErr := SendWrapped(context.Background(), store.TestSender(), roachpb.Header{}, &args)
+	var ba roachpb.BatchRequest
+	ba.Add(&args)
+	br, pErr := store.TestSender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	// The Logical time will increase over the course of the command
 	// execution so we can only rely on comparing the WallTime.
-	if respH.Timestamp.WallTime != store.cfg.Clock.Now().WallTime {
+	if br.Timestamp.WallTime != store.cfg.Clock.Now().WallTime {
 		t.Errorf("expected reply to have store clock time %s; got %s",
-			store.cfg.Clock.Now(), respH.Timestamp)
+			store.cfg.Clock.Now(), br.Timestamp)
 	}
 }
 
