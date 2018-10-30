@@ -9775,13 +9775,15 @@ func TestSplitMsgApps(t *testing.T) {
 }
 
 type testQuiescer struct {
-	desc           roachpb.RangeDescriptor
-	numProposals   int
-	status         *raft.Status
-	lastIndex      uint64
-	raftReady      bool
-	ownsValidLease bool
-	livenessMap    IsLiveMap
+	desc            roachpb.RangeDescriptor
+	numProposals    int
+	status          *raft.Status
+	lastIndex       uint64
+	raftReady       bool
+	ownsValidLease  bool
+	mergeInProgress bool
+	isDestroyed     bool
+	livenessMap     IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9802,6 +9804,17 @@ func (q *testQuiescer) hasRaftReadyRLocked() bool {
 
 func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 	return q.ownsValidLease
+}
+
+func (q *testQuiescer) mergeInProgressRLocked() bool {
+	return q.mergeInProgress
+}
+
+func (q *testQuiescer) isDestroyedRLocked() (DestroyReason, error) {
+	if q.isDestroyed {
+		return destroyReasonRemovalPending, errors.New("testQuiescer: replica destroyed")
+	}
+	return 0, nil
 }
 
 func TestShouldReplicaQuiesce(t *testing.T) {
@@ -9860,6 +9873,14 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.numProposals = 1
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.mergeInProgress = true
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.isDestroyed = true
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
