@@ -12,6 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+import _ from "lodash";
 import React from "react";
 
 import spinner from "assets/spinner.gif";
@@ -19,10 +20,31 @@ import "./index.styl";
 
 interface LoadingProps {
   loading: boolean;
-  error?: Error | null;
+  error?: Error | Error[] | null;
   className?: string;
   image?: string;
   render: () => React.ReactNode;
+}
+
+/**
+ * getValidErrorsList eliminates any null Error values, and returns either
+ * null or a non-empty list of Errors.
+ */
+function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
+  if (errors) {
+    if (!Array.isArray(errors)) {
+      // Put single Error into a list to simplify logic in main Loading component.
+      return [errors];
+    } else {
+      // Remove null values from Error[].
+      const validErrors = _.filter(errors, (e) => { return !!e; });
+      if (validErrors.length === 0) {
+        return null;
+      }
+      return validErrors;
+    }
+  }
+  return null;
 }
 
 /**
@@ -30,18 +52,35 @@ interface LoadingProps {
  * loading prop is true.
  */
 export default function Loading(props: LoadingProps) {
-  const className = props.className || "loading-image loading-image__spinner-left";
+  const className = props.className || "loading-image loading-image__spinner";
   const imageURL = props.image || spinner;
   const image = {
     "backgroundImage": `url(${imageURL})`,
   };
+
+  const errors = getValidErrorsList(props.error);
+
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
-  if (props.error) {
+  if (errors) {
+    if (errors.length > 1) {
+      return (
+        <div className="loading-error">
+          <p>Multiple errors occurred while loading this data:</p>
+          <ul>
+            {errors.map((error, idx) => (
+              <li key={idx}>
+                <pre>{error.message}</pre>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
     return (
       <div className="loading-error">
         <p>An error was encountered while loading this data:</p>
-        <pre>{props.error.message}</pre>
+        <pre>{errors[0].message}</pre>
       </div>
     );
   }
