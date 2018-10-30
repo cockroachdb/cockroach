@@ -17,6 +17,8 @@ package types
 import (
 	"fmt"
 
+	"github.com/cockroachdb/apd"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -30,6 +32,8 @@ const (
 	Bool T = iota
 	// Bytes is a column of type []byte
 	Bytes
+	// Decimal is a column of type apd.Decimal
+	Decimal
 	// Int8 is a column of type int8
 	Int8
 	// Int16 is a column of type int16
@@ -56,6 +60,10 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 		return Bool
 	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
 		return Bytes
+	case sqlbase.ColumnType_DATE, sqlbase.ColumnType_OID:
+		return Int64
+	case sqlbase.ColumnType_DECIMAL:
+		return Decimal
 	case sqlbase.ColumnType_INT:
 		switch ct.Width {
 		case 8:
@@ -68,8 +76,6 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 			return Int64
 		}
 		panic(fmt.Sprintf("integer with unknown width %d", ct.Width))
-	case sqlbase.ColumnType_OID:
-		return Int64
 	case sqlbase.ColumnType_FLOAT:
 		return Float64
 	}
@@ -108,6 +114,8 @@ func FromGoType(v interface{}) T {
 		return Bytes
 	case string:
 		return Bytes
+	case apd.Decimal:
+		return Decimal
 	default:
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
