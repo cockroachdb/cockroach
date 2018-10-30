@@ -1014,7 +1014,25 @@ var specs = []stmtSpec{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},
 	},
-	{name: "set_transaction", stmt: "nonpreparable_set_stmt", inline: []string{"set_transaction_stmt", "transaction_mode_list", "transaction_iso_level", "transaction_user_priority", "iso_level", "user_priority"}, match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")}, exclude: []*regexp.Regexp{regexp.MustCompile("'READ'")}, replace: map[string]string{"'ISOLATION' 'LEVEL'": "'ISOLATION LEVEL'"}},
+	{
+		name: "set_transaction",
+		stmt: "nonpreparable_set_stmt",
+		inline: []string{
+			"set_transaction_stmt",
+			"transaction_mode",
+			"transaction_mode_list",
+			"transaction_user_priority",
+			"opt_comma",
+		},
+		match:   []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
+		exclude: []*regexp.Regexp{regexp.MustCompile("transaction_iso_level \\( \\(")},
+		replace: map[string]string{
+			"'SET' 'TRANSACTION' 'PRIORITY' user_priority ( ( ( ',' |  ) ( transaction_iso_level | ( 'PRIORITY' user_priority ) | transaction_read_mode ) ) )*": "'SET' 'TRANSACTION' 'PRIORITY' user_priority ( ( ',' |  ) transaction_read_mode )?",
+			"'SET' 'TRANSACTION' transaction_read_mode ( ( ( ',' |  ) ( transaction_iso_level | ( 'PRIORITY' user_priority ) | transaction_read_mode ) ) )*":    "'SET' 'TRANSACTION' transaction_read_mode ( ( ',' |  ) 'PRIORITY' user_priority )?",
+			"user_priority":         "( 'LOW' | 'NORMAL' | 'HIGH' )",
+			"transaction_read_mode": "( 'READ' 'ONLY' | 'READ' 'WRITE')",
+		},
+	},
 	{
 		name: "show_var",
 		stmt: "show_stmt",

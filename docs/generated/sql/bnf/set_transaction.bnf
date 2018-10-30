@@ -1,2 +1,3 @@
 nonpreparable_set_stmt ::=
-	'SET' 'TRANSACTION' transaction_mode ( ( opt_comma transaction_mode ) )*
+	'SET' 'TRANSACTION' 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ( ( ',' |  ) ( 'READ' 'ONLY' | 'READ' 'WRITE') )?
+	| 'SET' 'TRANSACTION' ( 'READ' 'ONLY' | 'READ' 'WRITE') ( ( ',' |  ) 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) )?
