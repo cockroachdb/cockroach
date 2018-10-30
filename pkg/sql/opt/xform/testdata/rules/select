@@ -601,7 +601,7 @@ memo (optimized, ~13KB)
  ├── G1: (select G2 G4) (select G3 G4)
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (select G3 G4)
- │         └── cost: 411.20
+ │         └── cost: 45.69
  ├── G2: (scan b)
  │    └── ""
  │         ├── best: (scan b)
@@ -609,12 +609,12 @@ memo (optimized, ~13KB)
  ├── G3: (index-join G5 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G5 b,cols=(1-4))
- │         └── cost: 410.40
+ │         └── cost: 45.60
  ├── G4: (filters G6 G7)
  ├── G5: (scan b@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2),constrained)
- │         └── cost: 83.20
+ │         └── cost: 9.24
  ├── G6: (gt G9 G8)
  ├── G7: (lt G9 G10)
  ├── G8: (tuple G11 G12 G13)
