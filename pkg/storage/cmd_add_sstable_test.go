@@ -1,12 +1,18 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package storageccl
+package storage
 
 import (
 	"bytes"
@@ -24,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -71,7 +76,7 @@ func TestDBAddSSTable(t *testing.T) {
 		})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
-		store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		store, err := s.GetStores().(*Stores).GetStore(s.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +85,7 @@ func TestDBAddSSTable(t *testing.T) {
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
-func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *storage.Store) {
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *Store) {
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
@@ -170,7 +175,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		var metrics *storage.StoreMetrics
+		var metrics *StoreMetrics
 		var before int64
 		if store != nil {
 			metrics = store.Metrics()
@@ -345,7 +350,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			},
 			Stats: &enginepb.MVCCStats{},
 		}
-		_, err := evalAddSSTable(ctx, e, cArgs, nil)
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
