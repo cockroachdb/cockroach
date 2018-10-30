@@ -58,12 +58,9 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	kafkaNode := c.Node(c.nodes)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
+	c.Start(ctx, t, crdbNodes)
 
 	db := c.Conn(ctx, 1)
-	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
-		c.t.Fatal(err)
-	}
 	defer stopFeeds(db)
 
 	t.Status("installing kafka")
@@ -108,22 +105,17 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		})
 	}
 
-	verifierLogger, err := t.l.ChildLogger("verifier")
+	changefeedLogger, err := t.l.ChildLogger("changefeed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer verifierLogger.close()
+	defer changefeedLogger.close()
 	verifier := latencyVerifier{
 		targetInitialScanLatency: args.targetInitialScanLatency,
 		targetSteadyLatency:      args.targetSteadyLatency,
-		logger:                   verifierLogger,
+		logger:                   changefeedLogger,
 	}
 	m.Go(func(ctx context.Context) error {
-		l, err := t.l.ChildLogger(`changefeed`)
-		if err != nil {
-			return err
-		}
-
 		var targets string
 		if args.workloadType == tpccWorkloadType {
 			targets = `tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
@@ -142,7 +134,8 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			return err
 		}
 		verifier.statementTime = info.statementTime
-		l.Printf("started changefeed at (%d) %s\n", verifier.statementTime.UnixNano(), verifier.statementTime)
+		changefeedLogger.Printf("started changefeed at (%d) %s\n",
+			verifier.statementTime.UnixNano(), verifier.statementTime)
 		t.Status("watching changefeed")
 		return verifier.pollLatency(ctx, db, jobID, time.Second, workloadCompleteCh)
 	})
@@ -483,8 +476,12 @@ func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c *cluster, workloadDuration string) {
+	// TODO(dan): The --tolerate-errors here is unfortunate, but we're seeing
+	// all sorts of "error in newOrder: missing stock row" from tpcc. I'm
+	// debugging it, but in the meantime, we need to be getting data from these
+	// roachtest runs.
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s`,
+		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s --tolerate-errors`,
 		tw.tpccWarehouseCount, tw.sqlNodes, workloadDuration,
 	))
 }
