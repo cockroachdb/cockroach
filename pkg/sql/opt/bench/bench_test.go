@@ -332,7 +332,7 @@ type harness struct {
 	ctx       context.Context
 	semaCtx   tree.SemaContext
 	evalCtx   tree.EvalContext
-	prepMemo  memo.Memo
+	prepMemo  *memo.Memo
 	cat       *testcat.Catalog
 	optimizer xform.Optimizer
 
@@ -473,7 +473,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 	h.ctx = context.Background()
 	h.semaCtx = tree.MakeSemaContext(false /* privileged */)
 	h.evalCtx = tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	h.prepMemo = memo.Memo{}
+	h.prepMemo = nil
 	h.cat = nil
 	h.optimizer = xform.Optimizer{}
 
@@ -495,7 +495,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		} else {
 			h.runUsingAPI(tb, Explore, false /* usePrepared */)
 		}
-		h.optimizer.DetachMemo(&h.prepMemo)
+		h.prepMemo = h.optimizer.DetachMemo()
 	} else {
 		// Run optbuilder to infer any placeholder types.
 		h.runUsingAPI(tb, OptBuild, false /* usePrepared */)
@@ -553,7 +553,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 			tb.Fatalf("%v", err)
 		}
 	} else if h.prepMemo.HasPlaceholders() {
-		_ = h.optimizer.Factory().AssignPlaceholders(&h.prepMemo)
+		_ = h.optimizer.Factory().AssignPlaceholders(h.prepMemo)
 	}
 
 	if bmType == OptBuild || bmType == Normalize {
@@ -562,7 +562,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 
 	var execMemo *memo.Memo
 	if usePrepared && !h.prepMemo.HasPlaceholders() {
-		execMemo = &h.prepMemo
+		execMemo = h.prepMemo
 	} else {
 		h.optimizer.Optimize()
 		execMemo = h.optimizer.Memo()

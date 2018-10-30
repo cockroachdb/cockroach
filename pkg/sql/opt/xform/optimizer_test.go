@@ -15,14 +15,90 @@
 package xform_test
 
 import (
+	"context"
 	"flag"
+	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
+
+func TestDetachMemo(t *testing.T) {
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stmt, err := parser.ParseOne("SELECT * FROM abc WHERE c=$1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	var o xform.Optimizer
+	o.Init(&evalCtx)
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	before := o.DetachMemo()
+
+	if !o.Memo().IsEmpty() {
+		t.Error("memo expression should be reinitialized by DetachMemo")
+	}
+
+	semaCtx.Placeholders.Clear()
+	o.Init(&evalCtx)
+
+	stmt2, err := parser.ParseOne("SELECT a=$1 FROM abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after := o.Memo()
+	if after == before {
+		t.Error("after memo cannot be the same as the detached memo")
+	}
+
+	if !strings.Contains(after.RootExpr().String(), "variable: a [type=int]") {
+		t.Error("after memo did not contain expected operator")
+	}
+
+	if after.RootExpr().(memo.RelExpr).Memo() != after {
+		t.Error("after memo expression does not reference the after memo")
+	}
+
+	if before == o.Memo() {
+		t.Error("detached memo should not be reused")
+	}
+
+	if before.RootExpr().(memo.RelExpr).Memo() != before {
+		t.Error("detached memo expression does not reference the detached memo")
+	}
+
+	if !strings.Contains(before.RootExpr().String(), "variable: c [type=string]") {
+		t.Error("detached memo did not contain expected operator")
+	}
+}
 
 // TestCoster files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
