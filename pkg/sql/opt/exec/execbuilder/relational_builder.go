@@ -592,22 +592,6 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 		return execPlan{}, err
 	}
 
-	// The DistinctOn operator can effectively project away columns if they don't
-	// have a corresponding aggregation. Introduce that project before the
-	// distinct.
-	aggs := distinct.Aggregations
-	if n := distinct.GroupingCols.Len() + aggs.ChildCount(); n != input.outputCols.Len() {
-		cols := make(opt.ColList, 0, n)
-		for i, ok := distinct.GroupingCols.Next(0); ok; i, ok = distinct.GroupingCols.Next(i + 1) {
-			cols = append(cols, opt.ColumnID(i))
-		}
-		cols = append(cols, aggs.Private().(opt.ColList)...)
-		input, err = b.ensureColumns(input, cols, nil /* colNames */, distinct.Physical())
-		if err != nil {
-			return execPlan{}, err
-		}
-	}
-
 	distinctCols := input.getColumnOrdinalSet(distinct.GroupingCols)
 	orderedCols := input.getColumnOrdinalSet(aggOrderedCols(distinct.Input, distinct.GroupingCols))
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
@@ -1040,7 +1024,7 @@ func (b *Builder) ensureColumns(
 		return input, nil
 	}
 	var res execPlan
-	for i, col := range cols {
+	for i, col := range colList {
 		res.outputCols.Set(int(col), i)
 	}
 	reqOrdering := res.reqOrdering(props)
