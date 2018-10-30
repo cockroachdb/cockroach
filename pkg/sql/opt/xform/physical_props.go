@@ -52,23 +52,9 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 func (o *Optimizer) buildChildPhysicalProps(
 	parent memo.RelExpr, nth int, parentProps *props.Physical,
 ) *props.Physical {
-	// Fast path taken in common case when no ordering property is required of
-	// parent and the operator itself does not require any ordering.
-	if parentProps == props.MinPhysProps {
-		switch parent.Op() {
-		case opt.LimitOp, opt.OffsetOp,
-			opt.ExplainOp,
-			opt.RowNumberOp,
-			opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp,
-			opt.MergeJoinOp:
-			// These operations can require an ordering of some child even if there is
-			// no ordering requirement on themselves.
-		default:
-			return props.MinPhysProps
-		}
-	}
-
 	var childProps props.Physical
+
+	// The only operation that requires a presentation of its input is Explain.
 	if parent.Op() == opt.ExplainOp {
 		childProps.Presentation = parent.(*memo.ExplainExpr).Props.Presentation
 	}
