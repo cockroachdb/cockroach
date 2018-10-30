@@ -78,26 +78,16 @@ class Settings extends React.Component<SettingsProps, {}> {
   }
 
   render() {
-    if (!_.isNil(this.props.settings.lastError)) {
-      return (
-        <div className="section">
-          <h1>Cluster Settings</h1>
-          <h2>Error loading Cluster Settings</h2>
-          {this.props.settings.lastError}
-        </div>
-      );
-    }
-
     return (
       <div className="section">
         <Helmet>
           <title>Cluster Settings | Debug</title>
         </Helmet>
         <h1>Cluster Settings</h1>
-        <h2></h2>
+        <h2></h2> {/* TODO(vilterp): why is this here? just for spacing? */}
         <Loading
           loading={!this.props.settings.data}
-          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          error={this.props.settings.lastError}
           render={() => (
             <div>
               <p>Note that some settings have been redacted for security purposes.</p>
