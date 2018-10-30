@@ -95,6 +95,24 @@ func init() {
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: explainBuildChildReqOrdering,
 	}
+	funcMap[opt.ScalarGroupByOp] = funcs{
+		// ScalarGroupBy always has exactly one result; any required ordering should
+		// have been simplified to Any (unless normalization rules are disabled).
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: scalarGroupByBuildChildReqOrdering,
+	}
+	funcMap[opt.GroupByOp] = funcs{
+		canProvideOrdering:    groupByCanProvideOrdering,
+		buildChildReqOrdering: groupByBuildChildReqOrdering,
+	}
+	funcMap[opt.DistinctOnOp] = funcs{
+		canProvideOrdering:    distinctOnCanProvideOrdering,
+		buildChildReqOrdering: distinctOnBuildChildReqOrdering,
+	}
+	funcMap[opt.SortOp] = funcs{
+		canProvideOrdering:    nil, // should never get called
+		buildChildReqOrdering: noChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {

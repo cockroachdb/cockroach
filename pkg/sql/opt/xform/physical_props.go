@@ -38,45 +38,7 @@ import (
 func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Physical) bool {
 	// All operators can provide the Presentation property, so no need to check
 	// for that.
-	return o.canProvideOrdering(e, &required.Ordering)
-}
-
-// canProvideOrdering returns true if the given expression can provide the
-// required ordering property. The required ordering is assumed to have already
-// been reduced using functional dependency analysis.
-func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
-	switch e.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp,
-		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp:
-		return oporder.CanProvideOrdering(e, required)
-	}
-
-	if required.Any() {
-		return true
-	}
-
-	switch e.Op() {
-
-	case opt.DistinctOnOp:
-		// These operators require a certain ordering of their input, but can also
-		// pass through a stronger ordering.
-		return required.Intersects(o.internalOrdering(e))
-
-	case opt.GroupByOp:
-		// Similar to Limit, GroupBy may require a certain ordering of its input,
-		// but can also pass through a stronger ordering on the grouping columns.
-		groupBy := e.(*memo.GroupByExpr)
-		if !required.CanProjectCols(groupBy.GroupingCols) {
-			return false
-		}
-		return required.Intersects(&groupBy.Ordering)
-
-	case opt.ScalarGroupByOp:
-		// ScalarGroupBy always has exactly one result; any required ordering should
-		// have been simplified to Any (unless normalization rules are disabled).
-	}
-
-	return false
+	return oporder.CanProvideOrdering(e, &required.Ordering)
 }
 
 // buildChildPhysicalProps returns the set of physical properties required of
@@ -111,51 +73,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.ExplainExpr).Props.Presentation
 	}
 
-	switch parent.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp, opt.RowNumberOp,
-		opt.MergeJoinOp, opt.LimitOp, opt.OffsetOp, opt.ExplainOp:
-		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
-
-	case opt.ScalarGroupByOp:
-		// These ops require the ordering in their private.
-		if nth == 0 {
-			childProps.Ordering = *o.internalOrdering(parent)
-		}
-
-	case opt.DistinctOnOp:
-		if nth == 0 {
-			// These ops require the ordering in their private, but can pass through a
-			// stronger ordering. For example:
-			//   SELECT * FROM (SELECT x, y FROM t ORDER BY x LIMIT 10) ORDER BY x,y
-			// In this case the internal ordering is x+, but we can pass through x+,y+
-			// to satisfy both orderings.
-			childProps.Ordering = parentProps.Ordering.Intersection(o.internalOrdering(parent))
-		}
-
-	case opt.GroupByOp:
-		if nth == 0 {
-			// Similar to Limit, GroupBy may require a certain ordering of its input,
-			// but can also pass through a stronger ordering on the grouping columns.
-			groupBy := parent.(*memo.GroupByExpr)
-			parentOrdering := parentProps.Ordering
-			if !parentOrdering.SubsetOfCols(groupBy.GroupingCols) {
-				parentOrdering = parentOrdering.Copy()
-				parentOrdering.ProjectCols(groupBy.GroupingCols)
-			}
-
-			childProps.Ordering = parentOrdering.Intersection(&groupBy.Ordering)
-
-			// The FD set of the input doesn't "pass through" to the GroupBy FD set;
-			// check the ordering to see if it can be simplified with respect to the
-			// input FD set.
-			childProps.Ordering.Simplify(&groupBy.Input.Relational().FuncDeps)
-		}
-
-		// ************************* WARNING *************************
-		//  If you add a new case here, check if it needs to be added
-		//     to the exception list in the fast path above.
-		// ************************* WARNING *************************
-	}
+	childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
@@ -172,25 +90,4 @@ func (o *Optimizer) buildChildPhysicalProps(
 	}
 
 	return o.mem.InternPhysicalProps(&childProps)
-}
-
-// internalOrdering returns the internal OrderingChoice stored in the private
-// (for operators that have it).
-func (o *Optimizer) internalOrdering(nd memo.RelExpr) *props.OrderingChoice {
-	switch t := nd.(type) {
-	case *memo.LimitExpr:
-		return &t.Ordering
-	case *memo.OffsetExpr:
-		return &t.Ordering
-	case *memo.RowNumberExpr:
-		return &t.Ordering
-	case *memo.GroupByExpr:
-		return &t.Ordering
-	case *memo.ScalarGroupByExpr:
-		return &t.Ordering
-	case *memo.DistinctOnExpr:
-		return &t.Ordering
-	default:
-		return nil
-	}
 }
