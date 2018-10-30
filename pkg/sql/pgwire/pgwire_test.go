@@ -1144,6 +1144,45 @@ func (p preparedExecTest) RowsAffectedErr(err string) preparedExecTest {
 	return p
 }
 
+// Verify that bound dates are evaluated using session timezone.
+func TestPGPrepareDate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec("CREATE TABLE test (t TIMESTAMPTZ)"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec("SET TIME ZONE +08"); err != nil {
+		t.Fatal(err)
+	}
+
+	stmt, err := db.Prepare("INSERT INTO test VALUES ($1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := stmt.Exec("2018-01-01 12:34:56"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset to UTC for the query.
+	if _, err := db.Exec("SET TIME ZONE UTC"); err != nil {
+		t.Fatal(err)
+	}
+
+	var ts time.Time
+	if err := db.QueryRow("SELECT t FROM test").Scan(&ts); err != nil {
+		t.Fatal(err)
+	}
+
+	exp := time.Date(2018, 1, 1, 4, 34, 56, 0, time.UTC)
+	if !exp.Equal(ts) {
+		t.Fatalf("expected %s, got %s", exp, ts)
+	}
+}
+
 func TestPGPreparedExec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var baseTest preparedExecTest
