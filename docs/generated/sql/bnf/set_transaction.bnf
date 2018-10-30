@@ -1,2 +1,6 @@
 nonpreparable_set_stmt ::=
-	'SET' 'TRANSACTION' transaction_mode ( ( opt_comma transaction_mode ) )*
+	'SET' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) ) ) )*

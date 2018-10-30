@@ -1139,8 +1139,7 @@ unrestricted_name ::=
 	| reserved_keyword
 
 transaction_mode ::=
-	transaction_iso_level
-	| transaction_user_priority
+	transaction_user_priority
 	| transaction_read_mode
 
 opt_comma ::=
@@ -1558,9 +1557,6 @@ reserved_keyword ::=
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
 
-transaction_iso_level ::=
-	'ISOLATION' 'LEVEL' iso_level
-
 transaction_user_priority ::=
 	'PRIORITY' user_priority
 
@@ -1775,13 +1771,6 @@ all_or_distinct ::=
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
-
-iso_level ::=
-	'READ' 'UNCOMMITTED'
-	| 'READ' 'COMMITTED'
-	| 'SNAPSHOT'
-	| 'REPEATABLE' 'READ'
-	| 'SERIALIZABLE'
 
 user_priority ::=
 	'LOW'
