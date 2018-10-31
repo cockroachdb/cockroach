@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math"
 	"math/rand"
@@ -24,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -62,18 +64,6 @@ func TestCopyNullInfNaN(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stmt, err := txn.Prepare(pq.CopyIn(
-		"t", "i", "f", "s", "b", "d", "t",
-		"ts", "n", "o", "e", "u", "ip", "tz"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	input := [][]interface{}{
 		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
 		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
@@ -81,22 +71,26 @@ func TestCopyNullInfNaN(t *testing.T) {
 		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
 	}
 
-	for _, in := range input {
-		_, err = stmt.Exec(in...)
+	if err := crdb.ExecuteTx(context.Background(), db, nil, func(txn *gosql.Tx) error {
+		stmt, err := txn.Prepare(pq.CopyIn(
+			"t", "i", "f", "s", "b", "d", "t",
+			"ts", "n", "o", "e", "u", "ip", "tz"))
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
-	}
-	_, err = stmt.Exec()
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = stmt.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = txn.Commit()
-	if err != nil {
+
+		for _, in := range input {
+			_, err = stmt.Exec(in...)
+			if err != nil {
+				return err
+			}
+		}
+		_, err = stmt.Exec()
+		if err != nil {
+			return err
+		}
+		return stmt.Close()
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,16 +152,6 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	rng := rand.New(rand.NewSource(0))
 	types := []sqlbase.ColumnType_SemanticType{
 		sqlbase.ColumnType_INT,
@@ -184,35 +168,37 @@ func TestCopyRandom(t *testing.T) {
 		sqlbase.ColumnType_INET,
 		sqlbase.ColumnType_TIMESTAMPTZ,
 	}
-
 	var inputs [][]interface{}
 
-	for i := 0; i < 100; i++ {
-		row := make([]interface{}, len(types))
-		for j, t := range types {
-			var ds string
-			if j == 0 {
-				// Special handling for ID field
-				ds = strconv.Itoa(i)
-			} else {
-				d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
-				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
-			}
-			row[j] = ds
-		}
-		_, err = stmt.Exec(row...)
+	if err := crdb.ExecuteTx(context.Background(), db, nil, func(txn *gosql.Tx) error {
+		stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
-		inputs = append(inputs, row)
-	}
 
-	err = stmt.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = txn.Commit()
-	if err != nil {
+		inputs = nil
+		for i := 0; i < 100; i++ {
+			row := make([]interface{}, len(types))
+			for j, t := range types {
+				var ds string
+				if j == 0 {
+					// Special handling for ID field
+					ds = strconv.Itoa(i)
+				} else {
+					d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
+					ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
+				}
+				row[j] = ds
+			}
+			_, err = stmt.Exec(row...)
+			if err != nil {
+				return err
+			}
+			inputs = append(inputs, row)
+		}
+
+		return stmt.Close()
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -395,37 +381,34 @@ func TestCopyTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err := crdb.ExecuteTx(context.Background(), db, nil, func(txn *gosql.Tx) error {
+		// Note that, at least with lib/pq, this doesn't actually send a Parse msg
+		// (which we wouldn't support, as we don't support Copy-in in extended
+		// protocol mode). lib/pq has magic for recognizing a Copy.
+		stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+		if err != nil {
+			return err
+		}
 
-	// Note that, at least with lib/pq, this doesn't actually send a Parse msg
-	// (which we wouldn't support, as we don't support Copy-in in extended
-	// protocol mode). lib/pq has magic for recognizing a Copy.
-	stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-	if err != nil {
-		t.Fatal(err)
-	}
+		const val = 2
 
-	const val = 2
+		_, err = stmt.Exec(val)
+		if err != nil {
+			return err
+		}
 
-	_, err = stmt.Exec(val)
-	if err != nil {
-		t.Fatal(err)
-	}
+		if err = stmt.Close(); err != nil {
+			return err
+		}
 
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	var i int
-	if err := txn.QueryRow("SELECT i FROM d.t").Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != val {
-		t.Fatalf("expected 1, got %d", i)
-	}
-	if err := txn.Commit(); err != nil {
+		var i int
+		if err := txn.QueryRow("SELECT i FROM d.t").Scan(&i); err != nil {
+			return err
+		} else if i != val {
+			return fmt.Errorf("expected 1, got %d", i)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
