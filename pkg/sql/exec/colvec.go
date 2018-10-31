@@ -50,6 +50,10 @@ type ColVec interface {
 
 	// Col returns the raw, typeless backing storage for this ColVec.
 	Col() interface{}
+
+	// TemplateType returns an []interface{} and is used for operator templates.
+	// Do not call this from normal code - it'll always panic.
+	_TemplateType() []interface{}
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -151,4 +155,8 @@ func (m memColumn) Decimal() []apd.Decimal {
 
 func (m memColumn) Col() interface{} {
 	return m.col
+}
+
+func (m memColumn) _TemplateType() []interface{} {
+	panic("don't call this from non template code")
 }
