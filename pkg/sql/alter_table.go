@@ -89,6 +89,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
 	descriptorChanged := false
+	addedMutations := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
 	tn := &n.n.Table
@@ -408,6 +409,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 			if !found {
+				for _, m := range n.tableDesc.Mutations[len(n.tableDesc.ClusterVersion.Mutations):] {
+					if mutCol := m.GetColumn(); mutCol != nil && mutCol.ID == col.ID && m.Direction == sqlbase.DescriptorMutation_ADD {
+						// Referencing index drops could have been squashed, set this to true
+						// because len(table.Mutations) can be lower than origNumMutations.
+						addedMutations = true
+						n.tableDesc.AddColumnMutation(*mutCol, sqlbase.DescriptorMutation_DROP)
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
 				return fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 			}
 
@@ -577,7 +590,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	// dummy mutations. Most tests trigger errors above
 	// this line, but tests that run redundant operations like dropping
 	// a column when it's already dropped will hit this condition and exit.
-	addedMutations := len(n.tableDesc.Mutations) > origNumMutations
+	addedMutations = addedMutations || len(n.tableDesc.Mutations) > origNumMutations
 	if !addedMutations && !descriptorChanged {
 		return nil
 	}

@@ -586,3 +586,50 @@ query TT
 SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
 ----
 succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED
+
+subtest squash_add_drop
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD COLUMN i INT
+
+statement ok
+CREATE INDEX i_idx ON forlater (i)
+
+statement ok
+ALTER TABLE forlater DROP COLUMN i
+
+statement ok
+ALTER TABLE forlater ADD COLUMN i CHAR
+
+statement ok
+CREATE INDEX i_idx ON forlater (i)
+
+statement ok
+CREATE INDEX v_idx ON forlater (v)
+
+statement ok
+DROP INDEX forlater@i_idx
+
+statement ok
+ALTER INDEX forlater@v_idx RENAME TO i_idx
+
+statement ok
+ALTER TABLE forlater DROP COLUMN i
+
+statement ok
+ALTER TABLE forlater RENAME COLUMN v TO i
+
+statement ok
+DROP INDEX forlater@i_idx
+
+statement ok
+COMMIT
+
+# All mutation squashed, no new jobs created.
+query TT
+SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
+----
+succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED

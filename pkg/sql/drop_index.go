@@ -208,23 +208,32 @@ func (p *planner) dropIndexByName(
 		}
 	}
 	found := false
+	var index sqlbase.IndexDescriptor
 	for i := range tableDesc.Indexes {
 		if tableDesc.Indexes[i].ID == idx.ID {
-			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP); err != nil {
-				return err
-			}
+			index = tableDesc.Indexes[i]
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 			found = true
 			break
 		}
 	}
 	if !found {
+		for _, m := range tableDesc.Mutations[len(tableDesc.ClusterVersion.Mutations):] {
+			if mutIdx := m.GetIndex(); mutIdx != nil && mutIdx.ID == idx.ID && m.Direction == sqlbase.DescriptorMutation_ADD {
+				index = *mutIdx
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+	} else {
+		if err := tableDesc.AddIndexMutation(index, sqlbase.DescriptorMutation_DROP); err != nil {
+			return err
+		}
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return err
-	}
 	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err

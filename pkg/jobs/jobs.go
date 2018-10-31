@@ -139,6 +139,12 @@ func (j *Job) Created(ctx context.Context) error {
 	return j.insert(ctx, j.registry.makeJobID(), nil /* lease */)
 }
 
+// Removed deletes the row of the new job in the system.jobs table and
+// clears the assigned ID of the job in the Job.
+func (j *Job) Removed(ctx context.Context) error {
+	return j.delete(ctx)
+}
+
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
@@ -528,6 +534,23 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		return err
 	}
 	j.id = &id
+	return nil
+}
+
+func (j *Job) delete(ctx context.Context) error {
+	if j.id == nil {
+		// Not already created - do nothing.
+		return nil
+	}
+
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		const stmt = "DELETE FROM system.jobs WHERE id = $1"
+		_, err := j.registry.ex.Exec(ctx, "job-delete", txn, stmt, *j.id)
+		return err
+	}); err != nil {
+		return err
+	}
+	j.id = nil
 	return nil
 }
 
