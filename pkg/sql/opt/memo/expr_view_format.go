@@ -260,16 +260,14 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 
 	// Format functional dependencies.
 	if !f.HasFlags(ExprFmtHideFuncDeps) {
-		// Show the key separately from the rest of the FDs. Do this by copying
-		// the FD to the stack (fast shallow copy), and then calling ClearKey.
-		fd := logProps.Relational.FuncDeps
-		key, ok := fd.Key()
-		if ok {
+		// Show the key separately from the rest of the FDs.
+		if key, ok := logProps.Relational.FuncDeps.StrictKey(); ok {
 			tp.Childf("key: %s", key)
+		} else if key, ok := logProps.Relational.FuncDeps.LaxKey(); ok {
+			tp.Childf("lax-key: %s", key)
 		}
-		fd.ClearKey()
-		if !fd.Empty() {
-			tp.Childf("fd: %s", fd)
+		if fdStr := logProps.Relational.FuncDeps.StringOnlyFDs(); fdStr != "" {
+			tp.Childf("fd: %s", fdStr)
 		}
 	}
 

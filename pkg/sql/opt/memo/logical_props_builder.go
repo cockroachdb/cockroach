@@ -511,7 +511,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 			//   NULL  NULL
 			//
 			if !relational.OutputCols.Intersects(notNullCols) {
-				relational.FuncDeps.ClearKey()
+				relational.FuncDeps.DowngradeKey()
 			}
 			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
 			relational.FuncDeps.MakeOuter(h.rightOutputCols, notNullCols)
@@ -1024,7 +1024,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 	// Inherit functional dependencies from input, and add strict key FD for the
 	// additional key column.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	if key, ok := relational.FuncDeps.Key(); ok {
+	if key, ok := relational.FuncDeps.StrictKey(); ok {
 		// Any existing keys are still keys.
 		relational.FuncDeps.AddStrictKey(key, relational.OutputCols)
 	}

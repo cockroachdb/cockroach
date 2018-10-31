@@ -152,7 +152,7 @@ func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
 	aggs memo.GroupID, def memo.PrivateID, input memo.GroupID,
 ) bool {
 	inputFDs := &c.LookupLogical(input).Relational.FuncDeps
-	if _, hasKey := inputFDs.Key(); !hasKey {
+	if _, hasKey := inputFDs.StrictKey(); !hasKey {
 		// Fast-path for the case when the input has no keys.
 		return false
 	}
