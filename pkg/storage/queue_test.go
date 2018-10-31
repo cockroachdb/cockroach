@@ -295,6 +295,48 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 }
 
+// TestBaseQueueSamePriorityFIFO verifies that if multiple items are queued at
+// the same priority, they will be processes in first-in-first-out order.
+// This avoids starvation scenarios, in particular in the Raft snapshot queue.
+//
+// See:
+// https://github.com/cockroachdb/cockroach/issues/31947#issuecomment-434383267
+func TestBaseQueueSamePriorityFIFO(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	repls := createReplicas(t, &tc, 5)
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			t.Fatal("unexpected call to shouldQueue")
+			return false, 0.0
+		},
+	}
+
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 100})
+
+	for _, repl := range repls {
+		added, err := bq.Add(repl, 0.0)
+		if err != nil {
+			t.Fatal(errors.Wrap(err, repl.String()))
+		}
+		if !added {
+			t.Fatalf("%v not added", repl)
+		}
+	}
+	for _, expRepl := range repls {
+		actRepl := bq.pop()
+		if actRepl != expRepl {
+			t.Fatalf("expected %v, got %v", expRepl, actRepl)
+		}
+	}
+}
+
 // TestBaseQueueAdd verifies that calling Add() directly overrides the
 // ShouldQueue method.
 func TestBaseQueueAdd(t *testing.T) {
