@@ -53,6 +53,7 @@ typedef struct {
 
 typedef struct {
   bool prefix;
+  DBKey lower_bound;
   DBKey upper_bound;
   bool with_stats;
   DBTimestamp min_timestamp_hint;
@@ -242,6 +243,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // current key are skipped. After this call, DBIterValid() returns 1
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
+
+// DBIterSetLowerBound updates this iterator's lower bound.
+void DBIterSetLowerBound(DBIterator* iter, DBKey key);
 
 // DBIterSetUpperBound updates this iterator's upper bound.
 void DBIterSetUpperBound(DBIterator* iter, DBKey key);

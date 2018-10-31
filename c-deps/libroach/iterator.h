@@ -23,6 +23,7 @@
 struct DBIterator {
   DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options);
   ~DBIterator();
+  void SetLowerBound(DBKey key);
   void SetUpperBound(DBKey key);
 
   std::atomic<int64_t>* const iters_count;
@@ -32,6 +33,8 @@ struct DBIterator {
   std::unique_ptr<IteratorStats> stats;
 
   rocksdb::ReadOptions read_opts;
+  std::string lower_bound_str;
   std::string upper_bound_str;
+  rocksdb::Slice lower_bound;
   rocksdb::Slice upper_bound;
 };

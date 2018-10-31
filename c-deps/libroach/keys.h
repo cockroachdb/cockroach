@@ -10,6 +10,7 @@ const rocksdb::Slice kLocalRangeIDPrefix("\x01\x69", 2);
 const rocksdb::Slice kLocalRangeIDReplicatedInfix("\x72", 1);
 const rocksdb::Slice kLocalRangeAppliedStateSuffix("\x72\x61\x73\x6b", 4);
 const rocksdb::Slice kMeta2KeyMax("\x03\xff\xff", 3);
+const rocksdb::Slice kMinKey("", 0);
 const rocksdb::Slice kMaxKey("\xff\xff", 2);
 
 const std::vector<std::pair<rocksdb::Slice, rocksdb::Slice> > kSortedNoSplitSpans = {

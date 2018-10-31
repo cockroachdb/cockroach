@@ -2039,8 +2039,8 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 		r.parent.iters.Unlock()
 	}
 
-	if !opts.Prefix && len(opts.UpperBound) == 0 {
-		panic("iterator must set prefix or upper bound")
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
 	r.iter = C.DBNewIter(rdb, goToCIterOptions(opts))
@@ -2054,9 +2054,10 @@ func (r *rocksDBIterator) setOptions(opts IterOptions) {
 	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
 		panic("iterator with timestamp hints cannot be reused")
 	}
-	if !opts.Prefix && len(opts.UpperBound) == 0 {
-		panic("iterator must set prefix or upper bound")
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
 	}
+	C.DBIterSetLowerBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.LowerBound)))
 	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.UpperBound)))
 }
 
@@ -2473,6 +2474,7 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 func goToCIterOptions(opts IterOptions) C.DBIterOptions {
 	return C.DBIterOptions{
 		prefix:             C.bool(opts.Prefix),
+		lower_bound:        goToCKey(MakeMVCCMetadataKey(opts.LowerBound)),
 		upper_bound:        goToCKey(MakeMVCCMetadataKey(opts.UpperBound)),
 		min_timestamp_hint: goToCTimestamp(opts.MinTimestampHint),
 		max_timestamp_hint: goToCTimestamp(opts.MaxTimestampHint),
