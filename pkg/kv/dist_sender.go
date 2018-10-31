@@ -58,6 +58,12 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderSerialBatchCount = metric.Metadata{
+		Name:        "distsender.batches.serial",
+		Help:        "Number of partial batches sent in serialized fashion because a limit spanned multiple ranges",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncSentCount = metric.Metadata{
 		Name:        "distsender.batches.async.sent",
 		Help:        "Number of partial batches sent asynchronously",
@@ -106,6 +112,7 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 type DistSenderMetrics struct {
 	BatchCount             *metric.Counter
 	PartialBatchCount      *metric.Counter
+	SerialBatchCount       *metric.Counter
 	AsyncSentCount         *metric.Counter
 	AsyncThrottledCount    *metric.Counter
 	SentCount              *metric.Counter
@@ -118,6 +125,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	return DistSenderMetrics{
 		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
+		SerialBatchCount:       metric.NewCounter(metaDistSenderSerialBatchCount),
 		AsyncSentCount:         metric.NewCounter(metaDistSenderAsyncSentCount),
 		AsyncThrottledCount:    metric.NewCounter(metaDistSenderAsyncThrottledCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
@@ -857,7 +865,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If min_results is set, num_results will count how many results scans have
 	// accumulated so far.
 	var numResults int64
-	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		responseCh := make(chan response, 1)
@@ -889,6 +896,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// Determine next seek key, taking a potentially sparse batch into
 		// consideration.
 		var err error
+		var fullSpan bool
 		nextRS := rs
 		if scanDir == Descending {
 			// In next iteration, query previous range.
@@ -896,6 +904,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
 			seekKey, err = prev(ba, ri.Desc().StartKey)
+			if seekKey.Equal(ri.Desc().StartKey) {
+				fullSpan = true
+			}
 			nextRS.EndKey = seekKey
 		} else {
 			// In next iteration, query next range.
@@ -906,6 +917,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
 			seekKey, err = next(ba, ri.Desc().EndKey)
+			if seekKey.Equal(ri.Desc().EndKey) {
+				fullSpan = true
+			}
 			nextRS.Key = seekKey
 		}
 		if err != nil {
@@ -914,6 +928,21 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		lastRange := !ri.NeedAnother(rs)
+
+		// Parallelize if there's no limit, or there's a limit but the
+		// batch doesn't cover the full span of the current range, and if
+		// the scan options don't specify we end on a range boundary.
+		// Note that the case where we don't have a full span causes the
+		// iteration not to count asynchronously fetched results, so the
+		// MaxSpanRequestKeys header will be ignored unless and until the
+		// batch encounters a scan which runs off the end of a range. The
+		// goal is to avoid serializing "point" scans, but continue
+		// serializing full or partial table scans.
+		canParallelize := (ba.Header.MaxSpanRequestKeys == 0 || !fullSpan) && !stopAtRangeBoundary
+		if !canParallelize {
+			ds.metrics.SerialBatchCount.Inc(1)
+		}
+
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.

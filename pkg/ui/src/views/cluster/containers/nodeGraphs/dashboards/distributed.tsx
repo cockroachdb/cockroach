@@ -28,6 +28,7 @@ export default function (props: GraphDashboardProps) {
       <Axis label="batches">
         <Metric name="cr.node.distsender.batches" title="Batches" nonNegativeRate />
         <Metric name="cr.node.distsender.batches.partial" title="Partial Batches" nonNegativeRate />
+        <Metric name="cr.node.distsender.batches.serial" title="Serialized Batches" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
