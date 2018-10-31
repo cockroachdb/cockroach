@@ -22,8 +22,7 @@ the type system and part of the logic test infrastructure.
 
 The SQL code lies within the `pkg/sql` directory. The built-in
 functions reside in `pkg/sql/sem/builtins/builtins.go`. A function is
-described by a `Overload` structure, in
-`pkg/sql/sem/tree/overload_definition.go`:
+described by a `Overload` structure, in `pkg/sql/sem/tree/overload.go`:
 
 ```go
 type Overload struct {
@@ -40,7 +39,7 @@ attention to our the argument types (`Types`), the return type
 (`ReturnType`) and the implementation function pointer (`Fn`).
 
 Multiple function overloads are then grouped into a single "built-in
-definition" (`BuiltinDefinition` in `builtins/builtins.go`), and
+definition" (`builtinDefinition` in `builtins/builtins.go`), and
 during CockroachDB initialization transformed into a
 `FunctionDefinition` (in `builtins/all_builtins.go`).
 
@@ -49,14 +48,14 @@ For example, `abs` has an overload for each numeric type (`float`,
 correct version of a function given the name and the argument
 types.
 
-The SQL execution engine finds the `BuiltinDefinition` structure
-given the name of a function using the `Builtins` map:
+The SQL execution engine finds the `builtinDefinition` structure
+given the name of a function using the `builtins` map:
 
 ```go
-var Builtins = map[string]BuiltinDefinition{...}
+var builtins = map[string]builtinDefinition{...}
 ```
 
-Notice that this is a map from `string` to `BuiltinDefinition`, which
+Notice that this is a map from `string` to `builtinDefinition`, which
 contains a slice of `Overload`s via the member field
 `Overloads`. The `Overloads` slice is used to distinguish the
 "overloads" for a given function. 
@@ -68,12 +67,12 @@ variable number of usernames and return the corresponding real names. For
 example, `whois('pmattis')` will return `'Peter Mattis'`. For simplicity, the
 mapping of usernames to real names will be hardcoded. Let’s get started.
 
-The `Builtins` map is divided up into sections by function category, but this
+The `builtins` map is divided up into sections by function category, but this
 organization is purely for readability. We can add our function anywhere, so
 let’s add it right at the top of the definition for simplicity:
 
 ```go
-var Builtins = map[string]BuiltinDefinition{
+var builtins = map[string]builtinDefinition{
   "whois": makeBuiltin(defProps(),
     tree.Overload{
       Types:      tree.VariadicType{VarType: types.String},
@@ -91,7 +90,7 @@ takes a variable number of string arguments. The `ReturnType` field indicates
 our function returns a string. The implementation of our function is currently
 unfinished, so we’ll return an error for now.
 
-Go ahead and add the above code to `pkg/sql/sem/tree/builtins.go`. If you’ve
+Go ahead and add the above code to `pkg/sql/sem/builtins/builtins.go`. If you’ve
 followed the instructions in [CONTRIBUTING.md], you should be able to build
 CockroachDB from source:
 
@@ -164,7 +163,7 @@ for i, arg := range args {
 Lastly, we need to return the result:
 
 ```go
-return NewDString(buf.String()), nil
+return tree.NewDString(buf.String()), nil
 ```
 
 Much of the above looks like standard Go, but what is a ``DString``? The SQL
