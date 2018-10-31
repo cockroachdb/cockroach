@@ -62,6 +62,11 @@ const (
 	// defaultAPIEventLimit is the default maximum number of events returned by any
 	// endpoints returning events.
 	defaultAPIEventLimit = 1000
+
+	// Number of empty ranges for table descriptors that aren't actually tables,
+	// e.g. descriptors 17, 18, 19, and 22 which correspond to MetaRangesID,
+	// SystemRangesID, TimeseriesRangesID, and LivenessRangesID in pkg/keys.
+	nonTableDescriptorRangeCount = 4
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
@@ -572,7 +577,7 @@ func (s *adminServer) TableStats(
 }
 
 // NonTableStats is an endpoint that returns disk usage and replication
-// statistics for the time series system.
+// statistics for non-table parts of the system.
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
@@ -586,6 +591,39 @@ func (s *adminServer) NonTableStats(
 	response := serverpb.NonTableStatsResponse{
 		TimeSeriesStats: timeSeriesStats,
 	}
+
+	spansForInternalUse := []roachpb.Span{
+		{
+			Key:    keys.LocalMax,
+			EndKey: keys.TimeseriesPrefix,
+		},
+		{
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.TableDataMin,
+		},
+	}
+	for _, span := range spansForInternalUse {
+		nonTableStats, err := s.statsForSpan(ctx, span)
+		if err != nil {
+			return nil, err
+		}
+		if response.InternalUseStats == nil {
+			response.InternalUseStats = nonTableStats
+		} else {
+			response.InternalUseStats.Add(nonTableStats)
+		}
+	}
+
+	// There are four empty ranges for table descriptors 17, 18, 19, and 22 that
+	// aren't actually tables (a.k.a. MetaRangesID, SystemRangesID,
+	// TimeseriesRangesID, and LivenessRangesID in pkg/keys).
+	// No data is ever really written to them since they don't have actual
+	// tables. Some backend work could probably be done to eliminate these empty
+	// ranges, but it may be more trouble than it's worth. In the meantime,
+	// sweeping them under the general-purpose "Internal use" label in
+	// the "Non-Table" section of the Databases page.
+	response.InternalUseStats.RangeCount += nonTableDescriptorRangeCount
+
 	return &response, nil
 }
 
