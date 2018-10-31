@@ -225,8 +225,10 @@ message NonTableStatsRequest {
 // that do not belong to SQL tables. The statistics for each range are returned
 // as a TableStatsResponse.
 message NonTableStatsResponse {
-  // Information on time series ranges,
+  // Information on time series ranges.
   TableStatsResponse time_series_stats = 1;
+  // Information for remaining (non-table, non-time-series) ranges.
+  TableStatsResponse internal_use_stats = 2;
 }
 
 // UsersRequest requests a list of users.
