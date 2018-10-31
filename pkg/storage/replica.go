@@ -5148,6 +5148,51 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
+	if msg.Type == raftpb.MsgAppResp && msg.Reject {
+		r.mu.RLock()
+		desc := r.Desc()
+		ticks := r.mu.ticks
+		r.mu.RUnlock()
+
+		if msg.RejectHint == 0 && ticks < r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
+			// This replica has a blank state, i.e. its last index is zero. In
+			// particular, it's not a preemptive snapshot. This happens in two
+			// cases:
+			//
+			// 1. a rebalance operation is adding a new replica of the range to this node.
+			//    We always send a preemptive snapshot before attempting to do so, so we
+			//    wouldn't enter this branch as desc.Replicas would be nonempty. We would
+			//    however enter this branch if the preemptive snapshot got GC'ed before the
+			//    actual replica change came through.
+			//
+			// 	  FIXME(tschottdorf): land the mitigation for that issue before merging this.
+			//
+			// 2. a split executed that created this replica as its right hand side, but
+			//    this node's pre-split replica hasn't executed the split trigger (yet).
+			//    The expectation is that it will do so momentarily, however if we don't
+			//    drop this rejection, the Raft leader will try to catch us up via a snapshot.
+			//    In 99.9% of cases this is a wasted effort since the pre-split replica already
+			//    contains the data this replica will hold.
+			//
+			//    The remaining 0.01% constitute the case in which our local
+			//    replica of the pre-split range requires a snapshot which catches
+			//    it up "past" the split trigger, in which case the trigger will
+			//    never be executed (the snapshot instead wipes out the data the
+			//    split trigger would've tried to put into this range).
+			//    A similar scenario occurs if there's a rebalance operation
+			//    that rapidly removes the pre-split replica, so that it never
+			//    catches up (nor via log nor via snapshot); in that case too,
+			//    the Raft snapshot is required to materialize the split's right
+			//    hand side replica (i.e. this one). We're delaying the snapshot
+			//    for a short amount of time only, so this seems tolerable.
+			log.VEventf(ctx, 2, "dropping rejection from index %d to index %d", msg.Index, msg.RejectHint)
+			if desc.IsInitialized() {
+				log.Fatalf(ctx, "unexpectedly ended up dropping rejection for initialized descriptor %+v", desc)
+			}
+			return
+		}
+	}
+
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
 		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
