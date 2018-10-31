@@ -62,6 +62,7 @@ type processCallback func(error)
 // processing state.
 type replicaItem struct {
 	value roachpb.RangeID
+	seq   int // enforce FIFO order for equal priorities
 
 	// fields used when a replicaItem is enqueued in a priority queue.
 	priority float64
@@ -88,14 +89,21 @@ func (i *replicaItem) registerCallback(cb processCallback) {
 
 // A priorityQueue implements heap.Interface and holds replicaItems.
 type priorityQueue struct {
-	sl []*replicaItem
+	seqGen int
+	sl     []*replicaItem
 }
 
 func (pq priorityQueue) Len() int { return len(pq.sl) }
 
 func (pq priorityQueue) Less(i, j int) bool {
+	a, b := pq.sl[i], pq.sl[j]
+	if a.priority == b.priority {
+		// When priorities are equal, we want the lower sequence number to show
+		// up first (FIFO).
+		return a.seq < b.seq
+	}
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq.sl[i].priority > pq.sl[j].priority
+	return a.priority > b.priority
 }
 
 func (pq priorityQueue) Swap(i, j int) {
@@ -107,6 +115,8 @@ func (pq *priorityQueue) Push(x interface{}) {
 	n := len(pq.sl)
 	item := x.(*replicaItem)
 	item.index = n
+	pq.seqGen++
+	item.seq = pq.seqGen
 	pq.sl = append(pq.sl, item)
 }
 
