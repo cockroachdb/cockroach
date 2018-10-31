@@ -457,7 +457,37 @@
     $right:* &
         (HasOuterCols $right) &
         (CanHaveZeroRows $right) & # Let EliminateExistsGroupBy match instead.
-        (GroupBy | DistinctOn | Project)
+        (GroupBy | DistinctOn | Project | Zip)
+    $on:*
+)
+=>
+(GroupBy
+    (InnerJoinApply
+        $newLeft:(EnsureKey $left)
+        $right
+        $on
+    )
+    (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+    (MakeGroupByDef (KeyCols $newLeft))
+)
+
+# TryDecorrelateSemiJoinZip maps a SemiJoin over an InnerJoin/Zip complex to
+# an equivalent GroupBy/InnerJoin complex in hopes of triggering further rules
+# that will ultimately decorrelate the query. Once this rule fires, a
+# corresponding InnerJoin decorrelation rule will match
+# (i.e. TryDecorrelateZip).
+#
+# Citations: [5]
+[TryDecorrelateSemiJoinZip, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (InnerJoin | InnerJoinApply
+            *
+            (Zip)
+            *
+        )
     $on:*
 )
 =>

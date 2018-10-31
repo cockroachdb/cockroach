@@ -26,7 +26,7 @@
 [PushFilterIntoJoinLeftAndRight, Normalize]
 (InnerJoin | SemiJoin
     $left:* & ^(HasOuterCols $left)
-    $right:* & ^(HasOuterCols $right)
+    $right:* & ^(Zip) & ^(HasOuterCols $right)
     $filters:(Filters
         $list:[
             ...
@@ -95,7 +95,7 @@
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:*
+    $right:* & ^(Zip)
     $filters:(Filters
         $list:[
             ...
@@ -166,7 +166,7 @@
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:*
+    $right:* & ^(Zip)
     $on:(Filters $list:[
         ...
         $condition:* & (IsBoundBy $condition $rightCols:(OutputCols $right))
