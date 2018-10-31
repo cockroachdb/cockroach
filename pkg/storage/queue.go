@@ -784,6 +784,16 @@ func isBenign(err error) bool {
 	})
 }
 
+func isPurgatoryError(err error) (purgatoryError, bool) {
+	var purgErr purgatoryError
+	ok := causer.Visit(err, func(err error) bool {
+		var ok bool
+		purgErr, ok = err.(purgatoryError)
+		return ok
+	})
+	return purgErr, ok
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
@@ -817,7 +827,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := errors.Cause(err).(purgatoryError); ok {
+		if purgErr, ok := isPurgatoryError(err); ok {
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			return
 		}
