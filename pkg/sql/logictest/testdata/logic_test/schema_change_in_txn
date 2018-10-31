@@ -499,3 +499,41 @@ INSERT INTO customers (k) VALUES ('b')
 
 statement ok
 COMMIT;
+
+subtest squash_add_drop
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD COLUMN i INT
+
+statement ok
+CREATE INDEX i_idx ON forlater (i)
+
+statement ok
+ALTER TABLE forlater DROP COLUMN i
+
+statement ok
+ALTER TABLE forlater ADD COLUMN i CHAR
+
+statement ok
+CREATE INDEX i_idx ON forlater (i)
+
+statement ok
+CREATE INDEX v_idx ON forlater (v)
+
+statement ok
+DROP INDEX forlater@i_idx
+
+statement ok
+ALTER INDEX forlater@v_idx RENAME TO i_idx
+
+statement ok
+ALTER TABLE forlater DROP COLUMN i
+
+statement ok
+ALTER TABLE forlater RENAME COLUMN v TO i
+
+statement ok
+COMMIT
