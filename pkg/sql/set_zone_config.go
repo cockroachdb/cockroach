@@ -422,15 +422,24 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			})
 		}
 
-		// Finally revalidate everything. Validate only the completeZone config.
+		// Now revalidate everything. Validate only the completeZone config.
 		if err := completeZone.Validate(); err != nil {
 			return fmt.Errorf("could not validate zone config: %s", err)
 		}
+
+		// Finally, after the validation is done - we must take care of future
+		// proofing the constraints and range sizes. Because a later change to a
+		// parent config can affect the validity of the changes here, we ensure
+		// to hydrate the following pairs of fields in tandem:
+		//
+		// RangeMinBytes and RangeMaxBytes.
+		// Constraints and NumReplicas (only if per-replica constraints are used).
+		partialZone.HydrateTandemFields(*completeZone)
 	}
 
 	// If cluster version is below 2.2, just write the complete zone
 	// config instead of the partial for backwards compatibility reasons.
-	// Otherwise write the partial zone configutation.
+	// Otherwise write the partial zone configuration.
 	hasNewSubzones := !deleteZone && index != nil
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone

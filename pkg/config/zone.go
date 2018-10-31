@@ -379,6 +379,24 @@ func (z *ZoneConfig) IsComplete() bool {
 		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
+// HydrateTandemFields ensures that the zone is never
+// saved to the database with only partial information
+// about per-replica constraints and range sizes.
+// Required: completeZone must have all of its field set.
+func (z *ZoneConfig) HydrateTandemFields(completeZone ZoneConfig) {
+	if z.RangeMinBytes != nil || z.RangeMaxBytes != nil {
+		z.RangeMinBytes = proto.Int64(*completeZone.RangeMinBytes)
+		z.RangeMaxBytes = proto.Int64(*completeZone.RangeMaxBytes)
+	}
+	var numConstrainedRepls int32
+	for _, constraints := range z.Constraints {
+		numConstrainedRepls += constraints.NumReplicas
+	}
+	if numConstrainedRepls > 0 { //Per-replica constraints are in effect.
+		z.NumReplicas = proto.Int32(*completeZone.NumReplicas)
+	}
+}
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {

@@ -245,6 +245,79 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 }
 
+func TestZoneConfigHydrateMissingFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defaultZone := DefaultZoneConfig()
+	defaultZone.NumReplicas = proto.Int32(3)
+	defaultZone.RangeMinBytes = proto.Int64(10 << 20)
+	defaultZone.RangeMaxBytes = proto.Int64(20 << 20)
+	defer TestingSetDefaultZoneConfig(defaultZone)()
+
+	testCases := []struct {
+		partialCfg  ZoneConfig
+		completeCfg ZoneConfig
+		expectedCfg ZoneConfig
+	}{
+		// Setting only RangeMaxBytes automatically sets the complement too.
+		{
+			partialCfg: ZoneConfig{
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+			},
+			completeCfg: DefaultZoneConfig(),
+			expectedCfg: ZoneConfig{
+				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+			},
+		},
+		// Setting only RangeMinBytes automatically sets the complement too.
+		{
+			partialCfg: ZoneConfig{
+				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
+			},
+			completeCfg: DefaultZoneConfig(),
+			expectedCfg: ZoneConfig{
+				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+			},
+		},
+		// Setting per-replica constraints automatically sets the replication factor.
+		{
+			partialCfg: ZoneConfig{
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			completeCfg: DefaultZoneConfig(),
+			expectedCfg: ZoneConfig{
+				NumReplicas: proto.Int32(3), // Set from the completeCfg.
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+		},
+	}
+
+	for i, c := range testCases {
+		c.partialCfg.HydrateTandemFields(c.completeCfg)
+		if !c.partialCfg.Equal(c.expectedCfg) {
+			t.Errorf("%d: expected %v, got %v", i, c.expectedCfg, c.partialCfg)
+		}
+	}
+}
 func TestZoneConfigSubzones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
