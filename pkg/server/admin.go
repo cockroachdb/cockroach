@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -48,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -603,13 +602,26 @@ func (s *adminServer) statsForSpan(
 	}
 
 	// Get current range descriptors for table. This is done by scanning over
-	// meta2 keys for the range.
-	rangeDescKVs, err := s.server.db.Scan(ctx, keys.RangeMetaKey(startKey), keys.RangeMetaKey(endKey), 0)
+	// meta2 keys for the range. A special case occurs if we wish to include
+	// the meta1 key range itself, in which case we'll get KeyMin back and that
+	// cannot be scanned (due to range-local addressing confusion). This is
+	// handled appropriately by adjusting the bounds to grab the descriptors
+	// for all ranges (including range1, which is not only gossiped but also
+	// persisted in meta1).
+	startMetaKey := keys.RangeMetaKey(startKey)
+	if bytes.Equal(startMetaKey, roachpb.RKeyMin) {
+		// This is the special case described above. The following key instructs
+		// the code below to scan all of the addressing, i.e. grab all of the
+		// descriptors including that for r1.
+		startMetaKey = keys.RangeMetaKey(keys.MustAddr(keys.Meta2Prefix))
+	}
+
+	rangeDescKVs, err := s.server.db.Scan(ctx, startMetaKey, keys.RangeMetaKey(endKey), 0)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
 
-	// Extract a list of node IDs from the response.
+	// This map will store the nodes we need to fan out to.
 	nodeIDs := make(map[roachpb.NodeID]struct{})
 	for _, kv := range rangeDescKVs {
 		var rng roachpb.RangeDescriptor
