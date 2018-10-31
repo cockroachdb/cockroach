@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	gojson "encoding/json"
 	"fmt"
@@ -179,6 +178,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for k := range info {
 				inuseNames[k] = struct{}{}
 			}
+			for _, m := range n.tableDesc.Mutations {
+				if ck := m.GetCheck(); ck != nil {
+					inuseNames[ck.Name] = struct{}{}
+				}
+			}
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.PrimaryKey {
@@ -212,13 +216,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := MakeCheckConstraint(params.ctx,
+				// A previous command could have added a column which the new constraint uses,
+				// allocate IDs now.
+				if err != n.tableDesc.AllocateIDs() {
+					return err
+				}
+				ck, canSkipDelOnly, err := MakeCheckConstraint(params.ctx,
 					n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), n.n.Table)
 				if err != nil {
 					return err
 				}
-				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
-				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
+				if ck.Validity == sqlbase.ConstraintValidity_Validating {
+					n.tableDesc.AddCheckAddMutation(*ck, canSkipDelOnly)
+				} else {
+					n.tableDesc.AddCheck(*ck)
+				}
 				descriptorChanged = true
 
 			case *tree.ForeignKeyConstraintTableDef:
@@ -403,12 +415,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				} else if !used {
 					validChecks = append(validChecks, check)
+				} else {
+					n.tableDesc.MaybeAddCheckDropMutation(*check)
 				}
 			}
 
 			if len(validChecks) != len(n.tableDesc.Checks) {
 				n.tableDesc.Checks = validChecks
 				descriptorChanged = true
+			}
+
+			// Check that no dependent check constraints are queued to be added.
+			for _, m := range n.tableDesc.Mutations {
+				if ck := m.GetCheck(); ck != nil && m.Direction == sqlbase.DescriptorMutation_ADD {
+					if used, err := ck.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
+						return err
+					} else if used {
+						return fmt.Errorf("referencing constraint %q in the middle of being added, try again later", ck.Name)
+					}
+				}
 			}
 
 			found := false
@@ -443,12 +468,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypeUnique:
 				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
-				for i := range n.tableDesc.Checks {
-					if n.tableDesc.Checks[i].Name == name {
+				found := false
+				for i, ck := range n.tableDesc.Checks {
+					if ck.Name == name {
+						n.tableDesc.MaybeAddCheckDropMutation(*ck)
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
+						found = true
 						break
 					}
+				}
+				if !found {
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 			case sqlbase.ConstraintTypeFK:
 				idx, err := n.tableDesc.FindIndexByID(details.Index.ID)
@@ -488,7 +519,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if !found {
-					panic("constraint returned by GetConstraintInfo not found")
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := params.p.validateCheckExpr(
@@ -762,19 +793,6 @@ func applyColumnMutation(
 		col.ComputeExpr = nil
 	}
 	return nil
-}
-
-func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) string {
-	var s bytes.Buffer
-	for i := range cols {
-		if i != 0 {
-			s.WriteString(`, `)
-		}
-		s.WriteString(cols[i].Name)
-		s.WriteString(`=`)
-		s.WriteString(values[i].String())
-	}
-	return s.String()
 }
 
 // injectTableStats implements the INJECT STATISTICS command, which deletes any
