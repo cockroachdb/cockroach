@@ -173,10 +173,16 @@ func (r *Replica) AdminSplit(
 		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
 		// the command with the updated descriptor.
-		switch errors.Cause(lastErr).(type) {
-		case *roachpb.ConditionFailedError:
-		case *roachpb.AmbiguousResultError:
-		default:
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
 			return reply, roachpb.NewError(lastErr)
 		}
 	}
