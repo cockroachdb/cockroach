@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	gojson "encoding/json"
 	"fmt"
@@ -219,8 +218,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
-				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
-				descriptorChanged = true
+				n.tableDesc.AddCheckMutation(*ck, sqlbase.DescriptorMutation_ADD)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -430,12 +428,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypeUnique:
 				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
+				found := false
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
+						found = true
 						break
 					}
+				}
+				if !found {
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 			case sqlbase.ConstraintTypeFK:
 				idx, err := n.tableDesc.FindIndexByID(details.Index.ID)
@@ -475,7 +478,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if !found {
-					panic("constraint returned by GetConstraintInfo not found")
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := params.p.validateCheckExpr(
@@ -747,19 +750,6 @@ func applyColumnMutation(
 		col.ComputeExpr = nil
 	}
 	return nil
-}
-
-func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) string {
-	var s bytes.Buffer
-	for i := range cols {
-		if i != 0 {
-			s.WriteString(`, `)
-		}
-		s.WriteString(cols[i].Name)
-		s.WriteString(`=`)
-		s.WriteString(values[i].String())
-	}
-	return s.String()
 }
 
 // injectTableStats implements the INJECT STATISTICS command, which deletes any

@@ -586,3 +586,29 @@ query TT
 SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
 ----
 succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED
+
+subtest check_on_add_col
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD d INT
+
+statement ok
+ALTER TABLE forlater ADD CONSTRAINT d_0 CHECK (d > 0)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD e INT DEFAULT 0
+
+statement ok
+ALTER TABLE forlater ADD CONSTRAINT e_0 CHECK (e > 0)
+
+statement error pq: validation of CHECK "e > 0" failed on row: k='c', v='d', d=NULL, e=0
+COMMIT

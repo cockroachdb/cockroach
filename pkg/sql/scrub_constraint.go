@@ -31,7 +31,7 @@ import (
 type sqlCheckConstraintCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
-	checkDesc *sqlbase.TableDescriptor_CheckConstraint
+	checkDesc *sqlbase.CheckConstraint
 	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned in the query result
@@ -55,7 +55,7 @@ type sqlCheckConstraintCheckRun struct {
 func newSQLCheckConstraintCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.TableDescriptor,
-	checkDesc *sqlbase.TableDescriptor_CheckConstraint,
+	checkDesc *sqlbase.CheckConstraint,
 	asOf hlc.Timestamp,
 ) *sqlCheckConstraintCheckOperation {
 	return &sqlCheckConstraintCheckOperation{

@@ -476,6 +476,16 @@ message IndexDescriptor {
   optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
+message CheckConstraint {
+  optional string expr = 1 [(gogoproto.nullable) = false];
+  optional string name = 2 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+  reserved 4;
+  // An ordered list of column IDs used by the check constraint.
+  repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+                                 (gogoproto.casttype) = "ColumnID"];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -486,6 +496,7 @@ message DescriptorMutation {
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
+    CheckConstraint check = 8;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -635,16 +646,6 @@ message TableDescriptor {
     DROP = 2;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
-
-  message CheckConstraint {
-    optional string expr = 1 [(gogoproto.nullable) = false];
-    optional string name = 2 [(gogoproto.nullable) = false];
-    optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
-    reserved 4;
-    // An ordered list of column IDs used by the check constraint.
-    repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
-      (gogoproto.casttype) = "ColumnID"];
-  }
 
   repeated CheckConstraint checks = 20;
 
