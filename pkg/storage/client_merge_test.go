@@ -1964,8 +1964,6 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("this test occasionally flakes if the RHS quiesces")
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
