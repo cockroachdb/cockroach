@@ -385,6 +385,11 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		}
 	}
 
+	// Note that because [most of] these scans start at the first key of
+	// successive ranges, the dist sender will not attempt to parallelize
+	// them and will do them serially, so bounds are enforced across the
+	// entire batch. See TestMultiRangeBoundedBatchParallelScan for an
+	// example where this isn't true and the scans are parallelized.
 	scans := [][]string{{"a", "c"}, {"b", "c2"}, {"c", "g"}, {"f1a", "f2a"}}
 	// These are the expected results if there is no bound.
 	expResults := [][]string{
@@ -840,6 +845,90 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 			t.Errorf("expected %d keys, got %d", bound, expCount-rem)
 		}
 		checkResumeSpanDelRangeResults(t, spans, b.Results, expResults, expCount)
+	}
+}
+
+// TestMultiRangeBoundedBatchParallelScan verifies that we parallelize
+// scans across multiple ranges when the scans don't appear to cover
+// entire ranges.
+func TestMultiRangeBoundedBatchParallelScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _ := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	db := s.DB()
+	splits := []string{"a", "b", "c", "d"}
+	if err := setupMultipleRanges(ctx, db, splits...); err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{"a1", "b1", "b2", "c1", "c2", "c3"}
+	for _, key := range keys {
+		if err := db.Put(ctx, key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	spans := [][]string{{"a0", "a99"}, {"b0", "b99"}, {"c0", "c99"}}
+
+	testCases := []struct {
+		bound      int64
+		reverse    bool
+		expResults [][]string
+	}{
+		{bound: 4, reverse: false, expResults: [][]string{{"a1"}, {"b1", "b2"}, {"c1", "c2", "c3"}}},
+		{bound: 4, reverse: true, expResults: [][]string{{"a1"}, {"b2", "b1"}, {"c3", "c2", "c1"}}},
+		{bound: 3, reverse: false, expResults: [][]string{{"a1"}, {"b1", "b2"}, {"c1", "c2", "c3"}}},
+		{bound: 3, reverse: true, expResults: [][]string{{"a1"}, {"b2", "b1"}, {"c3", "c2", "c1"}}},
+		{bound: 2, reverse: false, expResults: [][]string{{"a1"}, {"b1", "b2"}, {"c1", "c2"}}},
+		{bound: 2, reverse: true, expResults: [][]string{{}, {}, {"c3", "c2"}}},
+		{bound: 1, reverse: false, expResults: [][]string{{"a1"}, {"b1"}, {}}},
+		{bound: 1, reverse: true, expResults: [][]string{{}, {}, {"c3"}}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("bound=%d,reverse=%t", tc.bound, tc.reverse), func(t *testing.T) {
+			b := &client.Batch{}
+			b.Header.MaxSpanRequestKeys = tc.bound
+			for _, span := range spans {
+				if !tc.reverse {
+					b.Scan(span[0], span[1])
+				} else {
+					b.ReverseScan(span[0], span[1])
+				}
+			}
+			if err := db.Run(ctx, b); err != nil {
+				t.Fatal(err)
+			}
+			expSatisfied := map[int]struct{}{}
+			var expCount int
+			for _, r := range tc.expResults {
+				expCount += len(r)
+				if !tc.reverse {
+					if tc.bound > 2 {
+						expSatisfied[2] = struct{}{}
+					}
+					if tc.bound > 1 {
+						expSatisfied[1] = struct{}{}
+					}
+					if tc.bound > 0 {
+						expSatisfied[0] = struct{}{}
+					}
+				} else {
+					if tc.bound > 2 {
+						expSatisfied[0] = struct{}{}
+						expSatisfied[1] = struct{}{}
+						expSatisfied[2] = struct{}{}
+					}
+				}
+			}
+			opt := checkOptions{mode: Strict, expCount: expCount}
+			if !tc.reverse {
+				checkScanResults(t, spans, b.Results, tc.expResults, expSatisfied, opt)
+			} else {
+				checkReverseScanResults(t, spans, b.Results, tc.expResults, expSatisfied, opt)
+			}
+		})
 	}
 }
 
