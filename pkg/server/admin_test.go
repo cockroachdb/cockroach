@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -1535,5 +1536,23 @@ func TestEnqueueRange(t *testing.T) {
 				t.Fatalf("unexpected error type: %+v", err)
 			}
 		})
+	}
+}
+
+func TestStatsforSpanOnLocalMax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	firstServer := testCluster.Server(0)
+	adminServer := firstServer.(*TestServer).Server.admin
+
+	underTest := roachpb.Span{
+		Key:    keys.LocalMax,
+		EndKey: keys.SystemPrefix,
+	}
+
+	_, err := adminServer.statsForSpan(context.Background(), underTest)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
