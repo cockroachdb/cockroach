@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -766,6 +767,23 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	return nil
 }
 
+type benignError struct {
+	error
+}
+
+var _ causer.Causer = &benignError{}
+
+func (be *benignError) Cause() error {
+	return be.error
+}
+
+func isBenign(err error) bool {
+	return causer.Visit(err, func(err error) bool {
+		_, ok := err.(*benignError)
+		return ok
+	})
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
@@ -787,7 +805,12 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Handle failures.
 	if err != nil {
-		// Increment failures metric to capture all error.
+		benign := isBenign(err)
+
+		// Increment failures metric.
+		//
+		// TODO(tschottdorf): once we start asserting zero failures in tests
+		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
 
 		// Determine whether a failure is a purgatory error. If it is, add
@@ -799,8 +822,10 @@ func (bq *baseQueue) finishProcessingReplica(
 			return
 		}
 
-		// If not a purgatory error, log.
-		log.Error(ctx, err)
+		// If not a benign or purgatory error, log.
+		if !benign {
+			log.Error(ctx, err)
+		}
 	}
 
 	// Maybe add replica back into queue, if requested.
