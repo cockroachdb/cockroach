@@ -69,7 +69,7 @@ func (p *planner) validateCheckExpr(
 	}
 	if next {
 		return errors.Errorf("validation of CHECK %q failed on row: %s",
-			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
+			expr.String(), sqlbase.LabeledRowValues(tableDesc.Columns, rows.Values()))
 	}
 	return nil
 }

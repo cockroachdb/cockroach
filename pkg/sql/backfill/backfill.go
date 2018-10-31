@@ -34,6 +34,14 @@ import (
 // MutationFilter is the type of a simple predicate on a mutation.
 type MutationFilter func(sqlbase.DescriptorMutation) bool
 
+// CheckMutationFilter is a filter that allows mutations that add
+// check constraints.
+func CheckMutationFilter(m sqlbase.DescriptorMutation) bool {
+	return m.GetCheck() != nil &&
+		m.Direction == sqlbase.DescriptorMutation_ADD &&
+		m.GetCheck().Validity == sqlbase.ConstraintValidity_Validating
+}
+
 // ColumnMutationFilter is a filter that allows mutations that add or drop
 // columns.
 func ColumnMutationFilter(m sqlbase.DescriptorMutation) bool {
@@ -50,6 +58,139 @@ func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
 type backfiller struct {
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
+}
+
+// CheckBackfiller is capable of backfilling all the added checks.
+type CheckBackfiller struct {
+	backfiller
+
+	addedExprs []tree.TypedExpr
+	added      []sqlbase.TableDescriptor_CheckConstraint
+	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
+	colIdxMap map[sqlbase.ColumnID]int
+	cols      []sqlbase.ColumnDescriptor
+
+	evalCtx *tree.EvalContext
+}
+
+// Init initializes a CheckBackfiller.
+func (cb *CheckBackfiller) Init(
+	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+) error {
+	cb.evalCtx = evalCtx
+	numCols := len(desc.Columns)
+	cb.cols = desc.Columns
+	if len(desc.Mutations) > 0 {
+		cb.cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
+		cb.cols = append(cb.cols, desc.Columns...)
+		for _, m := range desc.Mutations {
+			if column := m.GetColumn(); column != nil &&
+				m.Direction == sqlbase.DescriptorMutation_ADD &&
+				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				cb.cols = append(cb.cols, *column)
+			}
+		}
+	}
+
+	mutationID := desc.Mutations[0].MutationID
+	for _, m := range desc.Mutations {
+		if m.MutationID != mutationID {
+			break
+		}
+		if CheckMutationFilter(m) {
+			ck := m.GetCheck()
+			cb.added = append(cb.added, *ck)
+		}
+	}
+
+	var txCtx transform.ExprTransformContext
+	var err error
+	cb.addedExprs, err = sqlbase.MakeCheckExprs(
+		cb.added,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
+		cb.cols,
+		&txCtx,
+		cb.evalCtx,
+	)
+	if err != nil {
+		return err
+	}
+
+	cb.colIdxMap = make(map[sqlbase.ColumnID]int, len(cb.cols))
+	for i, c := range cb.cols {
+		cb.colIdxMap[c.ID] = i
+	}
+
+	// Get all values for displaying the whole row that fails any check.
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(cb.cols)-1)
+
+	tableArgs := row.FetcherTableArgs{
+		Desc:            desc,
+		Index:           &desc.PrimaryIndex,
+		ColIdxMap:       cb.colIdxMap,
+		Cols:            cb.cols,
+		ValNeededForCol: valNeededForCol,
+	}
+	return cb.fetcher.Init(
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &cb.alloc, tableArgs,
+	)
+}
+
+// RunCheckBackfillChunk runs an check validation over a chunk of the table
+// by traversing the span sp provided. The validation is run for the added
+// checks.
+func (cb *CheckBackfiller) RunCheckBackfillChunk(
+	ctx context.Context,
+	txn *client.Txn,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	sp roachpb.Span,
+	chunkSize int64,
+	traceKV bool,
+) (roachpb.Key, error) {
+	// Get the next set of rows.
+	//
+	// Running the scan and applying the changes in many transactions
+	// is fine because the schema change is in the correct state to
+	// handle intermediate OLTP commands which delete and add values
+	// during the scan. Index entries in the new index are being
+	// populated and deleted by the OLTP commands but not otherwise
+	// read or used
+	if err := cb.fetcher.StartScan(
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
+	); err != nil {
+		log.Errorf(ctx, "scan error: %s", err)
+		return roachpb.Key{}, err
+	}
+
+	iv := &sqlbase.RowIndexedVarContainer{
+		Cols:    cb.cols,
+		Mapping: cb.colIdxMap,
+	}
+	cb.evalCtx.IVarContainer = iv
+	for i := int64(0); i < chunkSize; i++ {
+		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
+		if err != nil {
+			return roachpb.Key{}, err
+		}
+		if datums == nil {
+			break
+		}
+		iv.CurSourceRow = datums
+
+		for j, e := range cb.addedExprs {
+			val, err := e.Eval(cb.evalCtx)
+			if err != nil {
+				return roachpb.Key{}, sqlbase.NewInvalidSchemaDefinitionError(err)
+			}
+			// Expression already type checked.
+			if val == tree.DBoolFalse {
+				return roachpb.Key{}, errors.Errorf("validation of CHECK %q failed on row: %s",
+					cb.added[j].Expr, sqlbase.LabeledRowValues(cb.cols, datums))
+			}
+		}
+	}
+	return cb.fetcher.Key(), nil
 }
 
 // ColumnBackfiller is capable of running a column backfill for all
@@ -418,7 +559,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 }
 
 // RunIndexBackfillChunk runs an index backfill over a chunk of the table
-// by tracversing the span sp provided. The backfill is run for the added
+// by traversing the span sp provided. The backfill is run for the added
 // indexes.
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
