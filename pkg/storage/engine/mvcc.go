@@ -1705,6 +1705,7 @@ func mvccScanInternal(
 		// }
 
 		iter = engine.NewIterator(IterOptions{
+			LowerBound: key,
 			UpperBound: endKey,
 			WithStats:  withStats,
 		})
@@ -2010,7 +2011,10 @@ func MVCCIterate(
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	// Get a new iterator.
-	iter := engine.NewIterator(IterOptions{UpperBound: endKey})
+	iter := engine.NewIterator(IterOptions{
+		LowerBound: startKey,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 
 	return MVCCIterateUsingIter(

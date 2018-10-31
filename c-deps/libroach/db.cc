@@ -612,6 +612,7 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   return DBIterGetState(iter);
 }
 
+void DBIterSetLowerBound(DBIterator* iter, DBKey key) { iter->SetLowerBound(key); }
 void DBIterSetUpperBound(DBIterator* iter, DBKey key) { iter->SetUpperBound(key); }
 
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
