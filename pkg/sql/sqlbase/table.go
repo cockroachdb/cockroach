@@ -232,7 +232,7 @@ type ConstraintDetail struct {
 	ReferencedIndex *IndexDescriptor
 
 	// Only populated for Check Constraints.
-	CheckConstraint *TableDescriptor_CheckConstraint
+	CheckConstraint *CheckConstraint
 }
 
 type tableLookupFn func(ID) (*TableDescriptor, error)
@@ -348,7 +348,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		}
 	}
 
-	for _, c := range desc.Checks {
+	for _, c := range desc.allNonDropChecks() {
 		if _, ok := info[c.Name]; ok {
 			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
 		}

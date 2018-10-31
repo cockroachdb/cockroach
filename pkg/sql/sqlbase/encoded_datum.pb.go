@@ -20,6 +20,7 @@ It has these top-level messages:
 	InterleaveDescriptor
 	PartitioningDescriptor
 	IndexDescriptor
+	CheckConstraint
 	DescriptorMutation
 	TableDescriptor
 	DatabaseDescriptor

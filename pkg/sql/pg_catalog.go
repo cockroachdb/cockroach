@@ -2377,7 +2377,7 @@ func (h oidHasher) writeColumn(column *sqlbase.ColumnDescriptor) {
 	h.writeStr(column.Name)
 }
 
-func (h oidHasher) writeCheckConstraint(check *sqlbase.TableDescriptor_CheckConstraint) {
+func (h oidHasher) writeCheckConstraint(check *sqlbase.CheckConstraint) {
 	h.writeStr(check.Name)
 	h.writeStr(check.Expr)
 }
@@ -2443,7 +2443,7 @@ func (h oidHasher) CheckConstraintOid(
 	db *sqlbase.DatabaseDescriptor,
 	scName string,
 	table *sqlbase.TableDescriptor,
-	check *sqlbase.TableDescriptor_CheckConstraint,
+	check *sqlbase.CheckConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(db)

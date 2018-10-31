@@ -1449,8 +1449,8 @@ func replaceVars(
 			return nil, true, expr
 		}
 
-		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
-		if err != nil {
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
 			return fmt.Errorf("column %q not found for constraint %q",
 				c.ColumnName, expr.String()), false, nil
 		}
@@ -1470,7 +1470,7 @@ func MakeCheckConstraint(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableName tree.TableName,
-) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+) (*sqlbase.CheckConstraint, error) {
 	name := string(d.Name)
 
 	if name == "" {
@@ -1499,7 +1499,7 @@ func MakeCheckConstraint(
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.AllNonDropColumns()),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
@@ -1508,7 +1508,7 @@ func MakeCheckConstraint(
 		return nil, err
 	}
 
-	return &sqlbase.TableDescriptor_CheckConstraint{
+	return &sqlbase.CheckConstraint{
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
