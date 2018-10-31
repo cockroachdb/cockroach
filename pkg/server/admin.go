@@ -569,7 +569,7 @@ func (s *adminServer) TableStats(
 	tableID := path[2]
 	tableSpan := generateTableSpan(tableID)
 
-	return s.tableStatsForSpan(ctx, tableSpan)
+	return s.statsForSpan(ctx, tableSpan)
 }
 
 // NonTableStats is an endpoint that returns disk usage and replication
@@ -577,7 +577,7 @@ func (s *adminServer) TableStats(
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
-	timeSeriesStats, err := s.tableStatsForSpan(ctx, roachpb.Span{
+	timeSeriesStats, err := s.statsForSpan(ctx, roachpb.Span{
 		Key:    keys.TimeseriesPrefix,
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
 	})
@@ -590,14 +590,14 @@ func (s *adminServer) NonTableStats(
 	return &response, nil
 }
 
-func (s *adminServer) tableStatsForSpan(
-	ctx context.Context, tableSpan roachpb.Span,
+func (s *adminServer) statsForSpan(
+	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
-	startKey, err := keys.Addr(tableSpan.Key)
+	startKey, err := keys.Addr(span.Key)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	endKey, err := keys.Addr(tableSpan.EndKey)
+	endKey, err := keys.Addr(span.EndKey)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
