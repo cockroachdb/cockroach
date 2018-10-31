@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/codahale/hdrhistogram"
 	"github.com/pkg/errors"
 )
 
@@ -110,11 +111,10 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		t.Fatal(err)
 	}
 	defer changefeedLogger.close()
-	verifier := latencyVerifier{
-		targetInitialScanLatency: args.targetInitialScanLatency,
-		targetSteadyLatency:      args.targetSteadyLatency,
-		logger:                   changefeedLogger,
-	}
+	verifier := makeLatencyVerifier(
+		args.targetInitialScanLatency, args.targetSteadyLatency, changefeedLogger)
+	defer verifier.maybeLogLatencyHist()
+
 	m.Go(func(ctx context.Context) error {
 		var targets string
 		if args.workloadType == tpccWorkloadType {
@@ -515,6 +515,21 @@ type latencyVerifier struct {
 	initialScanLatency   time.Duration
 	maxSeenSteadyLatency time.Duration
 	latencyBecameSteady  bool
+
+	latencyHist *hdrhistogram.Histogram
+}
+
+func makeLatencyVerifier(
+	targetInitialScanLatency time.Duration, targetSteadyLatency time.Duration, l *logger,
+) *latencyVerifier {
+	const sigFigs, minLatency, maxLatency = 1, 100 * time.Microsecond, 100 * time.Second
+	hist := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	return &latencyVerifier{
+		targetInitialScanLatency: targetInitialScanLatency,
+		targetSteadyLatency:      targetSteadyLatency,
+		logger:                   l,
+		latencyHist:              hist,
+	}
 }
 
 func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
@@ -540,6 +555,9 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		lv.logger.Printf("end-to-end latency %s not yet below target steady latency %s\n",
 			latency, lv.targetSteadyLatency)
 		return
+	}
+	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
+		lv.logger.Printf("could not record value %s: %s\n", latency, err)
 	}
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency
@@ -586,6 +604,23 @@ func (lv *latencyVerifier) assertValid(t *test) {
 		t.Fatalf("max latency was more than allowed: %s vs %s",
 			lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
 	}
+}
+
+func (lv *latencyVerifier) maybeLogLatencyHist() {
+	if lv.latencyHist == nil {
+		return
+	}
+	lv.logger.Printf(
+		"changefeed end-to-end __avg(ms)__p50(ms)__p75(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)\n")
+	lv.logger.Printf("changefeed end-to-end  %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
+		time.Duration(lv.latencyHist.Mean()).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(50)).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(75)).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(90)).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(95)).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(99)).Seconds()*1000,
+		time.Duration(lv.latencyHist.ValueAtQuantile(100)).Seconds()*1000,
+	)
 }
 
 func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (int, error) {
