@@ -1199,11 +1199,12 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, evalCtx, n.Table)
+			ck, _, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, evalCtx, n.Table)
 			if err != nil {
 				return desc, err
 			}
-			desc.Checks = append(desc.Checks, ck)
+			ck.Validity = sqlbase.ConstraintValidity_Validated
+			desc.AddCheck(*ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
 			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable); err != nil {
@@ -1447,7 +1448,7 @@ func validateComputedColumn(
 	}
 
 	// Replace column references with typed dummies to allow typechecking.
-	replacedExpr, _, err := replaceVars(desc, d.Computed.Expr)
+	replacedExpr, _, _, err := replaceVars(desc, d.Computed.Expr)
 	if err != nil {
 		return err
 	}
@@ -1464,11 +1465,13 @@ func validateComputedColumn(
 // replaceVars replaces the occurrences of column names in an expression with
 // dummies containing their type, so that they may be typechecked. It returns
 // this new expression tree alongside a set containing the ColumnID of each
-// column seen in the expression.
+// column seen in the expression. It also returns true if every used column
+// is either DELETE_AND_WRITE_ONLY or public.
 func replaceVars(
 	desc *sqlbase.MutableTableDescriptor, expr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
+) (tree.Expr, map[sqlbase.ColumnID]struct{}, bool, error) {
 	colIDs := make(map[sqlbase.ColumnID]struct{})
+	allColsWritable := true
 	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
@@ -1486,19 +1489,25 @@ func replaceVars(
 			return nil, true, expr
 		}
 
-		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
-		if err != nil {
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
 			return fmt.Errorf("column %q not found for constraint %q",
 				c.ColumnName, expr.String()), false, nil
 		}
+
+		if isMutation, isWriteOnly := desc.GetColumnMutationCapabilities(col.ID); isMutation && !isWriteOnly {
+			allColsWritable = false
+		}
+
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
 		return nil, false, &dummyColumnItem{typ: col.Type.ToDatumType(), name: c.ColumnName}
 	})
-	return newExpr, colIDs, err
+	return newExpr, colIDs, allColsWritable, err
 }
 
 // MakeCheckConstraint makes a descriptor representation of a check from a def.
+// It returns true if all referenced columns are public or in DELETE_AND_WRITE_ONLY.
 func MakeCheckConstraint(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
@@ -1507,26 +1516,26 @@ func MakeCheckConstraint(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableName tree.TableName,
-) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+) (*sqlbase.TableDescriptor_CheckConstraint, bool, error) {
 	name := string(d.Name)
 
 	if name == "" {
 		var err error
 		name, err = generateNameForCheckConstraint(desc, d.Expr, inuseNames)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
-	expr, colIDsUsed, err := replaceVars(desc, d.Expr)
+	expr, colIDsUsed, allColsWritable, err := replaceVars(desc, d.Expr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
 		expr, types.Bool, "CHECK", semaCtx, evalCtx, true, /* allowImpure */
 	); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	colIDs := make([]sqlbase.ColumnID, 0, len(colIDsUsed))
@@ -1536,18 +1545,19 @@ func MakeCheckConstraint(
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.AllNonDropColumns()),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
 	expr, err = dequalifyColumnRefs(ctx, sources, d.Expr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	return &sqlbase.TableDescriptor_CheckConstraint{
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
-	}, nil
+		Validity:  sqlbase.ConstraintValidity_Validating,
+	}, allColsWritable, nil
 }

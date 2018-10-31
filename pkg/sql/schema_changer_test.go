@@ -1222,7 +1222,8 @@ func dropIndexSchemaChange(
 	}
 }
 
-// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints
+// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints,
+// or an error occurs if a CHECK constraint is being added on it.
 func TestDropColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
@@ -1265,6 +1266,22 @@ CREATE TABLE t.test (
 
 	if tableDesc.Checks[0].Name != "check_ab" {
 		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.Checks[0].Name)
+	}
+
+	// Test that a constraint being added prevents the column from being dropped.
+	txn, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec(`ALTER TABLE t.test ADD CONSTRAINT check_bk CHECK (b >= k)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err,
+		"referencing constraint \"check_bk\" in the middle of being added") {
+		t.Fatalf("err = %+v", err)
+	}
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -2191,6 +2208,61 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 }
 
+// Test check constraints added on write-only or public columns
+// immediately start in write-only.
+func TestAddConstraintWriteOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	// Block schema changers so that the mutation states remain
+	// when the transaction commits.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD CONSTRAINT ck_v CHECK (v >= 0)"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Mutations) != 1 || tableDesc.Mutations[0].GetCheck() == nil {
+		t.Fatalf("Expected 1 check mutation but got %+v ", tableDesc.Mutations)
+	} else if e, a := sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY, tableDesc.Mutations[0].State; e != a {
+		t.Fatalf("Expected mutation state %d, got %d", e, a)
+	}
+
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD i INT, ADD CONSTRAINT ck_i CHECK (i >= v)"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-read table descriptor.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Second check mutation should be in DELETE_ONLY because column i is also in DELETE_ONLY.
+	if len(tableDesc.Mutations) != 3 {
+		t.Fatalf("Expected 3 mutations but got %d ", len(tableDesc.Mutations))
+	} else if mutation := tableDesc.Mutations[2]; mutation.GetCheck() == nil {
+		t.Fatalf("Expected check mutation but got %+v ", mutation)
+	} else if e, a := sqlbase.DescriptorMutation_DELETE_ONLY, mutation.State; e != a {
+		t.Fatalf("Expected mutation state %d, got %d", e, a)
+	}
+}
+
 // Test CRUD operations can read NULL values for NOT NULL columns
 // in the middle of a column backfill.
 func TestCRUDWhileColumnBackfill(t *testing.T) {
@@ -2557,6 +2629,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX bar ON t.kv (v)`, ``},
 		{`index-on-add-col`, `ALTER TABLE t.kv ADD i INT`,
 			`CREATE INDEX foobar ON t.kv (i)`, ``},
+		{`check-on-add-col`, `ALTER TABLE t.kv ADD j INT`,
+			`ALTER TABLE t.kv ADD CONSTRAINT ck_j CHECK (j >= 0)`, ``},
 	}
 
 	for _, testCase := range testCases {
@@ -3416,7 +3490,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v));`); err != nil {
+	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v), CONSTRAINT ck_k CHECK (k >= 0));`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3433,9 +3507,9 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	// Run schema changes that are execute Column and Index backfills.
+	// Run schema changes that are execute Column, Check and Index backfills.
 	if _, err := tx.Exec(`
-ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
+ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c), DROP CONSTRAINT ck_k, ADD CONSTRAINT ck_c CHECK (c >= 4)
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -3487,6 +3561,16 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 
+	// Constraint ck_k dropped, ck_c public.
+	if _, err := sqlDB.Exec(fmt.Sprintf("INSERT INTO t.test (k, v) VALUES (-1, %d)", maxValue+10)); err != nil {
+		t.Fatal(err)
+	}
+	q := fmt.Sprintf("INSERT INTO t.test (k, v) VALUES (%d, -1)", maxValue+10)
+	if _, err := sqlDB.Exec(q); !testutils.IsError(err,
+		`failed to satisfy CHECK constraint \(c >= 4\)`) {
+		t.Fatalf("err = %+v", err)
+	}
+
 	// The descriptor version hasn't changed.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if tableDesc.Version != 1 {
@@ -3494,8 +3578,8 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 	}
 }
 
-// TestCancelSchemaChange tests that a CANCEL JOB run midway through column
-// and index backfills is canceled.
+// TestCancelSchemaChange tests that a CANCEL JOB run midway through column,
+// index, or check backfill is canceled.
 func TestCancelSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3587,6 +3671,10 @@ func TestCancelSchemaChange(t *testing.T) {
 			false, false},
 		{`CREATE INDEX foo ON t.public.test (v)`,
 			false, true},
+		{`ALTER TABLE t.public.test ADD CONSTRAINT ck_k CHECK (k >= 0)`,
+			false, false},
+		{`ALTER TABLE t.public.test ADD CONSTRAINT ck_v CHECK (v >= 0)`,
+			true, false},
 	}
 
 	idx := 0
@@ -3669,19 +3757,29 @@ func TestCancelSchemaChange(t *testing.T) {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 
+	// Verify that only constraint `ck_k` is active.
+	if _, err := db.Exec(`INSERT INTO t.test (k, v) VALUES (-1, 0)`); !testutils.IsError(err,
+		`failed to satisfy CHECK constraint \(k >= 0\)`) {
+		t.Fatalf("err = %+v", err)
+	}
+	// ck_v is absent.
+	if _, err := db.Exec(`INSERT INTO t.test (k, v) VALUES (999, -1)`); err != nil {
+		t.Fatal(err)
+	}
+
 	// Verify that the data from the canceled CREATE INDEX is cleaned up.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
+		return checkTableKeyCount(ctx, kvDB, 3, maxValue+1)
 	})
 }
 
 // This test checks that when a transaction containing schema changes
 // needs to be retried it gets retried internal to cockroach. This test
-// currently fails because a schema changeg transaction is not retried.
+// currently fails because a schema change transaction is not retried.
 func TestSchemaChangeRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const numNodes = 3
