@@ -219,12 +219,20 @@ func (p *planner) dropIndexByName(
 		}
 	}
 	if !found {
+		for _, m := range tableDesc.Mutations[len(tableDesc.ClusterVersion.Mutations):] {
+			if mutIdx := m.GetIndex(); mutIdx != nil && mutIdx.ID == idx.ID && m.Direction == sqlbase.DescriptorMutation_ADD {
+				if err := tableDesc.AddIndexMutation(*mutIdx, sqlbase.DescriptorMutation_DROP); err != nil {
+					return err
+				}
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return err
-	}
 	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err

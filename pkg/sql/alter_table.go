@@ -408,6 +408,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 			if !found {
+				for _, m := range n.tableDesc.Mutations[len(n.tableDesc.ClusterVersion.Mutations):] {
+					if mutCol := m.GetColumn(); mutCol != nil && mutCol.ID == col.ID && m.Direction == sqlbase.DescriptorMutation_ADD {
+						n.tableDesc.AddColumnMutation(*mutCol, sqlbase.DescriptorMutation_DROP)
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
 				return fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 			}
 

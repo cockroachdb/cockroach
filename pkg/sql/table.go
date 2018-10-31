@@ -776,6 +776,91 @@ func (p *planner) writeTableDesc(
 	return p.txn.Run(ctx, b)
 }
 
+// squashNewMutations rewrites the mutations list, removing
+// mutations where schema elements are added and dropped in
+// the same transaction, and marking the mutation jobs as
+// succeeded.
+func (p *planner) squashNewMutations(
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor,
+) error {
+	if len(desc.ClusterVersion.Mutations) == len(desc.Mutations) {
+		return nil
+	}
+
+	origLen := len(desc.ClusterVersion.Mutations)
+	addDroppedColumns := make(map[sqlbase.ColumnID]bool)
+	addDroppedIndexes := make(map[sqlbase.IndexID]bool)
+	for _, m := range desc.Mutations[origLen:] {
+		switch t := m.Descriptor_.(type) {
+		case *sqlbase.DescriptorMutation_Column:
+			switch m.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				addDroppedColumns[t.Column.ID] = false
+			case sqlbase.DescriptorMutation_DROP:
+				if _, ok := addDroppedColumns[t.Column.ID]; ok {
+					addDroppedColumns[t.Column.ID] = true
+				}
+			}
+		case *sqlbase.DescriptorMutation_Index:
+			switch m.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				addDroppedIndexes[t.Index.ID] = false
+			case sqlbase.DescriptorMutation_DROP:
+				if _, ok := addDroppedIndexes[t.Index.ID]; ok {
+					addDroppedIndexes[t.Index.ID] = true
+				}
+			}
+		}
+	}
+
+	var newMutations []sqlbase.DescriptorMutation
+	var squashedIDs []sqlbase.MutationID
+
+	for _, m := range desc.Mutations[origLen:] {
+		var squashed bool
+		switch t := m.Descriptor_.(type) {
+		case *sqlbase.DescriptorMutation_Column:
+			squashed = addDroppedColumns[t.Column.ID]
+		case *sqlbase.DescriptorMutation_Index:
+			squashed = addDroppedIndexes[t.Index.ID]
+		}
+		if squashed {
+			squashedIDs = append(squashedIDs, m.MutationID)
+			// Perform any cleanup after drop is succeeded.
+			if m.Direction == sqlbase.DescriptorMutation_DROP {
+				if err := desc.MakeMutationComplete(m); err != nil {
+					return err
+				}
+			}
+		} else {
+			newMutations = append(newMutations, m)
+		}
+	}
+
+	var prev sqlbase.MutationID
+	for _, id := range squashedIDs {
+		if prev != id {
+			prev = id
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, desc.TableDesc(), id)
+			if err != nil {
+				return err
+			}
+
+			job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+			if err != nil {
+				return err
+			}
+
+			if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+				return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
+			}
+		}
+	}
+
+	desc.Mutations = append(desc.ClusterVersion.Mutations, newMutations...)
+	return nil
+}
+
 func (p *planner) writeTableDescToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
@@ -809,6 +894,10 @@ func (p *planner) writeTableDescToBatch(
 
 		// Schedule a schema changer for later.
 		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
+	}
+
+	if err := p.squashNewMutations(ctx, tableDesc); err != nil {
+		return err
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
