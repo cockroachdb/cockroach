@@ -158,7 +158,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
+	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
