@@ -128,14 +128,15 @@ func TestQueuePriorityQueue(t *testing.T) {
 	// establish the priority queue (heap) invariants.
 	const count = 3
 	expRanges := make([]roachpb.RangeID, count+1)
-	pq := make(priorityQueue, count)
+	pq := priorityQueue{}
+	pq.sl = make([]*replicaItem, count)
 	for i := 0; i < count; {
-		pq[i] = &replicaItem{
+		pq.sl[i] = &replicaItem{
 			value:    roachpb.RangeID(i),
 			priority: float64(i),
 			index:    i,
 		}
-		expRanges[3-i] = pq[i].value
+		expRanges[3-i] = pq.sl[i].value
 		i++
 	}
 	heap.Init(&pq)
