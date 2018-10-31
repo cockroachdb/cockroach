@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
@@ -46,6 +47,61 @@ type AnalyzeExprFunction func(
 	typingContext string,
 ) (tree.TypedExpr, error)
 
+// MakeCheckExprs returns a slice of typed check expressions for the
+// slice of input check constraint descriptors.
+// The length of the result slice matches the length of the input
+// constraint descriptors.
+func MakeCheckExprs(
+	checks []TableDescriptor_CheckConstraint,
+	tn *tree.TableName,
+	cols []ColumnDescriptor,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
+	typedExprs := make([]tree.TypedExpr, 0, len(checks))
+
+	exprStrings := make([]string, 0, len(cols))
+	for _, ck := range checks {
+		exprStrings = append(exprStrings, ck.Expr)
+	}
+	exprs, err := parser.ParseExprs(exprStrings)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need an ivarHelper and sourceInfo for type checking that each
+	// expressions results in a boolean.
+	iv := &descContainer{cols}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(cols))
+
+	sourceInfo := NewSourceInfoForSingleTable(
+		*tn, ResultColumnsFromColDescs(cols),
+	)
+
+	semaCtx := tree.MakeSemaContext(false)
+	semaCtx.IVarContainer = iv
+
+	for _, raw := range exprs {
+		expr, _, _, err := ResolveNames(raw,
+			MakeMultiSourceInfo(sourceInfo),
+			ivarHelper, evalCtx.SessionData.SearchPath)
+		if err != nil {
+			return nil, err
+		}
+
+		typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Bool)
+		if err != nil {
+			return nil, err
+		}
+		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			return nil, err
+		}
+		typedExprs = append(typedExprs, typedExpr)
+	}
+
+	return typedExprs, nil
+}
+
 // Init initializes the CheckHelper. This step should be done during planning.
 func (c *CheckHelper) Init(
 	ctx context.Context,
@@ -53,18 +109,19 @@ func (c *CheckHelper) Init(
 	tn *tree.TableName,
 	tableDesc *ImmutableTableDescriptor,
 ) error {
-	if len(tableDesc.Checks) == 0 {
+	checks := tableDesc.WritableChecks()
+	if len(checks) == 0 {
 		return nil
 	}
 
-	c.cols = tableDesc.Columns
+	c.cols = tableDesc.WritableColumns()
 	c.sourceInfo = NewSourceInfoForSingleTable(
-		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
+		*tn, ResultColumnsFromColDescs(tableDesc.WritableColumns()),
 	)
 
-	c.Exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
-	exprStrings := make([]string, len(tableDesc.Checks))
-	for i, check := range tableDesc.Checks {
+	c.Exprs = make([]tree.TypedExpr, len(checks))
+	exprStrings := make([]string, len(checks))
+	for i, check := range checks {
 		exprStrings[i] = check.Expr
 	}
 	exprs, err := parser.ParseExprs(exprStrings)

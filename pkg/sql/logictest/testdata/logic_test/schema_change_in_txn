@@ -777,3 +777,44 @@ ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
 
 statement ok
 COMMIT
+
+subtest check_on_add_col
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD d INT
+
+statement ok
+ALTER TABLE forlater ADD CONSTRAINT d_0 CHECK (d > 0)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE forlater ADD e INT DEFAULT 0
+
+statement ok
+ALTER TABLE forlater ADD CONSTRAINT e_0 CHECK (e > 0)
+
+statement error pq: validation of CHECK "e > 0" failed on row: k='c', v='d', d=NULL, e=0
+COMMIT
+
+# Constraint e_0 was not added
+query TTTTB
+SHOW CONSTRAINTS FROM forlater
+----
+forlater  d_0      CHECK        CHECK (d > 0)        true
+forlater  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+# Adding column e was rolled back
+query TTBTTTB
+SHOW COLUMNS FROM forlater
+----
+k  CHAR  false  NULL  ·  {primary}  false
+v  CHAR  true   NULL  ·  {}         false
+d  INT8  true   NULL  ·  {}         false
