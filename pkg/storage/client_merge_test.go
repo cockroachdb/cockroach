@@ -1771,17 +1771,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Remove and GC the LHS replica on store2. This ensures that the RHS replica
-	// on store2 will never be subsumed, because the merge trigger will never be
-	// applied by the LHS.
+	// Remove the LHS replica from store2.
 	mtc.unreplicateRange(lhsDesc.RangeID, 2)
-	lhsRepl2 := store2.LookupReplica(lhsDesc.StartKey)
-	if err := store2.ManualReplicaGC(lhsRepl2); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
-		t.Fatal("lhs replica not destroyed on store2")
-	}
 
 	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
 	// will force its replica to of the new RHS to become up to date, which

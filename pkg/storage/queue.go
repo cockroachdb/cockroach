@@ -18,6 +18,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -486,6 +487,11 @@ func (bq *baseQueue) addInternalLocked(
 			log.Infof(ctx, "queue disabled")
 		}
 		return false, errQueueDisabled
+	}
+
+	if bq.name == "replicaGC" {
+		log.Infof(ctx, "adding %s to replica gc queue", desc)
+		debug.PrintStack()
 	}
 
 	if !desc.IsInitialized() {
