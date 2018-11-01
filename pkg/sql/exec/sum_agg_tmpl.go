@@ -24,12 +24,28 @@
 package exec
 
 import (
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
 
-// TODO(asubiotto): Probably need to add declarations.
-// TODO(asubiotto): Need to have a zero value template.
+// {{/*
+// Declarations to make the template compile properly
+
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
+
+// _ASSIGN_ADD is the template addition function for assigning the first input
+// to the result of the second input + the third input.
+func _ASSIGN_ADD(_, _, _ string) {
+	panic("")
+}
+
+// */}}
 
 func newSumAgg(t types.T) (aggregateFunc, error) {
 	switch t {
@@ -72,7 +88,7 @@ func (a *sum_TYPEAgg) Reset() {
 	a.scratch.curIdx = -1
 }
 
-func (a *sumInt64Agg) CurrentOutputIndex() int {
+func (a *sum_TYPEAgg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
@@ -94,7 +110,7 @@ func (a *sum_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
 		a.done = true
 		return
 	}
-	ints, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
+	col, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
@@ -103,17 +119,17 @@ func (a *sum_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
 				x = 1
 			}
 			a.scratch.curIdx += x
-			a.scratch.vec[a.scratch.curIdx] += ints[i]
+			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
 		}
 	} else {
-		ints = ints[:inputLen]
-		for i := range ints {
+		col = col[:inputLen]
+		for i := range col {
 			x := 0
 			if a.groups[i] {
 				x = 1
 			}
 			a.scratch.curIdx += x
-			a.scratch.vec[a.scratch.curIdx] += ints[i]
+			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
 		}
 	}
 }
