@@ -576,6 +576,33 @@ func (s *adminServer) TableStats(
 	return s.statsForSpan(ctx, tableSpan)
 }
 
+// DatabaseTableStats is an endpoint that returns table stats for all tables
+// for all databases.
+func (s *adminServer) DatabaseTableStats(
+	ctx context.Context, req *serverpb.DatabaseTableStatsRequest,
+) (*serverpb.DatabaseTableStatsResponse, error) {
+	// TODO(celia): Replace this fake data with real data.
+	response := serverpb.DatabaseTableStatsResponse{
+		Databases: []*serverpb.DatabaseTableStatsResponse_Database{
+			{
+				DatabaseName: "db1",
+				Tables: []*serverpb.DatabaseTableStatsResponse_Database_Table{
+					{
+						TableName: "table1",
+						Stats: &serverpb.DatabaseTableStatsResponse_Database_Table_Stats{
+							ApproximateDiskBytes: uint64(1234),
+							RangeCount:           int64(2),
+							ColumnCount:          int64(3),
+							IndexCount:           int64(4),
+						},
+					},
+				},
+			},
+		},
+	}
+	return &response, nil
+}
+
 // NonTableStats is an endpoint that returns disk usage and replication
 // statistics for non-table parts of the system.
 func (s *adminServer) NonTableStats(

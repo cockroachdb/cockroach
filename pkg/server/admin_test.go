@@ -325,6 +325,22 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 }
 
+func TestAdminAPIDatabaseTableStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	s := testCluster.Server(0)
+
+	var resp serverpb.DatabaseTableStatsResponse
+	if err := getAdminJSONProto(s, "databasetablestats", &resp); err != nil {
+		t.Fatal(err)
+	}
+	// TODO(celia): Endpoint has fake data; eventually test call when it has real data.
+	assert.Equal(t, resp.Databases[0].DatabaseName, "db1")
+	assert.Equal(t, resp.Databases[0].Tables[0].TableName, "table1")
+	assert.Equal(t, resp.Databases[0].Tables[0].Stats.ApproximateDiskBytes, uint64(1234))
+}
+
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
