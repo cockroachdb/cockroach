@@ -29,6 +29,8 @@ type ColBatch interface {
 	SetLength(uint16)
 	// ColVec returns the ith ColVec in this batch.
 	ColVec(i int) ColVec
+	// ColVecs returns all of the underlying ColVecs in this batch.
+	ColVecs() []ColVec
 	// Selection, if not nil, returns the selection vector on this batch: a
 	// densely-packed list of the indices in each column that have not been
 	// filtered out by a previous step.
@@ -88,6 +90,10 @@ func (m *memBatch) Length() uint16 {
 
 func (m *memBatch) ColVec(i int) ColVec {
 	return m.b[i]
+}
+
+func (m *memBatch) ColVecs() []ColVec {
+	return m.b
 }
 
 func (m *memBatch) Selection() []uint16 {
