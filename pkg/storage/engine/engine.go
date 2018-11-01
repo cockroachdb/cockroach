@@ -135,10 +135,14 @@ type IterOptions struct {
 	// but iteration (using Next) over keys without the same user-key
 	// prefix will not work correctly (keys may be skipped).
 	Prefix bool
-	// UpperBound gives this iterator an upper bound. Attempts to Seek or Next
-	// past this point will invalidate the iterator. UpperBound must be provided
-	// unless Prefix is true, in which case the end of the prefix will be used as
-	// the upper bound.
+	// LowerBound gives this iterator an inclusive lower bound. Attempts to
+	// SeekReverse or Prev to a key that is strictly less than the bound will
+	// invalidate the iterator.
+	LowerBound roachpb.Key
+	// UpperBound gives this iterator an exclusive upper bound. Attempts to Seek
+	// or Next to a key that is greater than or equal to the bound will invalidate
+	// the iterator. UpperBound must be provided unless Prefix is true, in which
+	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
 	// If WithStats is true, the iterator accumulates RocksDB performance
 	// counters over its lifetime which can be queried via `Stats()`.
