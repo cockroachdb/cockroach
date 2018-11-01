@@ -7,117 +7,117 @@ eval
 eval
 '12h2m1s23ms'::interval + '1h'::interval
 ----
-'13h2m1s23ms'
+'13:02:01.023'
 
 eval
 '12 hours 2 minutes 1 second'::interval + '1h'::interval
 ----
-'13h2m1s'
+'13:02:01'
 
 eval
 'PT12H2M1S'::interval + '1h'::interval
 ----
-'13h2m1s'
+'13:02:01'
 
 eval
 '12:02:01'::interval + '1h'::interval
 ----
-'13h2m1s'
+'13:02:01'
 
 eval
 '12h2m1s23ms'::interval - '1h'::interval
 ----
-'11h2m1s23ms'
+'11:02:01.023'
 
 eval
 '12 hours 2 minutes 1 second'::interval - '1h'::interval
 ----
-'11h2m1s'
+'11:02:01'
 
 eval
 'PT12H2M1S'::interval - '1h'::interval
 ----
-'11h2m1s'
+'11:02:01'
 
 eval
 '1h'::interval - '12h2m1s23ms'::interval
 ----
-'-11h-2m-1s-23ms'
+'-11:02:01.023'
 
 eval
 'PT1H'::interval - '12h2m1s23ms'::interval
 ----
-'-11h-2m-1s-23ms'
+'-11:02:01.023'
 
 eval
 '1 hour'::interval - '12h2m1s23ms'::interval
 ----
-'-11h-2m-1s-23ms'
+'-11:02:01.023'
 
 eval
 3 * '1h2m'::interval * 3
 ----
-'9h18m'
+'09:18:00'
 
 eval
 3 * '1 hour 2 minutes'::interval * 3
 ----
-'9h18m'
+'09:18:00'
 
 eval
 3 * 'PT1H2M'::interval * 3
 ----
-'9h18m'
+'09:18:00'
 
 eval
 '3h'::interval / 2
 ----
-'1h30m'
+'01:30:00'
 
 eval
 'PT3H'::interval / 2
 ----
-'1h30m'
+'01:30:00'
 
 eval
 '3:00'::interval / 2
 ----
-'1h30m'
+'01:30:00'
 
 eval
 '3 hours'::interval / 2
 ----
-'1h30m'
+'01:30:00'
 
 eval
 '3 hours'::interval * 2.5
 ----
-'7h30m'
+'07:30:00'
 
 eval
 '3 hours'::interval / 2.5
 ----
-'1h12m'
+'01:12:00'
 
 eval
 '1h2m'::interval * 4.5
 ----
-'4h39m'
+'04:39:00'
 
 eval
 4.5 * '1h2m'::interval
 ----
-'4h39m'
+'04:39:00'
 
 eval
 5.0 * '1h2m'::interval
 ----
-'5h10m'
+'05:10:00'
 
 eval
 '1h2m'::interval * 5.0
 ----
-'5h10m'
+'05:10:00'
 
 eval
 '1h2m'::interval * 0.0
@@ -128,3 +128,13 @@ eval
 00.0 * '1h2m'::interval
 ----
 '0s'
+
+eval
+'.1s'::interval
+----
+'00:00:00.1'
+
+eval
+'.1ms'::interval
+----
+'00:00:00.0001'

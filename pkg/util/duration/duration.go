@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -169,43 +170,70 @@ func (d Duration) Format(buf *bytes.Buffer) {
 		return
 	}
 
-	if absGE(d.Months, 11) {
-		fmt.Fprintf(buf, "%dy", d.Months/12)
+	wrote := false
+	wrotePrev := func() {
+		if wrote {
+			buf.WriteString(" ")
+		}
+		wrote = true
+	}
+
+	negDays := d.Months < 0 || d.Days < 0
+	if absGE(d.Months, 12) {
+		years := d.Months / 12
+		wrotePrev()
+		fmt.Fprintf(buf, "%d year%s", years, isPlural(years))
 		d.Months %= 12
 	}
 	if d.Months != 0 {
-		fmt.Fprintf(buf, "%dmon", d.Months)
+		wrotePrev()
+		fmt.Fprintf(buf, "%d mon%s", d.Months, isPlural(d.Months))
 	}
 	if d.Days != 0 {
-		fmt.Fprintf(buf, "%dd", d.Days)
+		wrotePrev()
+		fmt.Fprintf(buf, "%d day%s", d.Days, isPlural(d.Days))
+	}
+
+	if d.Nanos == 0 {
+		return
+	}
+
+	wrotePrev()
+
+	if d.Nanos < 0 {
+		buf.WriteString("-")
+	} else if negDays {
+		buf.WriteString("+")
 	}
 
 	// The following comparisons are careful to preserve the sign in
 	// case the value is MinInt64, and thus cannot be made positive lest
 	// an overflow occur.
-	if absGE(d.Nanos, time.Hour.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dh", d.Nanos/time.Hour.Nanoseconds())
-		d.Nanos %= time.Hour.Nanoseconds()
+	fmt.Fprintf(buf, "%02d:", abs(d.Nanos/time.Hour.Nanoseconds()))
+	d.Nanos %= time.Hour.Nanoseconds()
+	fmt.Fprintf(buf, "%02d:", abs(d.Nanos/time.Minute.Nanoseconds()))
+	d.Nanos %= time.Minute.Nanoseconds()
+	fmt.Fprintf(buf, "%02d", abs(d.Nanos/time.Second.Nanoseconds()))
+	d.Nanos %= time.Second.Nanoseconds()
+
+	if nanos := abs(d.Nanos / time.Nanosecond.Nanoseconds()); nanos != 0 {
+		s := fmt.Sprintf(".%09d", nanos)
+		buf.WriteString(strings.TrimRight(s, "0"))
 	}
-	if absGE(d.Nanos, time.Minute.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dm", d.Nanos/time.Minute.Nanoseconds())
-		d.Nanos %= time.Minute.Nanoseconds()
+}
+
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
 	}
-	if absGE(d.Nanos, time.Second.Nanoseconds()) {
-		fmt.Fprintf(buf, "%ds", d.Nanos/time.Second.Nanoseconds())
-		d.Nanos %= time.Second.Nanoseconds()
+	return x
+}
+
+func isPlural(i int64) string {
+	if i == 1 {
+		return ""
 	}
-	if absGE(d.Nanos, time.Millisecond.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dms", d.Nanos/time.Millisecond.Nanoseconds())
-		d.Nanos %= time.Millisecond.Nanoseconds()
-	}
-	if absGE(d.Nanos, time.Microsecond.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dµs", d.Nanos/time.Microsecond.Nanoseconds())
-		d.Nanos %= time.Microsecond.Nanoseconds()
-	}
-	if d.Nanos != 0 {
-		fmt.Fprintf(buf, "%dns", d.Nanos)
-	}
+	return "s"
 }
 
 // absGE returns whether x is greater than or equal to y in magnitude.
