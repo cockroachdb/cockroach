@@ -35,8 +35,8 @@ func TestCount(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, tc.tuples, []types.T{}, func(t *testing.T, input Operator) {
-			count := NewCountOp(input)
+		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+			count := NewCountOp(input[0])
 			out := newOpTestOutput(count, []int{0}, tc.expected)
 
 			if err := out.Verify(); err != nil {

@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
+// column is an interface that represents a raw array of a Go native type.
+type column interface{}
+
 // ColVec is an interface that represents a column vector that's accessible by
 // Go native types.
 type ColVec interface {
@@ -54,6 +57,21 @@ type ColVec interface {
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
+
+	// Append appends fromLength elements of the the given ColVec to toLength
+	// elements of this ColVec, assuming that both ColVecs are of type colType.
+	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
+
+	// AppendWithSel appends into itself another column vector from a ColBatch with
+	// maximum size of ColBatchSize, filtered by the given selection vector.
+	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
+
+	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
+	// the contents of this ColVec.
+	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
+	// the contents of this ColVec.
+	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -71,33 +89,35 @@ type Nulls interface {
 	Rank(i uint16) uint16
 }
 
-var _ ColVec = memColumn{}
+var _ ColVec = &memColumn{}
 
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
-	col interface{}
+	col column
 }
 
-// newMemColumn returns a new memColumn, initialized with a type and length.
-func newMemColumn(t types.T, n int) memColumn {
+// newMemColumn returns a new memColumn, initialized with a length.
+func newMemColumn(t types.T, n int) *memColumn {
 	switch t {
 	case types.Bool:
-		return memColumn{col: make([]bool, n)}
+		return &memColumn{col: make([]bool, n)}
 	case types.Bytes:
-		return memColumn{col: make([][]byte, n)}
+		return &memColumn{col: make([][]byte, n)}
+	case types.Int8:
+		return &memColumn{col: make([]int8, n)}
 	case types.Int16:
-		return memColumn{col: make([]int16, n)}
+		return &memColumn{col: make([]int16, n)}
 	case types.Int32:
-		return memColumn{col: make([]int32, n)}
+		return &memColumn{col: make([]int32, n)}
 	case types.Int64:
-		return memColumn{col: make([]int64, n)}
+		return &memColumn{col: make([]int64, n)}
 	case types.Float32:
-		return memColumn{col: make([]float32, n)}
+		return &memColumn{col: make([]float32, n)}
 	case types.Float64:
-		return memColumn{col: make([]float64, n)}
+		return &memColumn{col: make([]float64, n)}
 	case types.Decimal:
-		return memColumn{col: make([]apd.Decimal, n)}
+		return &memColumn{col: make([]apd.Decimal, n)}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
