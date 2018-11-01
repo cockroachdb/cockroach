@@ -287,7 +287,7 @@ SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMPTZ
 query T
 SELECT '40 days' COLLATE en::INTERVAL
 ----
-40d
+40 days
 
 statement ok
 CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)
