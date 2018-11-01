@@ -193,9 +193,10 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
+		words, lastBitsUsed := v.EncodingParts()
+		b.putInt32(4 + int32(8*(len(words)-1)) + int32((lastBitsUsed+7)/8))
 		bitLen := v.BitLen()
 		b.putInt32(int32(bitLen))
-		words, lastBitsUsed := v.EncodingParts()
 		var byteBuf [8]byte
 		for i := 0; i < len(words)-1; i++ {
 			w := words[i]
