@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,8 +65,8 @@ func TestIterStats(t *testing.T) {
 			}
 			// Scanning a key range containing the tombstone sees it.
 			for i := 0; i < 10; i++ {
-				if _, _, _, err := iter.MVCCScan(
-					roachpb.KeyMin, roachpb.KeyMax, 0, hlc.Timestamp{}, nil, true, false, false,
+				if _, _, _, _, err := iter.MVCCScan(
+					roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64, hlc.Timestamp{}, nil, true, false, false,
 				); err != nil {
 					t.Fatal(err)
 				}

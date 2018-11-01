@@ -186,9 +186,9 @@ func (s *Iterator) MVCCScan(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
 	return s.i.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
 }
