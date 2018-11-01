@@ -20,7 +20,7 @@ import (
 )
 
 func lookupOrIndexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
-	// LookupJoin and IndexJoin can pass through its ordering if the ordering
+	// LookupJoin and IndexJoin can pass through their ordering if the ordering
 	// depends only on columns present in the input.
 	return isOrderingBoundBy(expr.Child(0).(memo.RelExpr), required)
 }
