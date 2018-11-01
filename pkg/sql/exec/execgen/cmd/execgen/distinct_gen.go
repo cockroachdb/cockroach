@@ -17,10 +17,11 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func genDistinctOps(wr io.Writer) error {
@@ -31,11 +32,14 @@ func genDistinctOps(wr io.Writer) error {
 
 	s := string(d)
 
-	s = strings.Replace(s, "_GOTYPE", "{{.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
-	s = strings.Replace(s, "_EQUALITY_FN", "{{.EqualityFunction}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
+	// Replace the template variables.
+	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+
+	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
+	s = assignNeRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("distinct_op").Parse(s)
@@ -43,8 +47,7 @@ func genDistinctOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, []types.T{types.Bool, types.Bytes,
-		types.Int8, types.Int16, types.Int32, types.Int64, types.Float32, types.Float64})
+	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
 	registerGenerator(genDistinctOps, "distinct.og.go")

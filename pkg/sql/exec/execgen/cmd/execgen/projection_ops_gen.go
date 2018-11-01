@@ -22,6 +22,11 @@ import (
 const projTemplate = `
 package exec
 
+import "bytes"
+
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import "github.com/cockroachdb/apd"
+
 {{define "opConstName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
@@ -43,12 +48,12 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 	n := batch.Length()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			projCol[i] = col[i] {{.OpStr}} p.constArg
+			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
 		}
 	} else {
 		col = col[:n]
-		for i, v := range col {
-			projCol[i] = v {{.OpStr}} p.constArg
+		for i := range col {
+			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
 		}
 	}
 	return batch
@@ -75,12 +80,12 @@ func (p *{{template "opName" .}}) Next() ColBatch {
 	n := batch.Length()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			projCol[i] = col1[i] {{.OpStr}} col2[i]
+			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
 		}
 	} else {
 		col1 = col1[:n]
-		for i, v := range col1 {
-			projCol[i] = v {{.OpStr}} col2[i]
+		for i := range col1 {
+			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
 		}
 	}
 	return batch
@@ -98,7 +103,7 @@ func genProjectionOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var allOverloads []overload
+	var allOverloads []*overload
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
 	return tmpl.Execute(wr, allOverloads)
