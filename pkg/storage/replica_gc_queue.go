@@ -225,6 +225,35 @@ func (rgcq *replicaGCQueue) process(
 		}
 	} else if desc.RangeID == replyDesc.RangeID {
 		// We are no longer a member of this range, but the range still exists.
+		repl.mu.RLock()
+		desc := repl.descRLocked()
+		ticks := repl.mu.ticks
+		preemptive := repl.mu.replicaID == 0 && desc.IsInitialized()
+		repl.mu.RUnlock()
+
+		if preemptive && ticks < 20 {
+			// When a replica is added, the replicate queue first sends a
+			// preemptive snapshot. To this queue, that snapshot will look like
+			// a replica that's in need of GC. Removing it would put the range
+			// in a fragile state until it has recovered via a Raft snapshot, so
+			// we want to hold off on the GC for a while until it's likely that
+			// the replication change has failed.
+			//
+			// TODO(tschottdorf): figure out if this is the right place for this
+			// check. Outside of the scanner, we always Add directly to the
+			// replica GC queue (because we're usually sure enough that we need
+			// to really go check the meta ranges and because we want to bypass
+			// all the other checks in shouldQueue which are a big mess), so
+			// we'd have to move them to various locations there (and then the
+			// scanner might pick it up inadvertently).
+			//
+			// TODO(tschottdorf): if we're looking at this replica because it
+			// blocked an overlapping snapshot, we should probably not run this
+			// check. Related to the above TODO.
+			log.VEventf(ctx, 1, "skipping replicaGC due to grace period for possible preemptive snapshot")
+			return nil
+		}
+
 		// Clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
