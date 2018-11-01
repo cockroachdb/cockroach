@@ -123,7 +123,7 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DDate:
 		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(t, nil, b.putbuf[4:4])
+		s := formatDate(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -407,9 +407,12 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 }
 
-const pgTimeFormat = "15:04:05.999999"
-const pgTimeStampFormatNoOffset = "2006-01-02 " + pgTimeFormat
-const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
+const (
+	pgTimeFormat              = "15:04:05.999999"
+	pgDateFormat              = "2006-01-02"
+	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+)
 
 // formatTime formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
@@ -418,11 +421,25 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
 }
 
-// formatTs formats t with an optional offset into a format lib/pq understands,
-// appending to the provided tmp buffer and reallocating if needed. The function
-// will then return the resulting buffer. formatTs is mostly cribbed from
-// github.com/lib/pq.
 func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+	var format string
+	if offset != nil {
+		format = pgTimeStampFormat
+	} else {
+		format = pgTimeStampFormatNoOffset
+	}
+	return formatTsWithFormat(format, t, offset, tmp)
+}
+
+func formatDate(t time.Time, offset *time.Location, tmp []byte) []byte {
+	return formatTsWithFormat(pgDateFormat, t, offset, tmp)
+}
+
+// formatTsWithFormat formats t with an optional offset into a format
+// lib/pq understands, appending to the provided tmp buffer and
+// reallocating if needed. The function will then return the resulting
+// buffer. formatTsWithFormat is mostly cribbed from github.com/lib/pq.
+func formatTsWithFormat(format string, t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -437,12 +454,7 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 		bc = true
 	}
 
-	if offset != nil {
-		b = t.AppendFormat(tmp, pgTimeStampFormat)
-	} else {
-		b = t.AppendFormat(tmp, pgTimeStampFormatNoOffset)
-	}
-
+	b = t.AppendFormat(tmp, format)
 	if bc {
 		b = append(b, " BC"...)
 	}
