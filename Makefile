@@ -1315,7 +1315,8 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
 pkg/sql/exec/distinct.og.go: pkg/sql/exec/distinct_tmpl.go
-pkg/sql/exec/%.og.go: bin/execgen
+
+$(EXECGEN_TARGETS): bin/execgen
 	execgen $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
