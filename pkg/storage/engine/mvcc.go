@@ -1689,10 +1689,6 @@ func mvccScanInternal(
 	txn *roachpb.Transaction,
 	reverse bool,
 ) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
-	if len(endKey) == 0 {
-		return nil, 0, nil, nil, emptyKeyError()
-	}
-
 	kvData, numKvs, intentData, err := iter.MVCCScan(
 		key, endKey, max, timestamp, txn, consistent, reverse, tombstones)
 	if err != nil {
