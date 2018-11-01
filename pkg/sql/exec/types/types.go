@@ -17,6 +17,9 @@ package types
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+
 	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -154,4 +157,60 @@ func (t T) GoTypeName() string {
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
+}
+
+// GetDatumToPhysicalFn returns a function for converting a datum of the given
+// ColumnType to the corresponding Go type.
+func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) interface{} {
+	switch ct.SemanticType {
+	case sqlbase.ColumnType_BOOL:
+		return func(datum tree.Datum) interface{} {
+			return bool(*datum.(*tree.DBool))
+		}
+	case sqlbase.ColumnType_BYTES:
+		return func(datum tree.Datum) interface{} {
+			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))
+		}
+	case sqlbase.ColumnType_INT:
+		switch ct.Width {
+		case 8:
+			return func(datum tree.Datum) interface{} {
+				return int8(*datum.(*tree.DInt))
+			}
+		case 16:
+			return func(datum tree.Datum) interface{} {
+				return int16(*datum.(*tree.DInt))
+			}
+		case 32:
+			return func(datum tree.Datum) interface{} {
+				return int32(*datum.(*tree.DInt))
+			}
+		case 0, 64:
+			return func(datum tree.Datum) interface{} {
+				return int64(*datum.(*tree.DInt))
+			}
+		}
+		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
+	case sqlbase.ColumnType_DATE:
+		return func(datum tree.Datum) interface{} {
+			return int64(*datum.(*tree.DDate))
+		}
+	case sqlbase.ColumnType_FLOAT:
+		return func(datum tree.Datum) interface{} {
+			return float64(*datum.(*tree.DFloat))
+		}
+	case sqlbase.ColumnType_OID:
+		return func(datum tree.Datum) interface{} {
+			return int64(datum.(*tree.DOid).DInt)
+		}
+	case sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
+		return func(datum tree.Datum) interface{} {
+			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
+		}
+	case sqlbase.ColumnType_DECIMAL:
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DDecimal).Decimal
+		}
+	}
+	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
 }
