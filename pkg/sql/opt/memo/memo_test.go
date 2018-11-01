@@ -39,7 +39,8 @@ func TestMemo(t *testing.T) {
 
 func TestLogicalProps(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
-	runDataDrivenTest(t, "testdata/logprops/", flags)
+	runDataDrivenTest(t, "testdata/logprops/sql", flags)
+	runPropsTest(t, "testdata/logprops/yaml", flags)
 }
 
 func TestStats(t *testing.T) {
@@ -191,6 +192,24 @@ func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.ExprFormat = fmtFlags
+			return tester.RunCommand(t, d)
+		})
+	})
+}
+
+// runPropsTest runs data-driven testcases of the form
+//   <command>
+//   <SQL statement or YAML input>
+//   ----
+//   <expected results>
+//
+// See PropsTester.RunCommand for supported commands.
+func runPropsTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
+	datadriven.Walk(t, path, func(t *testing.T, path string) {
+		catalog := testcat.New()
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewPropsTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})

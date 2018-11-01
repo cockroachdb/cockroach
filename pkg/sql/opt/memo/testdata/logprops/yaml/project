@@ -1,0 +1,51 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+props operator=project
+input:
+  tables: [a]
+  outputcols: [1, 2, 3, 4]
+  notnullcols: [1, 4]
+  cardinality:
+    min: 0
+    max: 10000
+passthrough: [1, 2]
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 10000]
+ └── unknown
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      └── cardinality: [0 - 10000]
+
+props operator=project
+input:
+  tables: [a]
+  outputcols: [1, 2, 3, 4]
+projections:
+  - shared:
+      outercols: [1, 2]
+  - shared:
+----
+project
+ ├── columns: column5:5(anyelement) column6:6(anyelement)
+ ├── cardinality: [0 - 0]
+ ├── fd: ()-->(6)
+ ├── unknown
+ │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal)
+ │    └── cardinality: [0 - 0]
+ └── projections
+      ├── unknown [outer=(1,2)]
+      └── unknown

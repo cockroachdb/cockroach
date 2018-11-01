@@ -1,0 +1,68 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+props operator=scan
+table: a
+index: 0
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+
+props operator=scan
+table: a
+cols: [1, 2]
+constraint: "/1: [/1 - /2]"
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int)
+ ├── constraint: /1: [/1 - /2]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+props operator=scan
+table: a
+index: 1
+hardlimit: 5
+----
+scan a@secondary
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── limit: 5
+ ├── key: (1)
+ └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+
+props operator=scan
+table: a
+flags:
+  noindexjoin: true
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── flags: no-index-join
+ ├── key: (1)
+ └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+
+props operator=scan
+table: a
+flags:
+  forceindex: true
+  index: 1
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── flags: force-index=secondary
+ ├── key: (1)
+ └── fd: (1)-->(2-4), (3,4)~~>(1,2)
