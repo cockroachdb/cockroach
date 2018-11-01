@@ -20,7 +20,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"regexp"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func genSumAgg(wr io.Writer) error {
@@ -31,24 +33,20 @@ func genSumAgg(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_GOTYPE", "{{.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+
+	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
+	s = assignAddRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
 
 	tmpl, err := template.New("sum_agg").Parse(s)
 	if err != nil {
 		return err
 	}
 
-	// TODO(asubiotto): Only execute on types that have an addition.
-	// TODO(asubiotto): Support decimal.
-	return tmpl.Execute(
-		wr,
-		[]types.T{
-			types.Int8, types.Int16, types.Int32, types.Int64, types.Float32, types.Float64,
-		},
-	)
+	return tmpl.Execute(wr, binaryOpToOverloads[tree.Plus])
 }
 
 func init() {
