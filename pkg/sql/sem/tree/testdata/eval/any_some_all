@@ -1,0 +1,171 @@
+# ANY, SOME, and ALL expressions.
+
+eval
+1   = ANY ARRAY[]
+----
+false
+
+eval
+1   = ANY (ARRAY[2, 3, 4])
+----
+false
+
+eval
+1   = ANY (ARRAY[1, 3, 4])
+----
+true
+
+eval
+1+1 = ANY (ARRAY[2, 3, 4])
+----
+true
+
+eval
+1+1 = ANY  (ARRAY[1, 3, 4])
+----
+false
+
+eval
+1+1 = SOME (ARRAY[1, 3, 4])
+----
+false
+
+eval
+1   = ALL (ARRAY[])
+----
+true
+
+eval
+1   = ALL (ARRAY[1, 1, 1])
+----
+true
+
+eval
+1+1 = ALL (ARRAY[2, 3, 4])
+----
+false
+
+eval
+1+1 = ALL (ARRAY[2, 2, 2])
+----
+true
+
+eval
+1 = ANY (ARRAY[1, 2, NULL])
+----
+true
+
+eval
+1 = ANY (ARRAY[2, 3, NULL])
+----
+NULL
+
+eval
+1 = ANY (ARRAY[NULL])
+----
+NULL
+
+eval
+1 = ALL (ARRAY[1, 1, NULL])
+----
+NULL
+
+eval
+1 = ALL (ARRAY[1, 2, NULL])
+----
+false
+
+eval
+1 = ALL (ARRAY[NULL])
+----
+NULL
+
+eval
+1 =  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 <  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 >  ANY (ARRAY[1, 3, 5])
+----
+false
+
+eval
+1 <= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 >= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 =  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 <  ANY (ARRAY[1, 3, 5])
+----
+false
+
+eval
+5 >  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 <= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 >= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+'AAA' LIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'CCC' LIKE ANY (ARRAY['%A%', '%B%'])
+----
+false
+
+eval
+'AAA' NOT LIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'AAA' NOT LIKE ANY (ARRAY['%A%', '%A%'])
+----
+false
+
+eval
+'aaa' ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'ccc' ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+false
+
+eval
+'aaa' NOT ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'aaa' NOT ILIKE ANY (ARRAY['%A%', '%A%'])
+----
+false
