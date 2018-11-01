@@ -42,8 +42,29 @@ func registerLoadSplits(r *registry) {
 			runUniformLoadSplits(ctx, t, c)
 		},
 	})
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
+		MinVersion: st.VersionByKey(st.VersionLoadSplits).String(),
+		Nodes:      nodes(numNodes),
+		Stable:     true, // DO NOT COPY to new tests
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSequentialLoadSplits(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
+		MinVersion: st.VersionByKey(st.VersionLoadSplits).String(),
+		Nodes:      nodes(numNodes),
+		Stable:     true, // DO NOT COPY to new tests
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSpanningLoadSplits(ctx, t, c)
+		},
+	})
 }
 
+// runUniformLoadSplits tests behavior of load based splitting under
+// a uniform kv distribution. It checks whether certain number of
+// splits occur in such a workload.
 func runUniformLoadSplits(ctx context.Context, t *test, c *cluster) {
 	const maxSize = 10 << 30 // 10 GB
 	const concurrency = 64   // 64 concurrent workers
@@ -132,6 +153,151 @@ func runUniformLoadSplits(ctx context.Context, t *test, c *cluster) {
 		if rc := rangeCount(); rc < expSplits+1 {
 			return errors.Errorf("kv.kv has %d ranges, expected at least %d",
 				rc, expSplits+1)
+		}
+		return nil
+	})
+	m.Wait()
+}
+
+// runSequentialLoadSplits tests behavior of load based splitting under
+// a sequential write kv distribution. It ensures no splits occur.
+func runSequentialLoadSplits(ctx context.Context, t *test, c *cluster) {
+	const maxSize = 10 << 30 // 10 GB
+	const concurrency = 64   // 64 concurrent workers
+	const qpsThreshold = 100 // 100 queries per second
+
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Start(ctx, t, c.All())
+
+	m := newMonitor(ctx, c, c.All())
+	m.Go(func(ctx context.Context) error {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		t.Status("disable load based splitting")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+			return err
+		}
+
+		t.Status("increasing range_max_bytes")
+		setRangeMaxBytes := func(maxBytes int) {
+			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
+			if _, err := db.Exec(stmtZone); err != nil {
+				t.Fatalf("failed to set range_max_bytes: %v", err)
+			}
+		}
+		// Set the range size to a huge size so we don't get splits that occur
+		// as a result of size thresholds. The kv table will thus be in a single
+		// range unless split by load.
+		setRangeMaxBytes(maxSize)
+
+		t.Status("running uniform kv workload")
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.nodes))
+
+		t.Status("checking initial range count")
+		rangeCount := func() int {
+			var ranges int
+			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE kv.kv]"
+			if err := db.QueryRow(q).Scan(&ranges); err != nil {
+				t.Fatalf("failed to get range count: %v", err)
+			}
+			return ranges
+		}
+		if rc := rangeCount(); rc != 1 {
+			return errors.Errorf("kv.kv table split over multiple ranges.")
+		}
+
+		// Set the QPS threshold for load based splitting before turning it on.
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range_split.load_qps_threshold = %d",
+			qpsThreshold)); err != nil {
+			return err
+		}
+		t.Status("enable load based splitting")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = true`); err != nil {
+			return err
+		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
+			"--init --concurrency=%d --sequential {pgurl:1-%d} --duration='%s'", concurrency,
+			c.nodes, (60*time.Second).String()))
+
+		t.Status(fmt.Sprintf("checking if splits happened"))
+		if rc := rangeCount(); rc != 1 {
+			return errors.Errorf("kv.kv has %d ranges, expected %d",
+				rc, 1)
+		}
+		return nil
+	})
+	m.Wait()
+}
+
+// runSpanningLoadSplits tests behavior of load based splitting under
+// a spanning query kv workload. It ensures no splits occur.
+func runSpanningLoadSplits(ctx context.Context, t *test, c *cluster) {
+	const maxSize = 10 << 30 // 10 GB
+	const spanPercent = 95   // 95% spanning queries
+	const concurrency = 64   // 64 concurrent workers
+	const qpsThreshold = 100 // 100 queries per second
+
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Start(ctx, t, c.All())
+
+	m := newMonitor(ctx, c, c.All())
+	m.Go(func(ctx context.Context) error {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		t.Status("disable load based splitting")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+			return err
+		}
+
+		t.Status("increasing range_max_bytes")
+		setRangeMaxBytes := func(maxBytes int) {
+			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
+			if _, err := db.Exec(stmtZone); err != nil {
+				t.Fatalf("failed to set range_max_bytes: %v", err)
+			}
+		}
+		// Set the range size to a huge size so we don't get splits that occur
+		// as a result of size thresholds. The kv table will thus be in a single
+		// range unless split by load.
+		setRangeMaxBytes(maxSize)
+
+		t.Status("running uniform kv workload")
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.nodes))
+
+		t.Status("checking initial range count")
+		rangeCount := func() int {
+			var ranges int
+			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE kv.kv]"
+			if err := db.QueryRow(q).Scan(&ranges); err != nil {
+				t.Fatalf("failed to get range count: %v", err)
+			}
+			return ranges
+		}
+		if rc := rangeCount(); rc != 1 {
+			return errors.Errorf("kv.kv table split over multiple ranges.")
+		}
+
+		// Set the QPS threshold for load based splitting before turning it on.
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range_split.load_qps_threshold = %d",
+			qpsThreshold)); err != nil {
+			return err
+		}
+		t.Status("enable load based splitting")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = true`); err != nil {
+			return err
+		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
+			"--init --concurrency=%d --span-percent=%d {pgurl:1-%d} --duration='%s'", concurrency,
+			spanPercent, c.nodes, (60*time.Second).String()))
+
+		t.Status(fmt.Sprintf("checking if splits happened"))
+		if rc := rangeCount(); rc != 1 {
+			return errors.Errorf("kv.kv has %d ranges, expected %d",
+				rc, 1)
 		}
 		return nil
 	})
