@@ -82,12 +82,17 @@ func main() {
 
 	for _, expr := range stmts {
 		sql := fmt.Sprintf("SELECT %s", expr)
+		text, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatText)
+		if err != nil {
+			log.Fatal(err)
+		}
 		binary, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatBinary)
 		if err != nil {
-			log.Println(err)
+			log.Fatal(err)
 		}
 		data = append(data, entry{
 			SQL:    expr,
+			Text:   string(text),
 			Binary: binary,
 		})
 	}
@@ -103,6 +108,7 @@ func main() {
 
 type entry struct {
 	SQL    string
+	Text   string
 	Binary []byte
 }
 
@@ -124,6 +130,7 @@ const outputJSON = `[
 	{{- if gt $idx 0 }},{{end}}
 	{
 		"SQL": {{.SQL | json}},
+		"Text": {{.Text | json}},
 		"Binary": {{.Binary | binary}}
 	}
 {{- end}}
