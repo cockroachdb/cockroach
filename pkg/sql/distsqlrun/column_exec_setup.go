@@ -190,7 +190,7 @@ func newColOperator(
 			}
 		}
 
-		op, err = exec.NewEqInnerDistinctHashJoiner(
+		op, err = exec.NewEqInnerHashJoiner(
 			inputs[0],
 			inputs[1],
 			core.HashJoiner.LeftEqColumns,
@@ -199,6 +199,8 @@ func newColOperator(
 			rightOutCols,
 			leftTypes,
 			rightTypes,
+			core.HashJoiner.RightEqColumnsAreKey,
+			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 		)
 
 	default:
