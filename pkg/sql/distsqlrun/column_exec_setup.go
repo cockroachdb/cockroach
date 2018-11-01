@@ -17,14 +17,14 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
-
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func checkNumIn(inputs []exec.Operator, numIn int) error {
@@ -41,12 +41,15 @@ func newColOperator(
 	post := &spec.Post
 	var err error
 	var op exec.Operator
+	var columnTypes []sqlbase.ColumnType
 	switch {
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
+		returnMutations := core.TableReader.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
@@ -59,6 +62,9 @@ func newColOperator(
 			!spec.Aggregations[0].Distinct {
 			return exec.NewCountOp(inputs[0]), nil
 		}
+
+		// TODO(solon): Set columnTypes appropriately.
+
 		return nil, errors.Errorf("unsupported aggregator %+v", core.Aggregator)
 
 	case core.Distinct != nil:
@@ -85,7 +91,8 @@ func newColOperator(
 			return nil, errors.New("unsorted distinct not supported")
 		}
 
-		typs := types.FromColumnTypes(spec.Input[0].ColumnTypes)
+		columnTypes = spec.Input[0].ColumnTypes
+		typs := types.FromColumnTypes(columnTypes)
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 
 	default:
@@ -98,7 +105,15 @@ func newColOperator(
 
 	if !post.Filter.Empty() {
 		// TODO(solon): plan selection op
-		return nil, errors.New("filters unsupported")
+		var helper exprHelper
+		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
+		if err != nil {
+			return nil, err
+		}
+		op, err = planExpressionOperators(helper.expr, columnTypes, op)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to columnarize filter expression")
+		}
 	}
 	if post.Projection {
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
@@ -107,6 +122,34 @@ func newColOperator(
 		return nil, errors.New("renders unsupported")
 	}
 	return op, nil
+}
+
+// planExpressionOperators plans a chain of operators to execute the provided
+// expression. It currently only handles constant filters.
+func planExpressionOperators(
+	expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
+) (exec.Operator, error) {
+	switch t := expr.(type) {
+	case *tree.ComparisonExpr:
+		cmpOp := t.Operator
+		if leftIvar, ok := t.Left.(*tree.IndexedVar); ok {
+			if constArg, ok := t.Right.(tree.Datum); ok {
+				colIdx := leftIvar.Idx
+				ct := columnTypes[leftIvar.Idx]
+				return exec.GetSelectionConstOperator(ct, cmpOp, input, colIdx, constArg)
+			}
+			if rightIvar, ok := t.Right.(*tree.IndexedVar); ok {
+				colIdx1 := leftIvar.Idx
+				colIdx2 := rightIvar.Idx
+				ct := columnTypes[leftIvar.Idx]
+				return exec.GetSelectionOperator(ct, cmpOp, input, colIdx1, colIdx2)
+			}
+			return nil, errors.New("unable to plan comparison where RHS is not an ivar or constant")
+		}
+		return nil, errors.New("unable to plan comparison where LHS is not an ivar")
+	default:
+		return nil, errors.Errorf("unhandled expression type: %s", t)
+	}
 }
 
 func (f *Flow) setupVectorized(ctx context.Context) error {
