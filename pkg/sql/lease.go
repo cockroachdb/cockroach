@@ -1372,6 +1372,17 @@ func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 // the returned descriptor. Renewal of a lease may begin in the
 // background. Renewal is done in order to prevent blocking on future
 // acquisitions.
+//
+// Known limitation: AcquireByName() calls Acquire() and therefore suffers
+// from the same limitation as Acquire (See Acquire). AcquireByName() is
+// unable to function correctly on a timestamp less than the timestamp
+// of a transaction with a DROP/TRUNCATE on a table. The limitation in
+// the face of a DROP follows directly from the limitation on Acquire().
+// A TRUNCATE is implemented by changing the name -> id mapping for a table
+// and by dropping the descriptor with the old id. While AcquireByName
+// can use the timestamp and get the correct name->id  mapping at a
+// timestamp, it uses Acquire() to get a descriptor with the corresponding
+// id and fails because the id has been dropped by the TRUNCATE.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1505,6 +1516,12 @@ func (m *LeaseManager) resolveName(
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
 // the returned descriptor.
+//
+// Known limitation: Acquire() can return an error after the table with
+// the tableID has been dropped. This is true even when using a timestamp
+// less than the timestamp of the DROP command. This is because Acquire
+// can only return an older version of a descriptor if the latest version
+// can be leased; as it stands a dropped table cannot be leased.
 func (m *LeaseManager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
