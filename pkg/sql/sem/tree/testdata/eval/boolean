@@ -1,0 +1,116 @@
+eval
+false AND true
+----
+false
+
+eval
+false AND NULL
+----
+false
+
+eval
+false AND false
+----
+false
+
+eval
+true AND true
+----
+true
+
+eval
+true AND false
+----
+false
+
+eval
+true AND NULL
+----
+NULL
+
+eval
+NULL AND true
+----
+NULL
+
+eval
+NULL AND false
+----
+false
+
+eval
+NULL AND NULL
+----
+NULL
+
+eval
+false OR true
+----
+true
+
+eval
+false OR NULL
+----
+NULL
+
+eval
+false OR false
+----
+false
+
+eval
+true OR true
+----
+true
+
+eval
+true OR false
+----
+true
+
+eval
+true OR NULL
+----
+true
+
+eval
+NULL OR true
+----
+true
+
+eval
+NULL OR false
+----
+NULL
+
+eval
+NULL OR NULL
+----
+NULL
+
+eval
+NOT false
+----
+true
+
+eval
+NOT true
+----
+false
+
+eval
+NOT NULL
+----
+NULL
+
+# Boolean expressions short-circuit the evaluation.
+
+eval
+false AND (2 = 1)
+----
+false
+
+eval
+true OR (3 = 1)
+----
+true

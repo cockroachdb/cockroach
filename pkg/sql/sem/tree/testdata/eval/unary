@@ -1,0 +1,16 @@
+# Unary operators
+
+eval
+-3
+----
+-3
+
+eval
+-4.1
+----
+-4.1
+
+eval
+-6.1:::float
+----
+-6.1

@@ -1,0 +1,11 @@
+# Ones complement operates on signed integers.
+
+eval
+~0
+----
+-1
+
+eval
+~0 - 1
+----
+-2
