@@ -119,7 +119,7 @@ type Iterator interface {
 	// will be empty).
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
-	) (kvs []byte, numKvs int64, intents []byte, err error)
+	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
 	// SetUpperBound installs a new upper bound for this iterator.
 	SetUpperBound(roachpb.Key)
 
