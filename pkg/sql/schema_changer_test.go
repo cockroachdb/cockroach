@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -74,10 +75,11 @@ func TestSchemaChangeLease(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	var leaseDurationString string
 	sqlRun.QueryRow(t, `SHOW CLUSTER SETTING schemachanger.lease.duration`).Scan(&leaseDurationString)
-	leaseDuration, err := time.ParseDuration(leaseDurationString)
+	leaseInterval, err := tree.ParseDInterval(leaseDurationString)
 	if err != nil {
 		t.Fatal(err)
 	}
+	leaseDuration := time.Duration(leaseInterval.Duration.Nanos)
 	sqlRun.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
