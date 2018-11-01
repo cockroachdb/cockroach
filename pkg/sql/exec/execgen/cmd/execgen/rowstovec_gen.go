@@ -15,7 +15,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"text/template"
 
@@ -29,9 +28,10 @@ package exec
 import (
   "fmt"
 
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
@@ -51,6 +51,7 @@ func EncDatumRowsToColVec(
 	{{range .}}
 	if columnType.SemanticType == sqlbase.{{.SemanticType}} && columnType.Width == {{.Width}} {
 		col := vec.{{.ExecType}}()
+		datumToPhysicalFn := types.GetDatumToPhysicalFn(*columnType)
 		for i := uint16(0); i < nRows; i++ {
 			if rows[i][columnIdx].Datum == nil {
 				if err := rows[i][columnIdx].EnsureDecoded(columnType, alloc); err != nil {
@@ -61,7 +62,11 @@ func EncDatumRowsToColVec(
 			if datum == tree.DNull {
 				vec.SetNull(i)
 			} else {
-				col[i] = {{.DatumToPhysicalFn}}
+				v, err := datumToPhysicalFn(datum)
+				if err != nil {
+					return err
+				}
+				col[i] = v.({{.GoType}})
 			}
 		}
 		return nil
@@ -81,9 +86,7 @@ type columnConversion struct {
 	// ExecType is the exec.T to which we're converting. It should correspond to
 	// a method name on exec.ColVec.
 	ExecType string
-	// DatumToPhysicalFn is a stringified function for converting a datum to the
-	// physical type used in the column vector.
-	DatumToPhysicalFn string
+	GoType   string
 }
 
 func genRowsToVec(wr io.Writer) error {
@@ -98,10 +101,10 @@ func genRowsToVec(wr io.Writer) error {
 				continue
 			}
 			conversion := columnConversion{
-				SemanticType:      "ColumnType_" + name,
-				Width:             width,
-				ExecType:          t.String(),
-				DatumToPhysicalFn: getDatumToPhysicalFn(ct),
+				SemanticType: "ColumnType_" + name,
+				Width:        width,
+				ExecType:     t.String(),
+				GoType:       t.GoTypeName(),
 			}
 			columnConversions = append(columnConversions, conversion)
 		}
@@ -125,38 +128,4 @@ func getWidths(semanticType sqlbase.ColumnType_SemanticType) []int32 {
 		return []int32{0, 8, 16, 32, 64}
 	}
 	return []int32{0}
-}
-
-func getDatumToPhysicalFn(ct sqlbase.ColumnType) string {
-	switch ct.SemanticType {
-	case sqlbase.ColumnType_BOOL:
-		return "bool(*datum.(*tree.DBool))"
-	case sqlbase.ColumnType_BYTES:
-		return "encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))"
-	case sqlbase.ColumnType_INT:
-		switch ct.Width {
-		case 8:
-			return "int8(*datum.(*tree.DInt))"
-		case 16:
-			return "int16(*datum.(*tree.DInt))"
-		case 32:
-			return "int32(*datum.(*tree.DInt))"
-		case 0, 64:
-			return "int64(*datum.(*tree.DInt))"
-		}
-		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
-	case sqlbase.ColumnType_DATE:
-		return "int64(*datum.(*tree.DDate))"
-	case sqlbase.ColumnType_FLOAT:
-		return "float64(*datum.(*tree.DFloat))"
-	case sqlbase.ColumnType_OID:
-		return "int64(datum.(*tree.DOid).DInt)"
-	case sqlbase.ColumnType_STRING:
-		return "encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))"
-	case sqlbase.ColumnType_NAME:
-		return "encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DOidWrapper).Wrapped.(*tree.DString)))"
-	case sqlbase.ColumnType_DECIMAL:
-		return "datum.(*tree.DDecimal).Decimal"
-	}
-	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
 }

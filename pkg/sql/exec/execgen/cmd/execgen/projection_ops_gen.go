@@ -17,19 +17,29 @@ package main
 import (
 	"io"
 	"text/template"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 const projTemplate = `
 package exec
 
-import "bytes"
+import (
+	"bytes"
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-import "github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
+)
 
 {{define "opConstName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
+{{/* The outer range is a types.T, and the inner is the overloads associated
+     with that type. */}}
+{{range .}}
 {{range .}}
 
 type {{template "opConstName" .}} struct {
@@ -43,6 +53,9 @@ type {{template "opConstName" .}} struct {
 
 func (p *{{template "opConstName" .}}) Next() ColBatch {
 	batch := p.input.Next()
+	if p.outputIdx == len(batch.ColVecs()) {
+		batch.AppendCol(types.{{.RetTyp}})
+	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
 	col := batch.ColVec(p.colIdx).{{.LTyp}}()[:ColBatchSize]
 	n := batch.Length()
@@ -74,6 +87,9 @@ type {{template "opName" .}} struct {
 
 func (p *{{template "opName" .}}) Next() ColBatch {
 	batch := p.input.Next()
+	if p.outputIdx == len(batch.ColVecs()) {
+		batch.AppendCol(types.{{.RetTyp}})
+	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
 	col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:ColBatchSize]
 	col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:ColBatchSize]
@@ -96,6 +112,121 @@ func (p {{template "opName" .}}) Init() {
 }
 
 {{end}}
+{{end}}
+
+// GetProjectionConstOperator returns the appropriate constant projection
+// operator for the given column type and comparison.
+func GetProjectionConstOperator(
+	ct sqlbase.ColumnType,
+	op tree.Operator,
+	input Operator,
+	colIdx int,
+	constArg tree.Datum,
+  outputIdx int,
+) (Operator, error) {
+	c, err := types.GetDatumToPhysicalFn(ct)(constArg)
+	if err != nil {
+		return nil, err
+	}
+	switch t := types.FromColumnType(ct); t {
+	{{range $typ, $overloads := .}}
+	case types.{{$typ}}:
+		switch op.(type) {
+		case tree.BinaryOperator:
+			switch op {
+			{{range $overloads}}
+			{{if .IsBinOp}}
+			case tree.{{.Name}}:
+				return &{{template "opConstName" .}}{
+					input:    input,
+					colIdx:   colIdx,
+					constArg: c.({{.RGoType}}),
+					outputIdx: outputIdx,
+				}, nil
+			{{end}}
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled binary operator: %s", op)
+			}
+		case tree.ComparisonOperator:
+			switch op {
+			{{range $overloads}}
+			{{if .IsCmpOp}}
+			case tree.{{.Name}}:
+				return &{{template "opConstName" .}}{
+					input:    input,
+					colIdx:   colIdx,
+					constArg: c.({{.RGoType}}),
+					outputIdx: outputIdx,
+				}, nil
+			{{end}}
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled comparison operator: %s", op)
+			}
+		default:
+			return nil, errors.New("unhandled operator type")
+		}
+	{{end}}
+	default:
+		return nil, errors.Errorf("unhandled type: %s", t)
+	}
+}
+
+// GetProjectionOperator returns the appropriate projection operator for the
+// given column type and comparison.
+func GetProjectionOperator(
+	ct sqlbase.ColumnType,
+	op tree.Operator,
+	input Operator,
+	col1Idx int,
+	col2Idx int,
+  outputIdx int,
+) (Operator, error) {
+	switch t := types.FromColumnType(ct); t {
+	{{range $typ, $overloads := .}}
+	case types.{{$typ}}:
+		switch op.(type) {
+		case tree.BinaryOperator:
+			switch op {
+			{{range $overloads}}
+			{{if .IsBinOp}}
+			case tree.{{.Name}}:
+				return &{{template "opName" .}}{
+					input:    input,
+					col1Idx:   col1Idx,
+					col2Idx:   col2Idx,
+					outputIdx: outputIdx,
+				}, nil
+			{{end}}
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled binary operator: %s", op)
+			}
+		case tree.ComparisonOperator:
+			switch op {
+			{{range $overloads}}
+			{{if .IsCmpOp}}
+			case tree.{{.Name}}:
+				return &{{template "opName" .}}{
+					input:    input,
+					col1Idx:   col1Idx,
+					col2Idx:   col2Idx,
+					outputIdx: outputIdx,
+				}, nil
+			{{end}}
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled comparison operator: %s", op)
+			}
+		default:
+			return nil, errors.New("unhandled operator type")
+		}
+	{{end}}
+	default:
+		return nil, errors.Errorf("unhandled type: %s", t)
+	}
+}
 `
 
 func genProjectionOps(wr io.Writer) error {
@@ -103,10 +234,17 @@ func genProjectionOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
+
 	var allOverloads []*overload
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
-	return tmpl.Execute(wr, allOverloads)
+
+	typToOverloads := make(map[types.T][]*overload)
+	for _, overload := range allOverloads {
+		typ := overload.LTyp
+		typToOverloads[typ] = append(typToOverloads[typ], overload)
+	}
+	return tmpl.Execute(wr, typToOverloads)
 }
 
 func init() {

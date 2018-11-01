@@ -15,9 +15,12 @@
 package exec
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -56,6 +59,39 @@ func TestSelLTInt64Int64(t *testing.T) {
 			t.Error(err)
 		}
 	})
+}
+
+func TestGetSelectionConstOperator(t *testing.T) {
+	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}
+	cmpOp := tree.LT
+	var input Operator
+	colIdx := 3
+	constVal := int64(31)
+	constArg := tree.NewDDate(tree.DDate(constVal))
+	op, err := GetSelectionConstOperator(ct, cmpOp, input, colIdx, constArg)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &selLTInt64Int64ConstOp{input: input, colIdx: colIdx, constArg: constVal}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
+	}
+}
+
+func TestGetSelectionOperator(t *testing.T) {
+	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16}
+	cmpOp := tree.GE
+	var input Operator
+	col1Idx := 5
+	col2Idx := 7
+	op, err := GetSelectionOperator(ct, cmpOp, input, col1Idx, col2Idx)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &selGEInt16Int16Op{input: input, col1Idx: col1Idx, col2Idx: col2Idx}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
+	}
 }
 
 func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
