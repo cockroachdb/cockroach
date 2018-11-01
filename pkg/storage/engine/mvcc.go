@@ -1691,7 +1691,18 @@ func mvccScanToKvs(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	kvs, err := buildScanResults(kvData, numKVs)
+	kvs := make([]roachpb.KeyValue, numKVs)
+	var k MVCCKey
+	var rawBytes []byte
+	for i := range kvs {
+		k, rawBytes, kvData, err = MVCCScanDecodeKeyValue(res.KVData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		kvs[i].Key = k.Key
+		kvs[i].Value.RawBytes = rawBytes
+		kvs[i].Value.Timestamp = k.Timestamp
+	}
 	return kvs, resumeSpan, intents, err
 }
 
@@ -1768,23 +1779,6 @@ func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, int, er
 		return nil, 0, err
 	}
 	return key.Key, offset, nil
-}
-
-func buildScanResults(kvData []byte, numKvs int64) ([]roachpb.KeyValue, error) {
-	kvs := make([]roachpb.KeyValue, numKvs)
-	var key MVCCKey
-	var rawBytes []byte
-	var err error
-	for i := range kvs {
-		key, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
-		if err != nil {
-			return nil, err
-		}
-		kvs[i].Key = key.Key
-		kvs[i].Value.RawBytes = rawBytes
-		kvs[i].Value.Timestamp = key.Timestamp
-	}
-	return kvs, nil
 }
 
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
