@@ -208,12 +208,15 @@ func TestBatchPrefixIter(t *testing.T) {
 	}
 }
 
-func TestIterUpperBound(t *testing.T) {
+func TestIterBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	db := setupMVCCInMemRocksDB(t, "iter_upper_bound")
+	db := setupMVCCInMemRocksDB(t, "iter_bounds")
 	defer db.Close()
 
+	if err := db.Put(mvccKey("0"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Put(mvccKey("a"), []byte("val")); err != nil {
 		t.Fatal(err)
 	}
@@ -234,6 +237,47 @@ func TestIterUpperBound(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := tc.createEngine()
 			defer e.Close()
+
+			if _, ok := e.(*rocksDBBatch); !ok { // batches do not support reverse iteration
+				// Test that a new iterator's lower bound is applied.
+				func() {
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("b")})
+					defer iter.Close()
+					iter.SeekReverse(mvccKey("b"))
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if !ok {
+						t.Fatalf("expected iterator to be valid, but was invalid")
+					}
+					iter.SeekReverse(mvccKey("a"))
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if ok {
+						t.Fatalf("expected iterator to be invalid, but was valid")
+					}
+				}()
+
+				// Test that the cached iterator, if the underlying engine implementation
+				// caches iterators, can take on a new lower bound.
+				func() {
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("a")})
+					defer iter.Close()
+
+					iter.SeekReverse(mvccKey("a"))
+					if ok, err := iter.Valid(); !ok {
+						t.Fatal(err)
+					}
+					if !mvccKey("a").Equal(iter.Key()) {
+						t.Fatalf("expected key a, but got %q", iter.Key())
+					}
+					iter.Prev()
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if ok {
+						t.Fatalf("expected iterator to be invalid, but was valid")
+					}
+				}()
+			}
 
 			// Test that a new iterator's upper bound is applied.
 			func() {
@@ -268,9 +312,7 @@ func TestIterUpperBound(t *testing.T) {
 				}
 			}()
 
-			// If the engine supports writes, test that the upper bound is applied to
-			// newly written keys. This notably tests the logic in BaseDeltaIterator
-			// on batches.
+			// Perform additional tests if the engine supports writes.
 			w, isReadWriter := e.(ReadWriter)
 			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
 				return

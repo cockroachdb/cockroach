@@ -60,7 +60,7 @@ func RefreshRange(
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
 	intents, err := engine.MVCCIterateUsingIter(
 		ctx,
-		batch,
+		iter,
 		args.Key,
 		args.EndKey,
 		h.Txn.Timestamp,
@@ -68,7 +68,6 @@ func RefreshRange(
 		true,  /* tombstones */
 		nil,   /* txn */
 		false, /* reverse */
-		iter,
 		func(kv roachpb.KeyValue) (bool, error) {
 			if ts := kv.Value.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
 				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
