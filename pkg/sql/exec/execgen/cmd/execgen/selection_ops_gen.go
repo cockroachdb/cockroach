@@ -22,6 +22,11 @@ import (
 const selTemplate = `
 package exec
 
+import "bytes"
+
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import "github.com/cockroachdb/apd"
+
 {{define "opConstName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
@@ -47,7 +52,9 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 		if sel := batch.Selection(); sel != nil {
 			sel := sel[:n]
 			for _, i := range sel {
-				if col[i] {{.OpStr}} p.constArg {
+				var cmp bool
+				{{(.Assign "cmp" "col[i]" "p.constArg")}}
+				if cmp {
 					sel[idx] = i
 					idx++
 				}
@@ -56,7 +63,9 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 			batch.SetSelection(true)
 			sel := batch.Selection()
 			for i := uint16(0); i < n; i++ {
-				if col[i] {{.OpStr}} p.constArg {
+				var cmp bool
+				{{(.Assign "cmp" "col[i]" "p.constArg")}}
+				if cmp {
 					sel[idx] = i
 					idx++
 				}
@@ -95,7 +104,9 @@ func (p *{{template "opName" .}}) Next() ColBatch {
 		if sel := batch.Selection(); sel != nil {
 			sel := sel[:n]
 			for _, i := range sel {
-				if col1[i] {{.OpStr}} col2[i] {
+				var cmp bool
+				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
+				if cmp {
 					sel[idx] = i
 					idx++
 				}
@@ -104,7 +115,9 @@ func (p *{{template "opName" .}}) Next() ColBatch {
 			batch.SetSelection(true)
 			sel := batch.Selection()
 			for i := uint16(0); i < n; i++ {
-				if col1[i] {{.OpStr}} col2[i] {
+				var cmp bool
+				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
+				if cmp {
 					sel[idx] = i
 					idx++
 				}
