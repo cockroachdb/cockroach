@@ -502,12 +502,16 @@ func createConstraintCheckOperations(
 	for _, constraint := range constraints {
 		switch constraint.Kind {
 		case sqlbase.ConstraintTypeCheck:
-			results = append(results, newSQLCheckConstraintCheckOperation(
-				tableName,
-				tableDesc,
-				constraint.CheckConstraint,
-				asOf,
-			))
+			if active, err := constraint.CheckConstraint.IsActive(tableDesc); err != nil {
+				return nil, err
+			} else if active {
+				results = append(results, newSQLCheckConstraintCheckOperation(
+					tableName,
+					tableDesc,
+					constraint.CheckConstraint,
+					asOf,
+				))
+			}
 		case sqlbase.ConstraintTypeFK:
 			results = append(results, newSQLForeignKeyCheckOperation(
 				tableName,

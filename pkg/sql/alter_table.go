@@ -478,6 +478,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
+
+				if active, err := ck.IsActive(&n.tableDesc.TableDescriptor); err != nil {
+					return err
+				} else if !active {
+					return fmt.Errorf("constraint %q not active", t.Constraint)
+				}
+
 				if err := params.p.validateCheckExpr(
 					params.ctx, ck.Expr, &n.n.Table, n.tableDesc.TableDesc(),
 				); err != nil {

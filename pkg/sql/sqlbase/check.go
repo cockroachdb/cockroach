@@ -63,11 +63,15 @@ func (c *CheckHelper) Init(
 		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
-	c.Exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
-	exprStrings := make([]string, len(tableDesc.Checks))
-	for i, check := range tableDesc.Checks {
-		exprStrings[i] = check.Expr
+	var exprStrings []string
+	for _, check := range tableDesc.Checks {
+		if active, err := check.IsActive(tableDesc); err != nil {
+			return err
+		} else if active {
+			exprStrings = append(exprStrings, check.Expr)
+		}
 	}
+	c.Exprs = make([]tree.TypedExpr, len(exprStrings))
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return err

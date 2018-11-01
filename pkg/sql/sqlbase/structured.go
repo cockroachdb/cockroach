@@ -421,9 +421,9 @@ func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
 	return 1
 }
 
-// allNonDropColumns returns all the columns, including those being added
+// AllNonDropColumns returns all the columns, including those being added
 // in the mutations.
-func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
+func (desc *TableDescriptor) AllNonDropColumns() []ColumnDescriptor {
 	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	cols = append(cols, desc.Columns...)
 	for _, m := range desc.Mutations {
@@ -1101,7 +1101,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 
 	columnNames := make(map[string]ColumnID, len(desc.Columns))
 	columnIDs := make(map[ColumnID]string, len(desc.Columns))
-	for _, column := range desc.allNonDropColumns() {
+	for _, column := range desc.AllNonDropColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
 		}
@@ -1603,7 +1603,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []string) error {
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.allNonDropColumns() {
+		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1623,7 +1623,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *TableDescriptor, indexColNames
 	}
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.allNonDropColumns() {
+		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -2387,6 +2387,23 @@ func (cc *TableDescriptor_CheckConstraint) UsesColumn(
 	return i < len(colsUsed) && colsUsed[i] == colID, nil
 }
 
+// IsActive returns whether the check constraint uses columns which are all
+// active.
+func (cc *TableDescriptor_CheckConstraint) IsActive(desc *TableDescriptor) (bool, error) {
+	cols, err := cc.ColumnsUsed(desc)
+	if err != nil {
+		return false, err
+	}
+
+	for _, col := range cols {
+		if _, err := desc.FindActiveColumnByID(col); err != nil {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // ForeignKeyReferenceActionValue allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
@@ -2505,7 +2522,7 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		return nil, err
 	}
 
-	for _, c := range desc.allNonDropColumns() {
+	for _, c := range desc.AllNonDropColumns() {
 		for _, id := range c.UsesSequenceIds {
 			refs[id] = struct{}{}
 		}

@@ -1428,8 +1428,8 @@ func replaceVars(
 			return nil, true, expr
 		}
 
-		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
-		if err != nil {
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
 			return fmt.Errorf("column %q not found for constraint %q",
 				c.ColumnName, expr.String()), false, nil
 		}
@@ -1478,7 +1478,7 @@ func MakeCheckConstraint(
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.AllNonDropColumns()),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
