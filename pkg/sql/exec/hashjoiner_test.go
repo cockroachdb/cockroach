@@ -52,6 +52,7 @@ func TestHashJoinerInt64(t *testing.T) {
 		rightOutCols []int
 
 		buildRightSide bool
+		buildDistinct  bool
 
 		expectedTuples tuples
 	}{
@@ -78,6 +79,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightEqCols:  []int{0},
 			leftOutCols:  []int{1, 2},
 			rightOutCols: []int{0, 2},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{2, "foo", 2, int32(2)},
@@ -107,6 +110,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightEqCols:  []int{0},
 			leftOutCols:  []int{0},
 			rightOutCols: []int{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{0},
@@ -138,6 +143,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightEqCols:  []int{0},
 			leftOutCols:  []int{0},
 			rightOutCols: []int{0},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{1, 1},
@@ -173,6 +180,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			leftOutCols:  []int{0, 1, 2},
 			rightOutCols: []int{1},
 
+			buildDistinct: true,
+
 			expectedTuples: tuples{
 				{0, 2, 30, 100},
 				{1, 1, 40, 200},
@@ -204,6 +213,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightEqCols:  []int{0, 1},
 			leftOutCols:  []int{0, 1, 2},
 			rightOutCols: []int{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{20, 0, hashTableBucketSize},
@@ -238,6 +249,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			leftOutCols:  []int{6},
 			rightOutCols: []int{},
 
+			buildDistinct: true,
+
 			expectedTuples: tuples{
 				{"ccc"},
 				{"aaa"},
@@ -267,6 +280,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			leftOutCols:  []int{0, 1},
 			rightOutCols: []int{},
 
+			buildDistinct: true,
+
 			expectedTuples: tuples{
 				{float32(2.22), float64(44.4444)},
 				{float32(1.1), float64(33.333)},
@@ -295,6 +310,7 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightOutCols: []int{0, 1, 2, 3},
 
 			buildRightSide: true,
+			buildDistinct:  true,
 
 			expectedTuples: tuples{
 				{3, 3, 2, 2, 1, 2, 3, 4},
@@ -322,6 +338,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightEqCols:  []int{0},
 			leftOutCols:  []int{},
 			rightOutCols: []int{0},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{decs[2]},
@@ -351,9 +369,10 @@ func TestHashJoinerInt64(t *testing.T) {
 				},
 
 				buildRightSide: tc.buildRightSide,
+				buildDistinct:  tc.buildDistinct,
 			}
 
-			hj := &hashJoinEqInnerDistinctOp{
+			hj := &hashJoinEqInnerOp{
 				spec: spec,
 			}
 
@@ -420,9 +439,11 @@ func BenchmarkHashJoiner(b *testing.B) {
 						sourceTypes: sourceTypes,
 						source:      rightSource,
 					},
+
+					buildDistinct: true,
 				}
 
-				hj := &hashJoinEqInnerDistinctOp{
+				hj := &hashJoinEqInnerOp{
 					spec: spec,
 				}
 
