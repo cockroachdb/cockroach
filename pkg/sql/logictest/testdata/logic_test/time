@@ -72,7 +72,7 @@ SELECT '12h':::INTERVAL::TIME;
 query T
 SELECT '12:00:00':::TIME::INTERVAL;
 ----
-12h
+12:00:00
 
 query T
 SELECT '12:00:00':::TIME::STRING;
@@ -186,12 +186,12 @@ SELECT '12:00:00':::TIME - '1d':::INTERVAL
 query T
 SELECT '12:00:00':::TIME - '11:59:59':::TIME
 ----
-1s
+00:00:01
 
 query T
 SELECT '11:59:59':::TIME - '12:00:00':::TIME
 ----
--1s
+-00:00:01
 
 query T
 SELECT '2017-01-01':::DATE + '12:00:00':::TIME
@@ -255,27 +255,27 @@ SELECT * FROM arrays
 query T
 SELECT date_trunc('hour', time '12:01:02.345678')
 ----
-12h
+12:00:00
 
 query T
 SELECT date_trunc('minute', time '12:01:02.345678')
 ----
-12h1m
+12:01:00
 
 query T
 SELECT date_trunc('second', time '12:01:02.345678')
 ----
-12h1m2s
+12:01:02
 
 query T
 SELECT date_trunc('millisecond', time '12:01:02.345678')
 ----
-12h1m2s345ms
+12:01:02.345
 
 query T
 SELECT date_trunc('microsecond', time '12:01:02.345678')
 ----
-12h1m2s345ms678µs
+12:01:02.345678
 
 query error pgcode 22023 date_trunc\(\): unsupported timespan: day
 SELECT date_trunc('day', time '12:01:02.345')
