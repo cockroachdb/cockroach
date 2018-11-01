@@ -115,7 +115,7 @@ select
       ├── (f + f) < 3.0 [type=bool, outer=(3)]
       ├── (i + 1) <= length('foo') [type=bool, outer=(2)]
       ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
-      └── i::INTERVAL >= '1h' [type=bool, outer=(2)]
+      └── i::INTERVAL >= '01:00:00' [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt expect-not=NormalizeCmpPlusConst

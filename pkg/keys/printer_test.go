@@ -163,10 +163,10 @@ func TestPrettyPrint(t *testing.T) {
 			"/Table/42/B0000000000000000000000000000000000000000000000000000000000000000/PrefixEnd"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationAsc)),
-			"/Table/42/1mon1d1s"},
+			"/Table/42/1 mon 1 day 00:00:01"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationDesc)),
-			"/Table/42/-2mon-2d743h59m58s999ms999µs999ns"},
+			"/Table/42/-2 mons -2 days +743:59:58.999999999"},
 
 		// sequence
 		{MakeSequenceKey(55), `/Table/55/1/0/0`},
