@@ -974,6 +974,11 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	var statementsInResponse []string
 	for _, respStatement := range resp.Statements {
+		if respStatement.Key.KeyData.Failed {
+			// We ignore failed statements here as the INSERT statement can fail and
+			// be automatically retried, confusing the test success check.
+			continue
+		}
 		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
 	}
 
