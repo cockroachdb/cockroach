@@ -1781,3 +1781,112 @@ CREATE TABLE t.test2 ();
 		t.Fatalf("expected lease acquisition to not block, but blockCount is: %d", blockCount)
 	}
 }
+
+// TestReadBeforeDrop tests that a read over a table from a transaction
+// initiated before the table is dropped succeeds.
+func TestReadBeforeDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Test that once a table is dropped it cannot be used even when
+	// a transaction is using a timestamp from the past.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var k, v string
+		err := rows.Scan(&k, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k != "a" || v != "b" {
+			t.Fatalf("didn't find expected row: %s %s", k, v)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Tests that transactions with timestamps within the uncertainty interval
+// of a TABLE CREATE are pushed to allow them to observe the created table.
+func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(context.TODO())
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+ CREATE DATABASE t;
+ CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+ `); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a transaction before the table is created.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a transaction before the table is created. Use a different
+	// node so that clock uncertainty is presumed and it gets pushed.
+	tx1, err := tc.ServerConn(1).Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Was actually run in the past and so doesn't see the table.
+	if _, err := tx.Exec(`
+INSERT INTO t.kv VALUES ('a', 'b');
+`); !testutils.IsError(err, "does not exist") {
+		t.Fatal(err)
+	}
+
+	// Not sure whether run in the past and so sees clock uncertainty push.
+	if _, err := tx1.Exec(`
+INSERT INTO t.kv VALUES ('c', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx1.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
