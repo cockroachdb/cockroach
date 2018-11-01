@@ -12,31 +12,63 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// {{/*
+// +build execgen_template
+//
+// This file is the execgen template for sum_agg.og.go. It's formatted in a
+// special way, so it's both valid Go and a valid text/template input. This
+// permits editing this file with editor support.
+//
+// */}}
+
 package exec
 
-type sumInt64Agg struct {
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/pkg/errors"
+)
+
+// TODO(asubiotto): Probably need to add declarations.
+// TODO(asubiotto): Need to have a zero value template.
+
+func newSumAgg(t types.T) (aggregateFunc, error) {
+	switch t {
+	// {{range .}}
+	case _TYPES_T:
+		return &sum_TYPEAgg{}, nil
+		// {{end}}
+	default:
+		return nil, errors.Errorf("unsupported sum agg type %s", t)
+	}
+}
+
+// {{range .}}
+
+type sum_TYPEAgg struct {
 	done bool
 
 	groups  []bool
 	scratch struct {
 		curIdx int
 		// vec points to the output vector we are updating.
-		vec []int64
+		vec []_GOTYPE
 	}
 }
 
-var _ aggregateFunc = &sumInt64Agg{}
+var _ aggregateFunc = &sum_TYPEAgg{}
 
-var zeroInt64Batch = make([]int64, ColBatchSize)
+// TODO(asubiotto): Have all these zero batches somewhere else templated
+// separately.
+var zero_TYPEBatch = make([]_GOTYPE, ColBatchSize)
 
-func (a *sumInt64Agg) Init(groups []bool, v ColVec) {
+func (a *sum_TYPEAgg) Init(groups []bool, v ColVec) {
 	a.groups = groups
-	a.scratch.vec = v.Int64()
+	a.scratch.vec = v._TemplateType()
 	a.Reset()
 }
 
-func (a *sumInt64Agg) Reset() {
-	copy(a.scratch.vec, zeroInt64Batch)
+func (a *sum_TYPEAgg) Reset() {
+	copy(a.scratch.vec, zero_TYPEBatch)
 	a.scratch.curIdx = -1
 }
 
@@ -44,14 +76,14 @@ func (a *sumInt64Agg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
-func (a *sumInt64Agg) SetOutputIndex(idx int) {
+func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
-		copy(a.scratch.vec[idx+1:], zeroInt64Batch)
+		copy(a.scratch.vec[idx+1:], zero_TYPEBatch)
 	}
 }
 
-func (a *sumInt64Agg) Compute(b ColBatch, inputIdxs []uint32) {
+func (a *sum_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
@@ -62,7 +94,7 @@ func (a *sumInt64Agg) Compute(b ColBatch, inputIdxs []uint32) {
 		a.done = true
 		return
 	}
-	ints, sel := b.ColVec(int(inputIdxs[0])).Int64(), b.Selection()
+	ints, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
@@ -85,3 +117,5 @@ func (a *sumInt64Agg) Compute(b ColBatch, inputIdxs []uint32) {
 		}
 	}
 }
+
+// {{end}}
