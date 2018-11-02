@@ -2325,7 +2325,14 @@ func (r *rocksDBIterator) MVCCScan(
 
 	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
 	numKVs = int64(state.data.count)
-	resumeSpan = resumeKeyToSpan(start, end, cSliceToGoBytes(state.resume_key), reverse)
+
+	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
+		if reverse {
+			resumeSpan = &roachpb.Span{Key: start, EndKey: roachpb.Key(resumeKey).Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: end}
+		}
+	}
 
 	intents, err = buildScanIntents(cSliceToGoBytes(state.intents))
 	if err != nil {
