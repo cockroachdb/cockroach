@@ -66,6 +66,9 @@ type ColVec interface {
 	// maximum size of ColBatchSize, filtered by the given selection vector.
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
+	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
+	Copy(src ColVec, srcStartIdx, srcEndIdx int, typ types.T)
+
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
