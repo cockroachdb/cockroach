@@ -53,7 +53,7 @@ func (c *limitOp) Next() ColBatch {
 		return bat
 	}
 	newSeen := c.seen + uint64(length)
-	if newSeen > c.limit {
+	if newSeen >= c.limit {
 		c.done = true
 		bat.SetLength(uint16(c.limit - c.seen))
 		return bat
