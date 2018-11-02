@@ -66,7 +66,6 @@ template <bool reverse> class mvccScanner {
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
-        is_get_(false),
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
@@ -104,7 +103,6 @@ template <bool reverse> class mvccScanner {
   // reading transactionally and we own the intent.
 
   const DBScanResults& get() {
-    is_get_ = true;
     if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
       return results_;
     }
@@ -132,6 +130,9 @@ template <bool reverse> class mvccScanner {
           break;
         }
       }
+      if (kvs_->Count() == max_keys_ && advanceKey() && cur_key_.compare(end_key_) >= 0) {
+        results_.resume_key = ToDBSlice(cur_key_);
+      }
     } else {
       if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
         return results_;
@@ -140,6 +141,9 @@ template <bool reverse> class mvccScanner {
         if (!getAndAdvance()) {
           break;
         }
+      }
+      if (kvs_->Count() == max_keys_ && advanceKey() && cur_key_.compare(end_key_) < 0) {
+        results_.resume_key = ToDBSlice(cur_key_);
       }
     }
 
@@ -235,16 +239,11 @@ template <bool reverse> class mvccScanner {
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
-      if (kvs_->Count() == max_keys_ && !is_get_) {
+      if (kvs_->Count() == max_keys_) {
         // We've already retrieved the desired number of keys and now
         // we're adding the resume key. We don't want to add the
         // intent here as the intents should only correspond to KVs
-        // that lie before the resume key. The "!is_get_" is necessary
-        // to handle MVCCGet which specifies max_keys_==0 in order to
-        // avoid iterating to the next key. In the "get" path we want
-        // to return the intent associated with the key even though
-        // max_keys_==0.
-        kvs_->Put(cur_raw_key_, rocksdb::Slice());
+        // that lie before the resume key.
         return false;
       }
       intents_->Put(cur_raw_key_, cur_value_);
@@ -423,7 +422,7 @@ template <bool reverse> class mvccScanner {
     // instructed to include tombstones in the results.
     if (value.size() > 0 || tombstones_) {
       kvs_->Put(cur_raw_key_, value);
-      if (kvs_->Count() > max_keys_) {
+      if (kvs_->Count() == max_keys_) {
         return false;
       }
     }
@@ -616,7 +615,6 @@ template <bool reverse> class mvccScanner {
   std::string key_buf_;
   std::string saved_buf_;
   bool peeked_;
-  bool is_get_;
   cockroach::storage::engine::enginepb::MVCCMetadata meta_;
   // cur_raw_key_ holds either iter_rep_->key() or the saved value of
   // iter_rep_->key() if we've peeked at the previous key (and peeked_

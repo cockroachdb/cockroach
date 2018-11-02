@@ -1695,7 +1695,7 @@ func mvccScanToKvs(
 	var k MVCCKey
 	var rawBytes []byte
 	for i := range kvs {
-		k, rawBytes, kvData, err = MVCCScanDecodeKeyValue(res.KVData)
+		k, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1756,29 +1756,6 @@ func resumeKeyToSpan(key, endKey, resumeKey roachpb.Key, reverse bool) (resumeSp
 		}
 	}
 	return resumeSpan
-}
-
-func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, int, error) {
-	kvLen := len(kvData)
-	if kvLen == 0 {
-		return nil, 0, nil
-	}
-	if numKvs <= max {
-		return nil, 0, nil
-	}
-	var err error
-	for i := int64(0); i < max; i++ {
-		kvData, err = mvccScanSkipKeyValue(kvData)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	offset := kvLen - len(kvData)
-	key, _, _, err := MVCCScanDecodeKeyValue(kvData)
-	if err != nil {
-		return nil, 0, err
-	}
-	return key.Key, offset, nil
 }
 
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of

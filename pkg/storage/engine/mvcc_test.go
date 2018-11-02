@@ -1451,6 +1451,9 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
@@ -1474,6 +1477,30 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	}
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
+	}
+
+	// Note: testKey6, though not scanned directly, is important in testing that
+	// the computed resume span does not extend beyond the upper bound of a scan.
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, testKey5, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 {
+		t.Fatalf("expected 1 key but got %d", len(kvs))
+	}
+	if resumeSpan != nil {
+		t.Fatalf("resumeSpan = %+v", resumeSpan)
+	}
+
+	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey5, testKey6.Next(), 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 {
+		t.Fatalf("expected 1 key but got %d", len(kvs))
+	}
+	if resumeSpan != nil {
+		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 }
 
