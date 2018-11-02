@@ -314,6 +314,7 @@ typedef struct {
   DBChunkedBuffer data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
+  DBSlice resume_key;
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,

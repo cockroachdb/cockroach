@@ -2325,6 +2325,7 @@ func (r *rocksDBIterator) MVCCScan(
 
 	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
 	numKVs = int64(state.data.count)
+	resumeSpan = resumeKeyToSpan(start, end, cSliceToGoBytes(state.resume_key), reverse)
 
 	intents, err = buildScanIntents(cSliceToGoBytes(state.intents))
 	if err != nil {
@@ -2333,23 +2334,9 @@ func (r *rocksDBIterator) MVCCScan(
 	if consistent && len(intents) > 0 {
 		// When encountering intents during a consistent scan we still need to
 		// return the resume key.
-		resumeKey, _, err := buildScanResumeKey(kvData, numKVs, max)
-		if err != nil {
-			return nil, 0, nil, nil, err
-		}
-		resumeSpan = resumeKeyToSpan(start, end, resumeKey, reverse)
 		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
-	resumeKey, offset, err := buildScanResumeKey(kvData, numKVs, max)
-	if err != nil {
-		return nil, 0, nil, nil, nil
-	}
-	if resumeKey != nil {
-		kvData = kvData[:offset]
-		numKVs = max
-		resumeSpan = resumeKeyToSpan(start, end, resumeKey, reverse)
-	}
 	return kvData, numKVs, resumeSpan, intents, nil
 }
 
