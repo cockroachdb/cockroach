@@ -1739,25 +1739,6 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-// resumeKeyToSpan creates a resumeSpan suitable for returning in a ScanResponse
-// out of a resumeKey (the last key in a batch that exceeded a limit).
-func resumeKeyToSpan(key, endKey, resumeKey roachpb.Key, reverse bool) (resumeSpan *roachpb.Span) {
-	if resumeKey != nil {
-		// NB: we copy the resume key here to ensure that it doesn't point to the
-		// same shared buffer as the main results. Higher levels of the code may
-		// cache the resume key and we don't want them pinning excessive amounts of
-		// memory.
-		if reverse {
-			resumeKey = resumeKey[:len(resumeKey):len(resumeKey)]
-			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
-		} else {
-			resumeKey = append(roachpb.Key(nil), resumeKey...)
-			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
-		}
-	}
-	return resumeSpan
-}
-
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
 // results in ascending order. If it hits max, it returns a span to be used in
 // the next call to this function. Use MaxInt64 for not limit. If the limit is
