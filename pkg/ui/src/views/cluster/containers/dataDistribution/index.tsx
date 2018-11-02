@@ -4,6 +4,7 @@ import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import Helmet from "react-helmet";
 
+import { FixLong } from "src/util/fixLong";
 import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -19,6 +20,7 @@ import {
 import { LocalityTree, selectLocalityTree } from "src/redux/localities";
 import ReplicaMatrix, {
   METRIC_LEASEHOLDERS,
+  METRIC_LIVE_BYTES,
   METRIC_QPS,
   METRIC_REPLICAS,
   SchemaObject,
@@ -77,6 +79,8 @@ class DataDistribution extends React.Component<DataDistributionProps> {
           return this.getLeaseholderCount(dbPath, nodePath);
         case METRIC_REPLICAS:
           return this.getReplicaCount(dbPath, nodePath);
+        case METRIC_LIVE_BYTES:
+          return this.getLiveBytes(dbPath, nodePath);
         default:
           return 0;
       }
@@ -99,6 +103,12 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     const replica = this.getReplicaAtPaths(dbPath, nodePath);
 
     return replica ? Math.round(replica.stats.queries_per_second) : 0;
+  }
+
+  getLiveBytes(dbPath: TreePath, nodePath: TreePath): number {
+    const replica = this.getReplicaAtPaths(dbPath, nodePath);
+
+    return replica ? Math.round(FixLong(replica.live_bytes).toNumber()) : 0;
   }
 
   getReplicaCount(dbPath: TreePath, nodePath: TreePath): number {
