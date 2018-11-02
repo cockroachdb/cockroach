@@ -17,6 +17,8 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -91,6 +93,7 @@ func newColOperator(
 	default:
 		return nil, errors.Errorf("unsupported processor core %s", core)
 	}
+	log.VEventf(ctx, 1, "Made op %T\n", op)
 
 	if err != nil {
 		return nil, err
