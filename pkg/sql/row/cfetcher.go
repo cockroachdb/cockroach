@@ -83,6 +83,15 @@ type cTableInfo struct {
 
 	// -- Fields updated during a scan --
 
+	// foundFirstRow is set to true once we finished decoding the first row in a
+	// scan. It's used to break the ambiguity of the very first row for the
+	// purposes of incrementing rowIdx - although the first row appears like a
+	// new row, it's still the 0th row, so we don't want to bump rowIdx the very
+	// first time we see a new row.
+	foundFirstRow bool
+	// rowIdx is always set to the ordinal of the row we're currently writing to
+	// within the current batch. It's incremented as soon as we detect that a row
+	// is finished.
 	rowIdx uint16
 	batch  exec.ColBatch
 
@@ -171,6 +180,15 @@ type CFetcher struct {
 	kv                roachpb.KeyValue
 	keyRemainingBytes []byte
 	kvEnd             bool
+
+	// savedKv is the last kv we saw right before filling up our batch. Once the
+	// batch becomes full, we need to immediately return it to the user, since
+	// there's no space left in the batch to write new values to. But we only
+	// detect that the batch is full when we see a key from the next row, and at
+	// that point we're already trying to write that key into the next position
+	// in the batch. To solve this, we preserve that key (the first key of the
+	// next batch) in this field until the next invocation of NextBatch.
+	savedKv *roachpb.KeyValue
 
 	kvs []roachpb.KeyValue
 
@@ -450,6 +468,28 @@ func (rf *CFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, e
 func (rf *CFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
+	if rf.savedKv != nil {
+		// This is the last key we saw right before returning the last batch to the
+		// user. Decode it and carry on with the loop.
+		rf.keyRemainingBytes, ok, err = colencoding.DecodeIndexKeyToCols(
+			rf.currentTable.colvecs,
+			rf.currentTable.rowIdx,
+			rf.currentTable.desc,
+			rf.currentTable.index,
+			rf.currentTable.indexColOrdinals,
+			rf.currentTable.keyValTypes,
+			rf.currentTable.indexColumnDirs,
+			rf.kv.Key[rf.knownPrefixLength:],
+		)
+		rf.savedKv = nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return false, nil
+	}
+
 	for {
 		ok, rf.kv, err = rf.nextKV(ctx)
 		if err != nil {
@@ -478,6 +518,13 @@ func (rf *CFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			} else {
 				rf.keyRemainingBytes = keySuffix
 			}
+		} else {
+			// The prefix changed, which means the row changed. Bump our rowIdx.
+			if rf.currentTable.foundFirstRow {
+				rf.currentTable.rowIdx++
+			} else {
+				rf.currentTable.foundFirstRow = true
+			}
 		}
 		// See Init() for a detailed description of when we can get away with not
 		// reading the index key.
@@ -495,6 +542,13 @@ func (rf *CFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			// due for a refactor, now that it's (more) clear what the state machine
 			// it's trying to model is.
 		} else if rf.mustDecodeIndexKey || rf.traceKV {
+			if rf.currentTable.rowIdx >= exec.ColBatchSize {
+				// No more room in the current batch - save the current kv for the next
+				// round and return. We did finish a row, since our prefix changed, so
+				// return true.
+				rf.savedKv = &rf.kv
+				return true, nil
+			}
 			rf.keyRemainingBytes, ok, err = colencoding.DecodeIndexKeyToCols(
 				rf.currentTable.colvecs,
 				rf.currentTable.rowIdx,
@@ -821,9 +875,11 @@ func (rf *CFetcher) NextBatch(
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			rf.rowReadyTable.rowIdx++
 		}
 		if rf.kvEnd {
+			// We're finished with the scan - bump rowIdx so we write the correct
+			// length to the batch.
+			rf.rowReadyTable.rowIdx++
 			break
 		}
 	}
