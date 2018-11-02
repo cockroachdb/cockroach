@@ -106,6 +106,12 @@ func newColOperator(
 		// TODO(solon): plan renders
 		return nil, errors.New("renders unsupported")
 	}
+	if post.Offset != 0 {
+		return nil, errors.New("offset unsupported")
+	}
+	if post.Limit != 0 {
+		op = exec.NewLimitOp(op, post.Limit)
+	}
 	return op, nil
 }
 
