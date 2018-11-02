@@ -23,23 +23,21 @@ import (
 // TCollatedString is the type of strings with a locale.
 type TCollatedString struct {
 	Locale string
+	_      [0][]byte // Prevents use of the == operator.
 }
 
 // String implements the fmt.Stringer interface.
-func (t TCollatedString) String() string {
-	return fmt.Sprintf("collatedstring{%s}", t.Locale)
+func (t TCollatedString) String() string { return fmt.Sprintf("collatedstring{%s}", t.Locale) }
+
+// Identical implements the T interface.
+func (t TCollatedString) Identical(other T) bool {
+	u, ok := UnwrapType(other).(TCollatedString)
+	return ok && (t.Locale == "" || u.Locale == "" || t.Locale == u.Locale)
 }
 
 // Equivalent implements the T interface.
 func (t TCollatedString) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	u, ok := UnwrapType(other).(TCollatedString)
-	if ok {
-		return t.Locale == "" || u.Locale == "" || t.Locale == u.Locale
-	}
-	return false
+	return t.Identical(other) || Any.Identical(other)
 }
 
 // FamilyEqual implements the T interface.

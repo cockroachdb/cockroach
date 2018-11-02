@@ -47,9 +47,26 @@ func (t TTuple) String() string {
 	return buf.String()
 }
 
+// Identical implements the T interface.
+func (t TTuple) Identical(other T) bool {
+	u, ok := UnwrapType(other).(TTuple)
+	if !ok {
+		return false
+	}
+	if len(t.Types) != len(u.Types) {
+		return false
+	}
+	for i, typ := range t.Types {
+		if !typ.Identical(u.Types[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Equivalent implements the T interface.
 func (t TTuple) Equivalent(other T) bool {
-	if other == Any {
+	if Any.Identical(other) {
 		return true
 	}
 	u, ok := UnwrapType(other).(TTuple)

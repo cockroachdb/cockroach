@@ -603,31 +603,32 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 }
 
 func checkResultType(typ types.T) error {
-	// Compare all types that can rely on == equality.
-	switch types.UnwrapType(typ) {
-	case types.Unknown:
-	case types.BitArray:
-	case types.Bool:
-	case types.Int:
-	case types.Float:
-	case types.Decimal:
-	case types.Bytes:
-	case types.String:
-	case types.Date:
-	case types.Time:
-	case types.Timestamp:
-	case types.TimestampTZ:
-	case types.Interval:
-	case types.JSON:
-	case types.UUID:
-	case types.INet:
-	case types.NameArray:
-	case types.Oid:
-	case types.RegClass:
-	case types.RegNamespace:
-	case types.RegProc:
-	case types.RegProcedure:
-	case types.RegType:
+	// TODO(bram): speed this up.
+	baseTyp := types.UnwrapType(typ)
+	switch {
+	case types.Unknown.Identical(baseTyp):
+	case types.BitArray.Identical(baseTyp):
+	case types.Bool.Identical(baseTyp):
+	case types.Int.Identical(baseTyp):
+	case types.Float.Identical(baseTyp):
+	case types.Decimal.Identical(baseTyp):
+	case types.Bytes.Identical(baseTyp):
+	case types.String.Identical(baseTyp):
+	case types.Date.Identical(baseTyp):
+	case types.Time.Identical(baseTyp):
+	case types.Timestamp.Identical(baseTyp):
+	case types.TimestampTZ.Identical(baseTyp):
+	case types.Interval.Identical(baseTyp):
+	case types.JSON.Identical(baseTyp):
+	case types.UUID.Identical(baseTyp):
+	case types.INet.Identical(baseTyp):
+	case types.NameArray.Identical(baseTyp):
+	case types.Oid.Identical(baseTyp):
+	case types.RegClass.Identical(baseTyp):
+	case types.RegNamespace.Identical(baseTyp):
+	case types.RegProc.Identical(baseTyp):
+	case types.RegProcedure.Identical(baseTyp):
+	case types.RegType.Identical(baseTyp):
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual

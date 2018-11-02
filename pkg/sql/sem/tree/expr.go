@@ -1470,36 +1470,44 @@ var (
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []types.T {
-	switch types.UnwrapType(t) {
-	case types.BitArray:
+	// TODO(bram): speed this up.
+	typ := types.UnwrapType(t)
+	switch {
+	case types.BitArray.Identical(typ):
 		return bitArrayCastTypes
-	case types.Bool:
+	case types.Bool.Identical(typ):
 		return boolCastTypes
-	case types.Int:
+	case types.Int.Identical(typ):
 		return intCastTypes
-	case types.Float:
+	case types.Float.Identical(typ):
 		return floatCastTypes
-	case types.Decimal:
+	case types.Decimal.Identical(typ):
 		return decimalCastTypes
-	case types.String:
+	case types.String.Identical(typ):
 		return stringCastTypes
-	case types.Bytes:
+	case types.Bytes.Identical(typ):
 		return bytesCastTypes
-	case types.Date:
+	case types.Date.Identical(typ):
 		return dateCastTypes
-	case types.Time:
+	case types.Time.Identical(typ):
 		return timeCastTypes
-	case types.Timestamp, types.TimestampTZ:
+	case types.Timestamp.Identical(typ),
+		types.TimestampTZ.Identical(typ):
 		return timestampCastTypes
-	case types.Interval:
+	case types.Interval.Identical(typ):
 		return intervalCastTypes
-	case types.JSON:
+	case types.JSON.Identical(typ):
 		return jsonCastTypes
-	case types.UUID:
+	case types.UUID.Identical(typ):
 		return uuidCastTypes
-	case types.INet:
+	case types.INet.Identical(typ):
 		return inetCastTypes
-	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegProcedure, types.RegType:
+	case types.Oid.Identical(typ),
+		types.RegClass.Identical(typ),
+		types.RegNamespace.Identical(typ),
+		types.RegProc.Identical(typ),
+		types.RegProcedure.Identical(typ),
+		types.RegType.Identical(typ):
 		return oidCastTypes
 	default:
 		// TODO(eisen): currently dead -- there is no syntax yet for casting

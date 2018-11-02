@@ -139,7 +139,7 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
 func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
-	return typ == types.Unknown || c.colType(offset).Equivalent(typ)
+	return types.Unknown.Identical(typ) || c.colType(offset).Equivalent(typ)
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
@@ -625,13 +625,13 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	case *memo.VariableExpr:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
-		if c.colType(offset) == types.Bool && c.isIndexColumn(t, offset) {
+		if types.Bool.Identical(c.colType(offset)) && c.isIndexColumn(t, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolTrue, out)
 		}
 
 	case *memo.NotExpr:
 		// Support (NOT @1) as (@1 = FALSE) if @1 is boolean.
-		if c.colType(offset) == types.Bool && c.isIndexColumn(t.Input, offset) {
+		if types.Bool.Identical(c.colType(offset)) && c.isIndexColumn(t.Input, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolFalse, out)
 		}
 	}

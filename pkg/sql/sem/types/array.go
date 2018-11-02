@@ -19,26 +19,30 @@ import (
 )
 
 // TArray is the type of a DArray.
-type TArray struct{ Typ T }
+type TArray struct {
+	Typ T
+	_   [0][]byte // Prevents use of the == operator.
+}
+
+func makeTArray(typ T) TArray {
+	return TArray{
+		Typ: typ,
+	}
+}
 
 func (a TArray) String() string { return a.Typ.String() + "[]" }
 
-// Equivalent implements the T interface.
-func (a TArray) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	if u, ok := UnwrapType(other).(TArray); ok {
-		return a.Typ.Equivalent(u.Typ)
-	}
-	return false
+// Identical implements the T interface.
+func (a TArray) Identical(other T) bool {
+	u, ok := UnwrapType(other).(TArray)
+	return ok && a.Typ.Equivalent(u.Typ)
 }
 
 // FamilyEqual implements the T interface.
-func (TArray) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TArray)
-	return ok
-}
+func (TArray) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TArray); return ok }
+
+// Equivalent implements the T interface.
+func (a TArray) Equivalent(other T) bool { return a.Identical(other) || Any.Identical(other) }
 
 const noArrayType = 0
 

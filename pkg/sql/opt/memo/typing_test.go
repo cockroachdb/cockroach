@@ -124,11 +124,11 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 						continue
 					}
 
-					if op.LeftType == op2.LeftType && op.ReturnType != op2.ReturnType {
+					if op.LeftType.Identical(op2.LeftType) && !op.ReturnType.Identical(op2.ReturnType) {
 						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
 					}
 
-					if op.RightType == op2.RightType && op.ReturnType != op2.ReturnType {
+					if op.RightType.Identical(op2.RightType) && !op.ReturnType.Identical(op2.ReturnType) {
 						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
 					}
 				}
@@ -197,7 +197,7 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 			}
 
 			if name == "min" || name == "max" {
-				if retType != overload.Types.Types()[0] {
+				if !overload.Types.Types()[0].Identical(retType) {
 					t.Errorf("return type differs from arg type for %s: %+v", name, overload.Types.Types())
 				}
 			}

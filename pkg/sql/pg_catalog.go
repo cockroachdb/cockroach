@@ -2224,7 +2224,7 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 
 func typCategory(typ types.T) tree.Datum {
 	if typ.FamilyEqual(types.FamArray) {
-		if typ == types.AnyArray {
+		if types.AnyArray.Identical(typ) {
 			return typCategoryPseudo
 		}
 		return typCategoryArray

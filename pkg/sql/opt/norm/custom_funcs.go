@@ -131,7 +131,7 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp coltypes.T) bool 
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType() == types.String
+	return types.String.Identical(scalar.DataType())
 }
 
 // ColTypeToDatumType maps the given column type to a datum type.

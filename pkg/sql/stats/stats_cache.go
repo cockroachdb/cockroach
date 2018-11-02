@@ -241,8 +241,8 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 		{"histogram", histogramIndex, types.Bytes, true},
 	}
 	for _, v := range expectedTypes {
-		if datums[v.fieldIndex].ResolvedType() != v.expectedType &&
-			(!v.nullable || datums[v.fieldIndex].ResolvedType() != types.Unknown) {
+		if !datums[v.fieldIndex].ResolvedType().Identical(v.expectedType) &&
+			(!v.nullable || !types.Unknown.Identical(datums[v.fieldIndex].ResolvedType())) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}

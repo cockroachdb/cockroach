@@ -254,7 +254,7 @@ func (b *Builder) analyzeExtraArgument(
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {
-	if _, ok := e.ResolvedType().(types.TArray); ok || e.ResolvedType() == types.JSON {
+	if _, ok := e.ResolvedType().(types.TArray); ok || types.JSON.Identical(e.ResolvedType()) {
 		panic(unimplementedf("can't order by column type %s", e.ResolvedType()))
 	}
 }

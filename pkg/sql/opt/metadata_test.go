@@ -39,7 +39,7 @@ func TestMetadataColumns(t *testing.T) {
 	}
 
 	typ := md.ColumnType(colID)
-	if typ != types.Int {
+	if !types.Int.Identical(typ) {
 		t.Fatalf("unexpected column type: %s", typ)
 	}
 
@@ -59,7 +59,7 @@ func TestMetadataColumns(t *testing.T) {
 	}
 
 	typ = md.ColumnType(colID)
-	if typ != types.String {
+	if !types.String.Identical(typ) {
 		t.Fatalf("unexpected column type: %s", typ)
 	}
 

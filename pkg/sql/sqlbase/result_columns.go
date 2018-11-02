@@ -62,7 +62,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		// NULLs are considered equal because some types of queries (SELECT CASE,
 		// for example) can change their output types between a type and NULL based
 		// on input.
-		if other[i].Typ == types.Unknown {
+		if types.Unknown.Identical(other[i].Typ) {
 			continue
 		}
 		if !c.Typ.Equivalent(other[i].Typ) {

@@ -3492,7 +3492,8 @@ func DatumTypeSize(t types.T) (uintptr, bool) {
 	}
 
 	// All the primary types have fixed size information.
-	if bSzInfo, ok := baseDatumTypeSizes[t]; ok {
+	// TODO(bram): consider moving the sizes into the types directly.
+	if bSzInfo, ok := baseDatumTypeSizes[t.String()]; ok {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 
@@ -3504,26 +3505,26 @@ const (
 	variableSize = true
 )
 
-var baseDatumTypeSizes = map[types.T]struct {
+var baseDatumTypeSizes = map[string]struct {
 	sz       uintptr
 	variable bool
 }{
-	types.Unknown:     {unsafe.Sizeof(dNull{}), fixedSize},
-	types.Bool:        {unsafe.Sizeof(DBool(false)), fixedSize},
-	types.BitArray:    {unsafe.Sizeof(DBitArray{}), variableSize},
-	types.Int:         {unsafe.Sizeof(DInt(0)), fixedSize},
-	types.Float:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
-	types.Decimal:     {unsafe.Sizeof(DDecimal{}), variableSize},
-	types.String:      {unsafe.Sizeof(DString("")), variableSize},
-	types.Bytes:       {unsafe.Sizeof(DBytes("")), variableSize},
-	types.Date:        {unsafe.Sizeof(DDate(0)), fixedSize},
-	types.Time:        {unsafe.Sizeof(DTime(0)), fixedSize},
-	types.Timestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
-	types.TimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
-	types.Interval:    {unsafe.Sizeof(DInterval{}), fixedSize},
-	types.JSON:        {unsafe.Sizeof(DJSON{}), variableSize},
-	types.UUID:        {unsafe.Sizeof(DUuid{}), fixedSize},
-	types.INet:        {unsafe.Sizeof(DIPAddr{}), fixedSize},
+	types.Unknown.String():     {unsafe.Sizeof(dNull{}), fixedSize},
+	types.Bool.String():        {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.BitArray.String():    {unsafe.Sizeof(DBitArray{}), variableSize},
+	types.Int.String():         {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.Float.String():       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
+	types.Decimal.String():     {unsafe.Sizeof(DDecimal{}), variableSize},
+	types.String.String():      {unsafe.Sizeof(DString("")), variableSize},
+	types.Bytes.String():       {unsafe.Sizeof(DBytes("")), variableSize},
+	types.Date.String():        {unsafe.Sizeof(DDate(0)), fixedSize},
+	types.Time.String():        {unsafe.Sizeof(DTime(0)), fixedSize},
+	types.Timestamp.String():   {unsafe.Sizeof(DTimestamp{}), fixedSize},
+	types.TimestampTZ.String(): {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
+	types.Interval.String():    {unsafe.Sizeof(DInterval{}), fixedSize},
+	types.JSON.String():        {unsafe.Sizeof(DJSON{}), variableSize},
+	types.UUID.String():        {unsafe.Sizeof(DUuid{}), fixedSize},
+	types.INet.String():        {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
-	types.Any: {unsafe.Sizeof(DString("")), variableSize},
+	types.Any.String(): {unsafe.Sizeof(DString("")), variableSize},
 }

@@ -22,31 +22,27 @@ import (
 )
 
 var (
-	// Oid is the type of an OID. Can be compared with ==.
-	Oid = TOid{oid.T_oid}
-	// RegClass is the type of an regclass OID variant. Can be compared with ==.
-	RegClass = TOid{oid.T_regclass}
-	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
-	RegNamespace = TOid{oid.T_regnamespace}
-	// RegProc is the type of an regproc OID variant. Can be compared with ==.
-	RegProc = TOid{oid.T_regproc}
-	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
-	RegProcedure = TOid{oid.T_regprocedure}
-	// RegType is the type of an regtype OID variant. Can be compared with ==.
-	RegType = TOid{oid.T_regtype}
+	// Oid is the type of an OID.
+	Oid T = makeTOid(oid.T_oid)
+	// RegClass is the type of an regclass OID variant.
+	RegClass T = makeTOid(oid.T_regclass)
+	// RegNamespace is the type of an regnamespace OID variant.
+	RegNamespace T = makeTOid(oid.T_regnamespace)
+	// RegProc is the type of an regproc OID variant.
+	RegProc T = makeTOid(oid.T_regproc)
+	// RegProcedure is the type of an regprocedure OID variant.
+	RegProcedure T = makeTOid(oid.T_regprocedure)
+	// RegType is the type of an regtype OID variant.
+	RegType T = makeTOid(oid.T_regtype)
 
-	// Name is a type-alias for String with a different OID. Can be
-	// compared with ==.
+	// Name is a type-alias for String with a different OID.
 	Name = WrapTypeWithOid(String, oid.T_name)
-	// IntVector is a type-alias for an IntArray with a different OID. Can
-	// be compared with ==.
-	IntVector = WrapTypeWithOid(TArray{Int}, oid.T_int2vector)
-	// OidVector is a type-alias for an OidArray with a different OID. Can
-	// be compared with ==.
-	OidVector = WrapTypeWithOid(TArray{Oid}, oid.T_oidvector)
+	// IntVector is a type-alias for an IntArray with a different OID.
+	IntVector = WrapTypeWithOid(makeTArray(Int), oid.T_int2vector)
+	// OidVector is a type-alias for an OidArray with a different OID.
+	OidVector = WrapTypeWithOid(makeTArray(Oid), oid.T_oidvector)
 	// NameArray is the type family of a DArray containing the Name alias type.
-	// Can be compared with ==.
-	NameArray T = TArray{Name}
+	NameArray T = makeTArray(Name)
 )
 
 var (
@@ -65,53 +61,53 @@ var (
 // the map directly.
 var OidToType = map[oid.Oid]T{
 	oid.T_anyelement:   Any,
-	oid.T_anyarray:     TArray{Any},
+	oid.T_anyarray:     makeTArray(Any),
 	oid.T_bool:         Bool,
-	oid.T__bool:        TArray{Bool},
+	oid.T__bool:        makeTArray(Bool),
 	oid.T_bytea:        Bytes,
-	oid.T__bytea:       TArray{Bytes},
+	oid.T__bytea:       makeTArray(Bytes),
 	oid.T_date:         Date,
-	oid.T__date:        TArray{Date},
+	oid.T__date:        makeTArray(Date),
 	oid.T_time:         Time,
-	oid.T__time:        TArray{Time},
+	oid.T__time:        makeTArray(Time),
 	oid.T_float4:       typeFloat4,
-	oid.T__float4:      TArray{typeFloat4},
+	oid.T__float4:      makeTArray(typeFloat4),
 	oid.T_float8:       Float,
-	oid.T__float8:      TArray{Float},
+	oid.T__float8:      makeTArray(Float),
 	oid.T_int2:         typeInt2,
-	oid.T__int2:        TArray{typeInt2},
+	oid.T__int2:        makeTArray(typeInt2),
 	oid.T_int4:         typeInt4,
-	oid.T__int4:        TArray{typeInt4},
+	oid.T__int4:        makeTArray(typeInt4),
 	oid.T_int8:         Int,
-	oid.T__int8:        TArray{Int},
+	oid.T__int8:        makeTArray(Int),
 	oid.T_interval:     Interval,
-	oid.T__interval:    TArray{Interval},
+	oid.T__interval:    makeTArray(Interval),
 	oid.T_name:         Name,
-	oid.T__name:        TArray{Name},
+	oid.T__name:        makeTArray(Name),
 	oid.T_numeric:      Decimal,
-	oid.T__numeric:     TArray{Decimal},
+	oid.T__numeric:     makeTArray(Decimal),
 	oid.T_oid:          Oid,
-	oid.T__oid:         TArray{Oid},
+	oid.T__oid:         makeTArray(Oid),
 	oid.T_text:         String,
-	oid.T__text:        TArray{String},
+	oid.T__text:        makeTArray(String),
 	oid.T_timestamp:    Timestamp,
-	oid.T__timestamp:   TArray{Timestamp},
+	oid.T__timestamp:   makeTArray(Timestamp),
 	oid.T_timestamptz:  TimestampTZ,
-	oid.T__timestamptz: TArray{TimestampTZ},
+	oid.T__timestamptz: makeTArray(TimestampTZ),
 	oid.T_uuid:         UUID,
-	oid.T__uuid:        TArray{UUID},
+	oid.T__uuid:        makeTArray(UUID),
 	oid.T_inet:         INet,
-	oid.T__inet:        TArray{INet},
+	oid.T__inet:        makeTArray(INet),
 	oid.T_varchar:      typeVarChar,
-	oid.T__varchar:     TArray{typeVarChar},
+	oid.T__varchar:     makeTArray(typeVarChar),
 	oid.T_bpchar:       typeBpChar,
-	oid.T__bpchar:      TArray{typeBpChar},
+	oid.T__bpchar:      makeTArray(typeBpChar),
 	oid.T_char:         typeQChar,
-	oid.T__char:        TArray{typeQChar},
+	oid.T__char:        makeTArray(typeQChar),
 	oid.T_varbit:       BitArray,
-	oid.T__varbit:      TArray{BitArray},
+	oid.T__varbit:      makeTArray(BitArray),
 	oid.T_bit:          typeBit,
-	oid.T__bit:         TArray{typeBit},
+	oid.T__bit:         makeTArray(typeBit),
 	oid.T_jsonb:        JSON,
 	oid.T_int2vector:   IntVector,
 	oid.T_oidvector:    OidVector,
@@ -155,15 +151,25 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 // TOid represents an alias to the Int type with a different Postgres OID.
 type TOid struct {
 	oidType oid.Oid
+	_       [0][]byte // Prevents use of the == operator.
+}
+
+func makeTOid(oidType oid.Oid) TOid {
+	return TOid{
+		oidType: oidType,
+	}
 }
 
 func (t TOid) String() string { return t.SQLName() }
 
+// Identical implements the T interface.
+func (TOid) Identical(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
+
 // Equivalent implements the T interface.
-func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == Any }
+func (t TOid) Equivalent(other T) bool { return t.Identical(other) || Any.Identical(other) }
 
 // FamilyEqual implements the T interface.
-func (TOid) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
+func (t TOid) FamilyEqual(other T) bool { return t.Identical(other) }
 
 // Oid implements the T interface.
 func (t TOid) Oid() oid.Oid { return t.oidType }

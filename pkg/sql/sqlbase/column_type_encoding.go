@@ -181,8 +181,9 @@ func DecodeTableKey(
 	}
 	var rkey []byte
 	var err error
-	switch valType {
-	case types.BitArray:
+	// TODO(bram): Speed this up too.. ugh
+	switch {
+	case types.BitArray.Identical(valType):
 		var r bitarray.BitArray
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBitArrayAscending(key)
@@ -190,7 +191,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBitArrayDescending(key)
 		}
 		return a.NewDBitArray(tree.DBitArray{BitArray: r}), rkey, err
-	case types.Bool:
+	case types.Bool.Identical(valType):
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -200,7 +201,7 @@ func DecodeTableKey(
 		// No need to chunk allocate DBool as MakeDBool returns either
 		// tree.DBoolTrue or tree.DBoolFalse.
 		return tree.MakeDBool(tree.DBool(i != 0)), rkey, err
-	case types.Int:
+	case types.Int.Identical(valType):
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -208,7 +209,7 @@ func DecodeTableKey(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDInt(tree.DInt(i)), rkey, err
-	case types.Float:
+	case types.Float.Identical(valType):
 		var f float64
 		if dir == encoding.Ascending {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
@@ -216,7 +217,7 @@ func DecodeTableKey(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		return a.NewDFloat(tree.DFloat(f)), rkey, err
-	case types.Decimal:
+	case types.Decimal.Identical(valType):
 		var d apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
@@ -225,7 +226,7 @@ func DecodeTableKey(
 		}
 		dd := a.NewDDecimal(tree.DDecimal{Decimal: d})
 		return dd, rkey, err
-	case types.String:
+	case types.String.Identical(valType):
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
@@ -233,7 +234,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDString(tree.DString(r)), rkey, err
-	case types.Name:
+	case types.Name.Identical(valType):
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
@@ -241,9 +242,9 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDName(tree.DString(r)), rkey, err
-	case types.JSON:
+	case types.JSON.Identical(valType):
 		return tree.DNull, []byte{}, nil
-	case types.Bytes:
+	case types.Bytes.Identical(valType):
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -251,7 +252,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
-	case types.Date:
+	case types.Date.Identical(valType):
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -259,7 +260,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDDate(tree.DDate(t)), rkey, err
-	case types.Time:
+	case types.Time.Identical(valType):
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -267,7 +268,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDTime(tree.DTime(t)), rkey, err
-	case types.Timestamp:
+	case types.Timestamp.Identical(valType):
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -275,7 +276,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: t}), rkey, err
-	case types.TimestampTZ:
+	case types.TimestampTZ.Identical(valType):
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -283,7 +284,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: t}), rkey, err
-	case types.Interval:
+	case types.Interval.Identical(valType):
 		var d duration.Duration
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
@@ -291,7 +292,7 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(tree.DInterval{Duration: d}), rkey, err
-	case types.UUID:
+	case types.UUID.Identical(valType):
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -303,7 +304,7 @@ func DecodeTableKey(
 		}
 		u, err := uuid.FromBytes(r)
 		return a.NewDUuid(tree.DUuid{UUID: u}), rkey, err
-	case types.INet:
+	case types.INet.Identical(valType):
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -316,7 +317,7 @@ func DecodeTableKey(
 		var ipAddr ipaddr.IPAddr
 		_, err := ipAddr.FromBuffer(r)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), rkey, err
-	case types.Oid:
+	case types.Oid.Identical(valType):
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -417,7 +418,7 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 		return tree.DNull, b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valType != types.Bool {
+	if !types.Bool.Identical(valType) {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatum(a, valType, b)
@@ -432,23 +433,25 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []byte, error) {
-	switch t {
-	case types.Int:
+	// TODO(bram): speed this up too.
+	switch {
+	case types.Int.Identical(t):
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDInt(tree.DInt(i)), b, nil
-	case types.String, types.Name:
+	case types.String.Identical(t),
+		types.Name.Identical(t):
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDString(tree.DString(data)), b, nil
-	case types.BitArray:
+	case types.BitArray.Identical(t):
 		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
 		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
-	case types.Bool:
+	case types.Bool.Identical(t):
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
@@ -456,58 +459,58 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return tree.MakeDBool(tree.DBool(data)), b, nil
-	case types.Float:
+	case types.Float.Identical(t):
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDFloat(tree.DFloat(data)), b, nil
-	case types.Decimal:
+	case types.Decimal.Identical(t):
 		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDecimal(tree.DDecimal{Decimal: data}), b, nil
-	case types.Bytes:
+	case types.Bytes.Identical(t):
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDBytes(tree.DBytes(data)), b, nil
-	case types.Date:
+	case types.Date.Identical(t):
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDate(tree.DDate(data)), b, nil
-	case types.Time:
+	case types.Time.Identical(t):
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTime(tree.DTime(data)), b, nil
-	case types.Timestamp:
+	case types.Timestamp.Identical(t):
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: data}), b, nil
-	case types.TimestampTZ:
+	case types.TimestampTZ.Identical(t):
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: data}), b, nil
-	case types.Interval:
+	case types.Interval.Identical(t):
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
 		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
-	case types.UUID:
+	case types.UUID.Identical(t):
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
-	case types.INet:
+	case types.INet.Identical(t):
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
-	case types.JSON:
+	case types.JSON.Identical(t):
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
@@ -517,7 +520,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
-	case types.Oid:
+	case types.Oid.Identical(t):
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	default:
@@ -1047,33 +1050,37 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
 func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
-	switch t {
-	case types.Int:
+	// TODO(bram): Speed this up.
+	switch {
+	case types.Int.Identical(t):
 		return encoding.Int, nil
-	case types.Oid:
+	case types.Oid.Identical(t):
 		return encoding.Int, nil
-	case types.Float:
+	case types.Float.Identical(t):
 		return encoding.Float, nil
-	case types.Decimal:
+	case types.Decimal.Identical(t):
 		return encoding.Decimal, nil
-	case types.Bytes, types.String, types.Name:
+	case types.Bytes.Identical(t),
+		types.String.Identical(t),
+		types.Name.Identical(t):
 		return encoding.Bytes, nil
-	case types.Timestamp, types.TimestampTZ:
+	case types.Timestamp.Identical(t),
+		types.TimestampTZ.Identical(t):
 		return encoding.Time, nil
-	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
+	// Note.Identical(t): types.Date was incorrectly mapped to encoding.Time when arrays were
 	// first introduced. If any 1.1 users used date arrays, they would have been
 	// persisted with incorrect elementType values.
-	case types.Date, types.Time:
+	case types.Date.Identical(t), types.Time.Identical(t):
 		return encoding.Int, nil
-	case types.Interval:
+	case types.Interval.Identical(t):
 		return encoding.Duration, nil
-	case types.Bool:
+	case types.Bool.Identical(t):
 		return encoding.True, nil
-	case types.BitArray:
+	case types.BitArray.Identical(t):
 		return encoding.BitArray, nil
-	case types.UUID:
+	case types.UUID.Identical(t):
 		return encoding.UUID, nil
-	case types.INet:
+	case types.INet.Identical(t):
 		return encoding.IPAddr, nil
 	default:
 		if t.FamilyEqual(types.FamCollatedString) {

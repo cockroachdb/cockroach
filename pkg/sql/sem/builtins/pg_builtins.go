@@ -97,7 +97,10 @@ func initPGBuiltins() {
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
 		// Skip array types. We're doing them separately below.
-		if typ != types.Any && typ != types.IntVector && typ != types.OidVector && typ.Equivalent(types.AnyArray) {
+		if !types.Any.Identical(typ) &&
+			!types.IntVector.Identical(typ) &&
+			!types.OidVector.Identical(typ) &&
+			types.AnyArray.Identical(typ) {
 			continue
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
@@ -114,7 +117,14 @@ func initPGBuiltins() {
 	}
 
 	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+	// TODO(bram): make sure this is right.
+	for _, typ := range []types.TOid{
+		types.RegType.(types.TOid),
+		types.RegProc.(types.TOid),
+		types.RegProcedure.(types.TOid),
+		types.RegClass.(types.TOid),
+		types.RegNamespace.(types.TOid),
+	} {
 		typName := typ.SQLName()
 		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}
@@ -199,13 +209,13 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err = ctx.InternalExecutor.QueryRow(
 				ctx.Ctx(), "pg_get_indexdef",
 				ctx.Txn,
-				`SELECT ischema.column_name as pg_get_indexdef 
-		               FROM information_schema.statistics AS ischema 
-											INNER JOIN pg_catalog.pg_indexes AS pgindex 
-													ON ischema.table_schema = pgindex.schemaname 
-													AND ischema.table_name = pgindex.tablename 
-													AND ischema.index_name = pgindex.indexname 
-													AND pgindex.crdb_oid = $1 
+				`SELECT ischema.column_name as pg_get_indexdef
+		               FROM information_schema.statistics AS ischema
+											INNER JOIN pg_catalog.pg_indexes AS pgindex
+													ON ischema.table_schema = pgindex.schemaname
+													AND ischema.table_name = pgindex.tablename
+													AND ischema.index_name = pgindex.indexname
+													AND pgindex.crdb_oid = $1
 													AND ischema.seq_in_index = $2`, args[0], args[1])
 			if err != nil {
 				return nil, err

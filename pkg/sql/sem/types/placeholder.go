@@ -23,21 +23,21 @@ import (
 // TPlaceholder is the type of a placeholder.
 type TPlaceholder struct {
 	Name string
+	_    [0][]byte // Prevents use of the == operator.
 }
 
 // String implements the fmt.Stringer interface.
 func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.Name) }
 
-// Equivalent implements the T interface.
-func (t TPlaceholder) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	if other.IsAmbiguous() {
-		return true
-	}
+// Identical implements the T interface.
+func (t TPlaceholder) Identical(other T) bool {
 	u, ok := UnwrapType(other).(TPlaceholder)
 	return ok && t.Name == u.Name
+}
+
+// Equivalent implements the T interface.
+func (t TPlaceholder) Equivalent(other T) bool {
+	return other.IsAmbiguous() || Any.Identical(other) || t.Identical(other)
 }
 
 // FamilyEqual implements the T interface.

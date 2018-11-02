@@ -102,7 +102,7 @@ func TestFuncNull(t *testing.T) {
 					}
 					if typ.FamilyEqual(types.FamArray) {
 						hasArray = true
-						if typ == types.AnyArray {
+						if types.AnyArray.Identical(typ) {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::STRING[]")
 						} else {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::%s", typ)

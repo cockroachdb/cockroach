@@ -77,7 +77,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.typ.Equivalent(r.typ) || l.typ == types.Unknown || r.typ == types.Unknown) {
+		if !(l.typ.Equivalent(r.typ) || types.Unknown.Identical(l.typ) || types.Unknown.Identical(r.typ)) {
 			panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ)})
 		}
@@ -88,7 +88,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 
 		if newColsNeeded {
 			var typ types.T
-			if l.typ != types.Unknown {
+			if !types.Unknown.Identical(l.typ) {
 				typ = l.typ
 			} else {
 				typ = r.typ

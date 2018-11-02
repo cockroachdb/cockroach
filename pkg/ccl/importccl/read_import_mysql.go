@@ -178,12 +178,13 @@ func mysqlValueToDatum(
 			// https://github.com/cockroachdb/cockroach/issues/29298
 
 			if strings.HasPrefix(s, zeroYear) {
-				switch desired {
-				case types.TimestampTZ, types.Timestamp:
+				// TODO(bram): Speed this up.
+				switch {
+				case types.TimestampTZ.Identical(desired), types.Timestamp.Identical(desired):
 					if s == zeroTime {
 						return tree.DNull, nil
 					}
-				case types.Date:
+				case types.Date.Identical(desired):
 					if s == zeroDate {
 						return tree.DNull, nil
 					}

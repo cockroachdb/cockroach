@@ -87,12 +87,19 @@ const (
 )
 
 func categorizeType(t types.T) string {
-	switch t {
-	case types.Date, types.Interval, types.Timestamp, types.TimestampTZ:
+	// TODO(bram): speed this up?
+	switch {
+	case types.Date.Identical(t),
+		types.Interval.Identical(t),
+		types.Timestamp.Identical(t),
+		types.TimestampTZ.Identical(t):
 		return categoryDateAndTime
-	case types.Int, types.Decimal, types.Float:
+	case types.Int.Identical(t),
+		types.Decimal.Identical(t),
+		types.Float.Identical(t):
 		return categoryMath
-	case types.String, types.Bytes:
+	case types.String.Identical(t),
+		types.Bytes.Identical(t):
 		return categoryString
 	default:
 		return strings.ToUpper(t.String())

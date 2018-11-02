@@ -494,46 +494,52 @@ func (c *ColumnType) FloatProperties() (int32, int32) {
 // used to derive the semantic type of array elements and the
 // determination of DatumTypeHasCompositeKeyEncoding().
 func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
-	switch ptyp {
-	case types.BitArray:
+	// TODO(bram): Speed this up too.
+	switch {
+	case types.BitArray.Identical(ptyp):
 		return ColumnType_BIT, nil
-	case types.Bool:
+	case types.Bool.Identical(ptyp):
 		return ColumnType_BOOL, nil
-	case types.Int:
+	case types.Int.Identical(ptyp):
 		return ColumnType_INT, nil
-	case types.Float:
+	case types.Float.Identical(ptyp):
 		return ColumnType_FLOAT, nil
-	case types.Decimal:
+	case types.Decimal.Identical(ptyp):
 		return ColumnType_DECIMAL, nil
-	case types.Bytes:
+	case types.Bytes.Identical(ptyp):
 		return ColumnType_BYTES, nil
-	case types.String:
+	case types.String.Identical(ptyp):
 		return ColumnType_STRING, nil
-	case types.Name:
+	case types.Name.Identical(ptyp):
 		return ColumnType_NAME, nil
-	case types.Date:
+	case types.Date.Identical(ptyp):
 		return ColumnType_DATE, nil
-	case types.Time:
+	case types.Time.Identical(ptyp):
 		return ColumnType_TIME, nil
-	case types.Timestamp:
+	case types.Timestamp.Identical(ptyp):
 		return ColumnType_TIMESTAMP, nil
-	case types.TimestampTZ:
+	case types.TimestampTZ.Identical(ptyp):
 		return ColumnType_TIMESTAMPTZ, nil
-	case types.Interval:
+	case types.Interval.Identical(ptyp):
 		return ColumnType_INTERVAL, nil
-	case types.UUID:
+	case types.UUID.Identical(ptyp):
 		return ColumnType_UUID, nil
-	case types.INet:
+	case types.INet.Identical(ptyp):
 		return ColumnType_INET, nil
-	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegType, types.RegProcedure:
+	case types.Oid.Identical(ptyp),
+		types.RegClass.Identical(ptyp),
+		types.RegNamespace.Identical(ptyp),
+		types.RegProc.Identical(ptyp),
+		types.RegType.Identical(ptyp),
+		types.RegProcedure.Identical(ptyp):
 		return ColumnType_OID, nil
-	case types.Unknown:
+	case types.Unknown.Identical(ptyp):
 		return ColumnType_NULL, nil
-	case types.IntVector:
+	case types.IntVector.Identical(ptyp):
 		return ColumnType_INT2VECTOR, nil
-	case types.OidVector:
+	case types.OidVector.Identical(ptyp):
 		return ColumnType_OIDVECTOR, nil
-	case types.JSON:
+	case types.JSON.Identical(ptyp):
 		return ColumnType_JSONB, nil
 	default:
 		if ptyp.FamilyEqual(types.FamCollatedString) {
@@ -737,7 +743,7 @@ func (c *ColumnType) elementColumnType() *ColumnType {
 func CheckDatumTypeFitsColumnType(
 	col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo,
 ) error {
-	if typ == types.Unknown {
+	if types.Unknown.Identical(typ) {
 		return nil
 	}
 	// If the value is a placeholder, then the column check above has
