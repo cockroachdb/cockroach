@@ -202,6 +202,7 @@ func (p *planner) getTableScanByRef(
 		txn:         p.txn,
 		avoidCached: p.avoidCachedDescriptors,
 	},
+		false, /*requireMutable*/
 	}
 	desc, err := p.Tables().getTableVersionByID(ctx, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
