@@ -709,7 +709,7 @@ COMMIT
 query TTBTTTB
 SHOW COLUMNS FROM customers
 ----
-k  CHAR  false  NULL  ·  {"primary"}  false
+k  CHAR  false  NULL  ·  {primary}  false
 
 query error pq: index "j_idx" not found
 SELECT * FROM customers@j_idx

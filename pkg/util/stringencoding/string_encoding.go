@@ -41,8 +41,6 @@ var (
 	HexMap [256][]byte
 	// RawHexMap is a mapping from each byte to the `%%` hex form as a []byte.
 	RawHexMap [256][]byte
-	// OctalMap is a mapping from each byte to the `\%%%` octal form as a []byte.
-	OctalMap [256][]byte
 )
 
 func init() {
@@ -80,46 +78,6 @@ func init() {
 	for i := 0; i < 256; i++ {
 		HexMap[i] = underlyingHexBytes[i*4 : i*4+4]
 		RawHexMap[i] = underlyingHexBytes[i*4+2 : i*4+4]
-	}
-
-	// underlyingOctalMap contains the string "\000\001\002..." which OctalMap
-	// then indexes into.
-	var underlyingOctalMap bytes.Buffer
-	underlyingOctalMap.Grow(1024)
-
-	for i := 0; i < 256; i++ {
-		underlyingOctalMap.WriteByte('\\')
-		writeHexDigit(&underlyingOctalMap, i/64)
-		writeHexDigit(&underlyingOctalMap, (i/8)%8)
-		writeHexDigit(&underlyingOctalMap, i%8)
-	}
-
-	underlyingOctalBytes := underlyingOctalMap.Bytes()
-
-	for i := 0; i < 256; i++ {
-		OctalMap[i] = underlyingOctalBytes[i*4 : i*4+4]
-	}
-}
-
-// EncodeChar is used internally to write out a character from
-// a larger string to a buffer.
-func EncodeChar(buf *bytes.Buffer, entireString string, currentRune rune, currentIdx int) {
-	ln := utf8.RuneLen(currentRune)
-	if currentRune == utf8.RuneError {
-		// Errors are due to invalid unicode points, so escape the bytes.
-		// Make sure this is run at least once in case ln == -1.
-		buf.Write(OctalMap[entireString[currentIdx]])
-		for ri := 1; ri < ln; ri++ {
-			buf.Write(OctalMap[entireString[currentIdx+ri]])
-		}
-	} else if ln == 1 {
-		// Escape non-printable characters.
-		buf.Write(OctalMap[byte(currentRune)])
-	} else if ln == 2 {
-		// For multi-byte runes, print them based on their width.
-		fmt.Fprintf(buf, `\u%04X`, currentRune)
-	} else {
-		fmt.Fprintf(buf, `\U%08X`, currentRune)
 	}
 }
 

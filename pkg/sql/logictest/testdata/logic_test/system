@@ -80,88 +80,88 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 query TTBTTTB
 SHOW COLUMNS FROM system.namespace
 ----
-parentID  INT     false  NULL  ·  {"primary"}  false
-name      STRING  false  NULL  ·  {"primary"}  false
-id        INT     true   NULL  ·  {}           false
+parentID  INT     false  NULL  ·  {primary}  false
+name      STRING  false  NULL  ·  {primary}  false
+id        INT     true   NULL  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.descriptor
 ----
-id          INT    false  NULL  ·  {"primary"}  false
-descriptor  BYTES  true   NULL  ·  {}           false
+id          INT    false  NULL  ·  {primary}  false
+descriptor  BYTES  true   NULL  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {"primary"}  false
-hashedPassword  BYTES   true   NULL   ·  {}           false
-isRole          BOOL    false  false  ·  {}           false
+username        STRING  false  NULL   ·  {primary}  false
+hashedPassword  BYTES   true   NULL   ·  {}         false
+isRole          BOOL    false  false  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
 ----
-id      INT    false  NULL  ·  {"primary"}  false
-config  BYTES  true   NULL  ·  {}           false
+id      INT    false  NULL  ·  {primary}  false
+config  BYTES  true   NULL  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.lease
 ----
-descID      INT        false  NULL  ·  {"primary"}  false
-version     INT        false  NULL  ·  {"primary"}  false
-nodeID      INT        false  NULL  ·  {"primary"}  false
-expiration  TIMESTAMP  false  NULL  ·  {"primary"}  false
+descID      INT        false  NULL  ·  {primary}  false
+version     INT        false  NULL  ·  {primary}  false
+nodeID      INT        false  NULL  ·  {primary}  false
+expiration  TIMESTAMP  false  NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.eventlog
 ----
-timestamp    TIMESTAMP  false  NULL       ·  {"primary"}  false
-eventType    STRING     false  NULL       ·  {}           false
-targetID     INT        false  NULL       ·  {}           false
-reportingID  INT        false  NULL       ·  {}           false
-info         STRING     true   NULL       ·  {}           false
-uniqueID     BYTES      false  uuid_v4()  ·  {"primary"}  false
+timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
+eventType    STRING     false  NULL       ·  {}         false
+targetID     INT        false  NULL       ·  {}         false
+reportingID  INT        false  NULL       ·  {}         false
+info         STRING     true   NULL       ·  {}         false
+uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.rangelog
 ----
-timestamp     TIMESTAMP  false  NULL            ·  {"primary"}  false
-rangeID       INT        false  NULL            ·  {}           false
-storeID       INT        false  NULL            ·  {}           false
-eventType     STRING     false  NULL            ·  {}           false
-otherRangeID  INT        true   NULL            ·  {}           false
-info          STRING     true   NULL            ·  {}           false
-uniqueID      INT        false  unique_rowid()  ·  {"primary"}  false
+timestamp     TIMESTAMP  false  NULL            ·  {primary}  false
+rangeID       INT        false  NULL            ·  {}         false
+storeID       INT        false  NULL            ·  {}         false
+eventType     STRING     false  NULL            ·  {}         false
+otherRangeID  INT        true   NULL            ·  {}         false
+info          STRING     true   NULL            ·  {}         false
+uniqueID      INT        false  unique_rowid()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.ui
 ----
-key          STRING     false  NULL  ·  {"primary"}  false
-value        BYTES      true   NULL  ·  {}           false
-lastUpdated  TIMESTAMP  false  NULL  ·  {}           false
+key          STRING     false  NULL  ·  {primary}  false
+value        BYTES      true   NULL  ·  {}         false
+lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id        INT        false  unique_rowid()     ·  {"primary","jobs_status_created_idx"}  false
-status    STRING     false  NULL               ·  {"jobs_status_created_idx"}            false
-created   TIMESTAMP  false  now():::TIMESTAMP  ·  {"jobs_status_created_idx"}            false
-payload   BYTES      false  NULL               ·  {}                                     false
-progress  BYTES      true   NULL               ·  {}                                     false
+id        INT        false  unique_rowid()     ·  {primary,jobs_status_created_idx}  false
+status    STRING     false  NULL               ·  {jobs_status_created_idx}          false
+created   TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}          false
+payload   BYTES      false  NULL               ·  {}                                 false
+progress  BYTES      true   NULL               ·  {}                                 false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
-name         STRING     false  NULL               ·  {"primary"}  false
-value        STRING     false  NULL               ·  {}           false
-lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}           false
-valueType    STRING     true   NULL               ·  {}           false
+name         STRING     false  NULL               ·  {primary}  false
+value        STRING     false  NULL               ·  {}         false
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}         false
+valueType    STRING     true   NULL               ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
-role     STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}  false
-member   STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}  false
-isAdmin  BOOL    false  NULL  ·  {}                                                             false
+role     STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
+member   STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
+isAdmin  BOOL    false  NULL  ·  {}                                                       false
 
 
 # Verify default privileges on system tables.

@@ -61,7 +61,7 @@ eval
 eval
 (1,array['a','b"c'])::string
 ----
-e'(1,"{""a"",""b\\\\""c""}")'
+e'(1,"{a,""b\\\\""c""}")'
 
 eval
 ARRAY[1,2,3]::string
