@@ -123,17 +123,7 @@ func (p *planner) createDescriptorWithID(
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	isTable := false
-	var mutDesc *sqlbase.MutableTableDescriptor
-	switch d := descriptor.(type) {
-	case *sqlbase.MutableTableDescriptor:
-		mutDesc = d
-		isTable = true
-	case *sqlbase.TableDescriptor:
-		mutDesc = NewMutableTableDescriptor(*d, sqlbase.TableDescriptor{})
-		isTable = true
-	}
-
+	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
 		if err := mutDesc.ValidateTable(st); err != nil {
 			return err

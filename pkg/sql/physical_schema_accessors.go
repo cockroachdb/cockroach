@@ -140,6 +140,9 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// descriptor during the drain phase for the name. Do not
 			// return a descriptor during draining.
 			if nameMatchesTable(desc, dbDesc.ID, name.Table()) {
+				if flags.requireMutable {
+					return NewMutableExistingTableDescriptor(*desc), dbDesc, nil
+				}
 				return desc, dbDesc, nil
 			}
 		}
@@ -194,5 +197,18 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
 ) (ObjectDescriptor, *DatabaseDescriptor, error) {
-	return a.tc.getTableVersion(flags.ctx, name, flags)
+	if flags.requireMutable {
+		table, db, err := a.tc.getMutableTableDescriptor(flags.ctx, name, flags)
+		if table == nil {
+			// return nil interface.
+			return nil, db, err
+		}
+		return table, db, err
+	}
+	table, db, err := a.tc.getTableVersion(flags.ctx, name, flags)
+	if table == nil {
+		// return nil interface.
+		return nil, db, err
+	}
+	return table, db, err
 }

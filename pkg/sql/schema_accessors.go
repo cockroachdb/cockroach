@@ -127,4 +127,6 @@ type DatabaseListFlags struct {
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
+	// return a MutableTableDeescriptor
+	requireMutable bool
 }

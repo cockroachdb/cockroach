@@ -183,6 +183,56 @@ type dbCacheSubscriber interface {
 	waitForCacheState(cond func(*databaseCache) bool)
 }
 
+// getMutableTableDescriptor returns a mutable table descriptor.
+//
+// If flags.required is false, getMutableTableDescriptor() will gracefully
+// return a nil descriptor and no error if the table does not exist.
+//
+func (tc *TableCollection) getMutableTableDescriptor(
+	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
+) (*sqlbase.MutableTableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+	if log.V(2) {
+		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
+	}
+
+	if tn.SchemaName != tree.PublicSchemaName {
+		if flags.required {
+			return nil, nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
+		}
+		return nil, nil, nil
+	}
+
+	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
+	if refuseFurtherLookup || err != nil {
+		return nil, nil, err
+	}
+
+	if dbID == 0 {
+		// Resolve the database from the database cache when the transaction
+		// hasn't modified the database.
+		dbID, err = tc.databaseCache.getDatabaseID(ctx,
+			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
+		if err != nil || dbID == 0 {
+			// dbID can still be 0 if required is false and the database is not found.
+			return nil, nil, err
+		}
+	}
+
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
+		return nil, nil, err
+	} else if table != nil {
+		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
+		return table, nil, nil
+	}
+
+	phyAccessor := UncachedPhysicalAccessor{}
+	obj, db, err := phyAccessor.GetObjectDesc(tn, flags)
+	if obj == nil {
+		return nil, db, err
+	}
+	return obj.(*sqlbase.MutableTableDescriptor), db, err
+}
+
 // getTableVersion returns a table descriptor with a version suitable for
 // the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
 // The table must be released by calling tc.releaseTables().
@@ -196,7 +246,7 @@ type dbCacheSubscriber interface {
 //
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
-) (ObjectDescriptor, *sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
@@ -247,12 +297,20 @@ func (tc *TableCollection) getTableVersion(
 		}
 
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
-		return table, nil, nil
+		return table.TableDesc(), nil, nil
 	}
 
-	phyAccessor := UncachedPhysicalAccessor{}
+	readTableFromStore := func() (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+		phyAccessor := UncachedPhysicalAccessor{}
+		obj, db, err := phyAccessor.GetObjectDesc(tn, flags)
+		if obj == nil {
+			return nil, db, err
+		}
+		return obj.(*sqlbase.TableDescriptor), db, err
+	}
+
 	if avoidCache {
-		return phyAccessor.GetObjectDesc(tn, flags)
+		return readTableFromStore()
 	}
 
 	// First, look to see if we already have the table.
@@ -274,7 +332,7 @@ func (tc *TableCollection) getTableVersion(
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
 		if err == errTableDropped || err == sqlbase.ErrDescriptorNotFound {
-			return phyAccessor.GetObjectDesc(tn, flags)
+			return readTableFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
@@ -376,7 +434,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return NewMutableTableDescriptor(*table, *table), nil
+	return NewMutableExistingTableDescriptor(*table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {

@@ -43,7 +43,7 @@ type SchemaResolver interface {
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(ctx context.Context, required bool) CommonLookupFlags
-	ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags
+	ObjectLookupFlags(ctx context.Context, required bool, requireMutable bool) ObjectLookupFlags
 	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error)
 }
 
@@ -126,7 +126,7 @@ func resolveExistingObjectImpl(
 	requiredMutable bool,
 	requiredType requiredType,
 ) (res tree.NameResolutionResult, err error) {
-	found, descI, err := tn.ResolveExisting(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tn.ResolveExisting(ctx, sc, requiredMutable, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -154,11 +154,7 @@ func resolveExistingObjectImpl(
 	}
 
 	if requiredMutable {
-		if mutDesc, ok := descI.(*MutableTableDescriptor); ok {
-			return mutDesc, nil
-		}
-		tbl := *descI.(*TableDescriptor)
-		return NewMutableTableDescriptor(tbl, tbl), nil
+		return descI.(*MutableTableDescriptor), nil
 	}
 
 	return obj.TableDesc(), nil
@@ -191,10 +187,7 @@ type resolveFlags struct {
 func (p *planner) ResolveMutableTableDescriptor(
 	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
 ) (table *MutableTableDescriptor, err error) {
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		table, err = ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
-	})
-	return table, err
+	return ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
@@ -273,11 +266,11 @@ func (p *planner) LookupSchema(
 
 // LookupObject implements the tree.TableNameExistingResolver interface.
 func (p *planner) LookupObject(
-	ctx context.Context, dbName, scName, tbName string,
+	ctx context.Context, requireMutable bool, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	sc := p.LogicalSchemaAccessor()
 	p.tableName = tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
-	objDesc, _, err := sc.GetObjectDesc(&p.tableName, p.ObjectLookupFlags(ctx, false /*required*/))
+	objDesc, _, err := sc.GetObjectDesc(&p.tableName, p.ObjectLookupFlags(ctx, false /*required*/, requireMutable))
 	return objDesc != nil, objDesc, err
 }
 
@@ -290,9 +283,12 @@ func (p *planner) CommonLookupFlags(ctx context.Context, required bool) CommonLo
 	}
 }
 
-func (p *planner) ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags {
+func (p *planner) ObjectLookupFlags(
+	ctx context.Context, required, requireMutable bool,
+) ObjectLookupFlags {
 	return ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(ctx, required),
+		requireMutable:    requireMutable,
 	}
 }
 
@@ -387,8 +383,6 @@ func findTableContainingIndex(
 	}
 
 	result = nil
-	tblLookupFlags := ObjectLookupFlags{CommonLookupFlags: lookupFlags}
-	tblLookupFlags.required = false
 	for i := range tns {
 		tn := &tns[i]
 		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn, true, anyDescType)
@@ -580,14 +574,18 @@ var _ SchemaResolver = &fkSelfResolver{}
 
 // LookupObject implements the tree.TableNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
-	ctx context.Context, dbName, scName, tbName string,
+	ctx context.Context, requireMutable bool, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	if dbName == r.newTableName.Catalog() &&
 		scName == r.newTableName.Schema() &&
 		tbName == r.newTableName.Table() {
-		return true, r.newTableDesc, nil
+		table := r.newTableDesc
+		if requireMutable {
+			return true, NewMutableExistingTableDescriptor(*table), nil
+		}
+		return true, table, nil
 	}
-	return r.SchemaResolver.LookupObject(ctx, dbName, scName, tbName)
+	return r.SchemaResolver.LookupObject(ctx, requireMutable, dbName, scName, tbName)
 }
 
 // internalLookupCtx can be used in contexts where all descriptors
