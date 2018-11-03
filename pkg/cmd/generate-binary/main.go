@@ -84,11 +84,11 @@ func main() {
 		sql := fmt.Sprintf("SELECT %s", expr)
 		text, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatText)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("text: %s: %v", sql, err)
 		}
 		binary, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatBinary)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("binary: %s: %v", sql, err)
 		}
 		data = append(data, entry{
 			SQL:    expr,
