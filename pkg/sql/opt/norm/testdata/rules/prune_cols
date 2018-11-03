@@ -1548,7 +1548,7 @@ EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
 explain
  ├── columns: tree:6(string) field:7(string) description:8(string)
  └── project
-      ├── columns: a:1(int!null)
+      ├── columns: a:1(int!null)  [hidden: c:3(int!null)]
       ├── key: (1)
       ├── fd: (1)-->(3), (3)-->(1)
       ├── ordering: +3

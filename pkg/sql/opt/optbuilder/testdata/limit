@@ -134,7 +134,7 @@ build
 SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 limit
- ├── columns: sum:4(decimal)
+ ├── columns: sum:4(decimal)  [hidden: v:2(int)]
  ├── internal-ordering: -2
  ├── ordering: -2
  ├── project

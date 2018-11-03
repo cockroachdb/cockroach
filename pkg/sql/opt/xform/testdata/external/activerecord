@@ -201,7 +201,7 @@ AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum
 ----
 sort
- ├── columns: attname:2(string!null) format_type:65(string) pg_get_expr:66(string) attnotnull:13(bool!null) atttypid:3(oid!null) atttypmod:9(int!null) collname:67(string) comment:68(string)
+ ├── columns: attname:2(string!null) format_type:65(string) pg_get_expr:66(string) attnotnull:13(bool!null) atttypid:3(oid!null) atttypmod:9(int!null) collname:67(string) comment:68(string)  [hidden: attnum:6(int!null)]
  ├── fd: (3,9)-->(65)
  ├── ordering: +6
  └── project
