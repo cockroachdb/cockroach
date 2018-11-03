@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -170,12 +171,18 @@ func (r *Replica) AdminSplit(
 		}
 
 		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
-		switch errors.Cause(lastErr).(type) {
-		case *roachpb.ConditionFailedError:
-		case *roachpb.AmbiguousResultError:
-		default:
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
+		// the command with the updated descriptor.
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
 			return reply, roachpb.NewError(lastErr)
 		}
 	}
@@ -375,7 +382,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			err = errors.Wrap(err, msg)
+			// NB: we have to wrap the existing error here as consumers of this
+			// code look at the root cause to sniff out the changed descriptor.
+			err = &benignError{errors.Wrap(err, msg)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -647,6 +656,7 @@ func waitForReplicasInit(
 }
 
 type snapshotError struct {
+	// NB: don't implement Cause() on this type without also updating IsSnapshotError.
 	cause error
 }
 
@@ -657,8 +667,10 @@ func (s *snapshotError) Error() string {
 // IsSnapshotError returns true iff the error indicates a preemptive
 // snapshot failed.
 func IsSnapshotError(err error) bool {
-	_, ok := err.(*snapshotError)
-	return ok
+	return causer.Visit(err, func(err error) bool {
+		_, ok := errors.Cause(err).(*snapshotError)
+		return ok
+	})
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
@@ -913,7 +925,7 @@ func (r *Replica) changeReplicas(
 	}); err != nil {
 		log.Event(ctx, err.Error())
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			return errors.Wrapf(err, "change replicas of r%d failed: %s", rangeID, msg)
+			err = &benignError{errors.New(msg)}
 		}
 		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
@@ -954,7 +966,9 @@ func (r *Replica) sendSnapshot(
 
 	status := r.RaftStatus()
 	if status == nil {
-		return errors.New("raft status not initialized")
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.New("raft status not initialized")}
 	}
 
 	req := SnapshotRequest_Header{

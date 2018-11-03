@@ -6950,9 +6950,12 @@ func (r *Replica) setPendingSnapshotIndex(index uint64) error {
 	// snapshots on the same replica which is disallowed.
 	if (index == 1 && r.mu.pendingSnapshotIndex != 0) ||
 		(index > 1 && r.mu.pendingSnapshotIndex != 1) {
-		return errors.Errorf(
+		// NB: this path can be hit if the replicate queue and scatter work
+		// concurrently. It's still good to return an error to avoid duplicating
+		// work, but we make it a benign one (so that it isn't logged).
+		return &benignError{errors.Errorf(
 			"%s: can't set pending snapshot index to %d; pending snapshot already present: %d",
-			r, index, r.mu.pendingSnapshotIndex)
+			r, index, r.mu.pendingSnapshotIndex)}
 	}
 	r.mu.pendingSnapshotIndex = index
 	return nil
