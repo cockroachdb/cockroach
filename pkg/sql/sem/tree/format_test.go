@@ -351,10 +351,10 @@ func TestFormatPgwireText(t *testing.T) {
 		{`ROW(1, (2, 'a"b'))`, `(1,"(2,""a""""b"")")`},
 		{`ROW(1, 2, ARRAY[1,2,3])`, `(1,2,"{1,2,3}")`},
 		{`ROW(1, 2, ARRAY[1,NULL,3])`, `(1,2,"{1,NULL,3}")`},
-		{`ROW(1, 2, ARRAY['a','b','c'])`, `(1,2,"{""a"",""b"",""c""}")`},
+		{`ROW(1, 2, ARRAY['a','b','c'])`, `(1,2,"{a,b,c}")`},
 		{`ROW(1, 2, ARRAY[true,false,true])`, `(1,2,"{t,f,t}")`},
 		{`ARRAY[(1,2),(3,4)]`, `{"(1,2)","(3,4)"}`},
-		{`ARRAY[(false,'a'),(true,'b')]`, `{"(f,\"a\")","(t,\"b\")"}`},
+		{`ARRAY[(false,'a'),(true,'b')]`, `{"(f,a)","(t,b)"}`},
 		{`ARRAY[(1,ARRAY[2,NULL])]`, `{"(1,\"{2,NULL}\")"}`},
 		{`ARRAY[(1,(1,2)),(2,(3,4))]`, `{"(1,\"(1,2)\")","(2,\"(3,4)\")"}`},
 
@@ -362,23 +362,15 @@ func TestFormatPgwireText(t *testing.T) {
 			`("(""(1,""""a b"""",3)"",""(4,""""c d"""")"",""(6)"")","(7,8)","(""e f"")")`},
 
 		{`(((1, '2', 3), (4, '5'), ROW(6)), (7, 8), ROW('9'))`,
-			// TODO(knz): if/when we change the sub-string formatter
-			// to omit double quotes when not needed, the reference results
-			// needs to become:
-			// ("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")
-			`("(""(1,""""2"""",3)"",""(4,""""5"""")"",""(6)"")","(7,8)","(""9"")")`},
+			`("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")`},
 
 		{`ARRAY[('a b',ARRAY['c d','e f']), ('g h',ARRAY['i j','k l'])]`,
 			`{"(\"a b\",\"{\"\"c d\"\",\"\"e f\"\"}\")","(\"g h\",\"{\"\"i j\"\",\"\"k l\"\"}\")"}`},
 
 		{`ARRAY[('1',ARRAY['2','3']), ('4',ARRAY['5','6'])]`,
-			// TODO(knz): if/when we change the sub-string formatter
-			// to omit double quotes when not needed, the reference results
-			// needs to become:
-			// {"(1,\"{2,3}\")","(4,\"{5,6}\")"}
-			`{"(\"1\",\"{\"\"2\"\",\"\"3\"\"}\")","(\"4\",\"{\"\"5\"\",\"\"6\"\"}\")"}`},
+			`{"(1,\"{2,3}\")","(4,\"{5,6}\")"}`},
 
-		{`ARRAY[e'\U00002001☃']`, `{" ☃"}`},
+		{`ARRAY[e'\U00002001☃']`, `{ ☃}`},
 	}
 	var evalCtx tree.EvalContext
 	for i, test := range testData {
