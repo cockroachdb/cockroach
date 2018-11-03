@@ -379,14 +379,14 @@ a  b  word  catcode  catdesc
 query TTT colnames
 SELECT 'a' AS a, pg_get_keywords(), 'c' AS c LIMIT 1
 ----
-a  pg_get_keywords             c
-a  ("abort","U","unreserved")  c
+a  pg_get_keywords       c
+a  (abort,U,unreserved)  c
 
 query TTT colnames
 SELECT 'a' AS a, pg_get_keywords() AS b, 'c' AS c LIMIT 1
 ----
-a  b                           c
-a  ("abort","U","unreserved")  c
+a  b                     c
+a  (abort,U,unreserved)  c
 
 subtest unary_table
 
@@ -489,7 +489,7 @@ query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['a'])
 ----
 information_schema._pg_expandarray
-("a",1)
+(a,1)
 
 query TI colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY['a'])
@@ -501,8 +501,8 @@ query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 information_schema._pg_expandarray
-("b",1)
-("a",2)
+(b,1)
+(a,2)
 
 query TI colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
@@ -515,9 +515,9 @@ query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
 ----
 information_schema._pg_expandarray
-("c",1)
-("b",2)
-("a",3)
+(c,1)
+(b,2)
+(a,3)
 
 query TI colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])

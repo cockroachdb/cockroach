@@ -26,13 +26,14 @@ subtest unlabeled_tuple
 query TT colnames
 SELECT (1, 2, 'hello', NULL, NULL) AS t, (true, NULL, (false, 6.6, false)) AS u FROM tb
 ----
-t                u
-(1,2,"hello",,)  (t,,"(f,6.6,f)")
+t              u
+(1,2,hello,,)  (t,,"(f,6.6,f)")
 
 query T
 SELECT (1, e'hello\nworld')
 ----
-(1,"hello\012world")
+(1,"hello
+world")
 
 query BBBBBBBBB colnames
 SELECT
@@ -673,8 +674,8 @@ SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5) AS r,
        ((true, NULL, (false, 6.6, false)) AS a1, b2, c3) AS s
   FROM tb
 ----
-r                s
-(1,2,"hello",,)  (t,,"(f,6.6,f)")
+r              s
+(1,2,hello,,)  (t,,"(f,6.6,f)")
 
 # Comparing tuples
 query BBB colnames
@@ -762,7 +763,7 @@ SELECT ((
  FROM tb
 ----
 r
-("(""(1,""""2"""",3)"",""(4,""""5"""")"",""(6)"")","(7,8)","(""9"")")
+("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")
 
 subtest labeled_tuple_column_access
 
@@ -821,7 +822,7 @@ a  b  c
 query T
 SELECT (((ROW(1,'2',true) AS a,b,c)).*, 456) FROM tb
 ----
-("(1,""2"",t)",456)
+("(1,2,t)",456)
 
 query I colnames
 SELECT ((ROW(1) AS a)).* FROM tb

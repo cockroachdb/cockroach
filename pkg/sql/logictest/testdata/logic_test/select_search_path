@@ -154,7 +154,7 @@ SET search_path = nonexistent, public
 query T
 SELECT current_schemas(false)
 ----
-{"public"}
+{public}
 
 # Test that object creation targets the first valid entry in
 # search_path, not just the first entry.

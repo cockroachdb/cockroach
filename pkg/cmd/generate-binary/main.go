@@ -92,7 +92,7 @@ func main() {
 		}
 		data = append(data, entry{
 			SQL:    expr,
-			Text:   string(text),
+			Text:   text,
 			Binary: binary,
 		})
 	}
@@ -108,7 +108,7 @@ func main() {
 
 type entry struct {
 	SQL    string
-	Text   string
+	Text   []byte
 	Binary []byte
 }
 
@@ -130,7 +130,8 @@ const outputJSON = `[
 	{{- if gt $idx 0 }},{{end}}
 	{
 		"SQL": {{.SQL | json}},
-		"Text": {{.Text | json}},
+		"Text": {{printf "%q" .Text}},
+		"TextAsBinary": {{.Text | binary}},
 		"Binary": {{.Binary | binary}}
 	}
 {{- end}}
@@ -361,5 +362,33 @@ var inputs = map[string][]string{
 		"00000000",
 		"000000001",
 		"0010101000011010101111100100011001110101100001010101",
+	},
+
+	"array[%s]::text[]": {
+		`NULL`,
+		`''`,
+		`'test'`,
+		`'test with spaces'`,
+		`e'\f'`,
+		// byte order mark
+		`e'\uFEFF'`,
+		// snowman
+		`e'\u2603'`,
+	},
+
+	"array[%s]": {
+		`''`,
+		`'\x0d53e338548082'::BYTEA`,
+		`'test with spaces'::BYTEA`,
+		`'name'::NAME`,
+	},
+
+	"(%s,null)": {
+		`1::int8,2::int8,3::int8,4::int8`,
+		`'test with spaces'::BYTEA`,
+		`'test with spaces'::TEXT`,
+		`'name'::NAME`,
+		`'false'::JSONB`,
+		`'{"a": []}'::JSONB`,
 	},
 }
