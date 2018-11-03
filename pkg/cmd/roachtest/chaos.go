@@ -94,6 +94,8 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 
 			select {
 			case <-ch.Stopper:
+				l.Printf("restarting %v (chaos is done)\n", target)
+				c.Start(ctx, c.t.(*test), target)
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
