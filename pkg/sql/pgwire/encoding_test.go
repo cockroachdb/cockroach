@@ -17,6 +17,7 @@ package pgwire
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -54,6 +55,22 @@ func TestEncodings(t *testing.T) {
 	}
 	f.Close()
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
+
+	verifyLen := func(t *testing.T) []byte {
+		b := buf.wrapped.Bytes()
+		if len(b) < 4 {
+			t.Fatal("short buffer")
+		}
+		n := binary.BigEndian.Uint32(b)
+		// The first 4 bytes are the length prefix.
+		data := b[4:]
+		if len(data) != int(n) {
+			t.Logf("%v", b)
+			t.Errorf("expected %d bytes, got %d", n, len(data))
+		}
+		return data
+	}
+
 	sema := tree.MakeSemaContext(false)
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	var conv sessiondata.DataConversionConfig
@@ -87,25 +104,24 @@ func TestEncodings(t *testing.T) {
 			}
 
 			t.Run("text", func(t *testing.T) {
-				buf.wrapped.Reset()
+				buf.reset()
 				buf.textFormatter.Buffer.Reset()
 				buf.writeTextDatum(ctx, d, conv)
 				if buf.err != nil {
 					t.Fatal(buf.err)
 				}
-				got := string(buf.wrapped.Bytes()[4:])
+				got := string(verifyLen(t))
 				if got != tc.Text {
 					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
 				}
 			})
 			t.Run("binary", func(t *testing.T) {
-				buf.wrapped.Reset()
+				buf.reset()
 				buf.writeBinaryDatum(ctx, d, time.UTC)
 				if buf.err != nil {
 					t.Fatal(buf.err)
 				}
-				// The first 4 bytes are a length prefix that we don't care about.
-				got := buf.wrapped.Bytes()[4:]
+				got := verifyLen(t)
 				if !bytes.Equal(got, tc.Binary) {
 					t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
 				}
