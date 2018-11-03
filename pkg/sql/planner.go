@@ -113,16 +113,11 @@ type planner struct {
 
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
-	// within the transaction. This is necessary to:
-	// - ensure that queries ran with AS OF SYSTEM TIME get the right
-	//   version of descriptors.
-	// - queries that create/update descriptors read all their dependencies
-	//   in the same txn that they write new descriptors or update their
-	//   dependencies, so that update/creation appears transactional
-	//   to the rest of the cluster.
-	// Code that sets this to true should probably also check that
-	// the txn isolation level is SERIALIZABLE, and reject any update
-	// if it is SNAPSHOT.
+	// within the transaction. This is necessary to read descriptors
+	// from the store for:
+	// 1. Descriptors that are part of a schema change but are not
+	// modified by the schema change. (reading a table in CREATE VIEW)
+	// 2. Disable the use of the table cache in tests.
 	avoidCachedDescriptors bool
 
 	// If set, the planner should skip checking for the SELECT privilege when
@@ -398,7 +393,7 @@ func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (row.TableLookup, error) {
 	flags := ObjectLookupFlags{
-		CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
+		CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}, false /*requireMutable*/}
 	table, err := p.Tables().getTableVersionByID(ctx, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {

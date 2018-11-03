@@ -70,6 +70,9 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
 		if t, ok := scEntry.defs[tableName]; ok {
+			if flags.requireMutable {
+				return NewMutableExistingTableDescriptor(*t.desc), nil, nil
+			}
 			return t.desc, nil, nil
 		}
 		if _, ok := scEntry.allTableNames[tableName]; ok {
