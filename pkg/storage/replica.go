@@ -5129,6 +5129,10 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 				lastAppResp = message
 				drop = true
 			}
+
+			if r.maybeDropMsgAppResp(ctx, message) {
+				drop = true
+			}
 		}
 		if !drop {
 			r.sendRaftMessage(ctx, message)
@@ -5137,6 +5141,63 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 	if lastAppResp.Index > 0 {
 		r.sendRaftMessage(ctx, lastAppResp)
 	}
+}
+
+// maybeDropMsgAppResp returns true if the outgoing Raft message should be
+// dropped. It does so if sending the message would likely result in an errant
+// Raft snapshot after a split.
+func (r *Replica) maybeDropMsgAppResp(ctx context.Context, msg raftpb.Message) bool {
+	if !msg.Reject {
+		return false
+	}
+
+	r.mu.RLock()
+	ticks := r.mu.ticks
+	initialized := r.isInitializedRLocked()
+	r.mu.RUnlock()
+
+	if initialized {
+		return false
+	}
+
+	if ticks > r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
+		log.Infof(ctx, "allowing MsgAppResp for uninitialized replica")
+		return false
+	}
+
+	if msg.RejectHint != 0 {
+		log.Fatalf(ctx, "received reject hint %d from supposedly uninitialized replica", msg.RejectHint)
+	}
+
+	// This replica has a blank state, i.e. its last index is zero (because we
+	// start our Raft log at index 10). In particular, it's not a preemptive
+	// snapshot. This happens in two cases:
+	//
+	// 1. a rebalance operation is adding a new replica of the range to this
+	// node. We always send a preemptive snapshot before attempting to do so, so
+	// we wouldn't enter this branch as desc.Replicas would be nonempty. We
+	// would however enter this branch if the preemptive snapshot got GC'ed
+	// before the actual replica change came through.
+	//
+	// 2. a split executed that created this replica as its right hand side, but
+	// this node's pre-split replica hasn't executed the split trigger (yet).
+	// The expectation is that it will do so momentarily, however if we don't
+	// drop this rejection, the Raft leader will try to catch us up via a
+	// snapshot. In 99.9% of cases this is a wasted effort since the pre-split
+	// replica already contains the data this replica will hold. The remaining
+	// 0.01% constitute the case in which our local replica of the pre-split
+	// range requires a snapshot which catches it up "past" the split trigger,
+	// in which case the trigger will never be executed (the snapshot instead
+	// wipes out the data the split trigger would've tried to put into this
+	// range). A similar scenario occurs if there's a rebalance operation that
+	// rapidly removes the pre-split replica, so that it never catches up (nor
+	// via log nor via snapshot); in that case too, the Raft snapshot is
+	// required to materialize the split's right hand side replica (i.e. this
+	// one). We're delaying the snapshot for a short amount of time only, so
+	// this seems tolerable.
+	log.VEventf(ctx, 2, "dropping rejection from index %d to index %d", msg.Index, msg.RejectHint)
+
+	return true
 }
 
 // sendRaftMessage sends a Raft message.

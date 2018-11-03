@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -502,6 +503,54 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	if !bytes.Equal(newRngDesc.EndKey, roachpb.RKeyMax) || !bytes.Equal(rngDesc.StartKey, roachpb.RKeyMin) {
 		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rngDesc.StartKey, newRngDesc.EndKey)
 	}
+}
+
+func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	const numNodes = 3
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	const num = 100
+	perm := rand.Perm(100)
+	idx := int32(-1) // accessed atomically
+
+	checkNoSnaps := func(when string) {
+		for i := 0; i < numNodes; i++ {
+			var n int // num rows (sanity check against test rotting)
+			var c int // num Raft snapshots
+			if err := tc.ServerConn(i).QueryRow(`
+SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
+	name LIKE 'queue.raftsnapshot.process.%'
+OR
+	name LIKE 'queue.raftsnapshot.pending'
+`).Scan(&n, &c); err != nil {
+				t.Fatal(err)
+			}
+			if expRows := 3; n != expRows {
+				t.Fatalf("%s: expected %d rows, got %d", when, expRows, n)
+			}
+			if c > 0 {
+				t.Fatalf("observed %d Raft snapshots %s splits", c, when)
+			}
+		}
+	}
+
+	checkNoSnaps("before")
+
+	doSplit := func(ctx context.Context) error {
+		_, _, err := tc.SplitRange(
+			[]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
+		return err
+	}
+
+	if err := ctxgroup.GroupWorkers(ctx, 100, doSplit); err != nil {
+		t.Fatal(err)
+	}
+
+	checkNoSnaps("after")
 }
 
 // TestStoreRangeSplitIdempotency executes a split of a range and
