@@ -1423,20 +1423,20 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog","public"}
+{pg_catalog,public}
 
 query T
 SELECT current_schemas(false)
 ----
-{"public"}
+{public}
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
 query T
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
-{"pg_catalog","public"}
-{"public"}
+{pg_catalog,public}
+{public}
 
 statement ok
 SET search_path=test,pg_catalog
@@ -1444,12 +1444,12 @@ SET search_path=test,pg_catalog
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 query T
 SELECT current_schemas(false)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 statement ok
 RESET search_path

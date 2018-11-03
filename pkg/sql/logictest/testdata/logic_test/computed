@@ -90,12 +90,12 @@ x CREATE TABLE x (
 query TTBTTTB colnames
 SHOW COLUMNS FROM x
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
-a            INT        true         3:::INT         ·                      {}           false
-b            INT        true         7:::INT         ·                      {}           false
-c            INT        true         NULL            a                      {}           false
-d            INT        true         NULL            a + b                  {}           false
-rowid        INT        false        unique_rowid()  ·                      {"primary"}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
+a            INT        true         3:::INT         ·                      {}         false
+b            INT        true         7:::INT         ·                      {}         false
+c            INT        true         NULL            a                      {}         false
+d            INT        true         NULL            a + b                  {}         false
+rowid        INT        false        unique_rowid()  ·                      {primary}  true
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)

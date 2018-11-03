@@ -273,7 +273,7 @@ CREATE TABLE obitsa (
 query T rowsort
 SELECT * FROM obitsa
 ----
-{01,}
+{01,""}
 {01,0}
 {01,1}
 {01,0000}
@@ -281,7 +281,7 @@ SELECT * FROM obitsa
 {01,010}
 {01,10}
 {01,11}
-{01,}
+{01,""}
 {01,00100}
 {01,00110}
 {01,00001}

@@ -1192,7 +1192,7 @@ FROM pg_catalog.pg_proc
 WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
-least    2283         1         2283        2283         {"v"}
+least    2283         1         2283        2283         {v}
 
 query TOIOTT colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
@@ -1200,7 +1200,7 @@ FROM pg_catalog.pg_proc
 WHERE proname='json_extract_path'
 ----
 proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
-json_extract_path  25           2         3802        3802 25      {"i","v"}
+json_extract_path  25           2         3802        3802 25      {i,v}
 
 ## pg_catalog.pg_range
 query IIIIII colnames

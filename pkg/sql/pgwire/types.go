@@ -375,6 +375,17 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(int32(v.Days))
 		b.putInt32(int32(v.Months))
 
+	case *tree.DTuple:
+		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
+		subWriter := newWriteBuffer(nil /* bytecount */)
+		// Put the number of datums.
+		subWriter.putInt32(int32(len(v.D)))
+		for _, elem := range v.D {
+			subWriter.putInt32(int32(elem.ResolvedType().Oid()))
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
+		}
+		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
 	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
