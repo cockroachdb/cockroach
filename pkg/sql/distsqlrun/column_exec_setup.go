@@ -62,16 +62,69 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		spec := core.Aggregator
-		if len(spec.GroupCols) == 0 &&
-			len(spec.Aggregations) == 1 &&
-			spec.Aggregations[0].FilterColIdx == nil &&
-			spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
-			!spec.Aggregations[0].Distinct {
+		aggSpec := core.Aggregator
+		if len(aggSpec.GroupCols) == 0 &&
+			len(aggSpec.Aggregations) == 1 &&
+			aggSpec.Aggregations[0].FilterColIdx == nil &&
+			aggSpec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+			!aggSpec.Aggregations[0].Distinct {
 			return exec.NewCountOp(inputs[0]), nil
 		}
 
-		return nil, errors.Errorf("unsupported aggregator %+v", core.Aggregator)
+		var groupCols, orderedCols util.FastIntSet
+
+		for _, col := range aggSpec.OrderedGroupCols {
+			orderedCols.Add(int(col))
+		}
+		groupTyps := make([]types.T, len(aggSpec.GroupCols))
+		for i, col := range aggSpec.GroupCols {
+			if !orderedCols.Contains(int(col)) {
+				return nil, errors.New("unsorted aggregation not supported")
+			}
+			groupCols.Add(int(col))
+			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[i])
+		}
+		if !orderedCols.SubsetOf(groupCols) {
+			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
+		}
+
+		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
+		aggCols := make([][]uint32, len(aggSpec.Aggregations))
+		for i, agg := range aggSpec.Aggregations {
+			if agg.Distinct {
+				return nil, errors.New("distinct aggregation not supported")
+			}
+			if agg.FilterColIdx != nil {
+				return nil, errors.New("filtering aggregation not supported")
+			}
+			if len(agg.Arguments) > 0 {
+				return nil, errors.New("aggregates with arguments not supported")
+			}
+			if len(agg.ColIdx) != 1 {
+				return nil, errors.New("non-single-arg aggregates not supported")
+			}
+			colIdx := agg.ColIdx[0]
+			aggTyps[i] = []types.T{types.FromColumnType(spec.Input[0].ColumnTypes[colIdx])}
+			aggCols[i] = aggSpec.Aggregations[i].ColIdx
+
+			switch agg.Func {
+			case AggregatorSpec_SUM_INT:
+			case AggregatorSpec_SUM:
+				switch aggTyps[i][0] {
+				case types.Int8, types.Int16, types.Int32, types.Int64:
+					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
+					// at the end, mod issues with overflow. Perhaps to avoid the overflow
+					// issues, at first, we could plan SUM for all types besides Int64.
+					return nil, errors.New("sum on int cols not supported (use sum_int)")
+				}
+			default:
+				return nil, errors.Errorf("non-sum aggregation %s not supported", agg.Func)
+			}
+		}
+		op, err = exec.NewOrderedAggregator(inputs[0], aggSpec.GroupCols, groupTyps, aggCols, aggTyps)
+		if err != nil {
+			return nil, err
+		}
 
 	case core.Distinct != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -79,22 +132,18 @@ func newColOperator(
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
-		allSorted := true
 
 		for _, col := range core.Distinct.OrderedColumns {
 			orderedCols.Add(int(col))
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				allSorted = false
+				return nil, errors.New("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of distinct cols")
-		}
-		if !allSorted {
-			return nil, errors.New("unsorted distinct not supported")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
