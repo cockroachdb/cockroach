@@ -42,9 +42,10 @@ func TestEncodings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var tests []struct {
-		SQL    string
-		Text   string
-		Binary []byte
+		SQL          string
+		Text         string
+		TextAsBinary []byte
+		Binary       []byte
 	}
 	f, err := os.Open(filepath.Join("testdata", "encodings.json"))
 	if err != nil {
@@ -110,8 +111,8 @@ func TestEncodings(t *testing.T) {
 				if buf.err != nil {
 					t.Fatal(buf.err)
 				}
-				got := string(verifyLen(t))
-				if got != tc.Text {
+				got := verifyLen(t)
+				if !bytes.Equal(got, tc.TextAsBinary) {
 					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
 				}
 			})

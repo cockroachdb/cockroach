@@ -711,7 +711,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}, "", "{\"primary\"}", false).
+				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
 				Results("isRole", "BOOL", false, false, "", "{}", false),
 		}},
@@ -933,9 +933,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("{1.000}").Results("{1.000}"),
 		}},
 		{"SELECT $1:::STRING[]", []preparedQueryTest{
-			baseTest.SetArgs(`{aaa}`).Results(`{"aaa"}`),
-			baseTest.SetArgs(`{"aaa"}`).Results(`{"aaa"}`),
-			baseTest.SetArgs(`{aaa,bbb,ccc}`).Results(`{"aaa","bbb","ccc"}`),
+			baseTest.SetArgs(`{aaa}`).Results(`{aaa}`),
+			baseTest.SetArgs(`{"aaa"}`).Results(`{aaa}`),
+			baseTest.SetArgs(`{aaa,bbb,ccc}`).Results(`{aaa,bbb,ccc}`),
 		}},
 		{"SELECT $1:::JSON", []preparedQueryTest{
 			baseTest.SetArgs(`true`).Results(`true`),
