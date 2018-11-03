@@ -297,7 +297,7 @@ ORDER BY score desc, updated_at_inverse DESC
 LIMIT 50
 ----
 project
- ├── columns: score:9(int!null) expires_at:15(int!null)
+ ├── columns: score:9(int!null) expires_at:15(int!null)  [hidden: updated_at_inverse:14(int!null)]
  ├── cardinality: [0 - 50]
  ├── fd: ()-->(15)
  ├── ordering: -9,-14 opt(15)

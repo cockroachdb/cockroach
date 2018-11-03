@@ -27,7 +27,7 @@ build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -35,7 +35,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -44,7 +44,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
  └── sort
       ├── columns: x:1(int!null) y:2(int)
       ├── ordering: +2
@@ -55,7 +55,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+ ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)  [hidden: level:6(int) node_type:7(string)]
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
       ├── scan xy

@@ -153,7 +153,7 @@ opt
 SELECT x+1 AS r, y FROM a ORDER BY x, y DESC
 ----
 project
- ├── columns: r:5(int) y:2(float!null)
+ ├── columns: r:5(int) y:2(float!null)  [hidden: x:1(int!null)]
  ├── ordering: +1,-2
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -198,7 +198,7 @@ opt
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
 project
- ├── columns: y:2(float!null) z:5(int)
+ ├── columns: y:2(float!null) z:5(int)  [hidden: x:1(int!null)]
  ├── ordering: +1,-2
  ├── select
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -452,7 +452,7 @@ opt
 SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
 ----
 group-by
- ├── columns: sum:4(decimal)
+ ├── columns: sum:4(decimal)  [hidden: b:2(int!null)]
  ├── grouping columns: b:2(int!null)
  ├── ordering: +2
  ├── scan abc
@@ -520,7 +520,7 @@ opt
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 explain
- ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+ ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)  [hidden: level:6(int) node_type:7(string)]
  └── sort
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── ordering: +2

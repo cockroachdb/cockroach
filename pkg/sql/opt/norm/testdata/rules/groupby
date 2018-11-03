@@ -237,7 +237,7 @@ opt expect=EliminateGroupByProject
 SELECT DISTINCT ON (i) s FROM (SELECT i, s, f FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 distinct-on
- ├── columns: s:14(string)
+ ├── columns: s:14(string)  [hidden: i:12(int!null)]
  ├── grouping columns: i:12(int!null)
  ├── key: (12)
  ├── fd: (12)-->(14)
@@ -375,7 +375,7 @@ opt expect=ReduceGroupingCols
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
 ----
 distinct-on
- ├── columns: i:2(int) f:3(float) x:6(int)
+ ├── columns: i:2(int) f:3(float) x:6(int)  [hidden: k:1(int!null)]
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6), (2,3)~~>(1), (6)-->(2)
