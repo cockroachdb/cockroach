@@ -46,9 +46,10 @@ func registerScaleData(r *registry) {
 		const duration = 10 * time.Minute
 		for _, n := range []int{3, 6} {
 			r.Add(testSpec{
-				Name:   fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
-				Nodes:  nodes(n + 1),
-				Stable: true, // DO NOT COPY to new tests
+				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
+				Timeout: 2 * duration,
+				Nodes:   nodes(n + 1),
+				Stable:  true, // DO NOT COPY to new tests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runSqlapp(ctx, t, c, app, flags, duration)
 				},
