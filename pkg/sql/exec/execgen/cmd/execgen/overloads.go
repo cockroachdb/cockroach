@@ -81,6 +81,10 @@ type assignFunc func(op overload, target, l, r string) string
 var binaryOpOverloads []*overload
 var comparisonOpOverloads []*overload
 
+// binaryOpToOverloads maps a binary operator to all of the overloads that
+// implement it.
+var binaryOpToOverloads map[tree.BinaryOperator][]*overload
+
 // comparsionOpToOverloads maps a comparison operator to all of the overloads
 // that implement it.
 var comparisonOpToOverloads map[tree.ComparisonOperator][]*overload
@@ -107,6 +111,7 @@ func init() {
 	inputTypes := types.AllTypes
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+	binaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
 	comparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	for _, t := range inputTypes {
 		customizer := typeCustomizers[t]
@@ -131,6 +136,7 @@ func init() {
 				}
 			}
 			binaryOpOverloads = append(binaryOpOverloads, ov)
+			binaryOpToOverloads[op] = append(binaryOpToOverloads[op], ov)
 		}
 		for _, op := range cmpOps {
 			opStr := comparisonOpInfix[op]
