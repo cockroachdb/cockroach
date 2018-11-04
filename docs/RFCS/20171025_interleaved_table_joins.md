@@ -759,7 +759,7 @@ for the parent table is ordered, two 2-pass approaches using a merge-join
 pattern e-merges here:
 
   TODO(richardwu): From my understanding, if one does not know the exact
-  `/pk1/pk2` start and end keys (i.e. one can't tell RowFetcher/kvFetcher to scan
+  `/pk1/pk2` start and end keys (i.e. one can't tell RowFetcher/kvBatchFetcher to scan
   the first, second, etc. /pk1/pk2/ range), then one would have to scan the
   entire hierarchy. The bases for the following approaches revolve around the
   fact that we can't do separate scans for each unique `(pk1, pk2)` prefix.
