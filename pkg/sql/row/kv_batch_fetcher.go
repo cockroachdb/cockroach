@@ -33,7 +33,7 @@ import (
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
-// SetKVBatchSize changes the kvFetcher batch size, and returns a function that restores it.
+// SetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 func SetKVBatchSize(val int64) func() {
 	oldVal := kvBatchSize
 	kvBatchSize = val
@@ -51,7 +51,7 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
-	// returnRangeInfo, if set, causes the kvFetcher to populate rangeInfos.
+	// returnRangeInfo, if set, causes the kvBatchFetcher to populate rangeInfos.
 	// See also rowFetcher.returnRangeInfo.
 	returnRangeInfo bool
 
@@ -59,17 +59,19 @@ type txnKVFetcher struct {
 	batchIdx  int
 	responses []roachpb.ResponseUnion
 
-	// As the kvFetcher fetches batches of kvs, it accumulates information on the
+	// As the kvBatchFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
 	// getRangeInfo(), to be used for updating caches.
 	// rangeInfos are deduped, so they're not ordered in any particular way and
-	// they don't map to kvFetcher.spans in any particular way.
+	// they don't map to kvBatchFetcher.spans in any particular way.
 	rangeInfos []roachpb.RangeInfo
 }
 
+var _ kvBatchFetcher = &txnKVFetcher{}
+
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
-		panic("GetRangeInfo() called on kvFetcher that wasn't configured with returnRangeInfo")
+		panic("GetRangeInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo")
 	}
 	return f.rangeInfos
 }
@@ -120,14 +122,14 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	}
 }
 
-// makeKVFetcher initializes a kvFetcher for the given spans.
+// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
 //
 // If useBatchLimit is true, batches are limited to kvBatchSize. If
 // firstBatchLimit is also set, the first batch is limited to that value.
 // Subsequent batches are larger, up to kvBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
-func makeKVFetcher(
+func makeKVBatchFetcher(
 	txn *client.Txn,
 	spans roachpb.Spans,
 	reverse bool,

@@ -273,12 +273,12 @@ func TablesNeededForFKs(
 	}
 }
 
-// SpanKVFetcher is an kvFetcher that returns a set slice of kvs.
+// SpanKVFetcher is an kvBatchFetcher that returns a set slice of kvs.
 type SpanKVFetcher struct {
 	KVs []roachpb.KeyValue
 }
 
-// nextBatch implements the kvFetcher interface.
+// nextBatch implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) nextBatch(
 	_ context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
@@ -290,7 +290,7 @@ func (f *SpanKVFetcher) nextBatch(
 	return true, res, nil, 0, nil
 }
 
-// getRangesInfo implements the kvFetcher interface.
+// getRangesInfo implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	panic("getRangesInfo() called on SpanKVFetcher")
 }
