@@ -81,9 +81,10 @@ type ProposalData struct {
 	// Always use ProposalData.finishApplication().
 	doneCh chan proposalResult
 
-	// Local contains the results of evaluating the request
-	// tying the upstream evaluation of the request to the
-	// downstream application of the command.
+	// Local contains the results of evaluating the request tying the upstream
+	// evaluation of the request to the downstream application of the command.
+	// Nil when the proposal came from another node (i.e. the evaluation wasn't
+	// done here).
 	Local *result.LocalResult
 
 	// Request is the client's original BatchRequest.
