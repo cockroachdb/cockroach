@@ -1836,7 +1836,12 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
-			descriptors = append(descriptors, d)
+
+			// Don't use node descriptors with NodeID 0, because that's meant to
+			// indicate that the node has been removed from the cluster.
+			if d.NodeID != 0 {
+				descriptors = append(descriptors, d)
+			}
 			return nil
 		}); err != nil {
 			return err

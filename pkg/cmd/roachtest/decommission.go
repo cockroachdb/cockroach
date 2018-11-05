@@ -345,9 +345,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     1,
-		MaxRetries:     20,
 	}
-	for r := retry.Start(retryOpts); r.Next(); {
+	if err := retry.WithMaxAttempts(ctx, retryOpts, 20, func() error {
 		o, err := decommission(ctx, 2, c.Node(1),
 			"decommission", "--wait", "none", "--format", "csv")
 		if err != nil {
@@ -360,10 +359,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			decommissionFooter,
 		}
 
-		if err := matchCSV(o, exp); err != nil {
-			continue
-		}
-		break
+		return matchCSV(o, exp)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Check that even though the node is decommissioned, we still see it (since
@@ -595,6 +593,34 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			continue
 		}
 		break
+	}
+
+	// Wipe data of node 1 and start it as a new node.
+	// It will join the cluster with a node id of 5.
+	// This is done to verify that node status works when a new node is started
+	// with an address belonging to an old decommissioned node.
+	{
+		c.Wipe(ctx, c.Node(1))
+		c.Start(ctx, t, c.Node(1), startArgs(fmt.Sprintf("-a=--join %s",
+			c.InternalAddr(ctx, c.Node(2))[0])))
+	}
+
+	if err := retry.WithMaxAttempts(ctx, retryOpts, 20, func() error {
+		o, err := execCLI(ctx, 2, "node", "status", "--format", "csv")
+		if err != nil {
+			t.Fatalf("node-status failed: %v", err)
+		}
+
+		exp := [][]string{
+			statusHeader,
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`5`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		}
+		return matchCSV(o, exp)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := retry.ForDuration(time.Minute, func() error {
