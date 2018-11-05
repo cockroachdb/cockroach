@@ -17,7 +17,7 @@ good coverage of how to add tests, which this codelab ignores.
 Also, remember that for real feature development, you'll want to first write up
 an RFC describing the new feature as well as the proposed syntax, and make sure
 to get the approval of someone from @cockroachdb/sql-language.  There are also
-some guidelines on adding new syntax that you can read about on #17569.
+some guidelines on adding new syntax that you can read about on [#17569](https://github.com/cockroachdb/cockroach/pull/17569).
 
 ## Adding a SQL Statement
 
