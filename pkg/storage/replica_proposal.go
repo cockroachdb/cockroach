@@ -84,6 +84,9 @@ type ProposalData struct {
 	// Local contains the results of evaluating the request
 	// tying the upstream evaluation of the request to the
 	// downstream application of the command.
+	// TODO(andrei): ProposalData.Local is a pointer, but it's always assigned
+	// from &batcheval.result.Result.Local, which is not a pointer. So why is this
+	// a pointer?
 	Local *result.LocalResult
 
 	// Request is the client's original BatchRequest.
