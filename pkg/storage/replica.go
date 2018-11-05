@@ -5619,7 +5619,12 @@ func (r *Replica) processRaftCommand(
 			}
 			response.Intents = proposal.Local.DetachIntents()
 			response.EndTxns = proposal.Local.DetachEndTxns(response.Err != nil)
-			lResult = proposal.Local
+			if pErr == nil {
+				lResult = proposal.Local
+			}
+		}
+		if pErr != nil && lResult != nil {
+			log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 		}
 
 		// Handle the Result, executing any side effects of the last
