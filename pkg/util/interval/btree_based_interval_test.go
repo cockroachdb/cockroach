@@ -24,6 +24,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -555,7 +556,6 @@ func TestSmallTree(t *testing.T) {
 		}
 		checkWithLen(t, tree, i+1)
 	}
-	return
 
 	checkTraversal(t, tree, ivs)
 	checkIterator(t, tree, ivs)
@@ -686,142 +686,217 @@ func TestIterator(t *testing.T) {
 	checkIterator(t, tree, ivs)
 }
 
-const benchmarkTreeSize = 10000
+func forBenchmarkSizes(b *testing.B, f func(b *testing.B, count int)) {
+	for _, count := range []int{16, 128, 1024, 8192, 65536} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			f(b, count)
+		})
+	}
+}
 
 func BenchmarkBTreeInsert(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	b.StartTimer()
-	i := 0
-	for i < b.N {
-		tr := newBTree(InclusiveOverlapper)
-		for _, item := range insertP {
-			tr.Insert(item, false)
-			i++
-			if i >= b.N {
-				return
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
+		b.ResetTimer()
+		i := 0
+		for i < b.N {
+			tr := newBTree(InclusiveOverlapper)
+			for _, item := range insertP {
+				if err := tr.Insert(item, false); err != nil {
+					b.Fatal(err)
+				}
+				i++
+				if i >= b.N {
+					return
+				}
 			}
 		}
-	}
-}
-
-func BenchmarkBTreeDeleteInsert(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	tr := newBTree(InclusiveOverlapper)
-	for _, item := range insertP {
-		tr.Insert(item, false)
-	}
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Delete(insertP[i%benchmarkTreeSize], false)
-		tr.Insert(insertP[i%benchmarkTreeSize], false)
-	}
-}
-
-func BenchmarkBTreeDeleteInsertCloneOnce(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	tr := newBTree(InclusiveOverlapper)
-	for _, item := range insertP {
-		tr.Insert(item, false)
-	}
-	tr = tr.cloneInternal()
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Delete(insertP[i%benchmarkTreeSize], false)
-		tr.Insert(insertP[i%benchmarkTreeSize], false)
-	}
-}
-
-func BenchmarkBTreeDeleteInsertCloneEachTime(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	tr := newBTree(InclusiveOverlapper)
-	for _, item := range insertP {
-		tr.Insert(item, false)
-	}
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		tr = tr.cloneInternal()
-		tr.Delete(insertP[i%benchmarkTreeSize], false)
-		tr.Insert(insertP[i%benchmarkTreeSize], false)
-	}
+	})
 }
 
 func BenchmarkBTreeDelete(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	removeP := perm(benchmarkTreeSize)
-	b.StartTimer()
-	i := 0
-	for i < b.N {
-		b.StopTimer()
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP, removeP := perm(uint32(count)), perm(uint32(count))
+		b.ResetTimer()
+		i := 0
+		for i < b.N {
+			b.StopTimer()
+			tr := newBTree(InclusiveOverlapper)
+			for _, item := range insertP {
+				if err := tr.Insert(item, false); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StartTimer()
+			for _, item := range removeP {
+				if err := tr.Delete(item, false); err != nil {
+					b.Fatal(err)
+				}
+				i++
+				if i >= b.N {
+					return
+				}
+			}
+			if tr.Len() > 0 {
+				panic(tr.Len())
+			}
+		}
+	})
+}
+
+func BenchmarkBTreeDeleteInsert(b *testing.B) {
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
 		tr := newBTree(InclusiveOverlapper)
 		for _, item := range insertP {
 			if err := tr.Insert(item, false); err != nil {
 				b.Fatal(err)
 			}
 		}
-		b.StartTimer()
-		for _, item := range removeP {
-			tr.Delete(item, false)
-			i++
-			if i >= b.N {
-				return
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if err := tr.Delete(insertP[i%count], false); err != nil {
+				b.Fatal(err)
+			}
+			if err := tr.Insert(insertP[i%count], false); err != nil {
+				b.Fatal(err)
 			}
 		}
-		if tr.Len() > 0 {
-			panic(tr.Len())
+	})
+}
+
+func BenchmarkBTreeDeleteInsertCloneOnce(b *testing.B) {
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
+		tr := newBTree(InclusiveOverlapper)
+		for _, item := range insertP {
+			if err := tr.Insert(item, false); err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
+		tr = tr.cloneInternal()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if err := tr.Delete(insertP[i%count], false); err != nil {
+				b.Fatal(err)
+			}
+			if err := tr.Insert(insertP[i%count], false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkBTreeDeleteInsertCloneEachTime(b *testing.B) {
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
+		tr := newBTree(InclusiveOverlapper)
+		for _, item := range insertP {
+			if err := tr.Insert(item, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			tr = tr.cloneInternal()
+			if err := tr.Delete(insertP[i%count], false); err != nil {
+				b.Fatal(err)
+			}
+			if err := tr.Insert(insertP[i%count], false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
 
 func BenchmarkBTreeGet(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	removeP := perm(benchmarkTreeSize)
-	b.StartTimer()
-	i := 0
-	for i < b.N {
-		b.StopTimer()
-		tr := newBTree(InclusiveOverlapper)
-		for _, item := range insertP {
-			if err := tr.Insert(item, false); err != nil {
-				b.Fatal(err)
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
+		removeP := perm(uint32(count))
+		b.ResetTimer()
+		i := 0
+		for i < b.N {
+			b.StopTimer()
+			tr := newBTree(InclusiveOverlapper)
+			for _, item := range insertP {
+				if err := tr.Insert(item, false); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StartTimer()
+			for _, item := range removeP {
+				tr.Get(item.Range())
+				i++
+				if i >= b.N {
+					return
+				}
 			}
 		}
-		b.StartTimer()
-		for _, item := range removeP {
-			tr.Get(item.Range())
-			i++
-			if i >= b.N {
-				return
-			}
-		}
-	}
+	})
 }
 
 func BenchmarkBTreeGetCloneEachTime(b *testing.B) {
-	b.StopTimer()
-	insertP := perm(benchmarkTreeSize)
-	removeP := perm(benchmarkTreeSize)
-	b.StartTimer()
-	i := 0
-	for i < b.N {
-		b.StopTimer()
-		tr := newBTree(InclusiveOverlapper)
-		for _, v := range insertP {
-			tr.Insert(v, false)
-		}
-		b.StartTimer()
-		for _, item := range removeP {
-			tr = tr.cloneInternal()
-			tr.Get(item.Range())
-			i++
-			if i >= b.N {
-				return
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(uint32(count))
+		removeP := perm(uint32(count))
+		b.ResetTimer()
+		i := 0
+		for i < b.N {
+			b.StopTimer()
+			tr := newBTree(InclusiveOverlapper)
+			for _, v := range insertP {
+				if err := tr.Insert(v, false); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StartTimer()
+			for _, item := range removeP {
+				tr = tr.cloneInternal()
+				tr.Get(item.Range())
+				i++
+				if i >= b.N {
+					return
+				}
 			}
 		}
+	})
+}
+
+func key(i int) Comparable {
+	return []byte(fmt.Sprintf("%04d", i))
+}
+
+func rangeWithEnd(start, end int) Range {
+	return Range{Start: key(start), End: key(end)}
+}
+
+func randomRange(rng *rand.Rand, n int) Range {
+	start := rng.Intn(n)
+	end := rng.Intn(n + 1)
+	if end < start {
+		start, end = end, start
+	}
+	return rangeWithEnd(start, end)
+}
+
+func BenchmarkBTreeOverlapScan(b *testing.B) {
+	tr := newBTree(InclusiveOverlapper)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	const count = 8 << 10
+	const size = 2 * 31
+	for i := 0; i < count; i++ {
+		iv := &Interval{rangeWithEnd(i, i+size+1), uintptr(i)}
+		if err := tr.Insert(iv, false); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cmd := randomRange(rng, count)
+		tr.DoMatching(func(e Interface) bool {
+			return false
+		}, cmd)
 	}
 }
