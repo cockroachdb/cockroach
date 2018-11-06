@@ -49,7 +49,7 @@ func (s *colBatchScan) Init() {
 }
 
 func (s *colBatchScan) Next() exec.ColBatch {
-	bat, _, _, err := s.rf.NextBatch(s.ctx)
+	bat, err := s.rf.NextBatch(s.ctx)
 	if err != nil {
 		panic(err)
 	}

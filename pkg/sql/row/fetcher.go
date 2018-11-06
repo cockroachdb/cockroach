@@ -44,7 +44,7 @@ type kvBatchFetcher interface {
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, err error)
+		batchResponse []byte, numKvs int64, origSpan roachpb.Span, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -85,6 +85,11 @@ type tableInfo struct {
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
 	indexColIdx []int
+
+	// knownPrefixLength is the number of bytes in the index key prefix this
+	// Fetcher is configured for. The index key prefix is the table id, index
+	// id pair at the start of the key.
+	knownPrefixLength int
 
 	// -- Fields updated during a scan --
 
@@ -186,11 +191,6 @@ type Fetcher struct {
 	// This is only false if there are no needed columns and the (single)
 	// table has no interleave children.
 	mustDecodeIndexKey bool
-
-	// knownPrefixLength is the number of bytes in the index key prefix this
-	// Fetcher is configured for. The index key prefix is the table id, index
-	// id pair at the start of the key.
-	knownPrefixLength int
 
 	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
@@ -333,7 +333,7 @@ func (rf *Fetcher) Init(
 			}
 		}
 
-		rf.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
+		table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 		var indexColumnIDs []sqlbase.ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -488,7 +488,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, _, err = rf.kvFetcher.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -591,7 +591,7 @@ func (rf *Fetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err
 			rf.currentTable.keyValTypes,
 			rf.currentTable.keyVals,
 			rf.currentTable.indexColumnDirs,
-			key[rf.knownPrefixLength:],
+			key[rf.currentTable.knownPrefixLength:],
 		)
 	}
 
@@ -1280,11 +1280,11 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 		return nil, nil
 	}
 	n, err := consumeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.currentTable.index, nCols, rf.kv.Key[rf.knownPrefixLength:])
+		rf.currentTable.index, nCols, rf.kv.Key[rf.currentTable.knownPrefixLength:])
 	if err != nil {
 		return nil, err
 	}
-	return rf.kv.Key[:n+rf.knownPrefixLength], nil
+	return rf.kv.Key[:n+rf.currentTable.knownPrefixLength], nil
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.

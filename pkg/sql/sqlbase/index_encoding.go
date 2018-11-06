@@ -245,6 +245,13 @@ func appendEncDatumsToKey(
 	return key, nil
 }
 
+// EncodeTableIDIndexID encodes a table id followed by an index id.
+func EncodeTableIDIndexID(key []byte, tableID ID, indexID IndexID) []byte {
+	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
+	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
+	return key
+}
+
 // DecodeTableIDIndexID decodes a table id followed by an index id.
 func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 	var tableID uint64
@@ -409,7 +416,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	// interleavedSentinel is actually next, then this key is for a child
 	// table.
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		return nil, false, nil
+		return key, false, nil
 	}
 
 	return key, true, nil
