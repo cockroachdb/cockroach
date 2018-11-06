@@ -252,3 +252,11 @@ limit                                 ·            ·                          
                           └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
 ·                                     table        articles@primary           ·                                                                                        ·
 ·                                     spans        ALL                        ·                                                                                        ·
+
+# Regression test for #32162.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 0))
+----
+project set    ·         ·  ("if")  ·
+ │             render 0  1  ·       ·
+ └── emptyrow  ·         ·  ()      ·

@@ -922,9 +922,9 @@ func (b *Builder) initZipBuild(
 			return nil, nil, nil, opt.ColMap{}, err
 		}
 
-		props := child.Private().(*memo.FuncOpDef).Properties
-		if props.Class == tree.GeneratorClass {
-			numColsPerGen[i] = len(props.ReturnLabels)
+		if def, ok := child.Private().(*memo.FuncOpDef); ok &&
+			def.Properties.Class == tree.GeneratorClass {
+			numColsPerGen[i] = len(def.Properties.ReturnLabels)
 		} else {
 			numColsPerGen[i] = 1
 		}
