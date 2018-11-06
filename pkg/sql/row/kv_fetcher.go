@@ -30,6 +30,8 @@ type kvFetcher struct {
 
 	batchResponse []byte
 	batchNumKvs   int64
+	span          roachpb.Span
+	newSpan       bool
 }
 
 func newKVFetcher(batchFetcher kvBatchFetcher) kvFetcher {
@@ -41,11 +43,15 @@ func newKVFetcher(batchFetcher kvBatchFetcher) kvFetcher {
 // nextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, and any errors that may have
 // occurred.
-func (f *kvFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
+func (f *kvFetcher) nextKV(
+	ctx context.Context,
+) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
+	newSpan = f.newSpan
+	f.newSpan = false
 	if len(f.kvs) != 0 {
 		kv = f.kvs[0]
 		f.kvs = f.kvs[1:]
-		return true, kv, nil
+		return true, kv, newSpan, nil
 	}
 	if f.batchNumKvs > 0 {
 		f.batchNumKvs--
@@ -54,26 +60,27 @@ func (f *kvFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, e
 		var err error
 		key, _, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
 		if err != nil {
-			return false, kv, err
+			return false, kv, false, err
 		}
 		return true, roachpb.KeyValue{
 			Key: key,
 			Value: roachpb.Value{
 				RawBytes: rawBytes,
 			},
-		}, nil
+		}, newSpan, nil
 	}
 
 	var numKeys int64
-	ok, f.kvs, f.batchResponse, numKeys, err = f.nextBatch(ctx)
+	ok, f.kvs, f.batchResponse, numKeys, f.span, err = f.nextBatch(ctx)
 	if f.batchResponse != nil {
 		f.batchNumKvs = numKeys
 	}
 	if err != nil {
-		return ok, kv, err
+		return ok, kv, false, err
 	}
 	if !ok {
-		return false, kv, nil
+		return false, kv, false, nil
 	}
+	f.newSpan = true
 	return f.nextKV(ctx)
 }
