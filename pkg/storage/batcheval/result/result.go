@@ -16,6 +16,7 @@ package result
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -78,6 +79,28 @@ type LocalResult struct {
 	// EndTransaction or PushTxn. This is a pointer to allow the zero
 	// (and as an unwelcome side effect, all) values to be compared.
 	UpdatedTxns *[]*roachpb.Transaction
+}
+
+func (lResult *LocalResult) String() string {
+	if lResult == nil {
+		return "LocalResult: nil"
+	}
+	var numIntents, numEndTxns, numUpdatedTxns int
+	if lResult.Intents != nil {
+		numIntents = len(*lResult.Intents)
+	}
+	if lResult.EndTxns != nil {
+		numEndTxns = len(*lResult.EndTxns)
+	}
+	if lResult.UpdatedTxns != nil {
+		numUpdatedTxns = len(*lResult.UpdatedTxns)
+	}
+	return fmt.Sprintf("LocalResult (reply: %v, #intents: %d, #endTxns: %d #updated txns: %d, "+
+		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
+		"MaybeGossipNodeLiveness:%s",
+		lResult.Reply, numIntents, numEndTxns, numUpdatedTxns, lResult.GossipFirstRange,
+		lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
+		lResult.MaybeGossipNodeLiveness)
 }
 
 // DetachIntents returns (and removes) those intents from the
