@@ -42,8 +42,21 @@ new engineers.
      - Bash (4+ is preferred)
      - GNU Make (3.81+ is known to work)
      - CMake 3.1+
+     ### in centos7
+     ```
+     yum install -y cmake3
+     mv /usr/bin/cmake /usr/bin/cmake.bk
+     ln -s /usr/bin/cmake3 /usr/bin/cmake
+     ```
      - Autoconf 2.68+
      - NodeJS 6.x and Yarn 1.7+
+     - jemalloc-devel
+     ### in centos7
+     ```
+       wget https://dl.yarnpkg.com/rpm/yarn.repo -O /etc/yum.repos.d/yarn.repo
+       yum install -y yarn
+     ```
+     - [rocksdb](https://github.com/facebook/rocksdb/archive/v5.13.2.tar.gz)
 
    Note that at least 4GB of RAM is required to build from source and run tests.
 
