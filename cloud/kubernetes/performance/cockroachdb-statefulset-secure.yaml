@@ -228,7 +228,7 @@ spec:
       - name: cockroachdb
         # NOTE: Always use the most recent version of CockroachDB for the best
         # performance and reliability.
-        image: cockroachdb/cockroach:v2.0.6
+        image: cockroachdb/cockroach:v2.1.0
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the amount of allocatable resources on each of your Kubernetes nodes by running:
