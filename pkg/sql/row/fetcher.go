@@ -44,7 +44,7 @@ type kvBatchFetcher interface {
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, err error)
+		batchResponse []byte, numKvs int64, origSpan roachpb.Span, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -488,7 +488,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, _, err = rf.kvFetcher.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
