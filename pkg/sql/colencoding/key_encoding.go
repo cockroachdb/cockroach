@@ -17,6 +17,8 @@ package colencoding
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -25,7 +27,10 @@ import (
 
 // DecodeIndexKeyToCols decodes an index key into the idx'th position of the
 // provided slices of exec.ColVecs. The input index key must already have its
-// first table id / index id prefix removed.
+// first table id / index id prefix removed. If matches is false, the key is
+// from a different table, and the returned remainingKey indicates a
+// "seek prefix": the next key that might be part of the table being searched
+// for. The input key will also be mutated if matches is false.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
 	vecs []exec.ColVec,
@@ -35,11 +40,13 @@ func DecodeIndexKeyToCols(
 	indexColIdx []int,
 	types []sqlbase.ColumnType,
 	colDirs []sqlbase.IndexDescriptor_Direction,
-	key []byte,
-) (remainingKey []byte, matches bool, _ error) {
+	key roachpb.Key,
+) (remainingKey roachpb.Key, matches bool, _ error) {
 	var decodedTableID sqlbase.ID
 	var decodedIndexID sqlbase.IndexID
 	var err error
+
+	origKey := key
 
 	if len(index.Interleave.Ancestors) > 0 {
 		for i, ancestor := range index.Interleave.Ancestors {
@@ -51,22 +58,30 @@ func DecodeIndexKeyToCols(
 					return nil, false, err
 				}
 				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-					return nil, false, nil
+					// We don't match. Return a key with the table ID / index ID we're
+					// searching for, so the caller knows what to seek to.
+					curPos := len(origKey) - len(key)
+					key = sqlbase.EncodeTableIDIndexID(origKey[:curPos], ancestor.TableID, ancestor.IndexID)
+					return key, false, nil
 				}
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx, types[:length], colDirs[:length], key)
+			key, err = DecodeKeyValsToCols(vecs[:length], idx, indexColIdx, types[:length], colDirs[:length], key)
 			if err != nil {
 				return nil, false, err
 			}
-			types, colDirs = types[length:], colDirs[length:]
+			vecs, types, colDirs = vecs[length:], types[length:], colDirs[length:]
 
 			// Consume the interleaved sentinel.
 			var ok bool
 			key, ok = encoding.DecodeIfInterleavedSentinel(key)
 			if !ok {
-				return nil, false, nil
+				// We're expecting an interleaved sentinel but didn't find one. Append
+				// one so the caller can seek to it.
+				curPos := len(origKey) - len(key)
+				key = encoding.EncodeInterleavedSentinel(origKey[:curPos])
+				return key, false, nil
 			}
 		}
 
@@ -75,7 +90,11 @@ func DecodeIndexKeyToCols(
 			return nil, false, err
 		}
 		if decodedTableID != desc.ID || decodedIndexID != index.ID {
-			return nil, false, nil
+			// We don't match. Return a key with the table ID / index ID we're
+			// searching for, so the caller knows what to seek to.
+			curPos := len(origKey) - len(key)
+			key = sqlbase.EncodeTableIDIndexID(origKey[:curPos], desc.ID, index.ID)
+			return key, false, nil
 		}
 	}
 
@@ -88,7 +107,9 @@ func DecodeIndexKeyToCols(
 	// interleavedSentinel is actually next, then this key is for a child
 	// table.
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		return nil, false, nil
+		curPos := len(origKey) - len(key)
+		key = encoding.EncodeNullDescending(origKey[:curPos])
+		return key, false, nil
 	}
 
 	return key, true, nil
@@ -247,5 +268,61 @@ func skipTableKey(
 	default:
 		panic(fmt.Sprintf("unsupported type %+v", valType))
 	}
-	return rkey, err
+	if err != nil {
+		return key, err
+	}
+	return rkey, nil
+}
+
+// UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the
+// type expected by the column, writing into the input ColVec at the given row
+// idx. An error is returned if the value's type does
+// not match the column's type.
+// See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
+func UnmarshalColumnValueToCol(
+	vec exec.ColVec, idx uint16, typ sqlbase.ColumnType, value roachpb.Value,
+) error {
+	if value.RawBytes == nil {
+		vec.SetNull(idx)
+	}
+
+	var err error
+	switch typ.SemanticType {
+	case sqlbase.ColumnType_BOOL:
+		var v bool
+		v, err = value.GetBool()
+		vec.Bool()[idx] = v
+	case sqlbase.ColumnType_INT:
+		var v int64
+		v, err = value.GetInt()
+		switch typ.Width {
+		case 8:
+			vec.Int8()[idx] = int8(v)
+		case 16:
+			vec.Int16()[idx] = int16(v)
+		case 32:
+			vec.Int32()[idx] = int32(v)
+		case 0, 64:
+			vec.Int64()[idx] = v
+		default:
+			return errors.Errorf("invalid int width: %d", typ.Width)
+		}
+	case sqlbase.ColumnType_FLOAT:
+		var v float64
+		v, err = value.GetFloat()
+		vec.Float64()[idx] = v
+	case sqlbase.ColumnType_DECIMAL:
+		err = value.GetDecimalInto(&vec.Decimal()[idx])
+	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
+		var v []byte
+		v, err = value.GetBytes()
+		vec.Bytes()[idx] = v
+	case sqlbase.ColumnType_DATE:
+		var v int64
+		v, err = value.GetInt()
+		vec.Int64()[idx] = v
+	default:
+		return errors.Errorf("unsupported column type: %s", typ.SemanticType)
+	}
+	return err
 }
