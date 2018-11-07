@@ -1730,3 +1730,17 @@ query T
 SELECT array_agg(generate_series(1, 2))
 ----
 {1,2}
+
+# Regression test for #31882.
+
+statement ok
+CREATE TABLE uvw (u INT, v INT, w INT, INDEX uvw(u, v, w))
+
+statement ok
+INSERT INTO uvw VALUES (1, 2, 3), (1, 2, 3), (3, 2, 1), (3, 2, 3)
+
+query IIT rowsort
+SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
+----
+3  2  {1,3}
+1  2  {3,3}

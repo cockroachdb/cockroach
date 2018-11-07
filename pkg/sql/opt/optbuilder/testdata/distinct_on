@@ -86,12 +86,13 @@ distinct-on
 build
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
-sort
+distinct-on
  ├── columns: b:2(string!null)
+ ├── grouping columns: a:1(string!null) b:2(string!null) c:3(string!null)
  ├── ordering: +2
- └── distinct-on
+ └── sort
       ├── columns: a:1(string!null) b:2(string!null) c:3(string!null)
-      ├── grouping columns: a:1(string!null) b:2(string!null) c:3(string!null)
+      ├── ordering: +2
       └── scan abc
            └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
 
@@ -190,40 +191,43 @@ sort
 build
 SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
-sort
- ├── columns: y:2(int) z:3(int) x:1(int)
- ├── ordering: +3
- └── distinct-on
-      ├── columns: x:1(int) y:2(int) z:3(int)
-      ├── grouping columns: x:1(int) z:3(int)
-      ├── project
-      │    ├── columns: x:1(int) y:2(int) z:3(int)
-      │    └── scan xyz
-      │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: y [type=int]
-
-build
-SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
-----
 distinct-on
  ├── columns: y:2(int) z:3(int) x:1(int)
- ├── grouping columns: x:1(int)
- ├── internal-ordering: -3,-2 opt(1)
- ├── ordering: +1
+ ├── grouping columns: x:1(int) z:3(int)
+ ├── ordering: +3
  ├── sort
  │    ├── columns: x:1(int) y:2(int) z:3(int)
- │    ├── ordering: +1,-3,-2
+ │    ├── ordering: +3
  │    └── project
  │         ├── columns: x:1(int) y:2(int) z:3(int)
  │         └── scan xyz
  │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  └── aggregations
-      ├── first-agg [type=int]
-      │    └── variable: y [type=int]
       └── first-agg [type=int]
-           └── variable: z [type=int]
+           └── variable: y [type=int]
+
+build
+SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
+----
+sort
+ ├── columns: y:2(int) z:3(int) x:1(int)
+ ├── ordering: +1
+ └── distinct-on
+      ├── columns: x:1(int) y:2(int) z:3(int)
+      ├── grouping columns: x:1(int)
+      ├── internal-ordering: -3,-2
+      ├── sort
+      │    ├── columns: x:1(int) y:2(int) z:3(int)
+      │    ├── ordering: -3,-2
+      │    └── project
+      │         ├── columns: x:1(int) y:2(int) z:3(int)
+      │         └── scan xyz
+      │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+      └── aggregations
+           ├── first-agg [type=int]
+           │    └── variable: y [type=int]
+           └── first-agg [type=int]
+                └── variable: z [type=int]
 
 #####################
 # With aggregations #
@@ -428,16 +432,57 @@ sort
 build
 SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
-sort
+distinct-on
  ├── columns: pk1:4(int)
+ ├── grouping columns: x:1(int) y:2(int) z:3(int)
  ├── ordering: +1
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: pk1 [type=int]
+
+# Verify we accept either ordering direction for the ON columns.
+build
+SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x DESC
+----
+distinct-on
+ ├── columns: x:1(int) y:2(int) z:3(int)
+ ├── grouping columns: x:1(int) y:2(int)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: z [type=int]
+
+build
+SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x ASC, y DESC, z
+----
+sort
+ ├── columns: x:1(int) y:2(int) z:3(int)
+ ├── ordering: +1,-2
  └── distinct-on
-      ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int)
-      ├── grouping columns: x:1(int) y:2(int) z:3(int)
-      ├── project
-      │    ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
-      │    └── scan xyz
-      │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+      ├── columns: x:1(int) y:2(int) z:3(int)
+      ├── grouping columns: x:1(int) y:2(int)
+      ├── internal-ordering: +3
+      ├── sort
+      │    ├── columns: x:1(int) y:2(int) z:3(int)
+      │    ├── ordering: +3
+      │    └── project
+      │         ├── columns: x:1(int) y:2(int) z:3(int)
+      │         └── scan xyz
+      │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: pk1 [type=int]
+                └── variable: z [type=int]

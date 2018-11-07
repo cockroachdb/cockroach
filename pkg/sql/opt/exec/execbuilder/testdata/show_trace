@@ -295,10 +295,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 fetched: /ab/primary/1/4 -> NULL
 fetched: /ab/primary/1/5 -> NULL
 fetched: /ab/primary/2/1 -> NULL
+output row: [9]
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/3/9 -> NULL
-output row: [9]
 output row: [9]
 output row: [9]
 

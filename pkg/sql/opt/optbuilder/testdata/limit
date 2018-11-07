@@ -137,19 +137,21 @@ limit
  ├── columns: sum:4(decimal)
  ├── internal-ordering: -2
  ├── ordering: -2
- ├── sort
+ ├── project
  │    ├── columns: v:2(int) sum:4(decimal)
  │    ├── ordering: -2
- │    └── project
- │         ├── columns: v:2(int) sum:4(decimal)
- │         └── group-by
- │              ├── columns: k:1(int!null) v:2(int) sum:4(decimal)
- │              ├── grouping columns: k:1(int!null) v:2(int)
- │              ├── scan t
- │              │    └── columns: k:1(int!null) v:2(int) w:3(int)
- │              └── aggregations
- │                   └── sum [type=decimal]
- │                        └── variable: w [type=int]
+ │    └── group-by
+ │         ├── columns: k:1(int!null) v:2(int) sum:4(decimal)
+ │         ├── grouping columns: k:1(int!null) v:2(int)
+ │         ├── ordering: -2
+ │         ├── sort
+ │         │    ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         │    ├── ordering: -2
+ │         │    └── scan t
+ │         │         └── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── aggregations
+ │              └── sum [type=decimal]
+ │                   └── variable: w [type=int]
  └── const: 10 [type=int]
 
 build

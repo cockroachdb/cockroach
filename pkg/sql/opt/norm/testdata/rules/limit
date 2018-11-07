@@ -169,14 +169,14 @@ project
  │    ├── cardinality: [0 - 5]
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
+ │    ├── distinct-on
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── distinct-on
+ │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
+ │    │         ├── ordering: +3
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -284,14 +284,14 @@ project
  │    ├── internal-ordering: +3
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
+ │    ├── distinct-on
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── distinct-on
+ │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
+ │    │         ├── ordering: +3
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -345,14 +345,14 @@ project
  │    │    ├── internal-ordering: +3
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    ├── sort
+ │    │    ├── distinct-on
  │    │    │    ├── columns: i:2(int) f:3(float)
+ │    │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
- │    │    │    └── distinct-on
+ │    │    │    └── sort
  │    │    │         ├── columns: i:2(int) f:3(float)
- │    │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │    │         ├── key: (2,3)
+ │    │    │         ├── ordering: +3
  │    │    │         └── scan a
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 5 [type=int]

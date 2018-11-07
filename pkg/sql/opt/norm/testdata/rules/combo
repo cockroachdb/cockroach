@@ -1523,7 +1523,7 @@ TryDecorrelateProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateScalarGroupBy
-  Cost: 2222.54
+  Cost: 2232.54
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1611,7 +1611,7 @@ TryDecorrelateScalarGroupBy
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateProjectSelect
-  Cost: 2260.00
+  Cost: 2270.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1693,7 +1693,7 @@ TryDecorrelateProjectSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 DecorrelateJoin
-  Cost: 2260.00
+  Cost: 2270.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1749,7 +1749,7 @@ DecorrelateJoin
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushFilterIntoJoinRight
-  Cost: 2258.33
+  Cost: 2268.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1817,7 +1817,7 @@ PushFilterIntoJoinRight
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushSelectIntoProject
-  Cost: 2248.33
+  Cost: 2258.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1885,7 +1885,7 @@ PushSelectIntoProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2245.00
+  Cost: 2255.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1960,7 +1960,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneJoinRightCols
-  Cost: 2245.00
+  Cost: 2255.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2023,7 +2023,7 @@ PruneJoinRightCols
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateGroupByProject
-  Cost: 2235.00
+  Cost: 2245.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2107,7 +2107,7 @@ EliminateGroupByProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2225.00
+  Cost: 2235.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2190,7 +2190,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2215.00
+  Cost: 2225.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2274,7 +2274,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneProjectCols
-  Cost: 2215.00
+  Cost: 2225.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2322,7 +2322,7 @@ PruneProjectCols
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 InlineProjectInProject
-  Cost: 2195.00
+  Cost: 2205.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2409,7 +2409,7 @@ CommuteLeftJoin (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 GenerateMergeJoins
-  Cost: 2190.00
+  Cost: 2200.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2465,6 +2465,54 @@ CommuteRightJoin (no changes)
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
+GenerateStreamingGroupBy
+  Cost: 2190.00
+================================================================================
+   project
+    ├── columns: r:8(bool)
+    ├── group-by
+    │    ├── columns: x:1(int!null) bool_or:10(bool)
+    │    ├── grouping columns: x:1(int!null)
+  + │    ├── internal-ordering: +1
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(10)
+    │    ├── left-join (merge)
+    │    │    ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
+    │    │    ├── left ordering: +1
+    │    │    ├── right ordering: +3
+    │    │    ├── key: (1,3)
+    │    │    ├── fd: (3)-->(9)
+  + │    │    ├── ordering: +1
+    │    │    ├── scan xy
+    │    │    │    ├── columns: x:1(int!null)
+    │    │    │    ├── key: (1)
+    │    │    │    └── ordering: +1
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+    │    │    │    ├── key: (3)
+    │    │    │    ├── fd: (3)-->(9)
+    │    │    │    ├── ordering: +3
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
+    │    │    │    │    ├── key: (3)
+    │    │    │    │    ├── fd: (3)-->(4)
+    │    │    │    │    ├── ordering: +3
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
+    │    │    │    │    │    ├── key: (3)
+    │    │    │    │    │    ├── fd: (3)-->(4)
+    │    │    │    │    │    └── ordering: +3
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
+    │    │    │    └── projections
+    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
+    │    │    └── filters (true)
+    │    └── aggregations
+    │         └── bool-or [type=bool, outer=(9)]
+    │              └── variable: notnull [type=bool]
+    └── projections
+         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
+================================================================================
 Final best expression
   Cost: 2190.00
 ================================================================================
@@ -2473,6 +2521,7 @@ Final best expression
    ├── group-by
    │    ├── columns: x:1(int!null) bool_or:10(bool)
    │    ├── grouping columns: x:1(int!null)
+   │    ├── internal-ordering: +1
    │    ├── key: (1)
    │    ├── fd: (1)-->(10)
    │    ├── left-join (merge)
@@ -2481,6 +2530,7 @@ Final best expression
    │    │    ├── right ordering: +3
    │    │    ├── key: (1,3)
    │    │    ├── fd: (3)-->(9)
+   │    │    ├── ordering: +1
    │    │    ├── scan xy
    │    │    │    ├── columns: x:1(int!null)
    │    │    │    ├── key: (1)

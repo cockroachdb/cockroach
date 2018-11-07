@@ -101,7 +101,7 @@ memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
  │         └── cost: 1070.00
@@ -129,7 +129,7 @@ memo (optimized, ~7KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
  │         └── cost: 1070.00
@@ -196,7 +196,7 @@ memo (optimized, ~7KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
  │         └── cost: 1070.00
@@ -243,7 +243,7 @@ memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
  │         └── cost: 1070.00

@@ -41,6 +41,30 @@ TABLE xyz
       ├── y int not null
       └── z int not null
 
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX ab(a, b) STORING (c, d), INDEX cd(c, d) STORING (a, b))
+----
+TABLE abcd
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX ab
+ │    ├── a int
+ │    ├── b int
+ │    ├── rowid int not null (hidden)
+ │    ├── c int (storing)
+ │    └── d int (storing)
+ └── INDEX cd
+      ├── c int
+      ├── d int
+      ├── rowid int not null (hidden)
+      ├── a int (storing)
+      └── b int (storing)
+
 # --------------------------------------------------
 # Scan operator.
 # --------------------------------------------------
@@ -243,14 +267,14 @@ memo (optimized, ~4KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G1: (project G2 G3 y z)
  │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1142.54
+ │    │    └── cost: 1145.87
  │    └── []
  │         ├── best: (project G2 G3 y z)
  │         └── cost: 1083.33
  ├── G2: (select G4 G5)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1139.21
+ │    │    └── cost: 1142.54
  │    └── []
  │         ├── best: (select G4 G5)
  │         └── cost: 1080.00
@@ -258,7 +282,7 @@ memo (optimized, ~4KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G4: (scan a,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
  │         └── cost: 1070.00
@@ -321,10 +345,11 @@ SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
 group-by
  ├── columns: a:1(int!null) b:2(int!null) min:4(int)
  ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    └── ordering: +1
+ │    └── ordering: +1,+2
  └── aggregations
       └── min [type=int]
            └── variable: c [type=int]
@@ -367,8 +392,10 @@ sort
  └── group-by
       ├── columns: a:1(int!null) b:2(int!null) min:4(int)
       ├── grouping columns: a:1(int!null) b:2(int!null)
+      ├── internal-ordering: +1,+2
       ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1,+2
       └── aggregations
            └── min [type=int]
                 └── variable: c [type=int]
@@ -380,7 +407,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDE
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +3 opt(1,2)
+ ├── internal-ordering: +1,+2,+3
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -395,7 +422,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, 
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +3 opt(1,2)
+ ├── internal-ordering: +1,+2,+3
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -410,7 +437,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, 
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +3 opt(1,2)
+ ├── internal-ordering: +1,+2,+3
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -436,6 +463,56 @@ group-by
       └── sum [type=decimal]
            └── variable: c [type=int]
 
+# Verify we do a streaming group-by using the a, b ordering.
+opt
+SELECT sum(d) FROM abcd GROUP BY a, b, c
+----
+project
+ ├── columns: sum:6(decimal)
+ └── group-by
+      ├── columns: a:1(int) b:2(int) c:3(int) sum:6(decimal)
+      ├── grouping columns: a:1(int) b:2(int) c:3(int)
+      ├── internal-ordering: +1,+2
+      ├── scan abcd@ab
+      │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+      │    └── ordering: +1,+2
+      └── aggregations
+           └── sum [type=decimal]
+                └── variable: d [type=int]
+
+# Verify we do a streaming group-by using the c, d ordering.
+opt
+SELECT sum(a) FROM abcd GROUP BY b, c, d
+----
+project
+ ├── columns: sum:6(decimal)
+ └── group-by
+      ├── columns: b:2(int) c:3(int) d:4(int) sum:6(decimal)
+      ├── grouping columns: b:2(int) c:3(int) d:4(int)
+      ├── internal-ordering: +3,+4
+      ├── scan abcd@cd
+      │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+      │    └── ordering: +3,+4
+      └── aggregations
+           └── sum [type=decimal]
+                └── variable: a [type=int]
+
+opt
+SELECT array_agg(d) FROM (SELECT * FROM abcd ORDER BY c) GROUP BY a, b
+----
+project
+ ├── columns: array_agg:6(int[])
+ └── group-by
+      ├── columns: a:1(int) b:2(int) array_agg:6(int[])
+      ├── grouping columns: a:1(int) b:2(int)
+      ├── internal-ordering: +3
+      ├── scan abcd@cd
+      │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+      │    └── ordering: +3
+      └── aggregations
+           └── array-agg [type=int[]]
+                └── variable: d [type=int]
+
 # --------------------------------------------------
 # Explain operator.
 # --------------------------------------------------
@@ -457,11 +534,11 @@ memo (optimized, ~1KB, required=[presentation: tree:5,field:8,description:9,colu
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │    └── [presentation: tree:5,field:8,description:9,columns:10,ordering:11]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │         └── cost: 1289.32
+ │         └── cost: 1299.32
  └── G2: (scan a)
       ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1289.32
+      │    └── cost: 1299.32
       └── []
            ├── best: (scan a)
            └── cost: 1080.00
@@ -493,7 +570,7 @@ memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +6])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +6]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1289.32
+ │    │    └── cost: 1299.32
  │    └── []
  │         ├── best: (project G2 G3 y)
  │         └── cost: 1080.00
@@ -532,14 +609,14 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +2,+5])
  ├── G1: (row-number G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+5]
  │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1269.32
+ │    │    └── cost: 1279.32
  │    └── []
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1269.32
+ │         └── cost: 1279.32
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1259.32
+      │    └── cost: 1269.32
       └── []
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
@@ -551,14 +628,14 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +5])
  ├── G1: (row-number G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +5]
  │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1269.32
+ │    │    └── cost: 1279.32
  │    └── []
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1269.32
+ │         └── cost: 1279.32
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1259.32
+      │    └── cost: 1269.32
       └── []
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
@@ -570,7 +647,7 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: -5])
  ├── G1: (row-number G2)
  │    ├── [presentation: y:2] [ordering: -5]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1269.32
+ │    │    └── cost: 1279.32
  │    └── []
  │         ├── best: (row-number G2)
  │         └── cost: 1060.00
@@ -934,12 +1011,13 @@ offset
 opt
 SELECT DISTINCT b, c FROM abc ORDER BY b
 ----
-sort
+distinct-on
  ├── columns: b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2
- └── distinct-on
+ └── sort
       ├── columns: b:2(int!null) c:3(int!null)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── ordering: +2
       └── scan abc
            └── columns: b:2(int!null) c:3(int!null)
 
@@ -956,17 +1034,18 @@ scan abc
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b
 ----
-sort
+distinct-on
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2
- └── distinct-on
-      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
-      ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: a [type=int]
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +2
+ │    └── scan abc
+ │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: a [type=int]
 
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
@@ -977,10 +1056,10 @@ sort
  └── distinct-on
       ├── columns: a:1(int) b:2(int!null) c:3(int!null)
       ├── grouping columns: b:2(int!null) c:3(int!null)
-      ├── internal-ordering: +1 opt(2,3)
+      ├── internal-ordering: +1
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +1 opt(2,3)
+      │    └── ordering: +1
       └── aggregations
            └── first-agg [type=int]
                 └── variable: a [type=int]
@@ -988,19 +1067,21 @@ sort
 opt
 SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-distinct-on
+sort
  ├── columns: a:1(int!null) c:3(int)
- ├── grouping columns: a:1(int!null)
- ├── internal-ordering: -3,+2 opt(1)
  ├── ordering: +1
- ├── sort
- │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    ├── ordering: +1,-3,+2
- │    └── scan abc
- │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- └── aggregations
-      └── first-agg [type=int]
-           └── variable: c [type=int]
+ └── distinct-on
+      ├── columns: a:1(int!null) c:3(int)
+      ├── grouping columns: a:1(int!null)
+      ├── internal-ordering: -3,+2
+      ├── sort
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── ordering: -3,+2
+      │    └── scan abc
+      │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── aggregations
+           └── first-agg [type=int]
+                └── variable: c [type=int]
 
 # Pass through the ordering from above.
 opt
@@ -1009,10 +1090,11 @@ SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc) ORDER BY a
 distinct-on
  ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    └── ordering: +1
+ │    └── ordering: +1,+2
  └── aggregations
       └── first-agg [type=int]
            └── variable: c [type=int]
@@ -1038,10 +1120,11 @@ SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER B
 distinct-on
  ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    └── ordering: +1
+ │    └── ordering: +1,+2
  └── aggregations
       └── first-agg [type=int]
            └── variable: c [type=int]
@@ -1053,7 +1136,7 @@ SELECT * FROM (SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY c, b, a) ORDE
 distinct-on
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
  ├── grouping columns: b:2(int!null) c:3(int!null)
- ├── internal-ordering: +1 opt(2,3)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -1073,10 +1156,10 @@ sort
  └── distinct-on
       ├── columns: a:1(int) b:2(int!null) c:3(int)
       ├── grouping columns: b:2(int!null)
-      ├── internal-ordering: +3 opt(2)
+      ├── internal-ordering: +3
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    ├── ordering: +3 opt(2)
+      │    ├── ordering: +3
       │    └── scan abc
       │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── aggregations
@@ -1095,10 +1178,10 @@ sort
  └── distinct-on
       ├── columns: a:1(int!null) b:2(int) c:3(int)
       ├── grouping columns: a:1(int!null)
-      ├── internal-ordering: +2 opt(1)
+      ├── internal-ordering: +1,+2
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +2 opt(1)
+      │    └── ordering: +1,+2
       └── aggregations
            ├── first-agg [type=int]
            │    └── variable: b [type=int]

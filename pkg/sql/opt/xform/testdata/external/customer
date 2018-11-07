@@ -443,10 +443,12 @@ SELECT id, sum(value) FROM data GROUP BY id
 group-by
  ├── columns: id:1(uuid) sum:14(decimal)
  ├── grouping columns: id:1(uuid)
+ ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(14)
  ├── scan data@foo
- │    └── columns: id:1(uuid) value:2(int)
+ │    ├── columns: id:1(uuid) value:2(int)
+ │    └── ordering: +1
  └── aggregations
       └── sum [type=decimal, outer=(2)]
            └── variable: value [type=int]
