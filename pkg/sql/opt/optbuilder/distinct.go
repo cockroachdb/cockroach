@@ -84,7 +84,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			)})
 		}
-		seen.Add(int(col))
+		seen.Add(int(col.ID()))
 		if seen.Equals(distinctOnCols) {
 			// All DISTINCT ON columns showed up; other columns are allowed in the
 			// rest of the ORDER BY (case 2 above).
@@ -98,6 +98,13 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// DISTINCT ON columns doesn't affect intra-group ordering, so we add these
 	// columns as optional.
 	private.Ordering.FromOrderingWithOptCols(inScope.ordering, distinctOnCols)
+
+	// TODO(radu): the execbuilder doesn't correctly handle orderings with
+	// optional columns that are not constant (#31882). The fix for that is
+	// involved; for now we don't set the grouping columns as optional. The
+	// exploration rule that looks at interesting orderings negates (or at least
+	// alleviates) the impact of restricting the Ordering in this way.
+	private.Ordering.Optional = opt.ColSet{}
 
 	// Set up a new scope for the output of DISTINCT ON. This scope differs from
 	// the input scope in that it doesn't have "extra" ORDER BY columns, e.g.

@@ -573,8 +573,10 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	if groupBy.Op() == opt.ScalarGroupByOp {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
-		groupByInput := groupBy.Child(0).(memo.RelExpr)
-		orderedInputCols := input.getColumnOrdinalSet(aggOrderedCols(groupByInput, groupingCols))
+		groupBy := groupBy.(*memo.GroupByExpr)
+		orderedInputCols := input.getColumnOrdinalSet(
+			groupBy.StreamingAggCols(&groupBy.Physical().Ordering),
+		)
 		reqOrdering := ep.reqOrdering(groupBy.Physical())
 		ep.root, err = b.factory.ConstructGroupBy(
 			input.root, groupingColIdx, orderedInputCols, aggInfos, reqOrdering,
@@ -593,7 +595,7 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	}
 
 	distinctCols := input.getColumnOrdinalSet(distinct.GroupingCols)
-	orderedCols := input.getColumnOrdinalSet(aggOrderedCols(distinct.Input, distinct.GroupingCols))
+	orderedCols := input.getColumnOrdinalSet(distinct.StreamingAggCols(&distinct.Physical().Ordering))
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
 	if err != nil {
 		return execPlan{}, err
@@ -647,28 +649,6 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	}
 	input.outputCols = newOutputCols
 	return input, nil
-}
-
-// aggOrderedCols returns (as ordinals) the set of columns in the input of an
-// aggregation operator on which there is an ordering.
-func aggOrderedCols(inputExpr memo.RelExpr, groupingCols opt.ColSet) opt.ColSet {
-	// Use the ordering that we require on the child (this is the more restrictive
-	// between GroupByDef.Ordering and the ordering required on the aggregation
-	// operator itself).
-	ordering := inputExpr.Physical().Ordering
-	var res opt.ColSet
-	for i := range ordering.Columns {
-		g := ordering.Columns[i].Group
-		g = g.Intersection(groupingCols)
-		if !g.Intersects(groupingCols) {
-			// This group refers to a column that is not a grouping column.
-			// The rest of the ordering is not useful.
-			break
-		}
-		res.UnionWith(g)
-	}
-	res.IntersectionWith(groupingCols)
-	return res
 }
 
 func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {

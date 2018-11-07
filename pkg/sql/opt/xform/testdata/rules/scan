@@ -285,7 +285,7 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +3]
       │    ├── best: (sort G1)
-      │    └── cost: 1279.32
+      │    └── cost: 1289.32
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
            └── cost: 1070.00
@@ -297,7 +297,7 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
       │    ├── best: (sort G1)
-      │    └── cost: 1289.28
+      │    └── cost: 1300.28
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
            └── cost: 1070.00
@@ -309,14 +309,14 @@ memo (optimized, ~5KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  ├── G1: (select G2 G3) (scan a@s_idx,cols=(2-4),constrained) (index-join G4 a,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 11.35
+ │    │    └── cost: 11.45
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(2-4),constrained)
  │         └── cost: 10.59
  ├── G2: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(2-4))
  │         └── cost: 1070.00
@@ -384,7 +384,7 @@ memo (optimized, ~2KB, required=[presentation: d:4] [ordering: +5])
  ├── G1: (project G2 G3 d)
  │    ├── [presentation: d:4] [ordering: +5]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1289.32
  │    └── []
  │         ├── best: (project G2 G3 d)
  │         └── cost: 1070.00
@@ -486,7 +486,7 @@ memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
       │    ├── best: (sort G1)
-      │    └── cost: 1290.28
+      │    └── cost: 1301.38
       └── []
            ├── best: (scan a@s_idx,cols=(1,2,4))
            └── cost: 1070.00
