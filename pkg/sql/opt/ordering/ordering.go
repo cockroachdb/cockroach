@@ -15,9 +15,12 @@
 package ordering
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CanProvide returns true if the given operator returns rows that can
@@ -25,6 +28,9 @@ import (
 func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	if required.Any() {
 		return true
+	}
+	if util.RaceEnabled {
+		checkRequired(expr, required)
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
 }
@@ -35,7 +41,11 @@ func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 func BuildChildRequired(
 	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
-	return funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
+	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
+	if util.RaceEnabled && !result.Any() {
+		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
+	}
+	return result
 }
 
 type funcs struct {
@@ -123,4 +133,25 @@ func noChildReqOrdering(
 	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
 	return props.OrderingChoice{}
+}
+
+// checkRequired runs sanity checks on the ordering required of an operator.
+func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
+	rel := expr.Relational()
+
+	// Verify that the ordering only refers to output columns.
+	if !required.SubsetOfCols(rel.OutputCols) {
+		panic(fmt.Sprintf("required ordering refers to non-output columns (op %s)", expr.Op()))
+	}
+
+	// Verify that columns in a column group are equivalent.
+	for i := range required.Columns {
+		c := &required.Columns[i]
+		if !c.Group.SubsetOf(rel.FuncDeps.ComputeEquivGroup(c.AnyID())) {
+			panic(fmt.Sprintf(
+				"ordering column group %s contains non-equivalent columns (op %s)",
+				c.Group, expr.Op(),
+			))
+		}
+	}
 }
