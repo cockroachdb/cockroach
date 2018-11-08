@@ -307,7 +307,7 @@ func (p *planner) Update(
 		// If rowsNeeded is set, we have requested from the source above
 		// all the columns from the descriptor. However, to ensure that
 		// modified rows include all columns, the construction of the
-		// source has used publicAndNonVivible columns so the source may
+		// source has used publicAndNonPublicColumns so the source may
 		// contain additional columns for every newly added column not yet
 		// visible.
 		// We do not want these to be available for RETURNING below.
@@ -716,7 +716,15 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if u.run.rows != nil {
-		if _, err := u.run.rows.AddRow(params.ctx, newValues); err != nil {
+		// The new values can include all columns, the construction of the
+		// values has used publicAndNonPublicColumns so the values may
+		// contain additional columns for every newly added column not yet
+		// visible. We do not want them to be available for RETURNING.
+		//
+		// MakeUpdater guarantees that the first columns of the new values
+		// are those specified u.columns.
+		resultValues := newValues[:len(u.columns)]
+		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
 	}
