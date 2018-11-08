@@ -187,17 +187,35 @@ SELECT count(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
+
+statement ok
+BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
 query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NULL,
-   FAMILY "primary" (x, rowid)
+   x INT NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   FAMILY "primary" (x)
 )
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
 DELETE FROM t29494 RETURNING y
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+query I
+DELETE FROM t29494 RETURNING *
+----
+12
+
+statement ok
+COMMIT
