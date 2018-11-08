@@ -716,7 +716,18 @@ func (o *Optimizer) optimizeRootWithProps() {
 	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
 		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
 			root = o.f.CustomFuncs().PruneCols(root, neededCols)
-			o.mem.SetRoot(root, rootProps)
+			// We may have pruned a column that appears in the required ordering.
+			rootCols := root.Relational().OutputCols
+			if !rootProps.Ordering.SubsetOfCols(rootCols) {
+				newProps := *rootProps
+				newProps.Ordering = rootProps.Ordering.Copy()
+				newProps.Ordering.ProjectCols(rootCols)
+				o.mem.SetRoot(root, &newProps)
+				//lint:ignore SA4006 set rootProps in case another rule is added below.
+				rootProps = o.mem.RootProps()
+			} else {
+				o.mem.SetRoot(root, rootProps)
+			}
 			if o.appliedRule != nil {
 				o.appliedRule(opt.PruneRootCols, nil, root)
 			}
