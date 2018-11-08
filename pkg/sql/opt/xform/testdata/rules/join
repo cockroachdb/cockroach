@@ -106,7 +106,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G5)
- │         └── cost: 1279.32
+ │         └── cost: 1289.32
  ├── G6: (eq G8 G9)
  ├── G7: (true)
  ├── G8: (variable a)
@@ -134,7 +134,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G4)
- │         └── cost: 1279.32
+ │         └── cost: 1289.32
  ├── G5: (merge-on G7 full-join,+1,+7)
  ├── G6: (eq G8 G9)
  ├── G7: (true)
@@ -202,7 +202,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G4)
- │         └── cost: 1279.32
+ │         └── cost: 1289.32
  ├── G5: (merge-on G7 left-join,+1,+7)
  ├── G6: (eq G8 G9)
  ├── G7: (true)
@@ -251,7 +251,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G5)
- │         └── cost: 1279.32
+ │         └── cost: 1289.32
  ├── G6: (eq G8 G9)
  ├── G7: (true)
  ├── G8: (variable a)

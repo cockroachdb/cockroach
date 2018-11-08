@@ -249,9 +249,42 @@ type GroupByDef struct {
 	// GroupingCols is always empty in the ScalarGroupBy case.
 	GroupingCols opt.ColSet
 
-	// Ordering specifies the sort order of values within each group. This is
-	// only significant for order-sensitive aggregation operators, like ArrayAgg.
+	// Ordering specifies the order required of the input. This order can intermix
+	// grouping and non-grouping columns, serving a dual-purpose:
+	//  - if we ignore grouping columns, it specifies an intra-group ordering (sort
+	//    order of values within each group, useful for order-sensitive aggregation
+	//    operators like ArrayAgg;
+	//  - leading grouping columns specify an inter-group ordering, allowing for
+	//    more efficient streaming execution.
+	//
+	// The canonical operation always contains an ordering that has no grouping
+	// columns. Exploration rules can create versions of the operator with
+	// orderings that contain grouping columns.
 	Ordering props.OrderingChoice
+}
+
+// StreamingAggCols returns the subset of grouping columns that form a prefix of
+// the ordering required of the input. These columns can be used to perform a
+// streaming aggregation.
+func (g *GroupByDef) StreamingAggCols(required *props.OrderingChoice) opt.ColSet {
+	// The ordering required of the input is the intersection of the required
+	// ordering on the grouping operator and the internal ordering. We use both
+	// to determine the ordered grouping columns.
+	var res opt.ColSet
+	harvestCols := func(ord *props.OrderingChoice) {
+		for i := range ord.Columns {
+			cols := ord.Columns[i].Group.Intersection(g.GroupingCols)
+			if cols.Empty() {
+				// This group refers to a column that is not a grouping column.
+				// The rest of the ordering is not useful.
+				break
+			}
+			res.UnionWith(cols)
+		}
+	}
+	harvestCols(required)
+	harvestCols(&g.Ordering)
+	return res
 }
 
 // IndexJoinDef defines the value of the Def private field of the IndexJoin

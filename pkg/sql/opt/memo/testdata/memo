@@ -134,17 +134,17 @@ memo (optimized, ~24KB)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:6] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 2167.84
+ │    │    └── cost: 2171.17
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 2167.84
+ │         └── cost: 2171.17
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 2167.64
+ │    │    └── cost: 2170.97
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2167.64
+ │         └── cost: 2170.97
  ├── G3: (projections G6 y x)
  ├── G4: (inner-join G9 G8 G7) (inner-join G8 G9 G7) (lookup-join G9 G14 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G9 G10)
  │    ├── ""
@@ -152,7 +152,7 @@ memo (optimized, ~24KB)
  │    │    └── cost: 2108.33
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 2167.54
+ │         └── cost: 2170.87
  ├── G5: (const 10)
  ├── G6: (plus G22 G23)
  ├── G7: (filters G11)
@@ -169,10 +169,10 @@ memo (optimized, ~24KB)
  │    │    └── cost: 1056.67
  │    ├── "[ordering: +2]"
  │    │    ├── best: (sort G9)
- │    │    └── cost: 1115.87
+ │    │    └── cost: 1119.21
  │    └── "[ordering: +5]"
  │         ├── best: (sort G9)
- │         └── cost: 1115.87
+ │         └── cost: 1119.21
  ├── G10: (merge-on G14 inner-join,+3,+5)
  ├── G11: (eq G15 G16)
  ├── G12: (select G17 G18)
@@ -181,7 +181,7 @@ memo (optimized, ~24KB)
  │    │    └── cost: 1050.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G12)
- │         └── cost: 1109.21
+ │         └── cost: 1112.54
  ├── G13: (projections G19 y)
  ├── G14: (true)
  ├── G15: (variable column5)
@@ -192,7 +192,7 @@ memo (optimized, ~24KB)
  │    │    └── cost: 1040.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G17)
- │         └── cost: 1249.32
+ │         └── cost: 1259.32
  ├── G18: (filters G20)
  ├── G19: (cast G21 STRING)
  ├── G20: (gt G22 G23)
@@ -349,11 +349,11 @@ memo (optimized, ~4KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1062.00
+ │         └── cost: 1072.00
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── ""
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1061.00
+ │         └── cost: 1071.00
  ├── G3: (projections array_agg)
  ├── G4: (scan a)
  │    └── ""
@@ -370,14 +370,14 @@ memo (optimized, ~3KB)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1259.33
+ │         └── cost: 1269.33
  ├── G2: (scan a)
  │    ├── ""
  │    │    ├── best: (scan a)
  │    │    └── cost: 1040.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1249.32
+ │         └── cost: 1259.32
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable x)
