@@ -601,7 +601,7 @@ WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
 ORDER BY i_id
 ----
 scan item
- ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)
+ ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
  ├── stats: [rows=12, distinct(1)=12, null(1)=0]
  ├── cost: 13.08
@@ -618,7 +618,7 @@ WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
 ----
 project
- ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)
+ ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)  [hidden: s_i_id:1(int!null)]
  ├── stats: [rows=5]
  ├── cost: 6.3
  ├── key: (1)
@@ -653,7 +653,7 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
 project
- ├── columns: c_id:1(int!null)
+ ├── columns: c_id:1(int!null)  [hidden: c_first:4(string)]
  ├── stats: [rows=3.3e-05]
  ├── cost: 3.663e-05
  ├── key: (1)
@@ -1011,7 +1011,7 @@ FROM district
 ORDER BY d_w_id, d_id
 ----
 scan district
- ├── columns: d_next_o_id:11(int)
+ ├── columns: d_next_o_id:11(int)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
  ├── stats: [rows=100]
  ├── cost: 114
  ├── key: (1,2)
@@ -1027,7 +1027,7 @@ GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
 ----
 group-by
- ├── columns: max:4(int)
+ ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 98101
@@ -1055,7 +1055,7 @@ GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
 ----
 group-by
- ├── columns: max:9(int)
+ ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 330001
@@ -1143,7 +1143,7 @@ GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
 ----
 group-by
- ├── columns: sum:9(decimal)
+ ├── columns: sum:9(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 342001
@@ -1170,7 +1170,7 @@ GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
 sort
- ├── columns: count:11(int)
+ ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 1110017.05
  ├── key: (2,3)

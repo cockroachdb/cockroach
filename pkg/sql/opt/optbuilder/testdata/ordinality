@@ -69,7 +69,7 @@ build
 SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: ordinality:5(int!null)]
  ├── ordering: +5
  └── row-number
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
@@ -81,7 +81,7 @@ build
 SELECT ordinality FROM abcd WITH ORDINALITY ORDER BY a
 ----
 sort
- ├── columns: ordinality:5(int!null)
+ ├── columns: ordinality:5(int!null)  [hidden: a:1(int!null)]
  ├── ordering: +1
  └── project
       ├── columns: a:1(int!null) ordinality:5(int!null)

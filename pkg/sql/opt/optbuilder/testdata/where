@@ -96,7 +96,7 @@ build
 SELECT 'hello' LIKE v AS r FROM kvString WHERE k LIKE 'like%' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)
@@ -117,7 +117,7 @@ build
 SELECT 'hello' SIMILAR TO v AS r FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)
@@ -138,7 +138,7 @@ build
 SELECT 'hello' ~ replace(v, '%', '.*') AS r FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)

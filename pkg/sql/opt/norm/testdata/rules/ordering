@@ -45,7 +45,7 @@ opt expect=SimplifyLimitOrdering
 SELECT b, c FROM abcde WHERE d=1 AND e=2 ORDER BY b, c, d, e, a LIMIT 10
 ----
 limit
- ├── columns: b:2(int) c:3(int)
+ ├── columns: b:2(int) c:3(int)  [hidden: a:1(int!null) d:4(int!null) e:5(int!null)]
  ├── internal-ordering: +2,+3,+1 opt(4,5)
  ├── cardinality: [0 - 10]
  ├── key: (1)
@@ -74,7 +74,7 @@ opt expect=SimplifyLimitOrdering
 SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
 scan abcde@bc
- ├── columns: c:3(int)
+ ├── columns: c:3(int)  [hidden: a:1(int!null) b:2(int)]
  ├── limit: 10
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)

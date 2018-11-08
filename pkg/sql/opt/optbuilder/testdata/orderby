@@ -162,7 +162,7 @@ build
 SELECT b FROM t ORDER BY a DESC
 ----
 project
- ├── columns: b:2(int)
+ ├── columns: b:2(int)  [hidden: a:1(int!null)]
  ├── ordering: -1
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
@@ -172,7 +172,7 @@ build
 SELECT b FROM t ORDER BY a LIMIT 1
 ----
 limit
- ├── columns: b:2(int)
+ ├── columns: b:2(int)  [hidden: a:1(int!null)]
  ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
@@ -187,7 +187,7 @@ build
 SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 project
- ├── columns: b:2(int)
+ ├── columns: b:2(int)  [hidden: a:1(int!null)]
  ├── ordering: -1,+2
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
@@ -197,7 +197,7 @@ build
 SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 project
- ├── columns: b:2(int)
+ ├── columns: b:2(int)  [hidden: a:1(int!null)]
  ├── ordering: -1,-2
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
@@ -208,7 +208,7 @@ build
 SELECT a, b, b FROM t ORDER BY c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) b:2(int)
+ ├── columns: a:1(int!null) b:2(int) b:2(int)  [hidden: c:3(bool)]
  ├── ordering: +3
  └── scan t
       └── columns: a:1(int!null) b:2(int) c:3(bool)
@@ -302,7 +302,7 @@ build
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: column4:4(int)]
  ├── ordering: -4,+1
  └── project
       ├── columns: column4:4(int) a:1(int!null)
@@ -451,7 +451,7 @@ build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY -generate_series
 ----
 sort
- ├── columns: generate_series:1(int) array:2(int[])
+ ├── columns: generate_series:1(int) array:2(int[])  [hidden: column3:3(int)]
  ├── ordering: +3
  └── project
       ├── columns: array:2(int[]) column3:3(int) generate_series:1(int)
@@ -474,7 +474,7 @@ build
 SELECT * FROM t ORDER BY 1+2
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)  [hidden: column4:4(int!null)]
  ├── ordering: +4
  └── project
       ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
@@ -500,7 +500,7 @@ build
 SELECT * FROM t ORDER BY length('abc')
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)  [hidden: column4:4(int)]
  ├── ordering: +4
  └── project
       ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
@@ -560,7 +560,7 @@ build
 SELECT b, c FROM t ORDER BY @2
 ----
 sort
- ├── columns: b:2(int) c:3(bool)
+ ├── columns: b:2(int) c:3(bool)  [hidden: column4:4(int)]
  ├── ordering: +4
  └── project
       ├── columns: column4:4(int) b:2(int) c:3(bool)
@@ -615,7 +615,7 @@ build
 SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
- ├── columns: d:4(string)
+ ├── columns: d:4(string)  [hidden: column5:5(string)]
  ├── ordering: +5
  └── project
       ├── columns: column5:5(string) d:4(string)
@@ -647,7 +647,7 @@ build
 SELECT a, b FROM abc ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1(int!null) b:2(int!null)  [hidden: c:3(int!null)]
  ├── ordering: +2,+3
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -658,7 +658,7 @@ build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1(int!null) b:2(int!null)  [hidden: c:3(int!null)]
  ├── ordering: +2,+3,-1
  └── sort
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
@@ -764,7 +764,7 @@ build
 SELECT a FROM abc ORDER BY INDEX abc@bc
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int!null) c:3(int!null)]
  ├── ordering: +2,+3
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -932,7 +932,7 @@ build
 SELECT a FROM abcd ORDER BY b, PRIMARY KEY abcd
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int)]
  ├── ordering: +2,+1
  └── project
       ├── columns: a:1(int!null) b:2(int)
@@ -943,7 +943,7 @@ build
 SELECT a FROM abcd ORDER BY INDEX abcd@abc
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
  ├── ordering: +1,+2,+3
  └── scan abcd
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -953,7 +953,7 @@ build
 SELECT a FROM abcd ORDER BY INDEX abcd@abc DESC
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
  ├── ordering: -1,-2,-3
  └── scan abcd,rev
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -973,7 +973,7 @@ build
 SELECT a FROM abcd ORDER BY INDEX abcd@bcd
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
  └── scan abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -982,7 +982,7 @@ build
 SELECT a FROM abcd ORDER BY INDEX abcd@bcd DESC
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: -2,+3,-4,-1
  └── scan abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -997,7 +997,7 @@ build
 SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
  └── scan abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -1006,7 +1006,7 @@ build
 SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
  └── scan abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -1015,7 +1015,7 @@ build
 SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
  └── scan abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -1050,7 +1050,7 @@ build
 SELECT a, b FROM abcd ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1(int!null) b:2(int)  [hidden: c:3(int)]
  ├── ordering: +2,+3
  └── project
       ├── columns: a:1(int!null) b:2(int) c:3(int)
@@ -1061,7 +1061,7 @@ build
 SELECT a FROM abcd ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
  ├── ordering: +2,+3
  └── project
       ├── columns: a:1(int!null) b:2(int) c:3(int)
@@ -1072,7 +1072,7 @@ build
 SELECT a FROM abcd ORDER BY a, b, c
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
  ├── ordering: +1,+2,+3
  └── scan abcd
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)

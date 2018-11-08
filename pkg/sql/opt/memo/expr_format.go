@@ -167,45 +167,37 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	tp = tp.Child(f.Buffer.String())
 
-	// If a particular column presentation is required of the expression, then
-	// print columns using that information.
-	if !physical.Presentation.Any() {
-		f.formatPresentation(e, tp, physical.Presentation)
-	} else {
-		// Special handling to improve the columns display for certain ops.
-		switch t := e.(type) {
-		case *ProjectExpr:
-			// We want the synthesized column IDs to map 1-to-1 to the projections,
-			// and the pass-through columns at the end.
+	var colList opt.ColList
+	// Special handling to improve the columns display for certain ops.
+	switch t := e.(type) {
+	case *ProjectExpr:
+		// We want the synthesized column IDs to map 1-to-1 to the projections,
+		// and the pass-through columns at the end.
 
-			// Get the list of columns from the ProjectionsOp, which has the natural
-			// order.
-			var colList opt.ColList
-			for i := range t.Projections {
-				colList = append(colList, t.Projections[i].Col)
-			}
-
-			// Add pass-through columns.
-			t.Passthrough.ForEach(func(i int) {
-				colList = append(colList, opt.ColumnID(i))
-			})
-
-			f.formatColList(e, tp, "columns:", colList)
-
-		case *ValuesExpr:
-			f.formatColList(e, tp, "columns:", t.Cols)
-
-		case *UnionExpr, *IntersectExpr, *ExceptExpr,
-			*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
-			private := e.Private().(*SetPrivate)
-			f.formatColList(e, tp, "columns:", private.OutCols)
-
-		default:
-			// Fall back to writing output columns in column id order, with
-			// best guess label.
-			f.formatColSet(e, tp, "columns:", e.Relational().OutputCols)
+		// Get the list of columns from the ProjectionsOp, which has the natural
+		// order.
+		for i := range t.Projections {
+			colList = append(colList, t.Projections[i].Col)
 		}
+
+		// Add pass-through columns.
+		t.Passthrough.ForEach(func(i int) {
+			colList = append(colList, opt.ColumnID(i))
+		})
+
+	case *ValuesExpr:
+		colList = t.Cols
+
+	case *UnionExpr, *IntersectExpr, *ExceptExpr,
+		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
+		colList = e.Private().(*SetPrivate).OutCols
+
+	default:
+		// Fall back to writing output columns in column id order.
+		colList = opt.ColSetToList(e.Relational().OutputCols)
 	}
+
+	f.formatColumns(e, tp, colList, physical.Presentation)
 
 	switch t := e.(type) {
 	// Special-case handling for GroupBy private; print grouping columns
@@ -213,7 +205,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !private.GroupingCols.Empty() {
-			f.formatColSet(e, tp, "grouping columns:", private.GroupingCols)
+			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
 		}
 		if !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
@@ -456,32 +448,35 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	}
 }
 
-func (f *ExprFmtCtx) formatPresentation(
-	nd RelExpr, tp treeprinter.Node, presentation props.Presentation,
+func (f *ExprFmtCtx) formatColumns(
+	nd RelExpr, tp treeprinter.Node, cols opt.ColList, presentation props.Presentation,
 ) {
-	relational := nd.Relational()
+	if presentation.Any() {
+		f.formatColList(nd, tp, "columns:", cols)
+		return
+	}
+
+	// When a particular column presentation is required of the expression, then
+	// print columns using that information. Include information about columns
+	// that are hidden by the presentation separately.
+	hidden := cols.ToSet()
+	notNullCols := nd.Relational().NotNullCols
 	f.Buffer.Reset()
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
-		formatCol(f, col.Label, col.ID, relational.NotNullCols)
+		hidden.Remove(int(col.ID))
+		formatCol(f, col.Label, col.ID, notNullCols)
+	}
+	if !hidden.Empty() {
+		f.Buffer.WriteString("  [hidden:")
+		for _, col := range cols {
+			if hidden.Contains(int(col)) {
+				formatCol(f, "", col, notNullCols)
+			}
+		}
+		f.Buffer.WriteString("]")
 	}
 	tp.Child(f.Buffer.String())
-}
-
-// formatColSet constructs a new treeprinter child containing the specified set
-// of columns formatting using the formatCol method.
-func (f *ExprFmtCtx) formatColSet(
-	nd RelExpr, tp treeprinter.Node, heading string, colSet opt.ColSet,
-) {
-	if !colSet.Empty() {
-		notNullCols := nd.Relational().NotNullCols
-		f.Buffer.Reset()
-		f.Buffer.WriteString(heading)
-		colSet.ForEach(func(i int) {
-			formatCol(f, "", opt.ColumnID(i), notNullCols)
-		})
-		tp.Child(f.Buffer.String())
-	}
 }
 
 // formatColList constructs a new treeprinter child containing the specified

@@ -35,7 +35,7 @@ opt
 SELECT * FROM a ORDER BY length('foo'), random()+1.0
 ----
 sort
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)  [hidden: column7:7(float)]
  ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-5,7)
