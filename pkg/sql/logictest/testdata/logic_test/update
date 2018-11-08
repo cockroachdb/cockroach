@@ -439,15 +439,19 @@ UPDATE derived SET y = 'abcd'
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
+
+statement ok
+BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
 query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NULL,
-   FAMILY "primary" (x, rowid)
+   x INT NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   FAMILY "primary" (x)
 )
 
 # Check that the new column is not usable in RETURNING
@@ -458,6 +462,12 @@ UPDATE t29494 SET x = 123 RETURNING y
 # the txn because the error above trashed it.
 statement ok
 ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Returning * doesn't return y
+query I
+UPDATE t29494 SET x = 124 WHERE x = 12 RETURNING *
+----
+124
 
 statement error column "y" does not exist
 UPDATE t29494 SET y = 123
