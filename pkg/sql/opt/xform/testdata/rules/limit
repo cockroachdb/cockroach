@@ -68,7 +68,7 @@ opt
 SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 ----
 limit
- ├── columns: s:4(string)
+ ├── columns: s:4(string)  [hidden: i:2(int)]
  ├── internal-ordering: +4,+2
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -87,7 +87,7 @@ opt
 SELECT s FROM a ORDER BY f LIMIT 1
 ----
 limit
- ├── columns: s:4(string)
+ ├── columns: s:4(string)  [hidden: f:3(float)]
  ├── internal-ordering: +3
  ├── cardinality: [0 - 1]
  ├── key: ()

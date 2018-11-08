@@ -95,7 +95,7 @@ opt
 SELECT s FROM a ORDER BY k DESC
 ----
 scan a,rev
- ├── columns: s:4(string)
+ ├── columns: s:4(string)  [hidden: k:1(int!null)]
  ├── key: (1)
  ├── fd: (1)-->(4)
  └── ordering: -1
@@ -181,7 +181,7 @@ opt
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 scan a@s_idx
- ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +4,+1
@@ -208,7 +208,7 @@ GenerateIndexScans
 ================================================================================
 Source expression:
   sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    ├── ordering: +4,+1
@@ -219,7 +219,7 @@ Source expression:
 
 New expression 1 of 1:
   scan a@s_idx
-   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    └── ordering: +4,+1
@@ -240,7 +240,7 @@ GenerateConstrainedScans
 ================================================================================
 Source expression:
   select
-   ├── columns: s:4(string!null) i:2(int) f:3(float)
+   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4)
@@ -254,7 +254,7 @@ Source expression:
 
 New expression 1 of 2:
   scan a@s_idx
-   ├── columns: s:4(string!null) i:2(int) f:3(float)
+   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── constraint: /4/1: [/'foo' - /'foo']
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
@@ -262,7 +262,7 @@ New expression 1 of 2:
 
 New expression 2 of 2:
   sort
-   ├── columns: s:4(string!null) i:2(int) f:3(float)
+   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4)
@@ -428,7 +428,7 @@ opt
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 scan a
- ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +1
@@ -470,7 +470,7 @@ opt
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
 sort
- ├── columns: i:2(int) k:1(int!null)
+ ├── columns: i:2(int) k:1(int!null)  [hidden: s:4(string)]
  ├── key: (1)
  ├── fd: (1)-->(2,4)
  ├── ordering: -4,+2,+1

@@ -700,7 +700,7 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int)  [hidden: column6:6(int)]
  ├── ordering: +6
  └── project
       ├── columns: column6:6(int) v:2(int) count:5(int)
@@ -723,7 +723,7 @@ build
 SELECT v FROM kv GROUP BY v ORDER BY sum(k)
 ----
 sort
- ├── columns: v:2(int)
+ ├── columns: v:2(int)  [hidden: sum:5(decimal)]
  ├── ordering: +5
  └── group-by
       ├── columns: v:2(int) sum:5(decimal)
@@ -2798,7 +2798,7 @@ build
 SELECT 123 r FROM kv ORDER BY max(v)
 ----
 project
- ├── columns: r:6(int!null)
+ ├── columns: r:6(int!null)  [hidden: max:5(int)]
  ├── ordering: +5
  ├── scalar-group-by
  │    ├── columns: max:5(int)
