@@ -720,6 +720,15 @@ func (o *Optimizer) optimizeRootWithProps() {
 			if o.appliedRule != nil {
 				o.appliedRule(opt.PruneRootCols, nil, root)
 			}
+			// We may have pruned a column that appears in the required ordering.
+			rootCols := root.Relational().OutputCols
+			if !rootProps.Ordering.SubsetOfCols(rootCols) {
+				newProps := *rootProps
+				newProps.Ordering = rootProps.Ordering.Copy()
+				newProps.Ordering.ProjectCols(rootCols)
+				o.mem.SetRoot(root, &newProps)
+				rootProps = o.mem.RootProps()
+			}
 		}
 	}
 }
