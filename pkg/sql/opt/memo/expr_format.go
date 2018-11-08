@@ -531,6 +531,11 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 	f.Buffer.WriteByte(')')
 }
 
+// ScanIsReverseFn is a callback that is used to figure out if a scan needs to
+// happen in reverse (the code lives in the ordering package, and depending on
+// that directly would be a dependency loop).
+var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *props.OrderingChoice) bool
+
 // FormatPrivate outputs a description of the private to f.Buffer.
 func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical) {
 	if private == nil {
@@ -553,11 +558,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
 		}
-		ok, reverse := t.CanProvideOrdering(f.Memo.Metadata(), &physProps.Ordering)
-		if !ok {
-			panic("scan cannot provide required ordering")
-		}
-		if reverse {
+		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
 
