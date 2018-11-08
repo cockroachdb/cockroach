@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
@@ -204,7 +205,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *props.Physical) 
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
-	if _, reverse := scan.CanProvideOrdering(c.mem.Metadata(), &required.Ordering); reverse {
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
@@ -343,7 +344,7 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *props.Phys
 		// The cost is chosen so that it's always less than the cost to sort the
 		// input.
 		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
-		n := private.StreamingAggCols(&required.Ordering).Len()
+		n := ordering.StreamingGroupingCols(private, &required.Ordering).Len()
 		// n = 0:                factor = 1
 		// n = groupingColCount: factor = 0
 		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
