@@ -90,6 +90,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 // returned.
 func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, error) {
 	rangeID := r.RangeID
+	now := timeutil.Now()
 
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
@@ -110,7 +111,22 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	raftStatus := r.raftStatusRLocked()
 
 	firstIndex, err := r.raftFirstIndexLocked()
-	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
+	var pendingSnapshotIndex uint64
+	for curIndex, deadline := range r.mu.pendingSnapshotIndex {
+		if deadline != (time.Time{}) && deadline.Before(now) {
+			// The snapshot has finished and its grace period has passed.
+			// Ignore it when making truncation decisions.
+			delete(r.mu.pendingSnapshotIndex, curIndex)
+			continue
+		}
+		if pendingSnapshotIndex == 0 || pendingSnapshotIndex > curIndex {
+			pendingSnapshotIndex = curIndex
+		}
+	}
+	if len(r.mu.pendingSnapshotIndex) == 0 {
+		// Save a little bit of memory.
+		r.mu.pendingSnapshotIndex = nil
+	}
 	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()
 
@@ -153,6 +169,7 @@ const (
 )
 
 type truncateDecisionInput struct {
+	Now                            time.Time
 	RaftStatus                     *raft.Status // never nil
 	LogSize, MaxLogSize            int64
 	FirstIndex, LastIndex          uint64
@@ -248,7 +265,7 @@ func (td *truncateDecision) ShouldTruncate() bool {
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.QuorumIndex = getQuorumIndex(input.RaftStatus, input.PendingPreemptiveSnapshotIndex)
+	decision.QuorumIndex = getQuorumIndex(input.RaftStatus)
 
 	decision.NewFirstIndex = decision.QuorumIndex
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
@@ -264,14 +281,15 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 				decision.ChosenVia = truncatableIndexChosenViaFollowers
 			}
 		}
-		// The pending snapshot index acts as a placeholder for a replica that is
-		// about to be added to the range. We don't want to truncate the log in a
-		// way that will require that new replica to be caught up via a Raft
-		// snapshot.
-		if input.PendingPreemptiveSnapshotIndex > 0 && decision.NewFirstIndex > input.PendingPreemptiveSnapshotIndex {
-			decision.NewFirstIndex = input.PendingPreemptiveSnapshotIndex
-			decision.ChosenVia = truncatableIndexChosenViaPendingSnap
-		}
+	}
+
+	// The pending snapshot index acts as a placeholder for a replica that is
+	// about to be added to the range (or is in Raft recovery). We don't want to
+	// truncate the log in a way that will require that new replica to be caught
+	// up via yet another Raft snapshot.
+	if input.PendingPreemptiveSnapshotIndex > 0 && decision.NewFirstIndex > input.PendingPreemptiveSnapshotIndex {
+		decision.NewFirstIndex = input.PendingPreemptiveSnapshotIndex
+		decision.ChosenVia = truncatableIndexChosenViaPendingSnap
 	}
 
 	// Advance to the first index, but never truncate past the quorum commit
@@ -310,13 +328,10 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 // quorum was determined at the time the index was written. If you're thinking
 // of using getQuorumIndex for some purpose, consider that raftStatus.Commit
 // might be more appropriate (e.g. determining if a replica is up to date).
-func getQuorumIndex(raftStatus *raft.Status, pendingSnapshotIndex uint64) uint64 {
-	match := make([]uint64, 0, len(raftStatus.Progress)+1)
+func getQuorumIndex(raftStatus *raft.Status) uint64 {
+	match := make([]uint64, 0, len(raftStatus.Progress))
 	for _, progress := range raftStatus.Progress {
 		match = append(match, progress.Match)
-	}
-	if pendingSnapshotIndex != 0 {
-		match = append(match, pendingSnapshotIndex)
 	}
 	sort.Sort(uint64Slice(match))
 	quorum := computeQuorum(len(match))

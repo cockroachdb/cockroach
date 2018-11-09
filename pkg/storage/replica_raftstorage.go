@@ -397,10 +397,19 @@ func (r *Replica) GetSnapshot(
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	snap := r.store.engine.NewSnapshot()
+	r.mu.Lock()
+	appliedIndex := r.mu.state.RaftAppliedIndex
+	r.setPendingSnapshotIndexLocked(appliedIndex) // cleared when OutgoingSnapshot closes
+	r.mu.Unlock()
 	r.raftMu.Unlock()
+
+	release := func() {
+		r.clearPendingSnapshotIndex(appliedIndex)
+	}
 
 	defer func() {
 		if err != nil {
+			release()
 			snap.Close()
 		}
 	}()
@@ -434,6 +443,7 @@ func (r *Replica) GetSnapshot(
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
+	snapData.onClose = release
 	return &snapData, nil
 }
 
@@ -457,6 +467,7 @@ type OutgoingSnapshot struct {
 	WithSideloaded func(func(sideloadStorage) error) error
 	RaftEntryCache *raftEntryCache
 	snapType       string
+	onClose        func()
 }
 
 func (s *OutgoingSnapshot) String() string {
@@ -467,6 +478,9 @@ func (s *OutgoingSnapshot) String() string {
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
 	s.EngineSnap.Close()
+	if s.onClose != nil {
+		s.onClose()
+	}
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.

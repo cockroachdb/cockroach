@@ -66,23 +66,22 @@ func TestGetQuorumIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		progress             []uint64
-		pendingSnapshotIndex uint64
-		expected             uint64
+		progress []uint64
+		expected uint64
 	}{
 		// Basic cases.
-		{[]uint64{1}, 0, 1},
-		{[]uint64{2}, 1, 1},
-		{[]uint64{1, 2}, 0, 1},
-		{[]uint64{2, 3}, 1, 2},
-		{[]uint64{1, 2, 3}, 0, 2},
-		{[]uint64{2, 3, 4}, 1, 2},
-		{[]uint64{1, 2, 3, 4}, 0, 2},
-		{[]uint64{2, 3, 4, 5}, 1, 3},
-		{[]uint64{1, 2, 3, 4, 5}, 0, 3},
-		{[]uint64{2, 3, 4, 5, 6}, 1, 3},
+		{[]uint64{1}, 1},
+		{[]uint64{2}, 2},
+		{[]uint64{1, 2}, 1},
+		{[]uint64{2, 3}, 2},
+		{[]uint64{1, 2, 3}, 2},
+		{[]uint64{2, 3, 4}, 3},
+		{[]uint64{1, 2, 3, 4}, 2},
+		{[]uint64{2, 3, 4, 5}, 3},
+		{[]uint64{1, 2, 3, 4, 5}, 3},
+		{[]uint64{2, 3, 4, 5, 6}, 4},
 		// Sorting.
-		{[]uint64{5, 4, 3, 2, 1}, 0, 3},
+		{[]uint64{5, 4, 3, 2, 1}, 3},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -91,7 +90,7 @@ func TestGetQuorumIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		quorumMatchedIndex := getQuorumIndex(status, c.pendingSnapshotIndex)
+		quorumMatchedIndex := getQuorumIndex(status)
 		if c.expected != quorumMatchedIndex {
 			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
 		}
@@ -161,9 +160,10 @@ func TestComputeTruncateDecision(t *testing.T) {
 			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
 			"truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
 		},
+		// Don't truncate away pending snapshot, even when log too large.
 		{
 			[]uint64{100, 100}, 2000, 1, 100, 50,
-			"truncate 99 entries to first index 100 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
+			"truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
 		},
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
@@ -176,7 +176,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 		// The pending snapshot index affects the quorum commit index.
 		{
 			[]uint64{4}, 2000, 1, 7, 1,
-			"truncate 0 entries to first index 1 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+			"truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
 		},
 		// Never truncate past the quorum commit index.
 		{

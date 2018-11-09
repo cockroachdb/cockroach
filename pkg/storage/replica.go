@@ -346,10 +346,19 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// The raft log index of a pending preemptive snapshot. Used to prohibit
-		// raft log truncation while a preemptive snapshot is in flight. A value of
-		// 0 indicates that there is no pending snapshot.
-		pendingSnapshotIndex uint64
+		// A map of raft log index of pending preemptive snapshots to deadlines.
+		// Used to prohibit raft log truncations that would leave a gap between
+		// the snapshot and the new first index. The map entry has a zero
+		// deadline while the snapshot is being sent and turns nonzero when the
+		// snapshot has completed, preventing truncation for a grace period
+		// (since there is a race between the snapshot completing and its being
+		// reflected in the raft status used to make truncation decisions).
+		//
+		// NB: If we kept only one value, we could end up in situations in which
+		// we're either giving some snapshots no grace period, or keep an
+		// already finished snapshot "pending" for extended periods of time
+		// (preventing log truncation).
+		pendingSnapshotIndex map[uint64]time.Time
 		// raftLogSize is the approximate size in bytes of the persisted raft log.
 		// On server restart, this value is assumed to be zero to avoid costly scans
 		// of the raft log. This will be correct when all log entries predating this
@@ -6942,29 +6951,43 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
-func (r *Replica) setPendingSnapshotIndex(index uint64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// We allow the pendingSnapshotIndex to change from 0 to 1 and then from 1 to
-	// a value greater than 1. Any other change indicates 2 current preemptive
-	// snapshots on the same replica which is disallowed.
-	if (index == 1 && r.mu.pendingSnapshotIndex != 0) ||
-		(index > 1 && r.mu.pendingSnapshotIndex != 1) {
-		// NB: this path can be hit if the replicate queue and scatter work
-		// concurrently. It's still good to return an error to avoid duplicating
-		// work, but we make it a benign one (so that it isn't logged).
-		return &benignError{errors.Errorf(
-			"%s: can't set pending snapshot index to %d; pending snapshot already present: %d",
-			r, index, r.mu.pendingSnapshotIndex)}
+func (r *Replica) setPendingSnapshotIndexLocked(index uint64) {
+	// NB: usually, only one pending snapshot is sent at any given time, but
+	// if the replicate queue and scatter work concurrently, calls may interleave,
+	// and so we track the minimum inflight index here (to avoid truncations for
+	// all ongoing snapshots).
+	deadline, ok := r.mu.pendingSnapshotIndex[index]
+	if ok && deadline == (time.Time{}) {
+		// A snapshot at this index is already in flight. They're probably to
+		// different replicas, but we're going to treat them as one for simplicity.
+		// In the worst case, the snapshot index will be cleared too early (since
+		// we're not refcounting but removing immediately when the first snapshot
+		// is done).
+		return
 	}
-	r.mu.pendingSnapshotIndex = index
-	return nil
+
+	if r.mu.pendingSnapshotIndex == nil {
+		r.mu.pendingSnapshotIndex = make(map[uint64]time.Time)
+	}
+
+	r.mu.pendingSnapshotIndex[index] = time.Time{}
 }
 
-func (r *Replica) clearPendingSnapshotIndex() {
+func (r *Replica) clearPendingSnapshotIndex(origIndex uint64) {
 	r.mu.Lock()
-	r.mu.pendingSnapshotIndex = 0
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+
+	deadline := timeutil.Now().Add(3 * time.Second)
+
+	if r.mu.pendingSnapshotIndex == nil {
+		// Nothing to clear (this can happen if a concurrent snapshot at the
+		// same index finished earlier).
+		return
+	}
+	// Note that the deadline may already have been set by a concurrent snapshot
+	// at the same index, but ours is likely later so we write it
+	// unconditionally.
+	r.mu.pendingSnapshotIndex[origIndex] = deadline
 }
 
 func (r *Replica) startKey() roachpb.RKey {
