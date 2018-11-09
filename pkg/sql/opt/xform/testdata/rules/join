@@ -653,39 +653,6 @@ inner-join (merge)
  └── filters
       └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
-# Verify that the required orderings are simplified: the equality columns are
-# (u,t)=(x,z) but we are able to utilize indexes on s,t,u and y,z.
-opt
-SELECT * FROM (SELECT * FROM stu WHERE s = u) FULL OUTER JOIN (SELECT * FROM xyz WHERE x = y) ON u=x AND t=z
-----
-full-join (merge)
- ├── columns: s:1(int) t:2(int) u:3(int) x:4(int) y:5(int) z:6(int)
- ├── left ordering: +3,+2
- ├── right ordering: +4,+6
- ├── fd: (1)==(3), (3)==(1), (4)==(5), (5)==(4)
- ├── select
- │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
- │    ├── key: (2,3)
- │    ├── fd: (1)==(3), (3)==(1)
- │    ├── ordering: +(1|3),+2
- │    ├── scan stu
- │    │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
- │    │    ├── key: (1-3)
- │    │    └── ordering: +(1|3),+2
- │    └── filters
- │         └── s = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- ├── select
- │    ├── columns: x:4(int!null) y:5(int!null) z:6(int)
- │    ├── fd: (4)==(5), (5)==(4)
- │    ├── ordering: +(4|5),+6
- │    ├── scan xyz@yz
- │    │    ├── columns: x:4(int) y:5(int!null) z:6(int)
- │    │    ├── constraint: /5/6/7: (/NULL - ]
- │    │    └── ordering: +(4|5),+6
- │    └── filters
- │         └── x = y [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
- └── filters (true)
-
 # Verify multiple merge-joins can be chained.
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y RIGHT OUTER JOIN stu ON a=s

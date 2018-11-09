@@ -39,7 +39,7 @@ sort
  ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-5,7)
- ├── ordering: +7 opt(6)
+ ├── ordering: +7
  └── project
       ├── columns: column7:7(float) k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       ├── side-effects
