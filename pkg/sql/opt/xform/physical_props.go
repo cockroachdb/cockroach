@@ -15,13 +15,10 @@
 package xform
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // canProvidePhysicalProps returns true if the given expression can provide the
@@ -60,15 +57,6 @@ func (o *Optimizer) buildChildPhysicalProps(
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
-
-	// RaceEnabled ensures that checks are run on every change (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if util.RaceEnabled && !childProps.Ordering.Any() {
-		outCols := parent.Child(nth).(memo.RelExpr).Relational().OutputCols
-		if !childProps.Ordering.SubsetOfCols(outCols) {
-			panic(fmt.Sprintf("OrderingChoice refers to non-output columns (op: %s)", parent.Op()))
-		}
-	}
 
 	// If properties haven't changed, no need to re-intern them.
 	if childProps.Equals(parentProps) {

@@ -66,8 +66,8 @@ func TestProject(t *testing.T) {
 	for _, tc := range testCases {
 		req := props.ParseOrderingChoice(tc.req)
 		res := "no"
-		if CanProvide(project, &req) {
-			res = BuildChildRequired(project, &req, 0).String()
+		if projectCanProvideOrdering(project, &req) {
+			res = projectBuildChildReqOrdering(project, &req, 0).String()
 		}
 		if res != tc.exp {
 			t.Errorf("req: %s  expected: %s  got: %s\n", tc.req, tc.exp, res)

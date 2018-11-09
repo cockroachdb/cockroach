@@ -32,7 +32,7 @@ limit
  ├── columns: d:4(int) e:5(int)
  ├── internal-ordering: +4,+5
  ├── cardinality: [0 - 10]
- ├── ordering: +4,+5 opt(6)
+ ├── ordering: +4,+5
  ├── sort
  │    ├── columns: d:4(int) e:5(int)
  │    ├── ordering: +4,+5

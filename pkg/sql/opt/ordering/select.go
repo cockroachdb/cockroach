@@ -30,5 +30,28 @@ func selectBuildChildReqOrdering(
 	if childIdx != 0 {
 		return props.OrderingChoice{}
 	}
-	return *required
+	return trimColumnGroups(required, &parent.(*memo.SelectExpr).Input.Relational().FuncDeps)
+}
+
+// trimColumnGroups removes columns from ColumnOrderingChoice groups as
+// necessary, so that all columns in each group are equivalent according to
+// the given FDs. It is used when the parent expression can have column
+// equivalences that the input expression does not (for example a Select with an
+// equality condition); the columns in a group must be equivalent at the level
+// of the operator where the ordering is required.
+func trimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) props.OrderingChoice {
+	res := *required
+	copied := false
+	for i := range res.Columns {
+		c := &res.Columns[i]
+		eqGroup := fds.ComputeEquivGroup(c.AnyID())
+		if !c.Group.SubsetOf(eqGroup) {
+			if !copied {
+				res = res.Copy()
+				copied = true
+			}
+			res.Columns[i].Group = c.Group.Intersection(eqGroup)
+		}
+	}
+	return res
 }
