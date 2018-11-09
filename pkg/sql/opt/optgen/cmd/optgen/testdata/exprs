@@ -116,15 +116,19 @@ func (e *ProjectExpr) NextExpr() RelExpr {
 }
 
 func (e *ProjectExpr) Physical() *props.Physical {
-	return e.grp.physical()
+	return e.grp.bestProps().required
 }
 
 func (e *ProjectExpr) Cost() Cost {
-	return e.grp.cost()
+	return e.grp.bestProps().cost
 }
 
 func (e *ProjectExpr) group() exprGroup {
 	return e.grp
+}
+
+func (e *ProjectExpr) bestProps() *bestProps {
+	return e.grp.bestProps()
 }
 
 func (e *ProjectExpr) setNext(member RelExpr) {
@@ -145,9 +149,8 @@ func (e *ProjectExpr) setGroup(member RelExpr) {
 type projectGroup struct {
 	mem   *Memo
 	rel   props.Relational
-	phys  *props.Physical
-	cst   Cost
 	first ProjectExpr
+	best  bestProps
 }
 
 var _ exprGroup = &projectGroup{}
@@ -160,21 +163,12 @@ func (g *projectGroup) relational() *props.Relational {
 	return &g.rel
 }
 
-func (g *projectGroup) physical() *props.Physical {
-	return g.phys
-}
-
 func (g *projectGroup) firstExpr() RelExpr {
 	return &g.first
 }
 
-func (g *projectGroup) cost() Cost {
-	return g.cst
-}
-
-func (g *projectGroup) setBestProps(physical *props.Physical, cost Cost) {
-	g.phys = physical
-	g.cst = cost
+func (g *projectGroup) bestProps() *bestProps {
+	return &g.best
 }
 
 type ProjectionsExpr []ProjectionsItem
@@ -275,8 +269,7 @@ type ColPrivate struct {
 
 type SortExpr struct {
 	Input RelExpr
-	phys  *props.Physical
-	cst   Cost
+	best  bestProps
 }
 
 func (e *SortExpr) Op() opt.Operator {
@@ -329,11 +322,15 @@ func (e *SortExpr) NextExpr() RelExpr {
 }
 
 func (e *SortExpr) Physical() *props.Physical {
-	return e.phys
+	return e.best.required
 }
 
 func (e *SortExpr) Cost() Cost {
-	return e.cst
+	return e.best.cost
+}
+
+func (e *SortExpr) bestProps() *bestProps {
+	return &e.best
 }
 
 func (e *SortExpr) group() exprGroup {

@@ -91,9 +91,8 @@ func (g *exprsGen) genExprDef(define *lang.DefineExpr) {
 //   type selectGroup struct {
 //     mem   *Memo
 //     rel   props.Relational
-//     phys  *props.Physical
-//     cst   Cost
 //     first SelectExpr
+//     best  bestProps
 //   }
 //
 func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
@@ -108,9 +107,8 @@ func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "type %s struct {\n", groupStructType)
 	fmt.Fprintf(g.w, "  mem *Memo\n")
 	fmt.Fprintf(g.w, "  rel props.Relational\n")
-	fmt.Fprintf(g.w, "  phys *props.Physical\n")
-	fmt.Fprintf(g.w, "  cst Cost\n")
 	fmt.Fprintf(g.w, "  first %s\n", structType)
+	fmt.Fprintf(g.w, "  best bestProps\n")
 	fmt.Fprintf(g.w, "}\n\n")
 	fmt.Fprintf(g.w, "var _ exprGroup = &%s{}\n\n", groupStructType)
 
@@ -124,25 +122,14 @@ func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "  return &g.rel\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
-	// Generate the physical method.
-	fmt.Fprintf(g.w, "func (g *%s) physical() *props.Physical {\n", groupStructType)
-	fmt.Fprintf(g.w, "  return g.phys\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
 	// Generate the firstExpr method.
 	fmt.Fprintf(g.w, "func (g *%s) firstExpr() RelExpr {\n", groupStructType)
 	fmt.Fprintf(g.w, "  return &g.first\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
-	// Generate the cost method.
-	fmt.Fprintf(g.w, "func (g *%s) cost() Cost {\n", groupStructType)
-	fmt.Fprintf(g.w, "  return g.cst\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
-	// Generate the setBestProps method.
-	fmt.Fprintf(g.w, "func (g *%s) setBestProps(physical *props.Physical, cost Cost) {\n", groupStructType)
-	fmt.Fprintf(g.w, "  g.phys = physical\n")
-	fmt.Fprintf(g.w, "  g.cst = cost\n")
+	// Generate the bestProps method.
+	fmt.Fprintf(g.w, "func (g *%s) bestProps() *bestProps {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return &g.best\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
@@ -198,8 +185,7 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 		}
 	} else if define.Tags.Contains("Enforcer") {
 		fmt.Fprintf(g.w, "  Input RelExpr\n")
-		fmt.Fprintf(g.w, "  phys  *props.Physical\n")
-		fmt.Fprintf(g.w, "  cst   Cost\n")
+		fmt.Fprintf(g.w, "  best  bestProps\n")
 	} else {
 		fmt.Fprintf(g.w, "\n")
 		fmt.Fprintf(g.w, "  grp  exprGroup\n")
@@ -344,17 +330,22 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 
 		// Generate the Physical method.
 		fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
-		fmt.Fprintf(g.w, "  return e.grp.physical()\n")
+		fmt.Fprintf(g.w, "  return e.grp.bestProps().required\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
 		// Generate the Cost method.
 		fmt.Fprintf(g.w, "func (e *%s) Cost() Cost {\n", opTyp.name)
-		fmt.Fprintf(g.w, "  return e.grp.cost()\n")
+		fmt.Fprintf(g.w, "  return e.grp.bestProps().cost\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
 		// Generate the group method.
 		fmt.Fprintf(g.w, "func (e *%s) group() exprGroup {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  return e.grp\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the bestProps method.
+		fmt.Fprintf(g.w, "func (e *%s) bestProps() *bestProps {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.bestProps()\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
 		// Generate the setNext method.
@@ -442,12 +433,17 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 
 	// Generate the Physical method.
 	fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  return e.phys\n")
+	fmt.Fprintf(g.w, "  return e.best.required\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Cost method.
 	fmt.Fprintf(g.w, "func (e *%s) Cost() Cost {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  return e.cst\n")
+	fmt.Fprintf(g.w, "  return e.best.cost\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the bestProps method.
+	fmt.Fprintf(g.w, "func (e *%s) bestProps() *bestProps {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return &e.best\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the group method.
