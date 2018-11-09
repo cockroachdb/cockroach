@@ -15,6 +15,7 @@
 package memo
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
@@ -53,6 +54,10 @@ type bestProps struct {
 	// Required properties with respect to which the best expression was
 	// optimized.
 	required *props.Physical
+
+	// Provided ordering which needs to be maintained on the results in order to
+	// satisfy the required ordering; see RelExpr.ProvidedOrdering.
+	providedOrdering opt.Ordering
 
 	// Cost of the best expression.
 	cost Cost

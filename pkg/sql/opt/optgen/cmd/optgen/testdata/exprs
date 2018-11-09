@@ -119,6 +119,10 @@ func (e *ProjectExpr) Physical() *props.Physical {
 	return e.grp.bestProps().required
 }
 
+func (e *ProjectExpr) ProvidedOrdering() opt.Ordering {
+	return e.grp.bestProps().providedOrdering
+}
+
 func (e *ProjectExpr) Cost() Cost {
 	return e.grp.bestProps().cost
 }
@@ -323,6 +327,10 @@ func (e *SortExpr) NextExpr() RelExpr {
 
 func (e *SortExpr) Physical() *props.Physical {
 	return e.best.required
+}
+
+func (e *SortExpr) ProvidedOrdering() opt.Ordering {
+	return e.best.providedOrdering
 }
 
 func (e *SortExpr) Cost() Cost {

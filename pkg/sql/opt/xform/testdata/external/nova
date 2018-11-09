@@ -340,7 +340,7 @@ left-join (merge)
  │         │    │    │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
  │         │    │    │    │    │    ├── has-placeholder
  │         │    │    │    │    │    ├── fd: ()-->(22)
- │         │    │    │    │    │    ├── ordering: +17 opt(22)
+ │         │    │    │    │    │    ├── ordering: +17 opt(22) [provided: +17]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
  │         │    │    │    │    │    │    ├── has-placeholder
@@ -460,7 +460,7 @@ sort
  ├── has-placeholder
  ├── key: (1,34)
  ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
- ├── ordering: +7 opt(11)
+ ├── ordering: +7 opt(11) [provided: +7]
  └── right-join
       ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:34(int) key:35(string) value:36(string) flavor_extra_specs.flavor_id:37(int) flavor_extra_specs.created_at:38(timestamp) flavor_extra_specs.updated_at:39(timestamp)
       ├── side-effects
@@ -490,13 +490,13 @@ sort
       │         │    ├── has-placeholder
       │         │    ├── key: (1)
       │         │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    ├── ordering: +7 opt(11)
+      │         │    ├── ordering: +7 opt(11) [provided: +7]
       │         │    ├── sort
       │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │    ├── has-placeholder
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    │    ├── ordering: +7 opt(11)
+      │         │    │    ├── ordering: +7 opt(11) [provided: +7]
       │         │    │    └── select
       │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │         ├── has-placeholder
@@ -515,50 +515,50 @@ sort
       │         │    │         │    │    ├── right ordering: +23
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), ()~~>(31)
-      │         │    │         │    │    ├── ordering: +1 opt(11)
+      │         │    │         │    │    ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    ├── project
       │         │    │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── key: (1)
       │         │    │         │    │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    │         │    │    │    ├── ordering: +1 opt(11)
+      │         │    │         │    │    │    ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │    └── select
       │         │    │         │    │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    │         │    │    │         ├── has-placeholder
       │         │    │         │    │    │         ├── key: (1)
       │         │    │         │    │    │         ├── fd: ()-->(11), (1)-->(2-10,12,14,15,29), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    │         │    │    │         ├── ordering: +1 opt(11)
+      │         │    │         │    │    │         ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │         ├── group-by
       │         │    │         │    │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    │         │    │    │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │    │         │    │    │         │    ├── has-placeholder
       │         │    │         │    │    │         │    ├── key: (1)
       │         │    │         │    │    │         │    ├── fd: ()-->(11), (1)-->(2-12,14,15,29), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    │         │    │    │         │    ├── ordering: +1 opt(11)
+      │         │    │         │    │    │         │    ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │         │    ├── left-join (merge)
       │         │    │         │    │    │         │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool!null) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_projects.flavor_id:17(int) true:28(bool)
       │         │    │         │    │    │         │    │    ├── left ordering: +1
       │         │    │         │    │    │         │    │    ├── right ordering: +17
       │         │    │         │    │    │         │    │    ├── has-placeholder
       │         │    │         │    │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), ()~~>(28)
-      │         │    │         │    │    │         │    │    ├── ordering: +1 opt(11)
+      │         │    │         │    │    │         │    │    ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │         │    │    ├── select
       │         │    │         │    │    │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool!null) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │         │    │    │    ├── key: (1)
       │         │    │         │    │    │         │    │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-      │         │    │         │    │    │         │    │    │    ├── ordering: +1 opt(11)
+      │         │    │         │    │    │         │    │    │    ├── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │         │    │    │    ├── scan flavors
       │         │    │         │    │    │         │    │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │         │    │    │    │    ├── key: (1)
       │         │    │         │    │    │         │    │    │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-      │         │    │         │    │    │         │    │    │    │    └── ordering: +1 opt(11)
+      │         │    │         │    │    │         │    │    │    │    └── ordering: +1 opt(11) [provided: +1]
       │         │    │         │    │    │         │    │    │    └── filters
       │         │    │         │    │    │         │    │    │         └── disabled = false [type=bool, outer=(11), constraints=(/11: [/false - /false]; tight), fd=()-->(11)]
       │         │    │         │    │    │         │    │    ├── project
       │         │    │         │    │    │         │    │    │    ├── columns: true:28(bool!null) flavor_projects.flavor_id:17(int!null)
       │         │    │         │    │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │         │    │    │    ├── fd: ()-->(28)
-      │         │    │         │    │    │         │    │    │    ├── ordering: +17 opt(28)
+      │         │    │         │    │    │         │    │    │    ├── ordering: +17 opt(28) [provided: +17]
       │         │    │         │    │    │         │    │    │    ├── select
       │         │    │         │    │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) flavor_projects.project_id:18(string!null)
       │         │    │         │    │    │         │    │    │    │    ├── has-placeholder
@@ -608,7 +608,7 @@ sort
       │         │    │         │    │    │    ├── columns: true:31(bool!null) flavor_projects.flavor_id:23(int!null)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── fd: ()-->(31)
-      │         │    │         │    │    │    ├── ordering: +23 opt(31)
+      │         │    │         │    │    │    ├── ordering: +23 opt(31) [provided: +23]
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) flavor_projects.project_id:24(string!null)
       │         │    │         │    │    │    │    ├── has-placeholder
@@ -805,7 +805,7 @@ sort
       │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── fd: ()-->(25)
-      │         │    │         │    │    │    ├── ordering: +18 opt(25)
+      │         │    │         │    │    │    ├── ordering: +18 opt(25) [provided: +18]
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
       │         │    │         │    │    │    │    ├── has-placeholder
@@ -963,7 +963,7 @@ sort
       │         │    │    │    ├── columns: true:33(bool!null) instance_type_projects.instance_type_id:26(int!null)
       │         │    │    │    ├── has-placeholder
       │         │    │    │    ├── fd: ()-->(33)
-      │         │    │    │    ├── ordering: +26 opt(33)
+      │         │    │    │    ├── ordering: +26 opt(33) [provided: +26]
       │         │    │    │    ├── select
       │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
       │         │    │    │    │    ├── has-placeholder
@@ -1142,7 +1142,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── fd: ()-->(25)
- │    │         │    │    │    │    │    ├── ordering: +18 opt(25)
+ │    │         │    │    │    │    │    ├── ordering: +18 opt(25) [provided: +18]
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
@@ -1324,7 +1324,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── fd: ()-->(25)
- │    │         │    │    │    │    │    ├── ordering: +18 opt(25)
+ │    │         │    │    │    │    │    ├── ordering: +18 opt(25) [provided: +18]
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
@@ -1493,7 +1493,7 @@ right-join
  │         │    │    │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
  │         │    │    │    │    │    ├── has-placeholder
  │         │    │    │    │    │    ├── fd: ()-->(22)
- │         │    │    │    │    │    ├── ordering: +17 opt(22)
+ │         │    │    │    │    │    ├── ordering: +17 opt(22) [provided: +17]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
  │         │    │    │    │    │    │    ├── has-placeholder
@@ -1655,7 +1655,7 @@ right-join
  │         │    │    │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
  │         │    │    │    │    │    ├── has-placeholder
  │         │    │    │    │    │    ├── fd: ()-->(22)
- │         │    │    │    │    │    ├── ordering: +17 opt(22)
+ │         │    │    │    │    │    ├── ordering: +17 opt(22) [provided: +17]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
  │         │    │    │    │    │    │    ├── has-placeholder
@@ -1837,7 +1837,7 @@ sort
       │         │    │         │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── fd: ()-->(22)
-      │         │    │         │    │    │    ├── ordering: +17 opt(22)
+      │         │    │         │    │    │    ├── ordering: +17 opt(22) [provided: +17]
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
       │         │    │         │    │    │    │    ├── has-placeholder
@@ -2033,7 +2033,7 @@ sort
       │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── fd: ()-->(25)
-      │         │    │         │    │    │    ├── ordering: +18 opt(25)
+      │         │    │         │    │    │    ├── ordering: +18 opt(25) [provided: +18]
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
       │         │    │         │    │    │    │    ├── has-placeholder
@@ -2214,7 +2214,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── fd: ()-->(25)
- │    │         │    │    │    │    │    ├── ordering: +18 opt(25)
+ │    │         │    │    │    │    │    ├── ordering: +18 opt(25) [provided: +18]
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
@@ -2350,7 +2350,7 @@ sort
       │         │    │    │    ├── columns: true:28(bool!null) flavor_projects.flavor_id:23(int!null)
       │         │    │    │    ├── has-placeholder
       │         │    │    │    ├── fd: ()-->(28)
-      │         │    │    │    ├── ordering: +23 opt(28)
+      │         │    │    │    ├── ordering: +23 opt(28) [provided: +23]
       │         │    │    │    ├── select
       │         │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) project_id:24(string!null)
       │         │    │    │    │    ├── has-placeholder
@@ -2542,7 +2542,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── fd: ()-->(25)
- │    │         │    │         │    │    │    ├── ordering: +18 opt(25)
+ │    │         │    │         │    │    │    ├── ordering: +18 opt(25) [provided: +18]
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
@@ -2719,7 +2719,7 @@ sort
       │         │    │         │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
       │         │    │         │    │    │    ├── has-placeholder
       │         │    │         │    │    │    ├── fd: ()-->(22)
-      │         │    │         │    │    │    ├── ordering: +17 opt(22)
+      │         │    │         │    │    │    ├── ordering: +17 opt(22) [provided: +17]
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
       │         │    │         │    │    │    │    ├── has-placeholder
@@ -2844,7 +2844,7 @@ left-join (lookup instance_type_extra_specs)
  ├── has-placeholder
  ├── key: (1,39)
  ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40-46), (40,42,43)~~>(39,41,44-46)
- ├── ordering: +7,+1 opt(11)
+ ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  ├── left-join (lookup instance_type_extra_specs@secondary)
  │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:39(int) key:40(string) instance_type_extra_specs.instance_type_id:42(int) instance_type_extra_specs.deleted:43(bool)
  │    ├── key columns: [1] = [42]
@@ -2852,14 +2852,14 @@ left-join (lookup instance_type_extra_specs)
  │    ├── has-placeholder
  │    ├── key: (1,39)
  │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40,42,43), (40,42,43)~~>(39)
- │    ├── ordering: +7,+1 opt(11)
+ │    ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  │    ├── project
  │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │    ├── side-effects
  │    │    ├── has-placeholder
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │    ├── ordering: +7,+1 opt(11)
+ │    │    ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  │    │    └── limit
  │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
  │    │         ├── internal-ordering: +7,+1 opt(11)
@@ -2867,20 +2867,20 @@ left-join (lookup instance_type_extra_specs)
  │    │         ├── has-placeholder
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         ├── ordering: +7,+1 opt(11)
+ │    │         ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  │    │         ├── offset
  │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
  │    │         │    ├── internal-ordering: +7,+1 opt(11)
  │    │         │    ├── has-placeholder
  │    │         │    ├── key: (1)
  │    │         │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    ├── ordering: +7,+1 opt(11)
+ │    │         │    ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  │    │         │    ├── sort
  │    │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
  │    │         │    │    ├── has-placeholder
  │    │         │    │    ├── key: (1)
  │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    │    ├── ordering: +7,+1 opt(11)
+ │    │         │    │    ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  │    │         │    │    └── select
  │    │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
  │    │         │    │         ├── has-placeholder
@@ -2899,44 +2899,44 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    ├── right ordering: +26
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), ()~~>(36)
- │    │         │    │         │    │    ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    ├── project
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── key: (1)
  │    │         │    │         │    │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    │         │    │    │    ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    │    ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │    └── select
  │    │         │    │         │    │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
  │    │         │    │         │    │    │         ├── has-placeholder
  │    │         │    │         │    │    │         ├── key: (1)
  │    │         │    │         │    │    │         ├── fd: ()-->(11), (1)-->(2-10,12-16,34), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    │         │    │    │         ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    │         ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │         ├── group-by
  │    │         │    │         │    │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
  │    │         │    │         │    │    │         │    ├── grouping columns: instance_types.id:1(int!null)
  │    │         │    │         │    │    │         │    ├── has-placeholder
  │    │         │    │         │    │    │         │    ├── key: (1)
  │    │         │    │         │    │    │         │    ├── fd: ()-->(11), (1)-->(2-16,34), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    │         │    │    │         │    ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    │         │    ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │         │    ├── left-join (merge)
  │    │         │    │         │    │    │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool!null) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_projects.instance_type_id:18(int) true:33(bool)
  │    │         │    │         │    │    │         │    │    ├── left ordering: +1
  │    │         │    │         │    │    │         │    │    ├── right ordering: +18
  │    │         │    │         │    │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), ()~~>(33)
- │    │         │    │         │    │    │         │    │    ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    │         │    │    ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │         │    │    ├── select
  │    │         │    │         │    │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool!null) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │         │    │    │    ├── key: (1)
  │    │         │    │         │    │    │         │    │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
- │    │         │    │         │    │    │         │    │    │    ├── ordering: +1 opt(11)
+ │    │         │    │         │    │    │         │    │    │    ├── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │         │    │    │    ├── scan instance_types
  │    │         │    │         │    │    │         │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │         │    │    │    │    ├── key: (1)
  │    │         │    │         │    │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │         │    │    │         │    │    │    │    └── ordering: +1 opt(11)
+ │    │         │    │         │    │    │         │    │    │    │    └── ordering: +1 opt(11) [provided: +1]
  │    │         │    │         │    │    │         │    │    │    └── filters
  │    │         │    │         │    │    │         │    │    │         ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
  │    │         │    │         │    │    │         │    │    │         └── disabled = false [type=bool, outer=(11), constraints=(/11: [/false - /false]; tight), fd=()-->(11)]
@@ -2944,7 +2944,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │         │    │    │    ├── columns: true:33(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │         │    │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │         │    │    │    ├── fd: ()-->(33)
- │    │         │    │         │    │    │         │    │    │    ├── ordering: +18 opt(33)
+ │    │         │    │         │    │    │         │    │    │    ├── ordering: +18 opt(33) [provided: +18]
  │    │         │    │         │    │    │         │    │    │    ├── select
  │    │         │    │         │    │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) instance_type_projects.project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │         │    │    │    │    ├── has-placeholder
@@ -2999,7 +2999,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── columns: true:36(bool!null) instance_type_projects.instance_type_id:26(int!null)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── fd: ()-->(36)
- │    │         │    │         │    │    │    ├── ordering: +26 opt(36)
+ │    │         │    │         │    │    │    ├── ordering: +26 opt(36) [provided: +26]
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
@@ -3198,7 +3198,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── fd: ()-->(25)
- │    │         │    │         │    │    │    ├── ordering: +18 opt(25)
+ │    │         │    │         │    │    │    ├── ordering: +18 opt(25) [provided: +18]
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
@@ -3366,7 +3366,7 @@ right-join
  │         │    │    │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
  │         │    │    │    │    │    ├── has-placeholder
  │         │    │    │    │    │    ├── fd: ()-->(22)
- │         │    │    │    │    │    ├── ordering: +17 opt(22)
+ │         │    │    │    │    │    ├── ordering: +17 opt(22) [provided: +17]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
  │         │    │    │    │    │    │    ├── has-placeholder
@@ -3532,7 +3532,7 @@ sort
       │         │         │    │    │    ├── columns: true:22(bool!null) flavor_projects.flavor_id:17(int!null)
       │         │         │    │    │    ├── has-placeholder
       │         │         │    │    │    ├── fd: ()-->(22)
-      │         │         │    │    │    ├── ordering: +17 opt(22)
+      │         │         │    │    │    ├── ordering: +17 opt(22) [provided: +17]
       │         │         │    │    │    ├── select
       │         │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
       │         │         │    │    │    │    ├── has-placeholder

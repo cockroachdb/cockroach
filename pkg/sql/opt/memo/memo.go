@@ -293,19 +293,23 @@ func (m *Memo) InternPhysicalProps(physical *props.Physical) *props.Physical {
 	return m.interner.InternPhysicalProps(physical)
 }
 
-// SetBestProps updates the physical properties and cost of a relational
-// expression's memo group. It is called by the optimizer once it determines
-// the lowest cost expression in a group.
-func (m *Memo) SetBestProps(e RelExpr, phys *props.Physical, cost Cost) {
+// SetBestProps updates the physical properties, provided ordering, and cost of
+// a relational expression's memo group (see the relevant methods of RelExpr).
+// It is called by the optimizer once it determines the expression in the group
+// that is part of the lowest cost tree (for the overall query).
+func (m *Memo) SetBestProps(
+	e RelExpr, phys *props.Physical, providedOrdering opt.Ordering, cost Cost,
+) {
 	if e.Physical() != nil {
-		if e.Physical() != phys || e.Cost() != cost {
-			panic(fmt.Sprintf("cannot overwrite %s (%.9g) with %s (%.9g)",
-				e.Physical(), e.Cost(), phys, cost))
+		if e.Physical() != phys || !e.ProvidedOrdering().Equals(providedOrdering) || e.Cost() != cost {
+			panic(fmt.Sprintf("cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
+				e.Physical(), e.ProvidedOrdering(), e.Cost(), phys, providedOrdering, cost))
 		}
 		return
 	}
 	bp := e.bestProps()
 	bp.required = phys
+	bp.providedOrdering = providedOrdering
 	bp.cost = cost
 }
 

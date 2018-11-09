@@ -302,7 +302,20 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !physical.Ordering.Any() {
-		tp.Childf("ordering: %s", physical.Ordering.String())
+		provided := e.ProvidedOrdering()
+		// XXX do not merge
+		if provided != nil {
+			// Show the provided ordering as well, unless it's exactly the same.
+			reqStr := physical.Ordering.String()
+			provStr := provided.String()
+			if provStr == reqStr {
+				tp.Childf("ordering: %s", physical.Ordering.String())
+			} else {
+				tp.Childf("ordering: %s [provided: %s]", physical.Ordering.String(), provided.String())
+			}
+		} else {
+			tp.Childf("ordering: %s", physical.Ordering.String())
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideRuleProps) {

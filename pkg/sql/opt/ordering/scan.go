@@ -110,6 +110,35 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
+func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	scan := expr.(*memo.ScanExpr)
+	reverse := ScanIsReverse(scan, required)
+	md := scan.Memo().Metadata()
+	index := md.Table(scan.Table).Index(scan.Index)
+	fds := &scan.Relational().FuncDeps
+	constCols := fds.ComputeClosure(opt.ColSet{})
+	numCols := index.KeyColumnCount()
+	provided := make(opt.Ordering, 0, numCols)
+	for i := 0; i < numCols; i++ {
+		indexCol := index.Column(i)
+		colID := scan.Table.ColumnID(indexCol.Ordinal)
+		if !scan.Cols.Contains(int(colID)) {
+			// Column not in output; we are done.
+			break
+		}
+		if constCols.Contains(int(colID)) {
+			// Column constrained to a constant, ignore.
+			continue
+		}
+		provided = append(provided, opt.MakeOrderingColumn(
+			colID,
+			(indexCol.Descending != reverse), // != is bool XOR
+		))
+	}
+
+	return trimProvided(provided, required, fds)
+}
+
 func init() {
 	memo.ScanIsReverseFn = func(
 		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,

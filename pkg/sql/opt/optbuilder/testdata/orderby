@@ -117,7 +117,7 @@ SELECT a AS foo, (a) AS foo FROM t ORDER BY foo LIMIT 1
 limit
  ├── columns: foo:1(int!null) foo:1(int!null)
  ├── internal-ordering: +1
- ├── ordering: +1
+ ├── ordering: +1 [provided: ]
  ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: +1
@@ -174,7 +174,7 @@ SELECT b FROM t ORDER BY a LIMIT 1
 limit
  ├── columns: b:2(int)  [hidden: a:1(int!null)]
  ├── internal-ordering: +1
- ├── ordering: +1
+ ├── ordering: +1 [provided: ]
  ├── project
  │    ├── columns: a:1(int!null) b:2(int)
  │    ├── ordering: +1
@@ -188,7 +188,7 @@ SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 project
  ├── columns: b:2(int)  [hidden: a:1(int!null)]
- ├── ordering: -1,+2
+ ├── ordering: -1,+2 [provided: -1]
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── ordering: -1
@@ -198,7 +198,7 @@ SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 project
  ├── columns: b:2(int)  [hidden: a:1(int!null)]
- ├── ordering: -1,-2
+ ├── ordering: -1,-2 [provided: -1]
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── ordering: -1
@@ -254,13 +254,13 @@ SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null)
- ├── ordering: +2,+1
+ ├── ordering: +2,+1 [provided: +1]
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
-      ├── ordering: +1 opt(2)
+      ├── ordering: +1 opt(2) [provided: +1]
       ├── scan t
       │    ├── columns: a:1(int!null) b:2(int) c:3(bool)
-      │    └── ordering: +1 opt(2)
+      │    └── ordering: +1 opt(2) [provided: +1]
       └── filters
            └── eq [type=bool]
                 ├── variable: b [type=int]
@@ -659,7 +659,7 @@ SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null)  [hidden: c:3(int!null)]
- ├── ordering: +2,+3,-1
+ ├── ordering: +2,+3,-1 [provided: +2,+3]
  └── sort
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
       ├── ordering: +2,+3
@@ -682,7 +682,7 @@ SELECT a FROM abc ORDER BY a DESC LIMIT 1
 limit
  ├── columns: a:1(int!null)
  ├── internal-ordering: -1
- ├── ordering: -1
+ ├── ordering: -1 [provided: ]
  ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
@@ -748,13 +748,13 @@ project
  ├── ordering: +2,+3
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      ├── ordering: +2,+3 opt(1)
+      ├── ordering: +2,+3 opt(1) [provided: +2,+3]
       └── select
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           ├── ordering: +2,+3 opt(1)
+           ├── ordering: +2,+3 opt(1) [provided: +2,+3]
            ├── scan abc
            │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           │    └── ordering: +2,+3 opt(1)
+           │    └── ordering: +2,+3 opt(1) [provided: +1,+2,+3]
            └── filters
                 └── eq [type=bool]
                      ├── variable: a [type=int]
@@ -909,7 +909,7 @@ SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writ
 limit
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
  ├── internal-ordering: +1,+2,+3
- ├── ordering: +1,+2,+3
+ ├── ordering: +1,+2,+3 [provided: ]
  ├── project
  │    ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null)
  │    ├── ordering: +1,+2,+3
@@ -944,7 +944,7 @@ SELECT a FROM abcd ORDER BY INDEX abcd@abc
 ----
 project
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
- ├── ordering: +1,+2,+3
+ ├── ordering: +1,+2,+3 [provided: +1]
  └── scan abcd
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       └── ordering: +1
@@ -954,7 +954,7 @@ SELECT a FROM abcd ORDER BY INDEX abcd@abc DESC
 ----
 project
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
- ├── ordering: -1,-2,-3
+ ├── ordering: -1,-2,-3 [provided: -1]
  └── scan abcd,rev
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       └── ordering: -1
@@ -1073,7 +1073,7 @@ SELECT a FROM abcd ORDER BY a, b, c
 ----
 project
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int)]
- ├── ordering: +1,+2,+3
+ ├── ordering: +1,+2,+3 [provided: +1]
  └── scan abcd
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       └── ordering: +1

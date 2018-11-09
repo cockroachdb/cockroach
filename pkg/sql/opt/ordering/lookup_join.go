@@ -15,6 +15,7 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
@@ -35,4 +36,44 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
 	return projectOrderingToInput(parent.Child(0).(memo.RelExpr), required)
+}
+
+func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	rel := expr.Relational()
+	return remapProvided(
+		expr.Child(0).(memo.RelExpr).ProvidedOrdering(), &rel.FuncDeps, rel.OutputCols,
+	)
+}
+
+func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	// Some of the input columns might not be output columns (if they are not in
+	// lookupJoin.Cols) so we might need to remap them. Check for this condition
+	// first.
+	lookupJoin := expr.(*memo.LookupJoinExpr)
+	childProvided := lookupJoin.Input.ProvidedOrdering()
+	needsRemap := false
+	for i := range childProvided {
+		if !lookupJoin.Cols.Contains(int(childProvided[i].ID())) {
+			needsRemap = true
+			break
+		}
+	}
+	if !needsRemap {
+		// Fast path: we don't need to remap any columns.
+		return childProvided
+	}
+
+	// The lookup join implicitly constraints equality on the lookup columns.
+	// Start with the input FDs and apply the equalities.
+	var fds props.FuncDepSet
+	fds.CopyFrom(&lookupJoin.Input.Relational().FuncDeps)
+
+	md := lookupJoin.Memo().Metadata()
+	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
+	for i, colID := range lookupJoin.KeyCols {
+		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal)
+		fds.AddEquivalency(colID, indexColID)
+	}
+
+	return remapProvided(childProvided, &fds, lookupJoin.Cols)
 }

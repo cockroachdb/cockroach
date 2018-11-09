@@ -48,10 +48,32 @@ type RelExpr interface {
 	// characteristics of this expression's behavior and results.
 	Relational() *props.Relational
 
-	// Physical is the set of physical properties with respect to which this
-	// expression was optimized. Enforcers may be added to the expression tree
-	// to ensure the physical properties are provided.
+	// Physical is the set of required physical properties with respect to which
+	// this expression was optimized. Enforcers may be added to the expression
+	// tree to ensure the physical properties are provided.
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
 	Physical() *props.Physical
+
+	// ProvidedOrdering is an ordering that needs to be maintained on the rows
+	// produced by this operator in order to satisfy the required ordering in
+	// Physical. This is useful for configuring execution in a distributed
+	// setting, where results from multiple nodes may need to be merged. A
+	// best-effort attempt is made to have as few columns as possible.
+	//
+	// The ordering, in conjunction with the functional dependencies (in the
+	// logical properties), must intersect the required ordering in Physical.
+	//
+	// See the documentation for the opt/ordering package for some examples.
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	ProvidedOrdering() opt.Ordering
+
+	// Cost is an estimate of the cost of executing this expression tree. Set
+	// when optimization is complete, only for the expressions in the final tree.
+	Cost() Cost
 
 	// FirstExpr returns the first member expression in the memo group (could be
 	// this expression if it happens to be first in the group). Subsequent members
@@ -62,10 +84,6 @@ type RelExpr interface {
 	// NextExpr returns the next member expression in the memo group, or nil if
 	// there are no further members in the group.
 	NextExpr() RelExpr
-
-	// Cost is an estimate of the cost of executing this expression tree. Before
-	// optimization, this cost will always be 0.
-	Cost() Cost
 
 	// group returns the memo group that contains this expression and any other
 	// logically equivalent expressions. There is one group struct for each memo

@@ -245,7 +245,7 @@ define LookupJoinPrivate {
 	# just a LookupCols set indicating which columns we should add from the
 	# index. However, this requires extra Project operators in the lookup join
 	# exploration transforms which currently leads to problems related to lookup
-    # join statistics.
+	# join statistics.
 	Cols ColSet
 
 	lookupProps RelProps

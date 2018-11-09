@@ -15,6 +15,7 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
@@ -35,4 +36,11 @@ func limitOrOffsetBuildChildReqOrdering(
 		return props.OrderingChoice{}
 	}
 	return required.Intersection(parent.Private().(*props.OrderingChoice))
+}
+
+func limitOrOffsetBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	childProvided := expr.Child(0).(memo.RelExpr).ProvidedOrdering()
+	// The child's provided ordering satisfies both <required> and the
+	// Limit/Offset internal ordering; it may need to be trimmed.
+	return trimProvided(childProvided, required, &expr.Relational().FuncDeps)
 }
