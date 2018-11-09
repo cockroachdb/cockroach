@@ -392,15 +392,25 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 func (r *Replica) GetSnapshot(
 	ctx context.Context, snapType string,
 ) (_ *OutgoingSnapshot, err error) {
+	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	snap := r.store.engine.NewSnapshot()
+	r.mu.Lock()
+	appliedIndex := r.mu.state.RaftAppliedIndex
+	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex) // cleared when OutgoingSnapshot closes
+	r.mu.Unlock()
 	r.raftMu.Unlock()
+
+	release := func() {
+		r.completeSnapshotLogTruncationConstraint(ctx, snapUUID, timeutil.Now())
+	}
 
 	defer func() {
 		if err != nil {
+			release()
 			snap.Close()
 		}
 	}()
@@ -427,13 +437,14 @@ func (r *Replica) GetSnapshot(
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(
-		ctx, stateloader.Make(r.store.cfg.Settings, rangeID), snapType,
+		ctx, snapUUID, stateloader.Make(r.store.cfg.Settings, rangeID), snapType,
 		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
+	snapData.onClose = release
 	return &snapData, nil
 }
 
@@ -457,6 +468,7 @@ type OutgoingSnapshot struct {
 	WithSideloaded func(func(sideloadStorage) error) error
 	RaftEntryCache *raftEntryCache
 	snapType       string
+	onClose        func()
 }
 
 func (s *OutgoingSnapshot) String() string {
@@ -467,6 +479,9 @@ func (s *OutgoingSnapshot) String() string {
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
 	s.EngineSnap.Close()
+	if s.onClose != nil {
+		s.onClose()
+	}
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -485,6 +500,7 @@ type IncomingSnapshot struct {
 // given range. Note that snapshot() is called without Replica.raftMu held.
 func snapshot(
 	ctx context.Context,
+	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
 	snapType string,
 	snap engine.Reader,
@@ -536,7 +552,6 @@ func snapshot(
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
 	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
-	snapUUID := uuid.MakeV4()
 
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
