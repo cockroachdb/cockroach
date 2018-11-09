@@ -304,16 +304,9 @@ func (m *Memo) SetBestProps(e RelExpr, phys *props.Physical, cost Cost) {
 		}
 		return
 	}
-
-	// Enforcer expressions keep their own copy of physical properties and cost.
-	switch t := e.(type) {
-	case *SortExpr:
-		t.phys = phys
-		t.cst = cost
-
-	default:
-		e.group().setBestProps(phys, cost)
-	}
+	bp := e.bestProps()
+	bp.required = phys
+	bp.cost = cost
 }
 
 // IsOptimized returns true if the memo has been fully optimized.

@@ -73,6 +73,10 @@ type RelExpr interface {
 	// the first member of the group.
 	group() exprGroup
 
+	// bestProps returns the instance of bestProps associated with this
+	// expression.
+	bestProps() *bestProps
+
 	// setNext sets this expression's next pointer to point to the given
 	// expression. setNext will panic if the next pointer has already been set.
 	setNext(e RelExpr)
