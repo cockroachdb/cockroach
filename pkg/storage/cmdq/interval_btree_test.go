@@ -35,7 +35,6 @@ func (t *btree) Verify(tt *testing.T) {
 		return
 	}
 	t.verifyLeafSameDepth(tt)
-	t.verifyParentAndPosSet(tt)
 	t.verifyCountAllowed(tt)
 	t.isSorted(tt)
 	t.isUpperBoundCorrect(tt)
@@ -52,18 +51,6 @@ func (n *node) verifyDepthEqualToHeight(t *testing.T, depth, height int) {
 	}
 	n.recurse(func(child *node, _ int16) {
 		child.verifyDepthEqualToHeight(t, depth+1, height)
-	})
-}
-
-func (t *btree) verifyParentAndPosSet(tt *testing.T) {
-	t.root.verifyParentAndPosSet(tt, nil, 0)
-}
-
-func (n *node) verifyParentAndPosSet(t *testing.T, par *node, pos int16) {
-	require.Equal(t, par, n.parent)
-	require.Equal(t, pos, n.pos)
-	n.recurse(func(child *node, pos int16) {
-		child.verifyParentAndPosSet(t, n, pos)
 	})
 }
 
@@ -217,7 +204,7 @@ func checkIter(t *testing.T, it iterator, start, end int) {
 		}
 	}
 	if i != start {
-		t.Fatalf("expected %d, but at %d: %+v parent=%p", start, i, it, it.n.parent)
+		t.Fatalf("expected %d, but at %d: %+v", start, i, it)
 	}
 
 	all := newCmd(spanWithEnd(start, end))
