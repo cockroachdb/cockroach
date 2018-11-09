@@ -82,16 +82,12 @@ type orderedAggregator struct {
 	done bool
 
 	aggCols [][]uint32
+	aggTyps [][]types.T
 
 	// scratch is the ColBatch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
 	scratch struct {
 		ColBatch
-		// storage points to the memory that the ColBatch references. This is kept
-		// around to manipulate output memory in Next().
-		// TODO(asubiotto): This will eventually be a reference to the output
-		// ColVecs and the copying code will be templated after #31703 is in.
-		storage [][]int64
 		// resumeIdx is the index at which the aggregation functions should start
 		// writing to on the next iteration of Next().
 		resumeIdx int
@@ -110,14 +106,16 @@ type orderedAggregator struct {
 var _ Operator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
-// columns. Currently, the aggregator is only set up to perform an int64 sum
-// on the input columns in the same order. Each entry in aggCols specifies the
-// input column for a separate aggregate func.
-// TODO(asubiotto): Add aggregate function specifiers.
+// columns. aggCols is a slice where each index represents a new aggregation
+// function. The slice at that index specifies the columns of the input batch
+// that the aggregate function should work on. aggTyps specifies the associated
+// types of these input columns.
+// TODO(asubiotto): Add aggregate function specifiers. Currently the ordered
+// aggregator only plans sum aggregations.
 func NewOrderedAggregator(
-	input Operator, groupCols []uint32, aggCols [][]uint32, typs []types.T,
+	input Operator, groupCols []uint32, groupTyps []types.T, aggCols [][]uint32, aggTyps [][]types.T,
 ) (Operator, error) {
-	op, groupCol, err := orderedDistinctColsToOperators(input, groupCols, typs)
+	op, groupCol, err := orderedDistinctColsToOperators(input, groupCols, groupTyps)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +123,7 @@ func NewOrderedAggregator(
 	a := &orderedAggregator{
 		input:    op,
 		aggCols:  aggCols,
+		aggTyps:  aggTyps,
 		groupCol: groupCol,
 	}
 	a.aggregateFuncs = make([]aggregateFunc, len(aggCols))
@@ -135,7 +134,11 @@ func NewOrderedAggregator(
 				i, len(cols),
 			)
 		}
-		a.aggregateFuncs[i] = &sumInt64Agg{}
+		var err error
+		a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return a, nil
@@ -144,17 +147,16 @@ func NewOrderedAggregator(
 func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 	a.input.Init()
 
+	// Output types are the input types for now.
 	oTypes := make([]types.T, len(a.aggregateFuncs))
 	for i := range oTypes {
-		oTypes[i] = types.Int64
+		oTypes[i] = a.aggTyps[i][0]
 	}
 	// Twice the input batchSize is allocated to avoid having to check for
 	// overflow when outputting.
 	a.scratch.ColBatch = NewMemBatchWithSize(oTypes, inputSize*2)
-	a.scratch.storage = make([][]int64, len(oTypes))
 	for i := 0; i < len(oTypes); i++ {
 		vec := a.scratch.ColVec(i)
-		a.scratch.storage[i] = vec.Int64()
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
 	a.scratch.outputSize = outputSize
@@ -172,10 +174,10 @@ func (a *orderedAggregator) Next() ColBatch {
 	if a.scratch.resumeIdx >= a.scratch.outputSize {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
-		for i, outCol := range a.scratch.storage {
+		for i := 0; i < len(a.aggTyps); i++ {
 			// According to the aggregate function interface contract, the value at
 			// the current index must also be copied.
-			copy(outCol, outCol[a.scratch.outputSize:(a.scratch.resumeIdx+1)])
+			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i), a.scratch.outputSize, a.scratch.resumeIdx+1, a.aggTyps[i][0])
 			a.scratch.resumeIdx = a.scratch.resumeIdx - a.scratch.outputSize
 			if a.scratch.resumeIdx >= a.scratch.outputSize {
 				// We still have overflow output values.
