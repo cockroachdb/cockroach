@@ -107,12 +107,10 @@ func upperBound(c *cmd) keyBound {
 }
 
 type leafNode struct {
-	parent *node
-	max    keyBound
-	pos    int16
-	count  int16
-	leaf   bool
-	cmds   [maxCmds]*cmd
+	max   keyBound
+	count int16
+	leaf  bool
+	cmds  [maxCmds]*cmd
 }
 
 func newLeafNode() *node {
@@ -124,25 +122,16 @@ type node struct {
 	children [maxCmds + 1]*node
 }
 
-func (n *node) updatePos(start, end int) {
-	for i := start; i < end; i++ {
-		n.children[i].pos = int16(i)
-	}
-}
-
 func (n *node) insertAt(index int, c *cmd, nd *node) {
 	if index < int(n.count) {
 		copy(n.cmds[index+1:n.count+1], n.cmds[index:n.count])
 		if !n.leaf {
 			copy(n.children[index+2:n.count+2], n.children[index+1:n.count+1])
-			n.updatePos(index+2, int(n.count+2))
 		}
 	}
 	n.cmds[index] = c
 	if !n.leaf {
 		n.children[index+1] = nd
-		nd.parent = n
-		nd.pos = int16(index + 1)
 	}
 	n.count++
 }
@@ -151,8 +140,6 @@ func (n *node) pushBack(c *cmd, nd *node) {
 	n.cmds[n.count] = c
 	if !n.leaf {
 		n.children[n.count+1] = nd
-		nd.parent = n
-		nd.pos = n.count + 1
 	}
 	n.count++
 }
@@ -160,10 +147,7 @@ func (n *node) pushBack(c *cmd, nd *node) {
 func (n *node) pushFront(c *cmd, nd *node) {
 	if !n.leaf {
 		copy(n.children[1:n.count+2], n.children[:n.count+1])
-		n.updatePos(1, int(n.count+2))
 		n.children[0] = nd
-		nd.parent = n
-		nd.pos = 0
 	}
 	copy(n.cmds[1:n.count+1], n.cmds[:n.count])
 	n.cmds[0] = c
@@ -177,7 +161,6 @@ func (n *node) removeAt(index int) (*cmd, *node) {
 	if !n.leaf {
 		child = n.children[index+1]
 		copy(n.children[index+1:n.count], n.children[index+2:n.count+1])
-		n.updatePos(index+1, int(n.count))
 		n.children[n.count] = nil
 	}
 	n.count--
@@ -207,7 +190,6 @@ func (n *node) popFront() (*cmd, *node) {
 	if !n.leaf {
 		child = n.children[0]
 		copy(n.children[:n.count+1], n.children[1:n.count+2])
-		n.updatePos(0, int(n.count+1))
 		n.children[n.count+1] = nil
 	}
 	out := n.cmds[0]
@@ -276,10 +258,6 @@ func (n *node) split(i int) (*cmd, *node) {
 		copy(next.children[:], n.children[i+1:n.count+1])
 		for j := int16(i + 1); j <= n.count; j++ {
 			n.children[j] = nil
-		}
-		for j := int16(0); j <= next.count; j++ {
-			next.children[j].parent = next
-			next.children[j].pos = j
 		}
 	}
 	n.count = int16(i)
@@ -493,10 +471,6 @@ func (n *node) rebalanceOrMerge(i int) {
 		copy(child.cmds[child.count+1:], mergeChild.cmds[:mergeChild.count])
 		if !child.leaf {
 			copy(child.children[child.count+1:], mergeChild.children[:mergeChild.count+1])
-			for i := int16(0); i <= mergeChild.count; i++ {
-				mergeChild.children[i].parent = child
-			}
-			child.updatePos(int(child.count+1), int(child.count+mergeChild.count+2))
 		}
 		child.count += mergeChild.count + 1
 
@@ -593,7 +567,6 @@ func (t *btree) Delete(c *cmd) {
 	}
 	if t.root.count == 0 && !t.root.leaf {
 		t.root = t.root.children[0]
-		t.root.parent = nil
 	}
 }
 
@@ -610,10 +583,6 @@ func (t *btree) Set(c *cmd) {
 		newRoot.children[0] = t.root
 		newRoot.children[1] = splitNode
 		newRoot.max = newRoot.findUpperBound()
-		t.root.parent = newRoot
-		t.root.pos = 0
-		splitNode.parent = newRoot
-		splitNode.pos = 1
 		t.root = newRoot
 	}
 	if replaced, _ := t.root.insert(c); !replaced {
@@ -621,8 +590,9 @@ func (t *btree) Set(c *cmd) {
 	}
 }
 
-// MakeIter returns a new iterator object. Note that it is safe for an
-// iterator to be copied by value.
+// MakeIter returns a new iterator object. It is not safe to continue using an
+// iterator after modifications are made to the tree. If modifications are made,
+// create a new iterator.
 func (t *btree) MakeIter() iterator {
 	return iterator{t: t, pos: -1}
 }
@@ -679,19 +649,53 @@ func (n *node) writeString(b *strings.Builder) {
 
 // iterator is responsible for search and traversal within a btree.
 type iterator struct {
-	t   *btree
+	t    *btree
+	n    *node
+	pos  int16
+	s    []iterFrame
+	sBuf [3]iterFrame // avoids allocation of s up to height 4
+	o    overlapScan
+}
+
+type iterFrame struct {
 	n   *node
 	pos int16
-	o   overlapScan
+}
+
+func (i *iterator) reset() {
+	i.n = i.t.root
+	i.s = i.s[:0]
+	i.pos = -1
+	i.o = overlapScan{}
+}
+
+// descend descends into the node's child at position pos. It maintains a
+// stack of (parent, position) pairs so that the tree can be ascended again
+// later.
+func (i *iterator) descend(n *node, pos int16) {
+	if i.s == nil {
+		i.s = i.sBuf[:0]
+	}
+	i.s = append(i.s, iterFrame{n: n, pos: pos})
+	i.n = n.children[pos]
+	i.pos = 0
+}
+
+// ascend ascends up to the current node's parent and resets the position
+// to the one previously set for this parent node.
+func (i *iterator) ascend() {
+	f := i.s[len(i.s)-1]
+	i.s = i.s[:len(i.s)-1]
+	i.n = f.n
+	i.pos = f.pos
 }
 
 // SeekGE seeks to the first cmd greater-than or equal to the provided cmd.
 func (i *iterator) SeekGE(c *cmd) {
-	i.n = i.t.root
+	i.reset()
 	if i.n == nil {
 		return
 	}
-	i.o = overlapScan{}
 	for {
 		pos, found := i.n.find(c)
 		i.pos = int16(pos)
@@ -704,17 +708,16 @@ func (i *iterator) SeekGE(c *cmd) {
 			}
 			return
 		}
-		i.n = i.n.children[i.pos]
+		i.descend(i.n, i.pos)
 	}
 }
 
 // SeekLT seeks to the first cmd less-than the provided cmd.
 func (i *iterator) SeekLT(c *cmd) {
-	i.n = i.t.root
+	i.reset()
 	if i.n == nil {
 		return
 	}
-	i.o = overlapScan{}
 	for {
 		pos, found := i.n.find(c)
 		i.pos = int16(pos)
@@ -722,33 +725,31 @@ func (i *iterator) SeekLT(c *cmd) {
 			i.Prev()
 			return
 		}
-		i.n = i.n.children[i.pos]
+		i.descend(i.n, i.pos)
 	}
 }
 
 // First seeks to the first cmd in the btree.
 func (i *iterator) First() {
-	i.n = i.t.root
+	i.reset()
 	if i.n == nil {
 		return
 	}
 	for !i.n.leaf {
-		i.n = i.n.children[0]
+		i.descend(i.n, 0)
 	}
-	i.o = overlapScan{}
 	i.pos = 0
 }
 
 // Last seeks to the last cmd in the btree.
 func (i *iterator) Last() {
-	i.n = i.t.root
+	i.reset()
 	if i.n == nil {
 		return
 	}
 	for !i.n.leaf {
-		i.n = i.n.children[i.n.count]
+		i.descend(i.n, i.n.count)
 	}
-	i.o = overlapScan{}
 	i.pos = i.n.count - 1
 }
 
@@ -764,16 +765,15 @@ func (i *iterator) Next() {
 		if i.pos < i.n.count {
 			return
 		}
-		for i.n.parent != nil && i.pos >= i.n.count {
-			i.pos = i.n.pos
-			i.n = i.n.parent
+		for len(i.s) > 0 && i.pos >= i.n.count {
+			i.ascend()
 		}
 		return
 	}
 
-	i.n = i.n.children[i.pos+1]
+	i.descend(i.n, i.pos+1)
 	for !i.n.leaf {
-		i.n = i.n.children[0]
+		i.descend(i.n, 0)
 	}
 	i.pos = 0
 }
@@ -790,16 +790,16 @@ func (i *iterator) Prev() {
 		if i.pos >= 0 {
 			return
 		}
-		for i.n.parent != nil && i.pos < 0 {
-			i.pos = i.n.pos - 1
-			i.n = i.n.parent
+		for len(i.s) > 0 && i.pos < 0 {
+			i.ascend()
+			i.pos--
 		}
 		return
 	}
 
-	i.n = i.n.children[i.pos]
+	i.descend(i.n, i.pos)
 	for !i.n.leaf {
-		i.n = i.n.children[i.n.count]
+		i.descend(i.n, i.n.count)
 	}
 	i.pos = i.n.count - 1
 }
@@ -875,7 +875,7 @@ type overlapScan struct {
 // FirstOverlap seeks to the first cmd in the btree that overlaps with the
 // provided search cmd.
 func (i *iterator) FirstOverlap(c *cmd) {
-	i.n = i.t.root
+	i.reset()
 	if i.n == nil {
 		return
 	}
@@ -902,8 +902,9 @@ func (i *iterator) NextOverlap() {
 }
 
 func (i *iterator) constrainMinSearchBounds() {
+	k := i.o.c.span.Key
 	j := sort.Search(int(i.n.count), func(j int) bool {
-		return bytes.Compare(i.o.c.span.Key, i.n.cmds[j].span.Key) <= 0
+		return bytes.Compare(k, i.n.cmds[j].span.Key) <= 0
 	})
 	i.o.constrMinN = i.n
 	i.o.constrMinPos = int16(j)
@@ -922,23 +923,23 @@ func (i *iterator) findNextOverlap() {
 	for {
 		if i.pos > i.n.count {
 			// Iterate up tree.
-			if i.n.parent == nil {
+			if len(i.s) == 0 {
 				// Should have already hit upper-bound constraint.
 				panic("unreachable")
 			}
-			i.pos = i.n.pos
-			i.n = i.n.parent
+			i.ascend()
 		} else if !i.n.leaf {
 			// Iterate down tree.
 			if i.o.constrMinReached || i.n.children[i.pos].max.contains(i.o.c) {
-				i.n = i.n.children[i.pos]
-				i.pos = 0
+				par := i.n
+				pos := i.pos
+				i.descend(par, pos)
 
 				// Refine the constraint bounds, if necessary.
-				if i.n.parent == i.o.constrMinN && i.n.pos == i.o.constrMinPos {
+				if par == i.o.constrMinN && pos == i.o.constrMinPos {
 					i.constrainMinSearchBounds()
 				}
-				if i.n.parent == i.o.constrMaxN && i.n.pos == i.o.constrMaxPos {
+				if par == i.o.constrMaxN && pos == i.o.constrMaxPos {
 					i.constrainMaxSearchBounds()
 				}
 				continue
