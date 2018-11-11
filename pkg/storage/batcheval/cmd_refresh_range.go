@@ -86,6 +86,33 @@ func RefreshRange(
 		if i.Txn.ID == h.Txn.ID {
 			continue
 		}
+
+		if i.Span.EndKey != nil {
+			return result.Result{}, errors.Errorf("unexpected range intent from MVCC storage")
+		}
+
+		// HACK(bdarnell): Time-bound iterators can return intents that
+		// shouldn't be there
+		// (https://github.com/cockroachdb/cockroach/issues/28358), and
+		// this can result in stalled traffic when it occurs in this
+		// method (https://github.com/cockroachdb/cockroach/issues/31823).
+		// When we get an intent, check with a regular iterator to ensure
+		// that it's really there.
+		_, realIntents, err := engine.MVCCGetWithTombstone(
+			ctx,
+			batch,
+			i.Span.Key,
+			h.Txn.Timestamp,
+			false, /* consistent */
+			nil,   /* txn */
+		)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if len(realIntents) == 0 {
+			continue
+		}
+
 		// Return an error if an intent was written to the span.
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
 			i.Span.Key, i.Txn.Timestamp)
