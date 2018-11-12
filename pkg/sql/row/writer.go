@@ -220,7 +220,8 @@ func (ri *Inserter) InsertRow(
 //   (must be adapted depending on whether 'overwrite' is set)
 // - helper is the rowHelper that knows about the table being modified.
 // - primaryIndexKey is the PK prefix for the current row.
-// - updatedCols is the list of schema columns being updated.
+// - fetchedCols is the list of schema columns that have been fetched
+//   in preparation for this update.
 // - values is the SQL-level row values that are being written.
 // - marshaledValues contains the pre-encoded KV-level row values.
 //   marshaledValues is only used when writing single column families.
@@ -241,7 +242,7 @@ func prepareInsertOrUpdateBatch(
 	batch putter,
 	helper *rowHelper,
 	primaryIndexKey []byte,
-	updatedCols []sqlbase.ColumnDescriptor,
+	fetchedCols []sqlbase.ColumnDescriptor,
 	values []tree.Datum,
 	valColIDMapping map[sqlbase.ColumnID]int,
 	marshaledValues []roachpb.Value,
@@ -317,7 +318,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			col := updatedCols[idx]
+			col := fetchedCols[idx]
 
 			if lastColID > col.ID {
 				return nil, pgerror.NewAssertionErrorf("cannot write column id %d after %d", col.ID, lastColID)
@@ -549,6 +550,8 @@ func makeUpdaterWithoutCascader(
 		ru.FetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 
+		// maybeAddCol adds the provided column to ru.FetchCols and
+		// ru.FetchColIDtoRowIndex if it isn't already present.
 		maybeAddCol := func(colID sqlbase.ColumnID) error {
 			if _, ok := ru.FetchColIDtoRowIndex[colID]; !ok {
 				col, err := tableDesc.FindColumnByID(colID)
@@ -560,11 +563,18 @@ func makeUpdaterWithoutCascader(
 			}
 			return nil
 		}
+
+		// Fetch all columns in the primary key so that we can construct the
+		// keys when writing out the new kvs to the primary index.
 		for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
 				return Updater{}, err
 			}
 		}
+
+		// If any part of a column family is being updated, fetch all columns in
+		// that column family so that we can reconstruct the column family with
+		// the updated columns before writing it.
 		for _, fam := range tableDesc.Families {
 			familyBeingUpdated := false
 			for _, colID := range fam.ColumnIDs {
@@ -581,6 +591,9 @@ func makeUpdaterWithoutCascader(
 				}
 			}
 		}
+
+		// Fetch all columns from indices that are being update so that they can
+		// be used to create the new kv pairs for those indices.
 		for _, index := range indexes {
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err

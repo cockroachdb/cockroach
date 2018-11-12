@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -198,12 +199,42 @@ func (p *planner) Update(
 	rowsNeeded := resultsNeeded(n.Returning)
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if rowsNeeded || len(desc.Checks) > 0 {
+	if rowsNeeded {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
-		// TODO(nvanbenschoten): This could be made tighter, just the rows needed for
-		// the CHECK exprs.
 		requestedCols = desc.Columns
+	} else if len(desc.Checks) > 0 {
+		// Request any columns we'll need when validating check constraints. We
+		// could be smarter and only validate check constraints which depend on
+		// columns that are being modified in the UPDATE statement, in which
+		// case we'd only need to request the columns used by that subset of
+		// check constraints, but that doesn't seem worth the effort.
+		//
+		// TODO(nvanbenschoten): These conditions shouldn't be mutually
+		// exclusive, but since rowsNeeded implies that requestedCols =
+		// desc.Columns, there's no reason to enter this block if rowsNeeded is
+		// true. Remove this when the TODO above is addressed.
+		var requestedColSet util.FastIntSet
+		for _, col := range requestedCols {
+			requestedColSet.Add(int(col.ID))
+		}
+		for _, ck := range desc.Checks {
+			cols, err := ck.ColumnsUsed(desc)
+			if err != nil {
+				return nil, err
+			}
+			for _, colID := range cols {
+				if !requestedColSet.Contains(int(colID)) {
+					col, err := desc.FindColumnByID(colID)
+					if err != nil {
+						return nil, errors.Wrapf(err, "error finding column %d in table %s",
+							colID, desc.Name)
+					}
+					requestedCols = append(requestedCols, *col)
+					requestedColSet.Add(int(colID))
+				}
+			}
+		}
 	}
 
 	// Create the table updater, which does the bulk of the work.
