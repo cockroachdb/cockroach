@@ -77,9 +77,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/getsentry/raven-go"
+	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -681,9 +681,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return &ie
 		}
 
-	s.registry.AddMetricStruct(s.pgServer.Metrics())
-	s.registry.AddMetricStruct(s.pgServer.StatementCounters())
-	s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
+	for _, m := range s.pgServer.Metrics() {
+		s.registry.AddMetricStruct(m)
+	}
 	*internalExecutor = sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings(),
 	)
