@@ -37,6 +37,8 @@ type ColBatch interface {
 	Selection() []uint16
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
+	// AppendCol appends a ColVec with the specified type to this batch.
+	AppendCol(types.T)
 }
 
 var _ ColBatch = &memBatch{}
@@ -109,6 +111,10 @@ func (m *memBatch) SetSelection(b bool) {
 
 func (m *memBatch) SetLength(n uint16) {
 	m.n = n
+}
+
+func (m *memBatch) AppendCol(t types.T) {
+	m.b = append(m.b, newMemColumn(t, ColBatchSize))
 }
 
 // projectingBatch is a ColBatch that applies a simple projection to another,

@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -63,8 +64,6 @@ func newColOperator(
 			return exec.NewCountOp(inputs[0]), nil
 		}
 
-		// TODO(solon): Set columnTypes appropriately.
-
 		return nil, errors.Errorf("unsupported aggregator %+v", core.Aggregator)
 
 	case core.Distinct != nil:
@@ -105,22 +104,54 @@ func newColOperator(
 	}
 
 	if !post.Filter.Empty() {
-		// TODO(solon): plan selection op
+		if columnTypes == nil {
+			return nil, errors.Errorf(
+				"unable to columnarize filter expression %q: columnTypes is unset", post.Filter.Expr)
+		}
 		var helper exprHelper
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
 			return nil, err
 		}
-		op, err = planExpressionOperators(helper.expr, columnTypes, op)
+		var filterColumnTypes []sqlbase.ColumnType
+		op, _, filterColumnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
+		}
+		if len(filterColumnTypes) > len(columnTypes) {
+			// Additional columns were appended to store projection results while
+			// evaluating the filter. Project them away.
+			var outputColumns []uint32
+			for i := range columnTypes {
+				outputColumns = append(outputColumns, uint32(i))
+			}
+			op = exec.NewSimpleProjectOp(op, outputColumns)
 		}
 	}
 	if post.Projection {
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		// TODO(solon): plan renders
-		return nil, errors.New("renders unsupported")
+		if columnTypes == nil {
+			return nil, errors.New("unable to columnarize projection. columnTypes is unset")
+		}
+		var renderedCols []uint32
+		for _, expr := range post.RenderExprs {
+			var helper exprHelper
+			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
+			if err != nil {
+				return nil, err
+			}
+			var outputIdx int
+			op, outputIdx, columnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
+			if err != nil {
+				return nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+			}
+			if outputIdx < 0 {
+				return nil, errors.New("missing outputIdx")
+			}
+			renderedCols = append(renderedCols, uint32(outputIdx))
+		}
+		op = exec.NewSimpleProjectOp(op, renderedCols)
 	}
 	if post.Offset != 0 {
 		return nil, errors.New("offset unsupported")
@@ -132,30 +163,60 @@ func newColOperator(
 }
 
 // planExpressionOperators plans a chain of operators to execute the provided
-// expression. It currently only handles ComparisonExprs.
+// expression. It returns the the tail of the chain, as well as the column index
+// of the expression's result (if any, otherwise -1) and the column types of the
+// resulting batches.
 func planExpressionOperators(
 	expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
-) (exec.Operator, error) {
+) (op exec.Operator, resultIdx int, ct []sqlbase.ColumnType, err error) {
+	resultIdx = -1
 	switch t := expr.(type) {
+	case *tree.IndexedVar:
+		return input, t.Idx, columnTypes, nil
 	case *tree.ComparisonExpr:
+		// TODO(solon): Handle the case where a ComparisonExpr is a projection,
+		// e.g. SELECT a > b FROM t. Currently we assume it is a selection.
 		cmpOp := t.Operator
-		if leftIvar, ok := t.Left.(*tree.IndexedVar); ok {
-			if constArg, ok := t.Right.(tree.Datum); ok {
-				colIdx := leftIvar.Idx
-				ct := columnTypes[leftIvar.Idx]
-				return exec.GetSelectionConstOperator(ct, cmpOp, input, colIdx, constArg)
-			}
-			if rightIvar, ok := t.Right.(*tree.IndexedVar); ok {
-				colIdx1 := leftIvar.Idx
-				colIdx2 := rightIvar.Idx
-				ct := columnTypes[leftIvar.Idx]
-				return exec.GetSelectionOperator(ct, cmpOp, input, colIdx1, colIdx2)
-			}
-			return nil, errors.New("unable to plan comparison where RHS is not an ivar or constant")
+		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		if err != nil {
+			return nil, resultIdx, ct, err
 		}
-		return nil, errors.New("unable to plan comparison where LHS is not an ivar")
+		typ := ct[leftIdx]
+		if constArg, ok := t.Right.(tree.Datum); ok {
+			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
+			return op, resultIdx, ct, err
+		}
+		rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), ct, leftOp)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
+		return op, resultIdx, ct, err
+	case *tree.BinaryExpr:
+		binOp := t.Operator
+		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		typ := ct[leftIdx]
+		if constArg, ok := t.Right.(tree.Datum); ok {
+			// The projection result will be outputted to a new column which is appended
+			// to the input batch.
+			resultIdx = len(ct)
+			op, err := exec.GetProjectionConstOperator(typ, binOp, leftOp, leftIdx, constArg, resultIdx)
+			ct = append(ct, typ)
+			return op, resultIdx, ct, err
+		}
+		rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), ct, leftOp)
+		if err != nil {
+			return nil, resultIdx, nil, err
+		}
+		resultIdx = len(ct)
+		op, err := exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
+		ct = append(ct, typ)
+		return op, resultIdx, ct, err
 	default:
-		return nil, errors.Errorf("unhandled expression type: %s", t)
+		return nil, resultIdx, nil, errors.Errorf("unhandled expression type: %s", reflect.TypeOf(t))
 	}
 }
 

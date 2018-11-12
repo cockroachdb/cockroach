@@ -37,6 +37,8 @@ import (
 {{define "opConstName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
+{{/* The outer range is a types.T, and the inner is the overloads associated
+     with that type. */}}
 {{range .}}
 {{range .}}
 

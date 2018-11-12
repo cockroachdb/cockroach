@@ -72,8 +72,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	var expected Operator
-	expected = &selLTInt64Int64ConstOp{input: input, colIdx: colIdx, constArg: constVal}
+	expected := &selLTInt64Int64ConstOp{input: input, colIdx: colIdx, constArg: constVal}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
 	}
@@ -89,8 +88,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	var expected Operator
-	expected = &selGEInt16Int16Op{input: input, col1Idx: col1Idx, col2Idx: col2Idx}
+	expected := &selGEInt16Int16Op{input: input, col1Idx: col1Idx, col2Idx: col2Idx}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
 	}
