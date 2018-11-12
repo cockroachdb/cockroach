@@ -258,6 +258,7 @@ func (ef *execFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType,
 	left, right exec.Node,
 	leftEqCols, rightEqCols []exec.ColumnOrdinal,
+	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
 	p := ef.planner
@@ -285,6 +286,8 @@ func (ef *execFactory) ConstructHashJoin(
 		pred.leftColNames[i] = tree.Name(leftSrc.info.SourceColumns[leftEqCols[i]].Name)
 		pred.rightColNames[i] = tree.Name(rightSrc.info.SourceColumns[rightEqCols[i]].Name)
 	}
+	pred.leftEqKey = leftEqColsAreKey
+	pred.rightEqKey = rightEqColsAreKey
 
 	pred.onCond = pred.iVarHelper.Rebind(
 		extraOnCond, false /* alsoReset */, false, /* normalizeToNonNil */

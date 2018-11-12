@@ -60,6 +60,13 @@ type joinPredicate struct {
 	rightInfo *sqlbase.DataSourceInfo
 	info      *sqlbase.DataSourceInfo
 
+	// If set, the left equality columns form a key in the left input. Used as a
+	// hint for optimizing execution.
+	leftEqKey bool
+	// If set, the right equality columns form a key in the right input. Used as a
+	// hint for optimizing execution.
+	rightEqKey bool
+
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
