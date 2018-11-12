@@ -52,8 +52,8 @@ import (
 var (
 	local       bool
 	cockroach   string
-	cloud       = "gce"
-	encrypt     bool
+	cloud                    = "gce"
+	encrypt     encryptValue = "false"
 	workload    string
 	roachprod   string
 	buildTag    string
@@ -65,6 +65,40 @@ var (
 	// For the "list" command: list benchmarks instead of tests.
 	listBench bool
 )
+
+type encryptValue string
+
+func (v *encryptValue) String() string {
+	return string(*v)
+}
+
+func (v *encryptValue) Set(s string) error {
+	if s == "random" {
+		*v = encryptValue(s)
+		return nil
+	}
+	t, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*v = encryptValue(fmt.Sprint(t))
+	return nil
+}
+
+func (v *encryptValue) asBool() bool {
+	if *v == "random" {
+		return rand.Intn(2) == 0
+	}
+	t, err := strconv.ParseBool(string(*v))
+	if err != nil {
+		return false
+	}
+	return t
+}
+
+func (v *encryptValue) Type() string {
+	return "string"
+}
 
 func ifLocal(trueVal, falseVal string) string {
 	if local {
@@ -1033,7 +1067,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if encrypt && !argExists(args, "--encrypt") {
+	if !argExists(args, "--encrypt") && encrypt.asBool() {
 		args = append(args, "--encrypt")
 	}
 	return execCmd(ctx, c.l, args...)
