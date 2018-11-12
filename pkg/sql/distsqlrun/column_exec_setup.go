@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 
 	"github.com/pkg/errors"
@@ -89,6 +89,57 @@ func newColOperator(
 
 		typs := types.FromColumnTypes(spec.Input[0].ColumnTypes)
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+
+	case core.HashJoiner != nil:
+		if err := checkNumIn(inputs, 2); err != nil {
+			return nil, err
+		}
+
+		if !core.HashJoiner.OnExpr.Empty() {
+			return nil, errors.New("can't plan hash join with on expressions")
+		}
+
+		if core.HashJoiner.Type != sqlbase.JoinType_INNER {
+			return nil, errors.Errorf("hash join of type %s not supported", core.HashJoiner.Type)
+		}
+
+		leftTypes := types.FromColumnTypes(spec.Input[0].ColumnTypes)
+		rightTypes := types.FromColumnTypes(spec.Input[1].ColumnTypes)
+
+		nLeftCols := uint32(len(leftTypes))
+		nRightCols := uint32(len(rightTypes))
+
+		leftOutCols := make([]uint32, 0)
+		rightOutCols := make([]uint32, 0)
+
+		if post.Projection {
+			for _, col := range post.OutputColumns {
+				if col < nLeftCols {
+					leftOutCols = append(leftOutCols, col)
+				} else {
+					rightOutCols = append(rightOutCols, col-nLeftCols)
+				}
+			}
+		} else {
+			for i := uint32(0); i < nLeftCols; i++ {
+				leftOutCols = append(leftOutCols, i)
+			}
+
+			for i := uint32(0); i < nRightCols; i++ {
+				rightOutCols = append(rightOutCols, i)
+			}
+		}
+
+		op, err = exec.NewEqInnerDistinctHashJoiner(
+			inputs[0],
+			inputs[1],
+			core.HashJoiner.LeftEqColumns,
+			core.HashJoiner.RightEqColumns,
+			leftOutCols,
+			rightOutCols,
+			leftTypes,
+			rightTypes,
+		)
 
 	default:
 		return nil, errors.Errorf("unsupported processor core %s", core)
