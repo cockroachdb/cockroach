@@ -630,3 +630,52 @@ func (prober *hashJoinProber) collectResults(batch ColBatch, batchSize uint16, s
 
 	prober.batch.SetLength(nResults)
 }
+
+func NewEqInnerDistinctHashJoiner(
+	leftSource Operator,
+	rightSource Operator,
+	leftEqCols []uint32,
+	rightEqCols []uint32,
+	leftOutCols []uint32,
+	rightOutCols []uint32,
+	leftTypes []types.T,
+	rightTypes []types.T,
+) (Operator, error) {
+	spec := hashJoinerSpec{
+		left: hashJoinerSourceSpec{
+			eqCols:      make([]int, len(leftEqCols)),
+			outCols:     make([]int, len(leftOutCols)),
+			sourceTypes: leftTypes,
+			source:      leftSource,
+		},
+
+		right: hashJoinerSourceSpec{
+			eqCols:      make([]int, len(rightEqCols)),
+			outCols:     make([]int, len(rightOutCols)),
+			sourceTypes: rightTypes,
+			source:      rightSource,
+		},
+
+		buildRightSide: false,
+	}
+
+	for i, col := range leftEqCols {
+		spec.left.eqCols[i] = int(col)
+	}
+
+	for i, col := range rightEqCols {
+		spec.right.eqCols[i] = int(col)
+	}
+
+	for i, col := range leftOutCols {
+		spec.left.outCols[i] = int(col)
+	}
+
+	for i, col := range rightOutCols {
+		spec.right.outCols[i] = int(col)
+	}
+
+	return &hashJoinEqInnerDistinctOp{
+		spec: spec,
+	}, nil
+}
