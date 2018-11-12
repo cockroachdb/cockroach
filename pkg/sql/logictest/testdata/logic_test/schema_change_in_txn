@@ -1,5 +1,170 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+subtest create_and_add_fk_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+# The index on parent_id is added automatically because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# Check that the auto-created index is visible
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE test.child, test.parent
+
+subtest create_and_add_fk_in_separate_txns
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+statement ok
+BEGIN
+
+# The index on parent_id is added automatically because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+statement ok
+COMMIT
+
+# Check that the auto-created index is visible
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+DROP TABLE test.child, test.parent
+
+subtest auto_add_fk_with_composite_index_to_empty_table
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
+
+# The (composite) index needed for the fk constraint is automatically added because the table is empty
+statement ok
+ALTER TABLE child_composite_index ADD CONSTRAINT fk_id FOREIGN KEY (parent_a_id, parent_b_id) REFERENCES parent_composite_index;
+
+statement ok
+INSERT INTO parent_composite_index VALUES (100, 200)
+
+statement ok
+INSERT INTO child_composite_index VALUES (1, 100, 200)
+
+# Check that the auto-created index is visible
+query III rowsort
+SELECT * FROM child_composite_index@child_composite_index_auto_index_fk_id
+----
+1 100 200
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE parent_composite_index, child_composite_index
+
+subtest auto_add_fk_to_nonempty_table_error
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE nonempty_a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE nonempty_b (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+INSERT INTO nonempty_b VALUES (1), (2), (3);
+
+statement ok
+INSERT INTO nonempty_a VALUES (1, NULL, 1)
+
+# Fails because self_id is not indexed, and an index will not be automatically created because the table is nonempty
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
+
+statement ok
+COMMIT
+
+subtest auto_add_fk_index_name_collision
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent_name_collision (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE child_name_collision (id SERIAL NOT NULL, parent_id INT, other_col INT)
+
+statement ok
+CREATE INDEX child_name_collision_auto_index_fk_id ON child_name_collision (other_col)
+
+# Testing the unusual case where an index already exists that has the same name
+# as the index to be auto-generated when adding a fk constraint to an empty
+# table (but the existing index is not on the referencing column), in which
+# case the ALTER TABLE will fail due to the name collision.
+statement error duplicate index name: "child_name_collision_auto_index_fk_id"
+ALTER TABLE child_name_collision ADD CONSTRAINT fk_id FOREIGN KEY (parent_id) references parent_name_collision
+
+statement ok
+COMMIT
+
+subtest auto_add_fk_duplicate_cols_error
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent (a_id INT, b_id INT, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
+
+# The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
+statement error index \"child_duplicate_cols_auto_index_fk\" contains duplicate column \"parent_id\"
+ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
+
+statement ok
+COMMIT
+
 subtest create_with_other_commands_in_txn
 
 statement count 3

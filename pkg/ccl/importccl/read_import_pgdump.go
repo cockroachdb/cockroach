@@ -268,7 +268,7 @@ func readPostgresCreateTable(
 					continue
 				}
 				for _, constraint := range constraints {
-					if err := sql.ResolveFK(evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sqlbase.ConstraintValidity_Validated); err != nil {
+					if err := sql.ResolveFK(evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sql.NewTable); err != nil {
 						return nil, err
 					}
 				}
