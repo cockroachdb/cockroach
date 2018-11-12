@@ -447,7 +447,7 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		// We don't want to show the OriginalExpr; just show Cmp.
 		private = t.Cmp
 
-	case *SubqueryExpr, *ExistsExpr:
+	case *SubqueryExpr, *ExistsExpr, *ArrayFlattenExpr:
 		// We don't want to show the OriginalExpr.
 		private = nil
 

@@ -56,6 +56,7 @@ func init() {
 		opt.AnyOp:             (*Builder).buildAny,
 		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
 		opt.IndirectionOp:     (*Builder).buildIndirection,
+		opt.ArrayFlattenOp:    (*Builder).buildArrayFlatten,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Item operators.
@@ -400,6 +401,29 @@ func (b *Builder) buildIndirection(
 	}
 
 	return tree.NewTypedIndirectionExpr(expr, index), nil
+}
+
+func (b *Builder) buildArrayFlatten(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	af := scalar.(*memo.ArrayFlattenExpr)
+
+	// The subquery here should always be uncorrelated: if it were not, we would
+	// have converted it to an aggregation.
+	if !af.Input.Relational().OuterCols.Empty() {
+		panic("input to ArrayFlatten should be uncorrelated")
+	}
+
+	root, err := b.build(af.Input)
+	if err != nil {
+		return nil, err
+	}
+
+	col, _ := af.Input.(memo.RelExpr).Relational().OutputCols.Next(0)
+	typ := b.mem.Metadata().ColumnType(opt.ColumnID(col))
+	e := b.addSubquery(exec.SubqueryAllRows, typ, root, af.OriginalExpr)
+
+	return tree.NewTypedArrayFlattenExpr(e), nil
 }
 
 func (b *Builder) buildUnsupportedExpr(

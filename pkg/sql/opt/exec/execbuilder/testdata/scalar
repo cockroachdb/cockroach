@@ -587,3 +587,20 @@ render     ·         ·                                                 (r1, r2
  └── scan  ·         ·                                                 (s)       ·
 ·          table     t@primary                                         ·         ·
 ·          spans     ALL                                               ·         ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
+----
+root                          ·             ·                                                ("array")          ·
+ ├── render                   ·             ·                                                ("array")          ·
+ │    │                       render 0      ARRAY @S1                                        ·                  ·
+ │    └── emptyrow            ·             ·                                                ()                 ·
+ └── subquery                 ·             ·                                                ("array")          ·
+      │                       id            @S1                                              ·                  ·
+      │                       original sql  (SELECT generate_series(1, 10) ORDER BY 1 DESC)  ·                  ·
+      │                       exec mode     all rows                                         ·                  ·
+      └── sort                ·             ·                                                (generate_series)  -generate_series
+           │                  order         -generate_series                                 ·                  ·
+           └── project set    ·             ·                                                (generate_series)  ·
+                │             render 0      generate_series(1, 10)                           ·                  ·
+                └── emptyrow  ·             ·                                                ()                 ·

@@ -1102,6 +1102,55 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 	return c.f.ConstructTuple(elems, types.TTuple{Types: ts})
 }
 
+// MakeEmptyArray returns an empty array with the same element type as the input.
+func (c *CustomFuncs) MakeEmptyArray(in memo.RelExpr) opt.ScalarExpr {
+	col, _ := c.OutputCols(in).Next(0)
+	return c.f.ConstructArray(
+		memo.EmptyScalarListExpr,
+		types.TArray{Typ: c.f.Metadata().ColumnType(opt.ColumnID(col))},
+	)
+}
+
+// MakeUnorderedSubquery returns a SubqueryPrivate that specifies no ordering.
+func (c *CustomFuncs) MakeUnorderedSubquery() *memo.SubqueryPrivate {
+	return &memo.SubqueryPrivate{}
+}
+
+// ArrayType returns the type of the first output column wrapped
+// in an array.
+func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
+	inCol, _ := c.OutputCols(in).Next(0)
+	inTyp := c.mem.Metadata().ColumnType(opt.ColumnID(inCol))
+
+	return types.TArray{Typ: inTyp}
+}
+
+// FirstCol returns the first column in the input expression.
+func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
+	inCol, _ := c.OutputCols(in).Next(0)
+	return opt.ColumnID(inCol)
+}
+
+// MakeArrayAggCol returns a SubqueryPrivate that specifies no ordering.
+func (c *CustomFuncs) MakeArrayAggCol(typ types.T) *memo.ColPrivate {
+	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
+}
+
+// MakeOrderedGrouping constructs a new GroupingPrivate using the given
+// grouping columns and OrderingChoice private.
+func (c *CustomFuncs) MakeOrderedGrouping(
+	groupingCols opt.ColSet, ordering physical.OrderingChoice,
+) *memo.GroupingPrivate {
+	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
+}
+
+// SubqueryOrdering returns the ordering property on a SubqueryPrivate.
+func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.OrderingChoice {
+	var oc physical.OrderingChoice
+	oc.FromOrdering(sub.Ordering)
+	return oc
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
