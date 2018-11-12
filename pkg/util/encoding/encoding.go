@@ -2148,7 +2148,7 @@ func DecodeUntaggedBitArrayValue(b []byte) (remaining []byte, d bitarray.BitArra
 
 const uuidValueEncodedLength = 16
 
-var _ [uuidValueEncodedLength]byte = (uuid.UUID{}).UUID // Assert that "github.com/satori/go.uuid" is length 16.
+var _ [uuidValueEncodedLength]byte = uuid.UUID{} // Assert that uuid.UUID is length 16.
 
 // DecodeUUIDValue decodes a value encoded by EncodeUUIDValue.
 func DecodeUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error) {
