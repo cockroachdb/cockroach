@@ -20,19 +20,18 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-	"golang.org/x/text/language"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 )
 
 type alterTableNode struct {
@@ -241,7 +240,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// the global-scope resolveFK().
 				// TODO(vivek): check if the cache can be used.
 				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+					// Check whether the table is empty, and pass the result to resolveFK(). If
+					// the table is empty, then resolveFK will automatically add the necessary
+					// index for a fk constraint if the index does not exist.
+					kvs, scanErr := params.p.txn.Scan(params.ctx, n.tableDesc.PrimaryIndexSpan().Key, n.tableDesc.PrimaryIndexSpan().EndKey, 1)
+					if scanErr != nil {
+						err = scanErr
+						return
+					}
+					var tableState FKTableState
+					if len(kvs) == 0 {
+						tableState = EmptyTable
+					} else {
+						tableState = NonEmptyTable
+					}
+					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, tableState)
 				})
 				if err != nil {
 					return err

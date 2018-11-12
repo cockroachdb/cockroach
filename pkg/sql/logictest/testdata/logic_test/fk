@@ -725,22 +725,11 @@ CREATE TABLE a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY 
 statement ok
 CREATE TABLE b (id SERIAL NOT NULL, PRIMARY KEY (id))
 
-# Adding a self-ref FK to an _existing_ table also works.
-statement error foreign key requires an existing index on columns \("self_id"\)
-ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
-
-statement ok
-CREATE INDEX ON a (self_id);
-
+# The index needed for the fk constraint is automatically added because the table is empty
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
 
-statement error foreign key requires an existing index on columns \("b_id"\)
-ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
-
-statement ok
-CREATE INDEX ON a (b_id);
-
+# The index needed for the fk constraint is automatically added because the table is empty
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
 
@@ -852,24 +841,6 @@ DROP TABLE refers1
 
 statement ok
 COMMIT
-
-statement ok
-CREATE TABLE a (id BIGSERIAL NOT NULL, self_id INT, b_id INT UNIQUE NOT NULL, PRIMARY KEY (id));
-
-statement error foreign key requires an existing index on columns \("self_id"\)
-ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a(b_id);
-
-statement ok
-DROP TABLE a;
-
-statement ok
-CREATE TABLE a (id BIGSERIAL NOT NULL, self_id INT, b_id INT UNIQUE NOT NULL, PRIMARY KEY (id));
-
-statement error foreign key requires an existing index on columns \("self_id"\)
-ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a(b_id);
-
-statement ok
-DROP TABLE a;
 
 # Check that removing self-ref FK correctly removed backref too, #16070.
 statement ok
@@ -1468,3 +1439,99 @@ INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
 
 statement ok
 DROP TABLE b, a
+
+subtest auto_add_fk_with_composite_index_to_empty_table
+
+statement ok
+CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
+
+# The (composite) index needed for the fk constraint is automatically added because the table is empty
+statement ok
+ALTER TABLE child_composite_index ADD CONSTRAINT fk_id FOREIGN KEY (parent_a_id, parent_b_id) REFERENCES parent_composite_index;
+
+statement ok
+INSERT INTO parent_composite_index VALUES (100, 200)
+
+statement ok
+INSERT INTO child_composite_index VALUES (1, 100, 200)
+
+statement error foreign key violation: value \[100 300\] not found in parent_composite_index@primary \[a_id b_id\]
+INSERT INTO child_composite_index VALUES (2, 100, 300)
+
+statement ok
+DROP TABLE child_composite_index, parent_composite_index
+
+subtest auto_add_fk_to_nonempty_table_error
+
+statement ok
+CREATE TABLE nonempty_a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE nonempty_b (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+INSERT INTO nonempty_b VALUES (1), (2), (3);
+
+statement ok
+INSERT INTO nonempty_a VALUES (1, NULL, 1)
+
+# Fails because self_id is not indexed, and an index will not be automatically created because the table is nonempty
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
+
+statement ok
+CREATE INDEX ON nonempty_a (self_id)
+
+# This now succeeds with the manually added index
+statement ok
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
+
+# Fails because b_id is not indexed, and an index will not be automatically created because the table is nonempty
+statement error foreign key requires an existing index on columns \("b_id"\)
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES nonempty_b;
+
+statement ok
+CREATE INDEX ON nonempty_a (b_id)
+
+# This now succeeds with the manually added index
+statement ok
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES nonempty_b;
+
+statement ok
+DROP TABLE nonempty_a, nonempty_b
+
+subtest auto_add_fk_index_name_collision
+
+statement ok
+CREATE TABLE parent_name_collision (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE child_name_collision (id SERIAL NOT NULL, parent_id INT, other_col INT)
+
+statement ok
+CREATE INDEX child_name_collision_auto_index_fk_id ON child_name_collision (other_col)
+
+# Testing the unusual case where an index already exists that has the same name
+# as the index to be auto-generated when adding a fk constraint to an empty
+# table (but the existing index is not on the referencing column), in which
+# case the ALTER TABLE will fail due to the name collision.
+statement error duplicate index name: "child_name_collision_auto_index_fk_id"
+ALTER TABLE child_name_collision ADD CONSTRAINT fk_id FOREIGN KEY (parent_id) references parent_name_collision
+
+subtest auto_add_fk_duplicate_cols_error
+
+statement ok
+CREATE TABLE parent (a_id INT, b_id INT, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
+
+# The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
+statement error index \"child_duplicate_cols_auto_index_fk\" contains duplicate column \"parent_id\"
+ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
+
+statement ok
+DROP TABLE parent, child_duplicate_cols
