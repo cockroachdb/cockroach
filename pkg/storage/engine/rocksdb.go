@@ -2770,6 +2770,16 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
 }
 
+// Delete puts a deletion tombstone into the sstable being built. See
+// the Add method for more.
+func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Delete on a closed writer")
+	}
+	fw.DataSize += int64(len(k.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
+}
+
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Finish() ([]byte, error) {

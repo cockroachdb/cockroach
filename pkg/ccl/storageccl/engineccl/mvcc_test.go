@@ -388,7 +388,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	ingest := func(it engine.Iterator, count int) {
 		sst, err := engine.MakeRocksDBSstFileWriter()
 		if err != nil {
-			t.Fatal(sst)
+			t.Fatal(err)
 		}
 		defer sst.Close()
 
