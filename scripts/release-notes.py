@@ -123,15 +123,15 @@ crdb_folk = set([
 
 # Section titles for release notes.
 relnotetitles = {
-    'cli change': "Command-Line Changes",
-    'sql change': "SQL Language Changes",
-    'admin ui change': "Admin UI Changes",
-    'general change': "General Changes",
-    'build change': "Build Changes",
-    'enterprise change': "Enterprise Edition Changes",
-    'backward-incompatible change': "Backward-Incompatible Changes",
-    'performance improvement': "Performance Improvements",
-    'bug fix': "Bug Fixes",
+    'cli change': "Command line changes",
+    'sql change': "SQL language changes",
+    'admin ui change': "Admin UI changes",
+    'general change': "General changes",
+    'build change': "Build changes",
+    'enterprise change': "Enterprise edition changes",
+    'backward-incompatible change': "Backward-incompatible changes",
+    'performance improvement': "Performance improvements",
+    'bug fix': "Bug fixes",
 }
 
 # Order in which to show the sections.
@@ -676,7 +676,15 @@ if not hidedownloads:
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
-</div>""")
+</div>
+""")
+
+    print("""### Docker image
+
+~~~shell
+docker pull cockroachdb/cockroach:""" + current_version + """
+~~~
+""")
     print()
 
 seenshas = set()
@@ -715,7 +723,7 @@ if len(extrasec) > 0 or len(missing_release_notes) > 0:
 if len(extrasec) > 0:
     extrasec_sorted = sorted(list(extrasec))
     for extrasec in extrasec_sorted:
-        print("#### %s" % extrasec.title())
+        print("#### %s" % extrasec.capitalize())
         print()
         for item in release_notes[extrasec]:
             print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
@@ -732,7 +740,7 @@ if len(missing_release_notes) > 0:
     print()
 
 ## Print the Doc Updates section.
-print("### Doc Updates")
+print("### Doc updates")
 print()
 print("Docs team: Please add these manually.")
 print()
