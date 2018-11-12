@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -226,7 +225,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				DisableScanner: true,
 			},
 		},

@@ -21,6 +21,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,7 +79,7 @@ func TestIntentResolution(t *testing.T) {
 
 		results := map[string]struct{}{}
 		func() {
-			var storeKnobs storagebase.StoreTestingKnobs
+			var storeKnobs storage.StoreTestingKnobs
 			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
