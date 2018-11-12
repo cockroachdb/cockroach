@@ -66,11 +66,11 @@ func DecodeIndexKeyToCols(
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyValsToCols(vecs[:length], idx, indexColIdx, types[:length], colDirs[:length], key)
+			key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx[:length], types[:length], colDirs[:length], key)
 			if err != nil {
 				return nil, false, err
 			}
-			vecs, types, colDirs = vecs[length:], types[length:], colDirs[length:]
+			indexColIdx, types, colDirs = indexColIdx[length:], types[length:], colDirs[length:]
 
 			// Consume the interleaved sentinel.
 			var ok bool
