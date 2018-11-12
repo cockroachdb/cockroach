@@ -62,7 +62,11 @@ func EncDatumRowsToColVec(
 			if datum == tree.DNull {
 				vec.SetNull(i)
 			} else {
-				col[i] = datumToPhysicalFn(datum).({{.GoType}})
+				v, err := datumToPhysicalFn(datum)
+				if err != nil {
+					return err
+				}
+				col[i] = v.({{.GoType}})
 			}
 		}
 		return nil

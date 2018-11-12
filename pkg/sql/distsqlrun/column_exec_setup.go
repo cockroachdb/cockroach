@@ -190,6 +190,12 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, columnTypes, err
 		}
+		if !columnTypes[leftIdx].Equal(columnTypes[rightIdx]) {
+			err = errors.Errorf(
+				"comparison between %s and %s is unhandled", columnTypes[leftIdx].SemanticType,
+				columnTypes[rightIdx].SemanticType)
+			return nil, resultIdx, columnTypes, err
+		}
 		op, err := exec.GetSelectionOperator(ct, cmpOp, rightOp, leftIdx, rightIdx)
 		return op, resultIdx, columnTypes, err
 	case *tree.BinaryExpr:
@@ -210,6 +216,12 @@ func planExpressionOperators(
 		rightOp, rightIdx, columnTypes, err := planExpressionOperators(t.TypedRight(), columnTypes, leftOp)
 		if err != nil {
 			return nil, resultIdx, nil, err
+		}
+		if !columnTypes[leftIdx].Equal(columnTypes[rightIdx]) {
+			err = errors.Errorf(
+				"projection on %s and %s is unhandled", columnTypes[leftIdx].SemanticType,
+				columnTypes[rightIdx].SemanticType)
+			return nil, resultIdx, columnTypes, err
 		}
 		resultIdx = len(columnTypes)
 		op, err := exec.GetProjectionOperator(ct, binOp, rightOp, leftIdx, rightIdx, resultIdx)
