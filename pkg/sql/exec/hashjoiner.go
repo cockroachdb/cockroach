@@ -129,11 +129,6 @@ func (hj *hashJoinEqInnerDistinctOp) Init() {
 	hj.spec.left.source.Init()
 	hj.spec.right.source.Init()
 
-	nOutCols := len(hj.spec.left.outCols) + len(hj.spec.right.outCols)
-	if nOutCols == 0 {
-		panic("no output columns specified for hash joiner")
-	}
-
 	// Prepare the hashTable using the specified side as the build table. Prepare
 	// the prober using the other side as the probe table.
 	if hj.spec.buildRightSide {
@@ -629,4 +624,57 @@ func (prober *hashJoinProber) collectResults(batch ColBatch, batchSize uint16, s
 	}
 
 	prober.batch.SetLength(nResults)
+}
+
+// NewEqInnerDistinctHashJoiner creates a new inner equality hash join operator
+// on the left and right input tables. leftEqCols and rightEqCols specify the
+// equality columns while leftOutCols and rightOutCols specifies the output
+// columns.
+func NewEqInnerDistinctHashJoiner(
+	leftSource Operator,
+	rightSource Operator,
+	leftEqCols []uint32,
+	rightEqCols []uint32,
+	leftOutCols []uint32,
+	rightOutCols []uint32,
+	leftTypes []types.T,
+	rightTypes []types.T,
+) (Operator, error) {
+	spec := hashJoinerSpec{
+		left: hashJoinerSourceSpec{
+			eqCols:      make([]int, len(leftEqCols)),
+			outCols:     make([]int, len(leftOutCols)),
+			sourceTypes: leftTypes,
+			source:      leftSource,
+		},
+
+		right: hashJoinerSourceSpec{
+			eqCols:      make([]int, len(rightEqCols)),
+			outCols:     make([]int, len(rightOutCols)),
+			sourceTypes: rightTypes,
+			source:      rightSource,
+		},
+
+		buildRightSide: false,
+	}
+
+	for i, col := range leftEqCols {
+		spec.left.eqCols[i] = int(col)
+	}
+
+	for i, col := range rightEqCols {
+		spec.right.eqCols[i] = int(col)
+	}
+
+	for i, col := range leftOutCols {
+		spec.left.outCols[i] = int(col)
+	}
+
+	for i, col := range rightOutCols {
+		spec.right.outCols[i] = int(col)
+	}
+
+	return &hashJoinEqInnerDistinctOp{
+		spec: spec,
+	}, nil
 }
