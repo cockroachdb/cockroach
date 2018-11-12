@@ -136,11 +136,20 @@ type StoreInterface interface {
 	Clock() *hlc.Clock
 	Stopper() *stop.Stopper
 	DB() *client.DB
+	GetTxnWaitKnobs() TestingKnobs
 }
 
 // ReplicaInterface provides some parts of a Replica without incurring a dependency.
 type ReplicaInterface interface {
 	ContainsKey(roachpb.Key) bool
+}
+
+// TestingKnobs represents testing knobs for a Queue.
+type TestingKnobs struct {
+	// OnTxnWaitEnqueue is called when a would-be pusher joins a wait queue.
+	OnPusherBlocked func(ctx context.Context, push *roachpb.PushTxnRequest)
+	// OnTxnUpdate is called by Queue.UpdateTxn.
+	OnTxnUpdate func(ctx context.Context, txn *roachpb.Transaction)
 }
 
 // Queue enqueues PushTxn requests which are waiting on extant txns
@@ -269,6 +278,9 @@ func (q *Queue) Enqueue(txn *roachpb.Transaction) {
 func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	txn.AssertInitialized(ctx)
 	q.mu.Lock()
+	if f := q.store.GetTxnWaitKnobs().OnTxnUpdate; f != nil {
+		f(ctx, txn)
+	}
 
 	q.releaseWaitingQueriesLocked(ctx, txn.ID)
 
@@ -399,6 +411,9 @@ func (q *Queue) MaybeWaitForPush(
 		pending: make(chan *roachpb.Transaction, 1),
 	}
 	pending.waitingPushes = append(pending.waitingPushes, push)
+	if f := q.store.GetTxnWaitKnobs().OnPusherBlocked; f != nil {
+		f(ctx, req)
+	}
 	// Because we're adding another dependent on the pending
 	// transaction, send on the waiting queries' channel to
 	// indicate there is a new dependent and they should proceed
