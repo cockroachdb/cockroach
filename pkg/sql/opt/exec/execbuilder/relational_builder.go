@@ -445,8 +445,15 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		rightEqOrdinals[i] = right.getColumnOrdinal(rightEq[i])
 	}
 
+	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ToSet())
+	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ToSet())
+
 	ep.root, err = b.factory.ConstructHashJoin(
-		joinType, left.root, right.root, leftEqOrdinals, rightEqOrdinals, onExpr,
+		joinType,
+		left.root, right.root,
+		leftEqOrdinals, rightEqOrdinals,
+		leftEqColsAreKey, rightEqColsAreKey,
+		onExpr,
 	)
 	if err != nil {
 		return execPlan{}, err
