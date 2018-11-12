@@ -804,6 +804,8 @@ func (ef *execFactory) ConstructPlan(
 				out.execMode = distsqlrun.SubqueryExecModeOneRow
 			case exec.SubqueryAnyRows:
 				out.execMode = distsqlrun.SubqueryExecModeAllRowsNormalized
+			case exec.SubqueryAllRows:
+				out.execMode = distsqlrun.SubqueryExecModeAllRows
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}

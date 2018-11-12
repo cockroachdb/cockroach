@@ -778,24 +778,17 @@ build
 SELECT ARRAY(SELECT 1)
 ----
 project
- ├── columns: array:3(int[])
+ ├── columns: array:2(int[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:2(int[])
-           │         ├── project
-           │         │    ├── columns: "?column?":1(int!null)
-           │         │    ├── values
-           │         │    │    └── tuple [type=tuple]
-           │         │    └── projections
-           │         │         └── const: 1 [type=int]
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: ?column? [type=int]
-           └── array: [type=int[]]
+      └── array-flatten [type=int[]]
+           └── project
+                ├── columns: "?column?":1(int!null)
+                ├── values
+                │    └── tuple [type=tuple]
+                └── projections
+                     └── const: 1 [type=int]
 
 exec-ddl
 CREATE TABLE x (a INT PRIMARY KEY)
@@ -817,92 +810,104 @@ build
 SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
 ----
 project
- ├── columns: b:1(int!null) array:4(int[])
+ ├── columns: b:1(int!null) array:3(int[])
  ├── scan y
  │    └── columns: b:1(int!null)
  └── projections
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:3(int[])
-           │         ├── select
-           │         │    ├── columns: a:2(int!null)
-           │         │    ├── scan x
-           │         │    │    └── columns: a:2(int!null)
-           │         │    └── filters
-           │         │         └── eq [type=bool]
-           │         │              ├── variable: a [type=int]
-           │         │              └── variable: b [type=int]
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: a [type=int]
-           └── array: [type=int[]]
+      └── array-flatten [type=int[]]
+           └── select
+                ├── columns: a:2(int!null)
+                ├── scan x
+                │    └── columns: a:2(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: a [type=int]
+                          └── variable: b [type=int]
 
 build
 SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
 ----
 project
- ├── columns: b:1(int!null) array:4(int[])
+ ├── columns: b:1(int!null) array:3(int[])
  ├── scan y
  │    └── columns: b:1(int!null)
  └── projections
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:3(int[])
-           │         ├── internal-ordering: +2
-           │         ├── scan x
-           │         │    ├── columns: a:2(int!null)
-           │         │    └── ordering: +2
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: a [type=int]
-           └── array: [type=int[]]
+      └── array-flatten [type=int[]]
+           └── scan x
+                ├── columns: a:2(int!null)
+                └── ordering: +2
 
 build
 SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
 ----
 project
- ├── columns: array:3(string[])
+ ├── columns: array:2(string[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── coalesce [type=string[]]
-           ├── subquery [type=string[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:2(string[])
-           │         ├── values
-           │         │    ├── columns: column1:1(string)
-           │         │    ├── tuple [type=tuple{string}]
-           │         │    │    └── const: 'foo' [type=string]
-           │         │    ├── tuple [type=tuple{string}]
-           │         │    │    └── const: 'bar' [type=string]
-           │         │    └── tuple [type=tuple{string}]
-           │         │         └── const: 'baz' [type=string]
-           │         └── aggregations
-           │              └── array-agg [type=string[]]
-           │                   └── variable: column1 [type=string]
-           └── array: [type=string[]]
+      └── array-flatten [type=string[]]
+           └── values
+                ├── columns: column1:1(string)
+                ├── tuple [type=tuple{string}]
+                │    └── const: 'foo' [type=string]
+                ├── tuple [type=tuple{string}]
+                │    └── const: 'bar' [type=string]
+                └── tuple [type=tuple{string}]
+                     └── const: 'baz' [type=string]
 
 build
 SELECT ARRAY(VALUES (ARRAY[1]))
 ----
-error (0A000): can't build ARRAY(int[])
+project
+ ├── columns: array:2(int[][])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=int[][]]
+           └── values
+                ├── columns: column1:1(int[])
+                └── tuple [type=tuple{int[]}]
+                     └── array: [type=int[]]
+                          └── const: 1 [type=int]
 
 build
 SELECT ARRAY(SELECT (1, 2))
 ----
-error (0A000): can't build ARRAY(tuple{int, int})
+project
+ ├── columns: array:2(tuple{int, int}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=tuple{int, int}[]]
+           └── project
+                ├── columns: "?column?":1(tuple{int, int})
+                ├── values
+                │    └── tuple [type=tuple]
+                └── projections
+                     └── tuple [type=tuple{int, int}]
+                          ├── const: 1 [type=int]
+                          └── const: 2 [type=int]
 
 build
 SELECT ARRAY(VALUES ((1, 2)))
 ----
-error (0A000): can't build ARRAY(tuple{int, int})
+project
+ ├── columns: array:2(tuple{int, int}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=tuple{int, int}[]]
+           └── values
+                ├── columns: column1:1(tuple{int, int})
+                └── tuple [type=tuple{tuple{int, int}}]
+                     └── tuple [type=tuple{int, int}]
+                          ├── const: 1 [type=int]
+                          └── const: 2 [type=int]
 
 build
 SELECT ARRAY(VALUES ('{}'::JSONB))
 ----
-error (0A000): arrays of jsonb not allowed
+error: arrays of jsonb not allowed
 
 build
 SELECT ARRAY(SELECT 1, 2)
@@ -913,30 +918,22 @@ build
 SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
 ----
 project
- ├── columns: array:3(int[])
+ ├── columns: array:2(int[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:2(int[])
-           │         ├── internal-ordering: -1
-           │         ├── sort
-           │         │    ├── columns: generate_series:1(int)
-           │         │    ├── ordering: -1
-           │         │    └── project-set
-           │         │         ├── columns: generate_series:1(int)
-           │         │         ├── values
-           │         │         │    └── tuple [type=tuple]
-           │         │         └── zip
-           │         │              └── function: generate_series [type=int]
-           │         │                   ├── const: 1 [type=int]
-           │         │                   └── const: 100 [type=int]
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: generate_series [type=int]
-           └── array: [type=int[]]
+      └── array-flatten [type=int[]]
+           └── sort
+                ├── columns: generate_series:1(int)
+                ├── ordering: -1
+                └── project-set
+                     ├── columns: generate_series:1(int)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── zip
+                          └── function: generate_series [type=int]
+                               ├── const: 1 [type=int]
+                               └── const: 100 [type=int]
 
 build-scalar
 1 = ANY ARRAY[1, 2, 3]
@@ -1060,3 +1057,69 @@ build-scalar vars=(string)
 ----
 collate [type=collatedstring{en}]
  └── variable: @1 [type=string]
+
+exec-ddl
+CREATE TABLE u (x INT)
+----
+TABLE u
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE v (y INT[])
+----
+TABLE v
+ ├── y int[]
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: array:3(int[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=int[]]
+           └── sort
+                ├── columns: x:1(int)
+                ├── ordering: +1
+                └── project
+                     ├── columns: x:1(int)
+                     └── scan u
+                          └── columns: x:1(int) rowid:2(int!null)
+
+build
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: y:1(int[]!null)
+ └── select
+      ├── columns: y:1(int[]!null) v.rowid:2(int!null)
+      ├── scan v
+      │    └── columns: y:1(int[]) v.rowid:2(int!null)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: y [type=int[]]
+                └── array-flatten [type=int[]]
+                     └── sort
+                          ├── columns: x:3(int)
+                          ├── ordering: +3
+                          └── project
+                               ├── columns: x:3(int)
+                               └── scan u
+                                    └── columns: x:3(int) u.rowid:4(int!null)
+
+build
+SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v
+----
+error: can't execute a correlated ARRAY(...) over tuple{int[], int}
+
+build
+SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
+----
+error: can't execute a correlated ARRAY(...) over int[]

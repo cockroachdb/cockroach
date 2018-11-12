@@ -65,3 +65,28 @@ func (o *Optimizer) buildChildPhysicalProps(
 
 	return o.mem.InternPhysicalProps(&childProps)
 }
+
+// buildChildPhysicalPropsScalar is like buildChildPhysicalProps, but for
+// when the parent is a scalar expression.
+func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *physical.Required {
+	var childProps physical.Required
+	switch parent.Op() {
+	case opt.ArrayFlattenOp:
+		if nth == 0 {
+			af := parent.(*memo.ArrayFlattenExpr)
+			childProps.Ordering.FromOrdering(af.Ordering)
+			// ArrayFlatten might have extra ordering columns. Use the Presentation property
+			// to get rid of them.
+			childProps.Presentation = physical.Presentation{
+				opt.LabeledColumn{
+					// Keep the existing label for the column.
+					Label: o.mem.Metadata().ColumnLabel(af.RequestedCol),
+					ID:    af.RequestedCol,
+				},
+			}
+		}
+	default:
+		return physical.MinRequired
+	}
+	return o.mem.InternPhysicalProps(&childProps)
+}
