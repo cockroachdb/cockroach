@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -661,7 +660,7 @@ type StoreConfig struct {
 	// which is non-zero.
 	IntentResolverTaskLimit int
 
-	TestingKnobs storagebase.StoreTestingKnobs
+	TestingKnobs StoreTestingKnobs
 
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 
@@ -2107,7 +2106,7 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 func (s *Store) Tracer() opentracing.Tracer { return s.cfg.AmbientCtx.Tracer }
 
 // TestingKnobs accessor.
-func (s *Store) TestingKnobs() *storagebase.StoreTestingKnobs { return &s.cfg.TestingKnobs }
+func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
 // IsDraining accessor.
 func (s *Store) IsDraining() bool {

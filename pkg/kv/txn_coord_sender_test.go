@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,7 +53,7 @@ func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
 }
 
 func createTestDBWithContextAndKnobs(
-	t testing.TB, dbCtx client.DBContext, knobs *storagebase.StoreTestingKnobs,
+	t testing.TB, dbCtx client.DBContext, knobs *storage.StoreTestingKnobs,
 ) *localtestcluster.LocalTestCluster {
 	s := &localtestcluster.LocalTestCluster{
 		DBContext:         &dbCtx,
@@ -296,7 +297,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 // Test that the theartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storagebase.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -637,7 +638,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
 		key := roachpb.Key("a")
 		are := roachpb.NewAmbiguousResultError("very ambiguous")
-		knobs := &storagebase.StoreTestingKnobs{
+		knobs := &storage.StoreTestingKnobs{
 			TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 				for _, req := range ba.Requests {
 					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {

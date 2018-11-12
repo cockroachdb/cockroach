@@ -1582,7 +1582,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: filter,
 		},
@@ -1765,7 +1765,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
 
@@ -1854,7 +1854,7 @@ func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
 
@@ -2840,7 +2840,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
 		},
@@ -2968,7 +2968,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				DisableSplitQueue:         true,
 				DisableMergeQueue:         true,
 				ForceSyncIntentResolution: true,

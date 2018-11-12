@@ -20,11 +20,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -47,7 +48,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	// still a small chance that a non-gateway node will try a merge after we
 	// change the setting.
 	var testClusterArgs base.TestClusterArgs
-	testClusterArgs.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	testClusterArgs.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		DisableMergeQueue: true,
 	}
 	tc := serverutils.StartTestCluster(t, numHosts, testClusterArgs)
