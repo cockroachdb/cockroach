@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -74,10 +75,18 @@ func newMaterializer(
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
 		case sqlbase.ColumnType_FLOAT:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case sqlbase.ColumnType_BYTES:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
+		case sqlbase.ColumnType_DECIMAL:
+			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
+		case sqlbase.ColumnType_DATE:
+			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
 		case sqlbase.ColumnType_STRING:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
+		case sqlbase.ColumnType_BYTES:
+			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
+		case sqlbase.ColumnType_NAME:
+			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
+		case sqlbase.ColumnType_OID:
+			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
 			panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
 		}
@@ -150,11 +159,22 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 			case sqlbase.ColumnType_FLOAT:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case sqlbase.ColumnType_BYTES:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
+			case sqlbase.ColumnType_DECIMAL:
+				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
+			case sqlbase.ColumnType_DATE:
+				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
 			case sqlbase.ColumnType_STRING:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+			case sqlbase.ColumnType_BYTES:
+				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
+			case sqlbase.ColumnType_NAME:
+				b := col.Bytes()[rowIdx]
+				m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
+			case sqlbase.ColumnType_OID:
+				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
+			default:
+				panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
 			}
 		}
 		return m.ProcessRowHelper(m.row), nil
