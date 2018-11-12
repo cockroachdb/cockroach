@@ -56,6 +56,9 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 	case *memo.ExistsExpr:
 		return !t.Input.Relational().OuterCols.Empty()
 
+	case *memo.ArrayFlattenExpr:
+		return !t.Input.Relational().OuterCols.Empty()
+
 	case *memo.AnyExpr:
 		// Don't hoist Any when only its Scalar operand is correlated, because it
 		// executes much slower. It's better to cache the results of the constant
@@ -752,7 +755,7 @@ func (r *subqueryHoister) input() memo.RelExpr {
 func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 	// Match correlated subqueries.
 	switch scalar.Op() {
-	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp, opt.ArrayFlattenOp:
 		subquery := scalar.Child(0).(memo.RelExpr)
 		if subquery.Relational().OuterCols.Empty() {
 			break

@@ -499,8 +499,8 @@ func (o *Optimizer) optimizeScalarExpr(
 ) (cost memo.Cost, fullyOptimized bool) {
 	fullyOptimized = true
 	for i, n := 0, scalar.ChildCount(); i < n; i++ {
-		// Optimize the child with respect to properties that allow anything.
-		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), props.MinPhysProps)
+		childProps := o.buildChildPhysicalPropsScalar(scalar, i)
+		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
 
 		// Accumulate cost of children.
 		cost += childCost
@@ -631,11 +631,10 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *props.Physic
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		before := parent.Child(i)
 
-		// Relational parent expression can have different props for each child,
-		// whereas Scalar parent expressions always uses props.MinPhysProps (set
-		// above).
 		if relParent != nil {
 			childProps = o.buildChildPhysicalProps(relParent, i, parentProps)
+		} else {
+			childProps = o.buildChildPhysicalPropsScalar(parent, i)
 		}
 
 		after := o.setLowestCostTree(before, childProps)
