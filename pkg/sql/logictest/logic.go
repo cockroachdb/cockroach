@@ -380,6 +380,8 @@ type testClusterConfig struct {
 	overrideOptimizerMode string
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
+	// if non-empty, overrides the default experimental_vectorize mode.
+	overrideExpVectorize string
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
@@ -415,6 +417,7 @@ var logicTestConfigs = []testClusterConfig{
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
 	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
+	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "true"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
@@ -1033,6 +1036,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			}
 			return nil
 		})
+	}
+	if cfg.overrideExpVectorize != "" {
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1", cfg.overrideExpVectorize,
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// db may change over the lifetime of this function, with intermediate

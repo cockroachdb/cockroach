@@ -53,6 +53,7 @@ func (s *colBatchScan) Next() exec.ColBatch {
 	if err != nil {
 		panic(err)
 	}
+	bat.SetSelection(false)
 	return bat
 }
 
