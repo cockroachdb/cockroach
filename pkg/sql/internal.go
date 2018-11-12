@@ -181,7 +181,8 @@ func (ie *internalExecutorImpl) initConnEx(
 			sp,
 			stmtBuf,
 			clientComm,
-			ie.memMetrics)
+			ie.memMetrics,
+			true /*internalStats*/)
 	} else {
 		ex, err = ie.s.newConnExecutorWithTxn(
 			ctx,
@@ -195,7 +196,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	if err != nil {
 		return nil, nil, err
 	}
-	ex.stmtCounterDisabled = true
+	ex.useInternalStats = true
 
 	var wg sync.WaitGroup
 	wg.Add(1)

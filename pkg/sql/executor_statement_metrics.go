@@ -99,12 +99,7 @@ func (ex *connExecutor) recordStatementSummary(
 	automaticRetryCount int,
 	rowsAffected int,
 	err error,
-	m *EngineMetrics,
 ) {
-	if ex.stmtCounterDisabled {
-		return
-	}
-
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
 	// Compute the run latency. This is always recorded in the
@@ -127,6 +122,12 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// overhead latency: txn/retry management, error checking, etc
 	execOverhead := svcLat - processingLat
+
+	targetMetrics := &ex.server.Metrics
+	if ex.useInternalStats {
+		targetMetrics = &ex.server.InternalMetrics
+	}
+	m := &targetMetrics.EngineMetrics
 
 	if automaticRetryCount == 0 {
 		if optUsed {
