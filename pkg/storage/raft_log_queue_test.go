@@ -18,19 +18,17 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,7 +50,11 @@ func TestShouldTruncate(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			v := shouldTruncate(c.truncatableIndexes, c.raftLogSize)
+			var d truncateDecision
+			d.Input.LogSize = c.raftLogSize
+			d.Input.FirstIndex = 123
+			d.NewFirstIndex = d.Input.FirstIndex + c.truncatableIndexes
+			v := d.ShouldTruncate()
 			if c.expected != v {
 				t.Fatalf("expected %v, but found %v", c.expected, v)
 			}
@@ -96,7 +98,7 @@ func TestGetQuorumIndex(t *testing.T) {
 	}
 }
 
-func TestComputeTruncatableIndex(t *testing.T) {
+func TestComputeTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const targetSize = 1000
@@ -107,27 +109,90 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		firstIndex      uint64
 		lastIndex       uint64
 		pendingSnapshot uint64
-		expected        uint64
+		exp             string
 	}{
-		{[]uint64{1, 2}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 5, 5}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 5, 5}, 100, 2, 2, 0, 2},
-		{[]uint64{5, 5, 5}, 100, 2, 5, 0, 5},
-		{[]uint64{5, 5, 5}, 100, 2, 2, 1, 2},
-		{[]uint64{5, 5, 5}, 100, 2, 3, 3, 3},
-		{[]uint64{1, 2, 3, 4}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 2, 3, 4}, 100, 2, 2, 0, 2},
-		// If over targetSize, should truncate to quorum committed index.
-		{[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0, 3},
-		{[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0, 3},
-		{[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0, 3},
+		{
+			// Nothing to truncate.
+			[]uint64{1, 2}, 100, 1, 1, 0,
+			"truncate 0 entries to first index 1 (chosen via: quorum)"},
+		{
+			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
+			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
+			// own log asynchronously.
+			[]uint64{1, 5, 5}, 100, 1, 1, 0,
+			"truncate 0 entries to first index 1 (chosen via: followers)",
+		},
+		{
+			// We're not truncating anything, but one follower is already cut off. There's no pending
+			// snapshot so we shouldn't be causing any additional snapshots.
+			[]uint64{1, 5, 5}, 100, 2, 2, 0,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		{
+			// The happy case.
+			[]uint64{5, 5, 5}, 100, 2, 5, 0,
+			"truncate 3 entries to first index 5 (chosen via: quorum)",
+		},
+		{
+			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
+			// it was already obsolete before. (This example is also not one you could manufacture in
+			// a real system).
+			[]uint64{5, 5, 5}, 100, 2, 2, 1,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		{
+			// Respecting the pending snapshot.
+			[]uint64{5, 5, 5}, 100, 2, 5, 3,
+			"truncate 1 entries to first index 3 (chosen via: pending snapshot)",
+		},
+		{
+			// Log is below target size, so respecting the slowest follower.
+			[]uint64{1, 2, 3, 4}, 100, 1, 5, 0,
+			"truncate 0 entries to first index 1 (chosen via: followers)",
+		},
+		{
+			// Truncating since local log starts at 2. One follower is already cut off without a pending
+			// snapshot.
+			[]uint64{1, 2, 3, 4}, 100, 2, 2, 0,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		// If over targetSize, should truncate to quorum committed index. Minority will need snapshots.
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
+			"truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
+		},
+		{
+			[]uint64{100, 100}, 2000, 1, 100, 50,
+			"truncate 99 entries to first index 100 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
+		},
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			"truncate 1 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+		},
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
+			"truncate 0 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+		},
 		// The pending snapshot index affects the quorum commit index.
-		{[]uint64{4}, 2000, 1, 1, 1, 1},
+		{
+			[]uint64{4}, 2000, 1, 7, 1,
+			"truncate 0 entries to first index 1 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+		},
 		// Never truncate past the quorum commit index.
-		{[]uint64{3, 3, 6}, 100, 4, 4, 0, 3},
+		{
+			[]uint64{3, 3, 6}, 100, 2, 7, 0,
+			"truncate 1 entries to first index 3 (chosen via: quorum)",
+		},
 		// Never truncate past the last index.
-		{[]uint64{5}, 100, 1, 3, 0, 3},
-	}
+		{
+			[]uint64{5}, 100, 1, 3, 0,
+			"truncate 2 entries to first index 3 (chosen via: last index)",
+		},
+		// Never truncate "before the first index".
+		{
+			[]uint64{5}, 100, 2, 3, 1,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		}}
 	for i, c := range testCases {
 		status := &raft.Status{
 			Progress: make(map[uint64]raft.Progress),
@@ -135,10 +200,16 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		out := computeTruncatableIndex(status, c.raftLogSize, targetSize,
-			c.firstIndex, c.lastIndex, c.pendingSnapshot)
-		if !reflect.DeepEqual(c.expected, out) {
-			t.Errorf("%d: computeTruncatableIndex(...) expected %d, but got %d", i, c.expected, out)
+		decision := computeTruncateDecision(truncateDecisionInput{
+			RaftStatus:                     status,
+			LogSize:                        c.raftLogSize,
+			MaxLogSize:                     targetSize,
+			FirstIndex:                     c.firstIndex,
+			LastIndex:                      c.lastIndex,
+			PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+		})
+		if act, exp := decision.String(), c.exp; act != exp {
+			t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
 		}
 	}
 }
@@ -165,9 +236,9 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	}
 }
 
-// TestGetTruncatableIndexes verifies that old raft log entries are correctly
+// TestNewTruncateDecision verifies that old raft log entries are correctly
 // removed.
-func TestGetTruncatableIndexes(t *testing.T) {
+func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -179,18 +250,12 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	getIndexes := func() (uint64, uint64, uint64, error) {
-		r.mu.Lock()
-		firstIndex, err := r.raftFirstIndexLocked()
-		r.mu.Unlock()
+	getIndexes := func() (uint64, int, uint64, error) {
+		d, err := newTruncateDecision(context.Background(), r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		truncatableIndexes, oldestIndex, _, err := getTruncatableIndexes(context.Background(), r)
-		if err != nil {
-			return 0, 0, 0, err
-		}
-		return firstIndex, truncatableIndexes, oldestIndex, nil
+		return d.Input.FirstIndex, d.NumTruncatableIndexes(), d.NewFirstIndex, nil
 	}
 
 	aFirst, aTruncatable, aOldest, err := getIndexes()
@@ -215,13 +280,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if aFirst != bFirst {
-		t.Errorf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
+		t.Fatalf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
 	}
 	if aTruncatable >= bTruncatable {
-		t.Errorf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
+		t.Fatalf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
 	}
 	if aOldest >= bOldest {
-		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
+		t.Fatalf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
 	}
 
 	// Enable the raft log scanner and and force a truncation.
@@ -231,10 +296,11 @@ func TestGetTruncatableIndexes(t *testing.T) {
 
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
-	var cFirst, cTruncatable, cOldest uint64
+	var cFirst, cOldest uint64
+	var numTruncatable int
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		cFirst, cTruncatable, cOldest, err = getIndexes()
+		cFirst, numTruncatable, cOldest, err = getIndexes()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -243,8 +309,8 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 		return nil
 	})
-	if bTruncatable < cTruncatable {
-		t.Errorf("expected truncatableIndexes to decrease, instead it changed from %d -> %d", bTruncatable, cTruncatable)
+	if bTruncatable < numTruncatable {
+		t.Errorf("expected numTruncatable to decrease, instead it changed from %d -> %d", bTruncatable, numTruncatable)
 	}
 	if bOldest >= cOldest {
 		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
@@ -261,7 +327,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// Unlike the last iteration, where we expect a truncation and can wait on
 	// it with succeedsSoon, we can't do that here. This check is fragile in
 	// that the truncation triggered here may lose the race against the call to
-	// GetFirstIndex or getTruncatableIndexes, giving a false negative. Fixing
+	// GetFirstIndex or newTruncateDecision, giving a false negative. Fixing
 	// this requires additional instrumentation of the queues, which was deemed
 	// to require too much work at the time of this writing.
 	dFirst, dTruncatable, dOldest, err := getIndexes()
@@ -271,8 +337,8 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	if cFirst != dFirst {
 		t.Errorf("truncation should not have occurred, but firstIndex changed from %d -> %d", cFirst, dFirst)
 	}
-	if cTruncatable != dTruncatable {
-		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", cTruncatable, dTruncatable)
+	if numTruncatable != dTruncatable {
+		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", numTruncatable, dTruncatable)
 	}
 	if cOldest != dOldest {
 		t.Errorf("truncation should not have occurred, but oldestIndex changed from %d -> %d", cOldest, dOldest)
