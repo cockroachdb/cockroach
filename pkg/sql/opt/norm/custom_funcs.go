@@ -1292,3 +1292,38 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	}
 	return c.f.ConstructConstVal(result)
 }
+
+// MakeEmptyArray returns an empty array with the same element type as the input.
+func (c *CustomFuncs) MakeEmptyArray(in memo.RelExpr) opt.ScalarExpr {
+	col, _ := c.OutputCols(in).Next(0)
+	return c.f.ConstructArray(memo.EmptyScalarListExpr, types.TArray{Typ: c.f.Metadata().ColumnType(opt.ColumnID(col))})
+}
+
+// MakeSubquery returns a subquery returning the given relational expression with a Max1Row operator.
+func (c *CustomFuncs) MakeSubquery(in memo.RelExpr) opt.ScalarExpr {
+	return c.f.ConstructSubquery(c.f.ConstructMax1Row(in), &memo.SubqueryPrivate{})
+}
+
+// MakeArrayAggForFlatten returns the aggregate which represents collecting a
+// subquery into an array.
+func (c *CustomFuncs) MakeArrayAggForFlatten(
+	in memo.RelExpr, sub *memo.SubqueryPrivate,
+) memo.RelExpr {
+	inCol, _ := c.OutputCols(in).Next(0)
+	inTyp := c.mem.Metadata().ColumnType(opt.ColumnID(inCol))
+	col := c.mem.Metadata().AddColumn("array_agg", types.TArray{Typ: inTyp})
+
+	var oc props.OrderingChoice
+	oc.FromOrdering(sub.Ordering)
+
+	return c.f.ConstructScalarGroupBy(
+		in,
+		memo.AggregationsExpr{{
+			Agg: c.f.ConstructArrayAgg(
+				c.f.ConstructVariable(opt.ColumnID(inCol)),
+			),
+			ColPrivate: memo.ColPrivate{Col: col},
+		}},
+		&memo.GroupingPrivate{Ordering: oc},
+	)
+}

@@ -792,11 +792,6 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 
 	case *tree.ArrayFlatten:
-		if s.builder.AllowUnsupportedExpr {
-			// TODO(rytaft): Temporary fix for #24171 and #24170.
-			break
-		}
-
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t

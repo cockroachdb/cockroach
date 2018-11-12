@@ -65,3 +65,15 @@ func (o *Optimizer) buildChildPhysicalProps(
 
 	return o.mem.InternPhysicalProps(&childProps)
 }
+
+// buildChildPhysicalPropsScalar is like buildChildPhysicalProps, but for
+// when the parent is a scalar expression.
+func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *props.Physical {
+	var childProps props.Physical
+	if parent.Op() == opt.ArrayFlattenOp {
+		if nth == 0 {
+			childProps.Ordering.FromOrdering(parent.(*memo.ArrayFlattenExpr).Ordering)
+		}
+	}
+	return o.mem.InternPhysicalProps(&childProps)
+}

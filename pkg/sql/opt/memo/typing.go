@@ -82,6 +82,19 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
 	return o.NullableArgs
 }
 
+// AggregateOverloadExists returns whether or not the given operator has a
+// unary overload which takes the given type as input.
+func AggregateOverloadExists(agg opt.Operator, typ types.T) bool {
+	name := opt.AggregateOpReverseMap[agg]
+	_, overloads := builtins.GetBuiltinProperties(name)
+	for _, o := range overloads {
+		if o.Types.MatchAt(typ, 0) {
+			return true
+		}
+	}
+	return false
+}
+
 // FindAggregateOverload finds an aggregate function overload that matches the
 // given aggregate function expression. It panics if no match can be found.
 func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
@@ -122,6 +135,7 @@ func init() {
 	typingFuncMap[opt.SubqueryOp] = typeSubquery
 	typingFuncMap[opt.ColumnAccessOp] = typeColumnAccess
 	typingFuncMap[opt.IndirectionOp] = typeIndirection
+	typingFuncMap[opt.ArrayFlattenOp] = typeArrayFlatten
 
 	// Override default typeAsAggregate behavior for aggregate functions with
 	// a large number of possible overloads or where ReturnType depends on
@@ -175,6 +189,16 @@ func typeArrayAgg(e opt.ScalarExpr) types.T {
 // typeIndirection returns the type of the element of the array.
 func typeIndirection(e opt.ScalarExpr) types.T {
 	return types.UnwrapType(e.Child(0).(opt.ScalarExpr).DataType()).(types.TArray).Typ
+}
+
+// typeArrayFlatten returns the type of the subquery as an array.
+func typeArrayFlatten(e opt.ScalarExpr) types.T {
+	input := e.Child(0).(RelExpr)
+	colID, _ := input.Relational().OutputCols.Next(0)
+
+	return types.TArray{
+		Typ: input.Memo().Metadata().ColumnType(opt.ColumnID(colID)),
+	}
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.
