@@ -124,7 +124,10 @@ func GetProjectionConstOperator(
 	constArg tree.Datum,
   outputIdx int,
 ) (Operator, error) {
-	c := types.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := types.GetDatumToPhysicalFn(ct)(constArg)
+	if err != nil {
+		return nil, err
+	}
 	switch t := types.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
 	case types.{{$typ}}:
