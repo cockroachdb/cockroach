@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -8731,6 +8732,77 @@ func TestGCWithoutThreshold(t *testing.T) {
 				}
 			}()
 		}
+	}
+}
+
+// Test that, if the Raft command resulting from EndTransaction request fails to
+// be processed/apply, then the LocalResult associated with that command is
+// cleared.
+func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	var tc testContext
+	cfg := TestStoreConfig(nil)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	bt, btH := beginTxnArgs(key, txn)
+	assignSeqNumsForReqs(txn, &bt)
+	put := putArgs(key, []byte("value"))
+	assignSeqNumsForReqs(txn, &put)
+
+	var ba roachpb.BatchRequest
+	ba.Header = btH
+	ba.Add(&bt, &put)
+	if _, err := tc.Sender().Send(ctx, ba); err != nil {
+		t.Fatal(err)
+	}
+
+	var proposalRecognized int64 // accessed atomically
+
+	r := tc.repl
+	r.mu.Lock()
+	r.mu.submitProposalFn = func(pd *ProposalData) error {
+		// We're going to recognize the first time the commnand for the
+		// EndTransaction is proposed and we're going to hackily decrease its
+		// MaxLeaseIndex, so that the processing gets rejected further on.
+		ut := pd.Local.UpdatedTxns
+		if atomic.LoadInt64(&proposalRecognized) == 0 &&
+			ut != nil && len(*ut) == 1 && (*ut)[0].ID.Equal(txn.ID) {
+			pd.command.MaxLeaseIndex--
+			atomic.StoreInt64(&proposalRecognized, 1)
+		}
+		return defaultSubmitProposalLocked(r, pd)
+	}
+	r.mu.Unlock()
+
+	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+	defer cancel()
+
+	ba = roachpb.BatchRequest{}
+	et, etH := endTxnArgs(txn, true /* commit */)
+	et.IntentSpans = []roachpb.Span{{Key: key}}
+	assignSeqNumsForReqs(txn, &et)
+	ba.Header = etH
+	ba.Add(&et)
+	if _, err := tc.Sender().Send(opCtx, ba); err != nil {
+		t.Fatal(err)
+	}
+	formatted := tracing.FormatRecordedSpans(collect())
+	if err := testutils.MatchInOrder(formatted,
+		// The first proposal is rejected.
+		"retry proposal.*applied at lease index.*but required",
+		// The LocalResult is nil. This is the important part for this test.
+		"LocalResult: nil",
+		// The request will be re-evaluated.
+		"retry: proposalIllegalLeaseIndex",
+		// Re-evaluation succeeds and one txn is to be updated.
+		"LocalResult \\(reply.*#updated txns: 1",
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 
