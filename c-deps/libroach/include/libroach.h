@@ -412,6 +412,9 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 // cannot have been called.
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 
+// Adds a deletion tombstone to the sstable being built. See DBSstFileWriterAdd for more.
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
+
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
 DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);

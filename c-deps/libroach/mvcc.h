@@ -204,6 +204,10 @@ template <bool reverse> class mvccScanner {
       return seekVersion(timestamp_, false);
     }
 
+    if (cur_value_.size() == 0) {
+        return setStatus(FmtStatus("zero-length mvcc metadata"));
+    }
+
     if (!meta_.ParseFromArray(cur_value_.data(), cur_value_.size())) {
       return setStatus(FmtStatus("unable to decode MVCCMetadata"));
     }
