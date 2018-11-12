@@ -797,7 +797,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t
-			copy.Subquery = s.replaceSubquery(sub, false /* wrapInTuple */, 1 /* desiredColumns */)
+			copy.Subquery = s.replaceSubquery(sub, false /* wrapInTuple */, 1 /* desiredColumns */, extraColsAllowed)
 			expr = &copy
 		}
 
@@ -812,7 +812,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			if sub, ok := t.Right.(*tree.Subquery); ok {
 				// Copy the Comparison expression so that the tree isn't mutated.
 				copy := *t
-				copy.Right = s.replaceSubquery(sub, true /* wrapInTuple */, -1 /* desiredColumns */)
+				copy.Right = s.replaceSubquery(sub, true /* wrapInTuple */, -1 /* desiredColumns */, noExtraColsAllowed)
 				expr = &copy
 			}
 		}
@@ -824,9 +824,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 
 		if t.Exists {
-			expr = s.replaceSubquery(t, true /* wrapInTuple */, -1 /* desiredColumns */)
+			expr = s.replaceSubquery(t, true /* wrapInTuple */, -1 /* desiredColumns */, noExtraColsAllowed)
 		} else {
-			expr = s.replaceSubquery(t, false /* wrapInTuple */, s.columns /* desiredColumns */)
+			expr = s.replaceSubquery(t, false /* wrapInTuple */, s.columns /* desiredColumns */, noExtraColsAllowed)
 		}
 	}
 
@@ -979,6 +979,11 @@ func (s *scope) replaceCount(
 	return f, def
 }
 
+const (
+	extraColsAllowed   = true
+	noExtraColsAllowed = false
+)
+
 // Replace a raw subquery node with a typed subquery. wrapInTuple specifies
 // whether the return type of the subquery should be wrapped in a tuple.
 // wrapInTuple is true for subqueries that may return multiple rows in
@@ -987,8 +992,12 @@ func (s *scope) replaceCount(
 // subquery. Specifying -1 for desiredColumns allows the subquery to return any
 // number of columns and is used when the normal type checking machinery will
 // verify that the correct number of columns is returned.
+// If extraColsAllowed is true, extra columns built from the subquery (such as
+// columns for which orderings have been requested) will not be stripped away.
+// It is the duty of the caller to ensure that those columns are eventually
+// dealt with.
 func (s *scope) replaceSubquery(
-	sub *tree.Subquery, wrapInTuple bool, desiredColumns int,
+	sub *tree.Subquery, wrapInTuple bool, desiredColumns int, extraColsAllowed bool,
 ) *subquery {
 	if s.replaceSRFs {
 		// We need to save and restore the previous value of the replaceSRFs field in
@@ -1009,6 +1018,7 @@ func (s *scope) replaceSubquery(
 	s.builder.subquery = &subq
 
 	outScope := s.builder.buildStmt(sub.Select, s)
+	ord := outScope.ordering
 
 	// Treat the subquery result as an anonymous data source (i.e. column names
 	// are not qualified). Remove hidden columns, as they are not accessible
@@ -1028,7 +1038,7 @@ func (s *scope) replaceSubquery(
 		}
 	}
 
-	if len(outScope.extraCols) > 0 {
+	if len(outScope.extraCols) > 0 && !extraColsAllowed {
 		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
 		projScope.appendColumnsFromScope(outScope)
@@ -1038,7 +1048,7 @@ func (s *scope) replaceSubquery(
 
 	subq.cols = outScope.cols
 	subq.node = outScope.expr.(memo.RelExpr)
-	subq.ordering = outScope.ordering
+	subq.ordering = ord
 	return &subq
 }
 
