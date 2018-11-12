@@ -157,6 +157,15 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 	return memo.BinaryOverloadExists(op, left.DataType(), right.DataType())
 }
 
+// ArrayType returns the type of the first output column wrapped
+// in an array.
+func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
+	inCol, _ := c.OutputCols(in).Next(0)
+	inTyp := c.mem.Metadata().ColumnType(opt.ColumnID(inCol))
+
+	return types.TArray{Typ: inTyp}
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
@@ -1169,6 +1178,37 @@ func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) op
 	}
 
 	return c.f.ConstructConst(tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv))
+}
+
+// MakeUnorderedSubquery returns a SubqueryPrivate that specifies no ordering.
+func (c *CustomFuncs) MakeUnorderedSubquery() *memo.SubqueryPrivate {
+	return &memo.SubqueryPrivate{}
+}
+
+// SubqueryOrdering returns the ordering property on a SubqueryPrivate.
+func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.OrderingChoice {
+	var oc physical.OrderingChoice
+	oc.FromOrdering(sub.Ordering)
+	return oc
+}
+
+// FirstCol returns the first column in the input expression.
+func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
+	inCol, _ := c.OutputCols(in).Next(0)
+	return opt.ColumnID(inCol)
+}
+
+// MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
+func (c *CustomFuncs) MakeArrayAggCol(typ types.T) *memo.ColPrivate {
+	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
+}
+
+// MakeOrderedGrouping constructs a new GroupingPrivate using the given
+// grouping columns and OrderingChoice private.
+func (c *CustomFuncs) MakeOrderedGrouping(
+	groupingCols opt.ColSet, ordering physical.OrderingChoice,
+) *memo.GroupingPrivate {
+	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
 }
 
 // ----------------------------------------------------------------------

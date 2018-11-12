@@ -296,3 +296,47 @@
 )
 =>
 (CastToCollatedString $input $locale)
+
+# ArrayFlattenToAgg converts a correlated ArrayFlatten to an aggregation.
+# This rule exists because:
+#
+#     1. We cannot do the aggregation method if we don't have a scalar type
+#        (for instance, if we have a tuple type).
+#     2. We cannot decorrelate an ArrayFlatten directly (but we can decorrelate
+#        an aggregation). So it's desirable to perform this conversion in the
+#        interest of decorrelation.
+#
+# So the outcome is that we can perform uncorrelated ARRAY(...)s over any datatype,
+# and correlated ones only over the types that array_agg supports.
+#
+# Note that optbuilder should have already verified that if the input is
+# correlated, then we can array_agg over the input type.  Also note that the
+# Max1Row operator we introduce is guaranteed to be eliminated as
+# MakeArrayAggForFlatten will return a ScalarGroupBy.
+[NormalizeArrayFlattenToAgg, Normalize]
+(ArrayFlatten
+  $input:(HasOuterCols $input)
+  $subquery:*
+)
+=>
+(Coalesce
+    [
+        (Subquery
+            (ScalarGroupBy
+                $input
+                [
+                    (AggregationsItem
+                        (ArrayAgg (Variable (FirstCol $input)))
+                        (MakeArrayAggCol (ArrayType $input))
+                    )
+                ]
+                (MakeOrderedGrouping
+                    (MakeEmptyColSet)
+                    (SubqueryOrdering $subquery)
+                )
+            )
+            (MakeUnorderedSubquery)
+        )
+        (Array [] (ArrayType $input))
+    ]
+)

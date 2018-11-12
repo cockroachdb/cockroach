@@ -939,3 +939,11 @@ FROM c ORDER BY c_id
 4  {70,80}
 5  {}
 6  {90}
+
+# We can't decorrelate cases which don't use a scalar type in the
+# ARRAY(...) operator.
+statement error can't execute a correlated ARRAY\(...\) over tuple\{int, string\}
+SELECT
+  c_id,
+  ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id

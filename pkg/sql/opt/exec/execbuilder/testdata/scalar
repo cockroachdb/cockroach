@@ -587,3 +587,39 @@ render     ·         ·                                                 (r1, r2
  └── scan  ·         ·                                                 (s)       ·
 ·          table     t@primary                                         ·         ·
 ·          spans     ALL                                               ·         ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
+----
+root                          ·              ·                                                ("array")          ·
+ ├── values                   ·              ·                                                ("array")          ·
+ │                            size           1 column, 1 row                                  ·                  ·
+ │                            row 0, expr 0  ARRAY @S1                                        ·                  ·
+ └── subquery                 ·              ·                                                ("array")          ·
+      │                       id             @S1                                              ·                  ·
+      │                       original sql   (SELECT generate_series(1, 10) ORDER BY 1 DESC)  ·                  ·
+      │                       exec mode      all rows                                         ·                  ·
+      └── sort                ·              ·                                                (generate_series)  -generate_series
+           │                  order          -generate_series                                 ·                  ·
+           └── project set    ·              ·                                                (generate_series)  ·
+                │             render 0       generate_series(1, 10)                           ·                  ·
+                └── emptyrow  ·              ·                                                ()                 ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY(SELECT a FROM t ORDER BY b)
+----
+root                      ·              ·                             ("array")  ·
+ ├── values               ·              ·                             ("array")  ·
+ │                        size           1 column, 1 row               ·          ·
+ │                        row 0, expr 0  ARRAY @S1                     ·          ·
+ └── subquery             ·              ·                             ("array")  ·
+      │                   id             @S1                           ·          ·
+      │                   original sql   (SELECT a FROM t ORDER BY b)  ·          ·
+      │                   exec mode      all rows                      ·          ·
+      └── render          ·              ·                             (a)        ·
+           │              render 0       a                             ·          ·
+           └── sort       ·              ·                             (a, b)     +b
+                │         order          +b                            ·          ·
+                └── scan  ·              ·                             (a, b)     ·
+·                         table          t@primary                     ·          ·
+·                         spans          ALL                           ·          ·

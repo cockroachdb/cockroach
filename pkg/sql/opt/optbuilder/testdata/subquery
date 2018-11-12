@@ -58,25 +58,18 @@ build
 SELECT ARRAY(((((VALUES (1), (2))))))[2]
 ----
 project
- ├── columns: array:3(int)
+ ├── columns: array:2(int)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
       └── indirection [type=int]
-           ├── coalesce [type=int[]]
-           │    ├── subquery [type=int[]]
-           │    │    └── scalar-group-by
-           │    │         ├── columns: array_agg:2(int[])
-           │    │         ├── values
-           │    │         │    ├── columns: column1:1(int)
-           │    │         │    ├── tuple [type=tuple{int}]
-           │    │         │    │    └── const: 1 [type=int]
-           │    │         │    └── tuple [type=tuple{int}]
-           │    │         │         └── const: 2 [type=int]
-           │    │         └── aggregations
-           │    │              └── array-agg [type=int[]]
-           │    │                   └── variable: column1 [type=int]
-           │    └── array: [type=int[]]
+           ├── array-flatten [type=int[]]
+           │    └── values
+           │         ├── columns: column1:1(int)
+           │         ├── tuple [type=tuple{int}]
+           │         │    └── const: 1 [type=int]
+           │         └── tuple [type=tuple{int}]
+           │              └── const: 2 [type=int]
            └── const: 2 [type=int]
 
 build
@@ -2228,7 +2221,7 @@ FROM
 GROUP BY t2.b;
 ----
 project
- ├── columns: array:15(int[]) array:17(int[])
+ ├── columns: array:14(int[]) array:15(int[])
  ├── group-by
  │    ├── columns: t2.b:2(int) max:12(int)
  │    ├── grouping columns: t2.b:2(int)
@@ -2242,37 +2235,23 @@ project
  │         └── max [type=int]
  │              └── variable: a [type=int]
  └── projections
-      ├── coalesce [type=int[]]
-      │    ├── subquery [type=int[]]
-      │    │    └── scalar-group-by
-      │    │         ├── columns: array_agg:14(int[])
-      │    │         ├── scalar-group-by
-      │    │         │    ├── columns: max:7(int)
-      │    │         │    ├── project
-      │    │         │    │    ├── columns: t1.a:4(int)
-      │    │         │    │    └── scan t1
-      │    │         │    │         └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
-      │    │         │    └── aggregations
-      │    │         │         └── max [type=int]
-      │    │         │              └── variable: t1.a [type=int]
-      │    │         └── aggregations
-      │    │              └── array-agg [type=int[]]
-      │    │                   └── variable: max [type=int]
-      │    └── array: [type=int[]]
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:16(int[])
-           │         ├── project
-           │         │    ├── columns: max:13(int)
-           │         │    ├── scan t1
-           │         │    │    └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
-           │         │    └── projections
-           │         │         └── variable: max [type=int]
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: max [type=int]
-           └── array: [type=int[]]
+      ├── array-flatten [type=int[]]
+      │    └── scalar-group-by
+      │         ├── columns: max:7(int)
+      │         ├── project
+      │         │    ├── columns: t1.a:4(int)
+      │         │    └── scan t1
+      │         │         └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+      │         └── aggregations
+      │              └── max [type=int]
+      │                   └── variable: t1.a [type=int]
+      └── array-flatten [type=int[]]
+           └── project
+                ├── columns: max:13(int)
+                ├── scan t1
+                │    └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
+                └── projections
+                     └── variable: max [type=int]
 
 build
 SELECT
@@ -2284,7 +2263,7 @@ FROM
 GROUP BY t2.a, t2.b;
 ----
 project
- ├── columns: array:23(int[]) array:25(int[]) array:27(int[])
+ ├── columns: array:22(int[]) array:23(int[]) array:24(int[])
  ├── group-by
  │    ├── columns: t2.a:1(int) t2.b:2(int) max:13(int)
  │    ├── grouping columns: t2.a:1(int) t2.b:2(int)
@@ -2298,74 +2277,53 @@ project
  │         └── max [type=int]
  │              └── variable: a [type=int]
  └── projections
-      ├── coalesce [type=int[]]
-      │    ├── subquery [type=int[]]
-      │    │    └── scalar-group-by
-      │    │         ├── columns: array_agg:22(int[])
-      │    │         ├── project
-      │    │         │    ├── columns: max:7(int)
-      │    │         │    └── group-by
-      │    │         │         ├── columns: max:7(int) b:8(int)
-      │    │         │         ├── grouping columns: b:8(int)
-      │    │         │         ├── project
-      │    │         │         │    ├── columns: b:8(int) t1.a:4(int)
-      │    │         │         │    ├── scan t1
-      │    │         │         │    │    └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
-      │    │         │         │    └── projections
-      │    │         │         │         └── variable: t2.b [type=int]
-      │    │         │         └── aggregations
-      │    │         │              └── max [type=int]
-      │    │         │                   └── variable: t1.a [type=int]
-      │    │         └── aggregations
-      │    │              └── array-agg [type=int[]]
-      │    │                   └── variable: max [type=int]
-      │    └── array: [type=int[]]
-      ├── coalesce [type=int[]]
-      │    ├── subquery [type=int[]]
-      │    │    └── scalar-group-by
-      │    │         ├── columns: array_agg:24(int[])
-      │    │         ├── project
-      │    │         │    ├── columns: max:15(int)
-      │    │         │    ├── group-by
-      │    │         │    │    ├── columns: b:14(int)
-      │    │         │    │    ├── grouping columns: b:14(int)
-      │    │         │    │    └── project
-      │    │         │    │         ├── columns: b:14(int)
-      │    │         │    │         ├── scan t1
-      │    │         │    │         │    └── columns: t1.a:9(int) t1.b:10(int) t1.rowid:11(int!null)
-      │    │         │    │         └── projections
-      │    │         │    │              └── variable: t2.b [type=int]
-      │    │         │    └── projections
-      │    │         │         └── variable: max [type=int]
-      │    │         └── aggregations
-      │    │              └── array-agg [type=int[]]
-      │    │                   └── variable: max [type=int]
-      │    └── array: [type=int[]]
-      └── coalesce [type=int[]]
-           ├── subquery [type=int[]]
-           │    └── scalar-group-by
-           │         ├── columns: array_agg:26(int[])
-           │         ├── project
-           │         │    ├── columns: max:20(int)
-           │         │    └── group-by
-           │         │         ├── columns: max:20(int) b:21(int)
-           │         │         ├── grouping columns: b:21(int)
-           │         │         ├── project
-           │         │         │    ├── columns: column19:19(int) b:21(int)
-           │         │         │    ├── scan t1
-           │         │         │    │    └── columns: t1.a:16(int) t1.b:17(int) t1.rowid:18(int!null)
-           │         │         │    └── projections
-           │         │         │         ├── plus [type=int]
-           │         │         │         │    ├── variable: t1.a [type=int]
-           │         │         │         │    └── variable: t2.a [type=int]
-           │         │         │         └── variable: t2.b [type=int]
-           │         │         └── aggregations
-           │         │              └── max [type=int]
-           │         │                   └── variable: column19 [type=int]
-           │         └── aggregations
-           │              └── array-agg [type=int[]]
-           │                   └── variable: max [type=int]
-           └── array: [type=int[]]
+      ├── array-flatten [type=int[]]
+      │    └── project
+      │         ├── columns: max:7(int)
+      │         └── group-by
+      │              ├── columns: max:7(int) b:8(int)
+      │              ├── grouping columns: b:8(int)
+      │              ├── project
+      │              │    ├── columns: b:8(int) t1.a:4(int)
+      │              │    ├── scan t1
+      │              │    │    └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+      │              │    └── projections
+      │              │         └── variable: t2.b [type=int]
+      │              └── aggregations
+      │                   └── max [type=int]
+      │                        └── variable: t1.a [type=int]
+      ├── array-flatten [type=int[]]
+      │    └── project
+      │         ├── columns: max:15(int)
+      │         ├── group-by
+      │         │    ├── columns: b:14(int)
+      │         │    ├── grouping columns: b:14(int)
+      │         │    └── project
+      │         │         ├── columns: b:14(int)
+      │         │         ├── scan t1
+      │         │         │    └── columns: t1.a:9(int) t1.b:10(int) t1.rowid:11(int!null)
+      │         │         └── projections
+      │         │              └── variable: t2.b [type=int]
+      │         └── projections
+      │              └── variable: max [type=int]
+      └── array-flatten [type=int[]]
+           └── project
+                ├── columns: max:20(int)
+                └── group-by
+                     ├── columns: max:20(int) b:21(int)
+                     ├── grouping columns: b:21(int)
+                     ├── project
+                     │    ├── columns: column19:19(int) b:21(int)
+                     │    ├── scan t1
+                     │    │    └── columns: t1.a:16(int) t1.b:17(int) t1.rowid:18(int!null)
+                     │    └── projections
+                     │         ├── plus [type=int]
+                     │         │    ├── variable: t1.a [type=int]
+                     │         │    └── variable: t2.a [type=int]
+                     │         └── variable: t2.b [type=int]
+                     └── aggregations
+                          └── max [type=int]
+                               └── variable: column19 [type=int]
 
 build
 SELECT
@@ -2470,22 +2428,14 @@ project
       └── filters
            └── eq [type=bool]
                 ├── variable: y [type=int[]]
-                └── coalesce [type=int[]]
-                     ├── subquery [type=int[]]
-                     │    └── scalar-group-by
-                     │         ├── columns: array_agg:5(int[])
-                     │         ├── internal-ordering: +3
-                     │         ├── sort
-                     │         │    ├── columns: x:3(int)
-                     │         │    ├── ordering: +3
-                     │         │    └── project
-                     │         │         ├── columns: x:3(int)
-                     │         │         └── scan v
-                     │         │              └── columns: x:3(int) v.rowid:4(int!null)
-                     │         └── aggregations
-                     │              └── array-agg [type=int[]]
-                     │                   └── variable: x [type=int]
-                     └── array: [type=int[]]
+                └── array-flatten [type=int[]]
+                     └── sort
+                          ├── columns: x:3(int)
+                          ├── ordering: +3
+                          └── project
+                               ├── columns: x:3(int)
+                               └── scan v
+                                    └── columns: x:3(int) v.rowid:4(int!null)
 
 # Regression test for #30424. Aggregate function in the WHERE subquery
 # is aggregated in the outer scope, so it's not allowed.

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -116,64 +115,32 @@ func (b *Builder) buildScalar(
 			break
 		}
 
-		// We build
-		//
-		//  ARRAY(<subquery>)
-		//
-		// as
-		//
-		//   COALESCE(
-		//     (SELECT array_agg(x) FROM (<subquery>)),
-		//     ARRAY[]
-		//   )
-		//
-		// The COALESCE is needed because ARRAY(<empty subquery>) needs to return
-		// an empty array, while ARRAY_AGG with no inputs returns NULL.
-
 		s := t.Subquery.(*subquery)
-		aggInputColID := s.cols[0].id
 
-		elemType := b.factory.Metadata().ColumnType(aggInputColID)
-		if err := checkArrayElementType(elemType); err != nil {
-			panic(builderError{err})
+		inCol := s.cols[0].id
+
+		// This looks kind of arbitrary and strange, because it is:
+		// We cannot array_agg over some types, but we can only decorrelate via array_agg.
+		// Thus, we reject a query that is correlated and over a type that we can't array_agg.
+		typ := b.factory.Metadata().ColumnType(inCol)
+		if !s.outerCols.Empty() && !memo.AggregateOverloadExists(opt.ArrayAggOp, typ) {
+			panic(builderError{fmt.Errorf("can't execute a correlated ARRAY(...) over %s", typ)})
 		}
 
-		switch elemType.(type) {
-		case types.TTuple, types.TArray:
-			// We build this into ARRAY_AGG which doesn't support non-scalar types.
-			panic(unimplementedf("can't build ARRAY(%s)", elemType))
+		if !types.IsValidArrayElementType(typ) {
+			panic(builderError{fmt.Errorf("arrays of %s not allowed", typ)})
 		}
-
-		aggColID := b.factory.Metadata().AddColumn(
-			"array_agg",
-			types.TArray{Typ: elemType},
-		)
-
-		var oc physical.OrderingChoice
-		oc.FromOrdering(s.ordering)
-
-		out = b.factory.ConstructCoalesce(memo.ScalarListExpr{
-			b.factory.ConstructSubquery(
-				// A ScalarGroupBy always returns exactly one row, so there's no need
-				// for a Max1Row here.
-				b.factory.ConstructScalarGroupBy(
-					s.node,
-					memo.AggregationsExpr{{
-						Agg: b.factory.ConstructArrayAgg(
-							b.factory.ConstructVariable(aggInputColID),
-						),
-						ColPrivate: memo.ColPrivate{Col: aggColID},
-					}},
-					&memo.GroupingPrivate{Ordering: oc},
-				),
-				&memo.SubqueryPrivate{OriginalExpr: s.Subquery},
-			),
-			b.factory.ConstructArray(memo.EmptyScalarListExpr, types.TArray{Typ: elemType}),
-		})
 
 		// Perform correctness checks on the outer cols, update colRefs and
 		// b.subquery.outerCols.
 		b.checkSubqueryOuterCols(s.outerCols, inGroupingContext, inScope, colRefs)
+
+		subqueryPrivate := memo.SubqueryPrivate{
+			OriginalExpr: s.Subquery,
+			Ordering:     s.ordering,
+			RequestedCol: inCol,
+		}
+		out = b.factory.ConstructArrayFlatten(s.node, &subqueryPrivate)
 
 	case *tree.IndirectionExpr:
 		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)

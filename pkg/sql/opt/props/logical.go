@@ -70,9 +70,9 @@ type Shared struct {
 	OuterCols opt.ColSet
 
 	// HasSubquery is true if the subtree rooted at this node contains a subquery.
-	// The subquery can be a Subquery, Exists, or Any expression. Subqueries are
-	// the only place where a relational node can be nested within a scalar
-	// expression.
+	// The subquery can be a Subquery, Exists, Any, or ArrayFlatten expression.
+	// Subqueries are the only place where a relational node can be nested within a
+	// scalar expression.
 	HasSubquery bool
 
 	// HasCorrelatedSubquery is true if the scalar expression tree contains a

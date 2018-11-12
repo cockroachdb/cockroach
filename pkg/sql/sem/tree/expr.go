@@ -459,6 +459,16 @@ func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
 	return node
 }
 
+// NewTypedArrayFlattenExpr returns a new ArrayFlattenExpr that is verified to be well-typed.
+func NewTypedArrayFlattenExpr(input Expr) *ArrayFlatten {
+	inputTyp := input.(TypedExpr).ResolvedType()
+	node := &ArrayFlatten{
+		Subquery: input,
+	}
+	node.typ = types.TArray{Typ: inputTyp}
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
