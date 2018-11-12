@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -136,6 +137,7 @@ type StoreInterface interface {
 	Clock() *hlc.Clock
 	Stopper() *stop.Stopper
 	DB() *client.DB
+	GetTxnWaitKnobs() storagebase.TxnWaitKnobs
 }
 
 // ReplicaInterface provides some parts of a Replica without incurring a dependency.
@@ -269,6 +271,9 @@ func (q *Queue) Enqueue(txn *roachpb.Transaction) {
 func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	txn.AssertInitialized(ctx)
 	q.mu.Lock()
+	if f := q.store.GetTxnWaitKnobs().OnTxnUpdate; f != nil {
+		f(ctx, txn)
+	}
 
 	q.releaseWaitingQueriesLocked(ctx, txn.ID)
 
@@ -399,6 +404,9 @@ func (q *Queue) MaybeWaitForPush(
 		pending: make(chan *roachpb.Transaction, 1),
 	}
 	pending.waitingPushes = append(pending.waitingPushes, push)
+	if f := q.store.GetTxnWaitKnobs().OnPusherBlocked; f != nil {
+		f(ctx, req)
+	}
 	// Because we're adding another dependent on the pending
 	// transaction, send on the waiting queries' channel to
 	// indicate there is a new dependent and they should proceed

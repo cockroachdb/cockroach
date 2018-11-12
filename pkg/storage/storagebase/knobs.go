@@ -19,6 +19,7 @@
 package storagebase
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -177,6 +178,16 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
+	// TxnWait contains knobs for txnwait.Queue instances.
+	TxnWait TxnWaitKnobs
+}
+
+// TxnWaitKnobs groups knobs for txnwait.Queue.
+type TxnWaitKnobs struct {
+	// OnTxnWaitEnqueue is called when a would-be pusher joins a wait queue.
+	OnPusherBlocked func(ctx context.Context, push *roachpb.PushTxnRequest)
+	// OnTxnUpdate is called by Queue.UpdateTxn.
+	OnTxnUpdate func(ctx context.Context, txn *roachpb.Transaction)
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
