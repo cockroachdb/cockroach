@@ -89,13 +89,18 @@ type Factory interface {
 	) (Node, error)
 
 	// ConstructHashJoin returns a node that runs a hash-join between the results
-	// of two input nodes. The extraOnCond expression can refer to columns from
-	// both inputs using IndexedVars (first the left columns, then the right
-	// columns).
+	// of two input nodes.
+	//
+	// The leftEqColsAreKey/rightEqColsAreKey flags, if set, indicate that the
+	// equality columns form a key in the left/right input.
+	//
+	// The extraOnCond expression can refer to columns from both inputs using
+	// IndexedVars (first the left columns, then the right columns).
 	ConstructHashJoin(
 		joinType sqlbase.JoinType,
 		left, right Node,
 		leftEqCols, rightEqCols []ColumnOrdinal,
+		leftEqColsAreKey, rightEqColsAreKey bool,
 		extraOnCond tree.TypedExpr,
 	) (Node, error)
 

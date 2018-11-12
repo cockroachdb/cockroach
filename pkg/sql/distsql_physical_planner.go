@@ -2188,10 +2188,12 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	} else if leftMergeOrd.Columns == nil {
 		core.HashJoiner = &distsqlrun.HashJoinerSpec{
-			LeftEqColumns:  leftEqCols,
-			RightEqColumns: rightEqCols,
-			OnExpr:         onExpr,
-			Type:           joinType,
+			LeftEqColumns:        leftEqCols,
+			RightEqColumns:       rightEqCols,
+			OnExpr:               onExpr,
+			Type:                 joinType,
+			LeftEqColumnsAreKey:  n.pred.leftEqKey,
+			RightEqColumnsAreKey: n.pred.rightEqKey,
 		}
 	} else {
 		core.MergeJoiner = &distsqlrun.MergeJoinerSpec{
