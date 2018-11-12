@@ -27,7 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
@@ -62,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // ClusterOrganization is the organization name.
@@ -273,6 +273,15 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 )
+
+func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
+	if internal {
+		meta.Name += ".internal"
+		meta.Help += " (internal queries)"
+		meta.Measurement = "SQL Internal Statements"
+	}
+	return meta
+}
 
 // NodeInfo contains metadata about the executing node and cluster.
 type NodeInfo struct {

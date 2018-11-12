@@ -99,7 +99,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
 		switch ev.(type) {
 		case eventNonRetriableErr:
-			ex.server.StatementCounters.FailureCount.Inc(1)
+			ex.recordFailure()
 		}
 	case stateAborted, stateRestartWait:
 		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
@@ -110,6 +110,10 @@ func (ex *connExecutor) execStmt(
 	}
 
 	return ev, payload, err
+}
+
+func (ex *connExecutor) recordFailure() {
+	ex.metrics.StatementCounters.FailureCount.Inc(1)
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
@@ -710,7 +714,7 @@ func (ex *connExecutor) execStmtInParallel(
 
 		ex.recordStatementSummary(
 			planner, stmt, distributePlan, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
-			res.RowsAffected(), err, &ex.server.EngineMetrics,
+			res.RowsAffected(), err,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -850,7 +854,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.recordStatementSummary(
 		planner, stmt, distributePlan, optimizerPlanned,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
-		&ex.server.EngineMetrics,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -1381,9 +1384,7 @@ func (ex *connExecutor) handleAutoCommit(
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
-	if !ex.stmtCounterDisabled {
-		ex.server.StatementCounters.incrementCount(stmt.AST)
-	}
+	ex.metrics.StatementCounters.incrementCount(stmt.AST)
 }
 
 // validateSavepointName validates that it is that the provided ident

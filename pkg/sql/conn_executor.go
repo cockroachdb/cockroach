@@ -246,43 +246,59 @@ type Server struct {
 	// pool is the parent monitor for all session monitors except "internal" ones.
 	pool *mon.BytesMonitor
 
-	// EngineMetrics is exported as required by the metrics.Struct magic we use
-	// for metrics registration.
-	EngineMetrics EngineMetrics
+	// Metrics is used to account normal queries.
+	Metrics Metrics
 
-	// StatementCounters contains metrics.
-	StatementCounters StatementCounters
+	// InternalMetrics is used to account internal queries.
+	InternalMetrics Metrics
 
 	// dbCache is a cache for database descriptors, maintained through Gossip
 	// updates.
 	dbCache *databaseCacheHolder
 }
 
+// Metrics collects timeseries data about SQL activity.
+type Metrics struct {
+	// EngineMetrics is exported as required by the metrics.Struct magic we use
+	// for metrics registration.
+	EngineMetrics EngineMetrics
+
+	// StatementCounters contains metrics for statements.
+	StatementCounters StatementCounters
+}
+
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return &Server{
-		cfg: cfg,
-		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:  metric.NewCounter(MetaDistSQLSelect),
-			SQLOptCount:         metric.NewCounter(MetaSQLOpt),
-			SQLOptFallbackCount: metric.NewCounter(MetaSQLOptFallback),
-			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
-			DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
-				6*metricsSampleInterval),
-			SQLExecLatency: metric.NewLatency(MetaSQLExecLatency,
-				6*metricsSampleInterval),
-			DistSQLServiceLatency: metric.NewLatency(MetaDistSQLServiceLatency,
-				6*metricsSampleInterval),
-			SQLServiceLatency: metric.NewLatency(MetaSQLServiceLatency,
-				6*metricsSampleInterval),
-		},
-		StatementCounters: makeStatementCounters(),
+		cfg:             cfg,
+		Metrics:         makeMetrics(false /*internal*/),
+		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
 		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.NewSystemConfig())),
 		pool:     pool,
 		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reCache:  tree.NewRegexpCache(512),
+	}
+}
+
+func makeMetrics(internal bool) Metrics {
+	return Metrics{
+		EngineMetrics: EngineMetrics{
+			DistSQLSelectCount:  metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptCount:         metric.NewCounter(getMetricMeta(MetaSQLOpt, internal)),
+			SQLOptFallbackCount: metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
+			DistSQLExecLatency: metric.NewLatency(getMetricMeta(MetaDistSQLExecLatency, internal),
+				6*metricsSampleInterval),
+			SQLExecLatency: metric.NewLatency(getMetricMeta(MetaSQLExecLatency, internal),
+				6*metricsSampleInterval),
+			DistSQLServiceLatency: metric.NewLatency(getMetricMeta(MetaDistSQLServiceLatency, internal),
+				6*metricsSampleInterval),
+			SQLServiceLatency: metric.NewLatency(getMetricMeta(MetaSQLServiceLatency, internal),
+				6*metricsSampleInterval),
+		},
+		StatementCounters: makeStatementCounters(internal),
 	}
 }
 
@@ -348,8 +364,7 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
 	ex, err := s.newConnExecutor(
-		ctx, sessionParams{args: args}, stmtBuf, clientComm, memMetrics,
-	)
+		ctx, sessionParams{args: args}, stmtBuf, clientComm, memMetrics, &s.Metrics)
 	return ConnectionHandler{ex}, err
 }
 
@@ -429,6 +444,7 @@ func (s *Server) newConnExecutor(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
+	srvMetrics *Metrics,
 ) (*connExecutor, error) {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -453,6 +469,7 @@ func (s *Server) newConnExecutor(
 
 	ex := &connExecutor{
 		server:      s,
+		metrics:     srvMetrics,
 		stmtBuf:     stmtBuf,
 		clientComm:  clientComm,
 		mon:         &sessionRootMon,
@@ -463,9 +480,8 @@ func (s *Server) newConnExecutor(
 			portals:   make(map[string]portalEntry),
 		},
 		state: txnState{
-			mon:           &txnMon,
-			connCtx:       ctx,
-			txnAbortCount: s.StatementCounters.TxnAbortCount,
+			mon:     &txnMon,
+			connCtx: ctx,
 		},
 		transitionCtx: transitionCtx{
 			db:     s.cfg.DB,
@@ -484,6 +500,8 @@ func (s *Server) newConnExecutor(
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder: ctxHolder{connCtx: ctx},
 	}
+
+	ex.state.txnAbortCount = ex.metrics.StatementCounters.TxnAbortCount
 
 	ex.dataMutator = sessionDataMutator{
 		data:           &ex.sessionData,
@@ -504,11 +522,18 @@ func (s *Server) newConnExecutor(
 			return nil, err
 		}
 	} else {
-		// It's possible there were no defaults, for example when the
-		// connEx is serving an internal executor. In that case we still
-		// need to populate appStats according to the configured
-		// application name.
-		ex.appStats = s.sqlStats.getStatsForApplication(ex.sessionData.ApplicationName)
+		// When the connEx is serving an internal executor, it can inherit
+		// the application name from an outer session. This happens
+		// e.g. during ::regproc casts and built-in functions that use SQL internally.
+		// In that case, we do not want to record statistics against
+		// the outer application name directly; instead we want
+		// to use a separate bucket. However we will still
+		// want to have separate buckets for different applications so that
+		// we can measure their respective "pressure" on internal queries.
+		// Hence the choice here to add the delegate prefix
+		// to the current app name.
+		appStatsBucketName := DelegatedAppNamePrefix + ex.sessionData.ApplicationName
+		ex.appStats = s.sqlStats.getStatsForApplication(appStatsBucketName)
 	}
 
 	ex.phaseTimes[sessionInit] = timeutil.Now()
@@ -544,9 +569,10 @@ func (s *Server) newConnExecutorWithTxn(
 	clientComm ClientComm,
 	parentMon *mon.BytesMonitor,
 	memMetrics MemoryMetrics,
+	srvMetrics *Metrics,
 	txn *client.Txn,
 ) (*connExecutor, error) {
-	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics)
+	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics, srvMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -720,8 +746,14 @@ type connExecutor struct {
 	noCopy util.NoCopy
 
 	// The server to which this connExecutor is attached. The reference is used
-	// for getting access to configuration settings and metrics.
+	// for getting access to configuration settings.
+	// Note: do not use server.Metrics directly. Use metrics below instead.
 	server *Server
+
+	// The metrics to which the statement metrics should be accounted.
+	// This is different whether the executor is for regular client
+	// queries or for "internal" queries.
+	metrics *Metrics
 
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
@@ -756,11 +788,6 @@ type connExecutor struct {
 	// eventLog for SQL statements and other important session events. Will be set
 	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
 	eventLog trace.EventLog
-
-	// stmtCounterDisabled, if set, makes this connExecutor not contribute to
-	// statement counter metrics and to "statement summary" stats. This is used by
-	// "internal" SQL executors.
-	stmtCounterDisabled bool
 
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
@@ -2113,20 +2140,20 @@ type StatementCounters struct {
 	FailureCount     *metric.Counter
 }
 
-func makeStatementCounters() StatementCounters {
+func makeStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
-		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
-		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
-		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
-		SelectCount:      metric.NewCounter(MetaSelect),
-		UpdateCount:      metric.NewCounter(MetaUpdate),
-		InsertCount:      metric.NewCounter(MetaInsert),
-		DeleteCount:      metric.NewCounter(MetaDelete),
-		DdlCount:         metric.NewCounter(MetaDdl),
-		MiscCount:        metric.NewCounter(MetaMisc),
-		QueryCount:       metric.NewCounter(MetaQuery),
-		FailureCount:     metric.NewCounter(MetaFailure),
+		TxnBeginCount:    metric.NewCounter(getMetricMeta(MetaTxnBegin, internal)),
+		TxnCommitCount:   metric.NewCounter(getMetricMeta(MetaTxnCommit, internal)),
+		TxnAbortCount:    metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
+		TxnRollbackCount: metric.NewCounter(getMetricMeta(MetaTxnRollback, internal)),
+		SelectCount:      metric.NewCounter(getMetricMeta(MetaSelect, internal)),
+		UpdateCount:      metric.NewCounter(getMetricMeta(MetaUpdate, internal)),
+		InsertCount:      metric.NewCounter(getMetricMeta(MetaInsert, internal)),
+		DeleteCount:      metric.NewCounter(getMetricMeta(MetaDelete, internal)),
+		DdlCount:         metric.NewCounter(getMetricMeta(MetaDdl, internal)),
+		MiscCount:        metric.NewCounter(getMetricMeta(MetaMisc, internal)),
+		QueryCount:       metric.NewCounter(getMetricMeta(MetaQuery, internal)),
+		FailureCount:     metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 	}
 }
 

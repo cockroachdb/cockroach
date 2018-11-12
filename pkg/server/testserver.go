@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/cockroachdb/circuitbreaker"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -594,7 +594,9 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var found bool
 
 	reg := metric.NewRegistry()
-	reg.AddMetricStruct(ts.pgServer.Metrics())
+	for _, m := range ts.pgServer.Metrics() {
+		reg.AddMetricStruct(m)
+	}
 	reg.Each(func(n string, v interface{}) {
 		if name == n {
 			switch t := v.(type) {
