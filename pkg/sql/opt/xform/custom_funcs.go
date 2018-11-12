@@ -760,15 +760,9 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // IsCanonicalGroupBy returns true if the private is for the canonical version
 // of the grouping operator.
 func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
-	// Check that no grouping columns are part of the ordering.
-	// TODO(radu): when we address #31882 and grouping columns become optional, we
-	// can just check private.GroupingCols.SubsetOf(private.Ordering.Optional).
-	for i := range private.Ordering.Columns {
-		if private.GroupingCols.Intersects(private.Ordering.Columns[i].Group) {
-			return false
-		}
-	}
-	return true
+	// The canonical version always has all grouping columns as optional in the
+	// internal ordering.
+	return private.Ordering.Any() || private.GroupingCols.SubsetOf(private.Ordering.Optional)
 }
 
 // GenerateStreamingGroupBy generates variants of a GroupBy or DistinctOn
