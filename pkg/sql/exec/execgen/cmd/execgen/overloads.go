@@ -74,6 +74,9 @@ type overload struct {
 	RetTyp  types.T
 
 	AssignFunc assignFunc
+
+	IsCmpOp bool
+	IsBinOp bool
 }
 
 type assignFunc func(op overload, target, l, r string) string
@@ -124,6 +127,7 @@ func init() {
 			ov := &overload{
 				Name:    binaryOpName[op],
 				BinOp:   op,
+				IsBinOp: true,
 				OpStr:   binaryOpInfix[op],
 				LTyp:    t,
 				RTyp:    t,
@@ -143,6 +147,7 @@ func init() {
 			ov := &overload{
 				Name:    comparisonOpName[op],
 				CmpOp:   op,
+				IsCmpOp: true,
 				OpStr:   opStr,
 				LTyp:    t,
 				RTyp:    t,
