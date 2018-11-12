@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -976,6 +977,11 @@ func TestStatusAPIStatements(t *testing.T) {
 		if respStatement.Key.KeyData.Failed {
 			// We ignore failed statements here as the INSERT statement can fail and
 			// be automatically retried, confusing the test success check.
+			continue
+		}
+		if strings.HasPrefix(respStatement.Key.KeyData.App, sql.InternalAppNamePrefix) {
+			// We ignore internal queries, these are not relevant for the
+			// validity of this test.
 			continue
 		}
 		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
