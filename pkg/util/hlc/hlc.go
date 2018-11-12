@@ -180,7 +180,7 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 		// This ticker is turned on / off based on forwardClockJumpCheckEnabledCh
 		ticker := tickerFn(time.Hour)
 		ticker.Stop()
-		refreshPhysicalNowItvl := c.toleratedForwardClockJump() / 2
+		refreshPhysicalClockItvl := c.toleratedForwardClockJump() / 2
 		for {
 			select {
 			case forwardClockJumpEnabled, ok := <-forwardClockJumpCheckEnabledCh:
@@ -190,17 +190,17 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 				}
 				if forwardClockJumpEnabled {
 					// Forward jump check is enabled. Start the ticker
-					ticker = tickerFn(refreshPhysicalNowItvl)
+					ticker = tickerFn(refreshPhysicalClockItvl)
 
 					// Fetch the clock once before we start enforcing forward
 					// jumps. Otherwise the gap between the previous call to
 					// Now() and the time of the first tick would look like a
 					// forward jump.
-					c.PhysicalNow()
+					c.getPhysicalClock()
 				}
 				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
 			case <-ticker.C:
-				c.PhysicalNow()
+				c.getPhysicalClock()
 			}
 
 			if tickCallback != nil {
@@ -217,6 +217,14 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 // A value of 0 means offset checking is disabled.
 func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
+}
+
+// getPhysicalClock locks mu in order to access the physical clock, check for
+// time jumps and update the internal jump checking state.
+func (c *Clock) getPhysicalClock() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.getPhysicalClockLocked()
 }
 
 // getPhysicalClockLocked returns the current physical clock and checks for
@@ -283,12 +291,9 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 	}
 }
 
-// PhysicalNow returns the local wall time. It corresponds to the physicalClock
-// provided at instantiation. For a timestamp value, use Now() instead.
+// PhysicalNow returns the local wall time.
 func (c *Clock) PhysicalNow() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.getPhysicalClockLocked()
+	return c.physicalClock()
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
