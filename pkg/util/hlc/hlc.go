@@ -180,7 +180,7 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 		// This ticker is turned on / off based on forwardClockJumpCheckEnabledCh
 		ticker := tickerFn(time.Hour)
 		ticker.Stop()
-		refreshPhysicalNowItvl := c.toleratedForwardClockJump() / 2
+		refreshPhysicalClockItvl := c.toleratedForwardClockJump() / 2
 		for {
 			select {
 			case forwardClockJumpEnabled, ok := <-forwardClockJumpCheckEnabledCh:
@@ -190,17 +190,17 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 				}
 				if forwardClockJumpEnabled {
 					// Forward jump check is enabled. Start the ticker
-					ticker = tickerFn(refreshPhysicalNowItvl)
+					ticker = tickerFn(refreshPhysicalClockItvl)
 
 					// Fetch the clock once before we start enforcing forward
 					// jumps. Otherwise the gap between the previous call to
 					// Now() and the time of the first tick would look like a
 					// forward jump.
-					c.PhysicalNow()
+					c.getPhysicalClockAndCheck()
 				}
 				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
 			case <-ticker.C:
-				c.PhysicalNow()
+				c.getPhysicalClockAndCheck()
 			}
 
 			if tickCallback != nil {
@@ -219,9 +219,17 @@ func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
 }
 
-// getPhysicalClockLocked returns the current physical clock and checks for
+// getPhysicalClockAndCheck locks mu in order to access the physical clock, check for
+// time jumps and update the internal jump checking state.
+func (c *Clock) getPhysicalClockAndCheck() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.getPhysicalClockAndCheckLocked()
+}
+
+// getPhysicalClockAndCheckLocked returns the current physical clock and checks for
 // time jumps.
-func (c *Clock) getPhysicalClockLocked() int64 {
+func (c *Clock) getPhysicalClockAndCheckLocked() int64 {
 	newTime := c.physicalClock()
 
 	if c.mu.lastPhysicalTime != 0 {
@@ -256,7 +264,7 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 func (c *Clock) Now() Timestamp {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if physicalClock := c.getPhysicalClockLocked(); c.mu.timestamp.WallTime >= physicalClock {
+	if physicalClock := c.getPhysicalClockAndCheckLocked(); c.mu.timestamp.WallTime >= physicalClock {
 		// The wall time is ahead, so the logical clock ticks.
 		c.mu.timestamp.Logical++
 	} else {
@@ -283,12 +291,9 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 	}
 }
 
-// PhysicalNow returns the local wall time. It corresponds to the physicalClock
-// provided at instantiation. For a timestamp value, use Now() instead.
+// PhysicalNow returns the local wall time.
 func (c *Clock) PhysicalNow() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.getPhysicalClockLocked()
+	return c.physicalClock()
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
@@ -316,7 +321,7 @@ func (c *Clock) Update(rt Timestamp) Timestamp {
 
 func (c *Clock) updateLocked(rt Timestamp, updateIfMaxOffsetExceeded bool) (Timestamp, error) {
 	var err error
-	physicalClock := c.getPhysicalClockLocked()
+	physicalClock := c.getPhysicalClockAndCheckLocked()
 
 	if physicalClock > c.mu.timestamp.WallTime && physicalClock > rt.WallTime {
 		// Our physical clock is ahead of both wall times. It is used
