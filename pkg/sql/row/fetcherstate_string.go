@@ -4,9 +4,9 @@ package row
 
 import "strconv"
 
-const _fetcherState_name = "stateInvalidstateInitFetchstateDecodeFirstKVOfRowstateSeekPrefixstateFetchNextKVWithUnfinishedRowstateFinalizeRowstateEmitLastBatchstateFinished"
+const _fetcherState_name = "stateInvalidstateInitFetchstateResetBatchstateDecodeFirstKVOfRowstateSeekPrefixstateFetchNextKVWithUnfinishedRowstateFinalizeRowstateEmitLastBatchstateFinished"
 
-var _fetcherState_index = [...]uint8{0, 12, 26, 49, 64, 97, 113, 131, 144}
+var _fetcherState_index = [...]uint8{0, 12, 26, 41, 64, 79, 112, 128, 146, 159}
 
 func (i fetcherState) String() string {
 	if i < 0 || i >= fetcherState(len(_fetcherState_index)-1) {

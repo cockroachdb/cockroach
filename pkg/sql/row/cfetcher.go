@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,13 +56,14 @@ type cTableInfo struct {
 	// schema changes.
 	cols []sqlbase.ColumnDescriptor
 
+	// The exec types corresponding to the table columns in cols.
+	typs []types.T
+
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
 
-	// The number of needed columns from the value part of the row. Once we've
-	// seen this number of value columns for a particular row, we can stop
-	// decoding values in that row.
-	neededValueCols int
+	// The set of required value-component column ordinals in the table.
+	neededValueColsByIdx util.FastIntSet
 
 	// Map used to get the index for columns in cols.
 	colIdxMap colIdxMap
@@ -194,9 +196,13 @@ type CFetcher struct {
 		// curSpan is the current span that the kv fetcher just returned data from.
 		curSpan roachpb.Span
 		// nextKV is the kv to process next.
-		nextKV roachpb.KeyValue
+		nextKV *roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
+
+		// remainingValueColsByIdx is the set of value columns that are yet to be
+		// seen during the decoding of the current row.
+		remainingValueColsByIdx util.FastIntSet
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
@@ -243,25 +249,27 @@ func (rf *CFetcher) Init(
 		m.ords = append(m.ords, v)
 	}
 	sort.Sort(m)
+	colDescriptors := tableArgs.Cols
+	typs := make([]types.T, len(colDescriptors))
+	for i := range typs {
+		typs[i] = types.FromColumnType(colDescriptors[i].Type)
+		if typs[i] == types.Unhandled {
+			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
+		}
+	}
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
 		colIdxMap:        m,
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
-		cols:             tableArgs.Cols,
+		cols:             colDescriptors,
+		typs:             typs,
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
 		indexColOrdinals:    oldTable.indexColOrdinals[:0],
 		extraValColOrdinals: oldTable.extraValColOrdinals[:0],
-	}
-	typs := make([]types.T, len(table.cols))
-	for i := range typs {
-		typs[i] = types.FromColumnType(table.cols[i].Type)
-		if typs[i] == types.Unhandled {
-			return errors.Errorf("unhandled type %+v", table.cols[i].Type)
-		}
 	}
 	rf.machine.batch = exec.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -286,6 +294,12 @@ func (rf *CFetcher) Init(
 	var indexColumnIDs []sqlbase.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
+	compositeColumnIDs := util.MakeFastIntSet()
+	for _, id := range table.index.CompositeColumnIDs {
+		compositeColumnIDs.Add(int(id))
+	}
+
+	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 	neededIndexCols := 0
 	nIndexCols := len(indexColumnIDs)
 	if cap(table.indexColOrdinals) >= nIndexCols {
@@ -299,6 +313,11 @@ func (rf *CFetcher) Init(
 			table.indexColOrdinals[i] = colIdx
 			if neededCols.Contains(int(id)) {
 				neededIndexCols++
+				if !compositeColumnIDs.Contains(int(id)) {
+					// A composite column lives both in the index and in the value; if
+					// its needed, it must also be decoded from the value.
+					table.neededValueColsByIdx.Remove(colIdx)
+				}
 			}
 		} else {
 			table.indexColOrdinals[i] = -1
@@ -315,11 +334,6 @@ func (rf *CFetcher) Init(
 		if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
 			rf.mustDecodeIndexKey = true
 		}
-
-		// The number of columns we need to read from the value part of the key.
-		// It's the total number of needed columns minus the ones we read from the
-		// index key, except for composite columns.
-		table.neededValueCols = neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
 		if table.isSecondaryIndex {
 			for i := range table.cols {
@@ -434,6 +448,10 @@ const (
 	//     -> decodeFirstKVOfRow
 	stateInitFetch
 
+	// stateResetBatch resets the batch of a fetcher, removing nulls and the
+	// selection vector.
+	stateResetBatch
+
 	// stateDecodeFirstKVOfRow is the state of looking at a key that is part of
 	// a row that the fetcher hasn't processed before. s.machine.nextKV must be
 	// set.
@@ -544,9 +562,15 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 				*/
 			}
 
-			rf.machine.nextKV = kv
+			rf.machine.nextKV = &kv
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
+		case stateResetBatch:
+			for i := range rf.machine.colvecs {
+				rf.machine.colvecs[i].UnsetNulls()
+			}
+			rf.machine.batch.SetSelection(false)
+			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			if rf.mustDecodeIndexKey {
 				if debugState {
@@ -579,6 +603,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
 				rf.machine.lastRowPrefix = prefix
 			}
+			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
 			if _, _, err := rf.processValue(ctx, sqlbase.FamilyID(0)); err != nil {
 				return nil, err
@@ -607,7 +632,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 				// TODO(jordan): if nextKV returns newSpan = true, set the new span
 				// prefix and indicate that it needs decoding.
 				if bytes.Compare(kv.Key, rf.machine.seekPrefix) >= 0 {
-					rf.machine.nextKV = kv
+					rf.machine.nextKV = &kv
 					break
 				}
 			}
@@ -626,7 +651,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.machine.nextKV = kv
+			rf.machine.nextKV = &kv
 
 			// TODO(jordan): optimize this prefix check by skipping span prefix.
 			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
@@ -673,9 +698,13 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 			// We're finished with a row. Bump the row index, fill the row in with
 			// nulls if necessary, emit the batch if necessary, and move to the next
 			// state.
+			if err := rf.fillNulls(); err != nil {
+				return nil, err
+			}
 			rf.machine.rowIdx++
 			rf.shiftState()
 			if rf.machine.rowIdx >= exec.ColBatchSize {
+				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0
 				return rf.machine.batch, nil
@@ -699,6 +728,11 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 func (rf *CFetcher) shiftState() {
 	copy(rf.machine.state[:2], rf.machine.state[1:])
 	rf.machine.state[2] = stateInvalid
+}
+
+func (rf *CFetcher) pushState(state fetcherState) {
+	copy(rf.machine.state[1:], rf.machine.state[:2])
+	rf.machine.state[0] = state
 }
 
 // processValue processes the state machine's current value component, setting
@@ -856,6 +890,8 @@ func (rf *CFetcher) processValueSingle(
 			if err != nil {
 				return "", "", err
 			}
+			rf.machine.remainingValueColsByIdx.Remove(idx)
+
 			if rf.traceKV {
 				// TODO(jordan): handle this case by reaching into the colvecs array and
 				// pulling out a pretty value.
@@ -895,8 +931,7 @@ func (rf *CFetcher) processValueBytes(
 		lastColIDIndex         int
 		lastNeededColIndex     int
 	)
-	valueColsFound := 0
-	for len(valueBytes) > 0 && valueColsFound < table.neededValueCols {
+	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -948,10 +983,12 @@ func (rf *CFetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
+		rf.machine.remainingValueColsByIdx.Remove(idx)
 		if rf.traceKV {
-			fmt.Fprintf(rf.machine.prettyValueBuf, "/?")
+			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/?"); err != nil {
+				return "", "", err
+			}
 		}
-		valueColsFound++
 	}
 	if rf.traceKV {
 		prettyValue = rf.machine.prettyValueBuf.String()
@@ -965,4 +1002,29 @@ func (rf *CFetcher) processValueTuple(
 	ctx context.Context, table *cTableInfo, tupleBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
+}
+func (rf *CFetcher) fillNulls() error {
+	table := &rf.table
+	if rf.machine.remainingValueColsByIdx.Empty() {
+		return nil
+	}
+	for i, ok := rf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = rf.machine.remainingValueColsByIdx.Next(i + 1) {
+		if !table.cols[i].Nullable {
+			var indexColValues []string
+			for _, idx := range table.indexColOrdinals {
+				if idx != -1 {
+					indexColValues = append(indexColValues,
+						rf.machine.colvecs[idx].PrettyValueAt(rf.machine.rowIdx, rf.table.typs[idx]))
+				} else {
+					indexColValues = append(indexColValues, "?")
+				}
+				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
+					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+					table.desc.Name, table.cols[i].Name, table.index.Name,
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
+			}
+		}
+		rf.machine.colvecs[i].SetNull(rf.machine.rowIdx)
+	}
+	return nil
 }
