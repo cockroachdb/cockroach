@@ -3199,8 +3199,10 @@ func (r *Replica) executeWriteBatch(
 		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
 		switch retry {
 		case proposalIllegalLeaseIndex:
+			log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 			continue // retry
 		case proposalAmbiguousShouldBeReevaluated:
+			log.VEventf(ctx, 2, "retry: proposalAmbiguousShouldBeReevaluated")
 			ambiguousResult = true
 			continue // retry
 		case proposalRangeNoLongerExists, proposalErrorReproposing:
@@ -5619,7 +5621,15 @@ func (r *Replica) processRaftCommand(
 			}
 			response.Intents = proposal.Local.DetachIntents()
 			response.EndTxns = proposal.Local.DetachEndTxns(response.Err != nil)
-			lResult = proposal.Local
+			if pErr == nil {
+				lResult = proposal.Local
+			}
+		}
+		if pErr != nil && lResult != nil {
+			log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
+		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEvent(ctx, 2, lResult.String())
 		}
 
 		// Handle the Result, executing any side effects of the last
