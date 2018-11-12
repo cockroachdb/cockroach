@@ -200,6 +200,22 @@ func (s FastIntSet) Copy() FastIntSet {
 	return c
 }
 
+// CopyFrom sets the receiver to a copy of c, which can then be modified
+// independently.
+func (s *FastIntSet) CopyFrom(c FastIntSet) {
+	if c.large != nil {
+		if s.large == nil {
+			s.large = new(intsets.Sparse)
+		}
+		s.large.Copy(s.large)
+	} else {
+		s.small = c.small
+		if s.large != nil {
+			s.large.Clear()
+		}
+	}
+}
+
 // UnionWith adds all the elements from rhs to this set.
 func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 	if s.large == nil && rhs.large == nil {
