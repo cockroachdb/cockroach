@@ -1,5 +1,77 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+subtest create_and_add_fk_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+# FK is automatically added because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# check that the index is indeed visible.
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE test.child
+
+statement ok
+DROP TABLE test.parent
+
+subtest create_and_add_fk_in_separate_txns
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+statement ok
+BEGIN
+
+# FK is automatically added because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+statement ok
+COMMIT
+
+# check that the index is indeed visible.
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+DROP TABLE test.child
+
+statement ok
+DROP TABLE test.parent
+
 subtest create_with_other_commands_in_txn
 
 statement count 3
