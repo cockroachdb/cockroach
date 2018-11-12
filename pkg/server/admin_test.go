@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -344,6 +347,111 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, errPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
+}
+
+func TestAdminAPINonTableStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	s := testCluster.Server(0)
+
+	// Skip TableStatsResponse.Stats comparison, since it includes data which
+	// aren't consistent (time, bytes).
+	expectedResponse := serverpb.NonTableStatsResponse{
+		TimeSeriesStats: &serverpb.TableStatsResponse{
+			RangeCount:   1,
+			ReplicaCount: 3,
+			NodeCount:    3,
+		},
+		InternalUseStats: &serverpb.TableStatsResponse{
+			RangeCount:   9,
+			ReplicaCount: 15,
+			NodeCount:    3,
+		},
+	}
+
+	var resp serverpb.NonTableStatsResponse
+	if err := getAdminJSONProto(s, "nontablestats", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	assertExpectedStatsResponse := func(expected, actual *serverpb.TableStatsResponse) {
+		assert.Equal(t, expected.RangeCount, actual.RangeCount)
+		assert.Equal(t, expected.ReplicaCount, actual.ReplicaCount)
+		assert.Equal(t, expected.NodeCount, actual.NodeCount)
+	}
+
+	assertExpectedStatsResponse(expectedResponse.TimeSeriesStats, resp.TimeSeriesStats)
+	assertExpectedStatsResponse(expectedResponse.InternalUseStats, resp.InternalUseStats)
+}
+
+// TODO(celia): I expect all the ranges listed on the Database page to equal
+// the RangeCount returned from doing a span on [LocalMax, MaxKey). For a cluster
+// with no user data, all the ranges on the Databases page consist of:
+// 1) the total ranges listed for the system database
+// 2) the total ranges listed for the Non-Table data
+func TestRangeCount_MissingOneRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	s := testCluster.Server(0)
+
+	// Sum up ranges for non-table parts of the system returned
+	// from the "nontablestats" enpoint.
+	getNonTableRangeCount := func() int64 {
+		var resp serverpb.NonTableStatsResponse
+		if err := getAdminJSONProto(s, "nontablestats", &resp); err != nil {
+			t.Fatal(err)
+		}
+		return resp.TimeSeriesStats.RangeCount + resp.InternalUseStats.RangeCount
+	}
+
+	// Sum up ranges from system database tables returned
+	// from the "databases/system/tables/{table}" endpoints.
+	getSystemTableRangeCount := func() int64 {
+		var systemTableRangeCount int64
+		var dbResp serverpb.DatabaseDetailsResponse
+		if err := getAdminJSONProto(s, "databases/system", &dbResp); err != nil {
+			t.Fatal(err)
+		}
+		for _, tableName := range dbResp.TableNames {
+			var tblResp serverpb.TableStatsResponse
+			path := "databases/system/tables/" + tableName + "/stats"
+			if err := getAdminJSONProto(s, path, &tblResp); err != nil {
+				t.Fatal(err)
+			}
+			systemTableRangeCount += tblResp.RangeCount
+		}
+		return systemTableRangeCount
+	}
+
+	getRangeCountFromFullSpan := func() int64 {
+		adminServer := s.(*TestServer).Server.admin
+		stats, err := adminServer.statsForSpan(context.Background(), roachpb.Span{
+			Key:    keys.LocalMax,
+			EndKey: keys.MaxKey,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return stats.RangeCount
+	}
+
+	totalRangeCount := getRangeCountFromFullSpan()
+	nonTableRangeCount := getNonTableRangeCount()
+	systemTableRangeCount := getSystemTableRangeCount()
+
+	// expected: expectedRangeCount == nonTableRangeCount+systemTableRangeCount
+	// actual: expectedRangeCount > nonTableRangeCount+systemTableRangeCount
+	if totalRangeCount == nonTableRangeCount+systemTableRangeCount {
+		t.Fail()
+	}
+
+	// TODO(celia): We're missing 1 range -- where is it?
+	expectedMissingRangeCount := int64(1)
+	assert.Equal(t,
+		totalRangeCount,
+		nonTableRangeCount+systemTableRangeCount+expectedMissingRangeCount)
 }
 
 func TestAdminAPITableDoesNotExist(t *testing.T) {
@@ -1535,5 +1643,23 @@ func TestEnqueueRange(t *testing.T) {
 				t.Fatalf("unexpected error type: %+v", err)
 			}
 		})
+	}
+}
+
+func TestStatsforSpanOnLocalMax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	firstServer := testCluster.Server(0)
+	adminServer := firstServer.(*TestServer).Server.admin
+
+	underTest := roachpb.Span{
+		Key:    keys.LocalMax,
+		EndKey: keys.SystemPrefix,
+	}
+
+	_, err := adminServer.statsForSpan(context.Background(), underTest)
+	if err != nil {
+		t.Fatal(err)
 	}
 }

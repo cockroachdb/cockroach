@@ -72,6 +72,17 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
                 { FixLong(this.props.nonTableStats.time_series_stats.range_count).toNumber() }
               </td>
             </tr>
+            <tr className="sort-table__row sort-table__row--body">
+              <td className="sort-table__cell">
+                Internal Use
+              </td>
+              <td className="sort-table__cell">
+                { Bytes(FixLong(this.props.nonTableStats.internal_use_stats.approximate_disk_bytes).toNumber()) }
+              </td>
+              <td className="sort-table__cell">
+                { FixLong(this.props.nonTableStats.internal_use_stats.range_count).toNumber() }
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
