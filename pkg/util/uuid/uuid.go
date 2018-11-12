@@ -18,14 +18,22 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/satori/go.uuid"
 )
 
-// UUID is a thin wrapper around "github.com/satori/go.uuid".UUID that can be
+// Use math/rand instead of crypto/rand for UUID generation
+func init() {
+	uuid.SetRand(rand.New(rand.NewSource(time.Now().UnixNano())))
+}
+
+// UUID is a thin wrapper around "github.com/google/uuid".UUID that can be
 // used as a gogo/protobuf customtype.
+// Note that UUIDs are not crytographically secure in their randomness.
 type UUID struct {
 	uuid.UUID
 }
@@ -48,21 +56,6 @@ func (s ShortStringer) String() string {
 
 var _ fmt.Stringer = ShortStringer{}
 
-// Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent UUID
-// from implementing github.com/golang/protobuf/proto.raw, the semantics of
-// which do not match the semantics of the shadowed method. See
-// https://github.com/golang/protobuf/blob/5386fff/proto/text.go#L173:L176.
-//
-// TODO(tamird): remove when fixed upstream. See
-// https://github.com/gogo/protobuf/pull/227 and
-// https://github.com/golang/protobuf/issues/311.
-func (UUID) Bytes() {
-	panic("intentionally shadowed; use GetBytes()")
-}
-
-// Silence unused warning for UUID.Bytes.
-var _ = (UUID).Bytes
-
 // Equal returns true iff the receiver equals the argument.
 //
 // This method exists only to conform to the API expected by gogoproto's
@@ -73,7 +66,7 @@ func (u UUID) Equal(t UUID) bool {
 
 // GetBytes returns the UUID as a byte slice.
 func (u UUID) GetBytes() []byte {
-	return u.UUID.Bytes()
+	return u.UUID[:]
 }
 
 // ToUint128 returns the UUID as a Uint128.
@@ -88,7 +81,7 @@ func (u UUID) Size() int {
 
 // MarshalTo marshals u to data.
 func (u UUID) MarshalTo(data []byte) (int, error) {
-	return copy(data, u.UUID.Bytes()), nil
+	return copy(data, u.UUID[:]), nil
 }
 
 // Unmarshal unmarshals data to u.
@@ -112,10 +105,10 @@ func (u *UUID) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-// MakeV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
+// MakeV4 delegates to "github.com/google/uuid".New and wraps the result in
 // a UUID.
 func MakeV4() UUID {
-	return UUID{uuid.NewV4()}
+	return UUID{uuid.New()}
 }
 
 // NewPopulatedUUID returns a populated UUID.
@@ -128,21 +121,26 @@ func NewPopulatedUUID(r interface {
 	return &UUID{u}
 }
 
-// FromBytes delegates to "github.com/satori/go.uuid".FromBytes and wraps the
+// FromBytes delegates to "github.com/google/uuid".FromBytes and wraps the
 // result in a UUID.
 func FromBytes(input []byte) (UUID, error) {
 	u, err := uuid.FromBytes(input)
 	return UUID{u}, err
 }
 
-// FromString delegates to "github.com/satori/go.uuid".FromString and wraps the
+// FromString delegates to "github.com/google/uuid".Parse and wraps the
 // result in a UUID.
 func FromString(input string) (UUID, error) {
-	u, err := uuid.FromString(input)
+	// Google's UUID library does not support parsing outer curly braces so
+	// manually pull them off.
+	if len(input) > 0 && input[0] == '{' && input[len(input)-1] == '}' {
+		input = input[1 : len(input)-2]
+	}
+	u, err := uuid.Parse(input)
 	return UUID{u}, err
 }
 
-// FromUint128 delegates to "github.com/satori/go.uuid".FromBytes and wraps the
+// FromUint128 delegates to "github.com/google/uuid".FromBytes and wraps the
 // result in a UUID.
 func FromUint128(input uint128.Uint128) UUID {
 	u, err := uuid.FromBytes(input.GetBytes())
