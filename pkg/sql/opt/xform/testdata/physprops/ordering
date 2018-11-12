@@ -407,7 +407,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDE
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +1,+2,+3
+ ├── internal-ordering: +3 opt(1,2)
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -422,7 +422,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, 
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +1,+2,+3
+ ├── internal-ordering: +3 opt(1,2)
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -437,7 +437,7 @@ SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, 
 group-by
  ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
  ├── grouping columns: a:1(int!null) b:2(int!null)
- ├── internal-ordering: +1,+2,+3
+ ├── internal-ordering: +3 opt(1,2)
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -505,10 +505,10 @@ project
  └── group-by
       ├── columns: a:1(int) b:2(int) array_agg:6(int[])
       ├── grouping columns: a:1(int) b:2(int)
-      ├── internal-ordering: +3
+      ├── internal-ordering: +3 opt(1,2)
       ├── scan abcd@cd
       │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
-      │    └── ordering: +3
+      │    └── ordering: +3 opt(1,2)
       └── aggregations
            └── array-agg [type=int[]]
                 └── variable: d [type=int]
@@ -1050,38 +1050,36 @@ distinct-on
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
 ----
-sort
+distinct-on
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1 opt(2,3)
  ├── ordering: +2,+3
- └── distinct-on
-      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
-      ├── internal-ordering: +1
-      ├── scan abc
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +1
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: a [type=int]
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +2,+3,+1
+ │    └── scan abc
+ │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: a [type=int]
 
 opt
 SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-sort
+distinct-on
  ├── columns: a:1(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null)
+ ├── internal-ordering: -3,+2 opt(1)
  ├── ordering: +1
- └── distinct-on
-      ├── columns: a:1(int!null) c:3(int)
-      ├── grouping columns: a:1(int!null)
-      ├── internal-ordering: -3,+2
-      ├── sort
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    ├── ordering: -3,+2
-      │    └── scan abc
-      │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: c [type=int]
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +1,-3,+2
+ │    └── scan abc
+ │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: c [type=int]
 
 # Pass through the ordering from above.
 opt
@@ -1136,7 +1134,7 @@ SELECT * FROM (SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY c, b, a) ORDE
 distinct-on
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
  ├── grouping columns: b:2(int!null) c:3(int!null)
- ├── internal-ordering: +1
+ ├── internal-ordering: +1 opt(2,3)
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -1156,10 +1154,10 @@ sort
  └── distinct-on
       ├── columns: a:1(int) b:2(int!null) c:3(int)
       ├── grouping columns: b:2(int!null)
-      ├── internal-ordering: +3
+      ├── internal-ordering: +3 opt(2)
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    ├── ordering: +3
+      │    ├── ordering: +3 opt(2)
       │    └── scan abc
       │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── aggregations
