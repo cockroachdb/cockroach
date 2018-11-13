@@ -36,14 +36,13 @@ $subnav-underline-height = 3px
   border-right 1px solid $table-border-color
   margin 0
   padding 0
-  display block
+  display flex
+  flex-direction column
+  justify-content space-between
+  overflow-y scroll
 
 .navigation-bar__list
   width 100%
-
-  &--bottom
-    position absolute
-    bottom 0
 
   li
     width 100%
