@@ -1409,6 +1409,7 @@ bins = \
   bin/publish-artifacts \
   bin/optgen \
   bin/returncheck \
+  bin/roachprod \
   bin/roachprod-stress \
   bin/roachtest \
   bin/teamcity-trigger \
