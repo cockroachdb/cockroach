@@ -1352,13 +1352,30 @@ func (s *statusServer) ListLocalSessions(
 		return nil, remoteDebuggingErr
 	}
 
+	var superUser bool
+	sessionUser := userFromContext(ctx)
+	// If the client is asking to see more than just their own sessions, verify
+	// that they should be allowed to.
+	if sessionUser != req.Username {
+		// sessionUser can only be the empty string for direct grpc connections,
+		// which are only allowed from root/node users, or when the requirement to
+		// login to the admin UI is disabled.
+		superUser = (sessionUser == "" || s.isSuperUser(ctx, sessionUser))
+		if req.Username != "" && !superUser {
+			return nil, grpcstatus.Errorf(
+				codes.PermissionDenied,
+				"client user %q does not have permission to view sessions from user %q",
+				sessionUser, req.Username)
+		}
+	}
+
 	registry := s.sessionRegistry
 
 	sessions := registry.SerializeAll()
 	userSessions := make([]serverpb.Session, 0, len(sessions))
 
 	for _, session := range sessions {
-		if !(req.Username == security.RootUser || req.Username == session.Username) {
+		if !(superUser || sessionUser != session.Username) {
 			continue
 		}
 
@@ -1692,4 +1709,34 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 		return nil, err
 	}
 	return &serverpb.JSONResponse{Data: data}, nil
+}
+
+func userFromContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	usernames, ok := md[webSessionUserKeyStr]
+	if !ok || len(usernames) == 0 {
+		return ""
+	}
+	return usernames[0]
+}
+
+type superUserChecker interface {
+	RequireSuperUser(ctx context.Context, action string) error
+}
+
+func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
+	planner, cleanup := sql.NewInternalPlanner(
+		"check-superuser",
+		client.NewTxn(ctx, s.db, s.gossip.NodeID.Get(), client.RootTxn),
+		username,
+		&sql.MemoryMetrics{},
+		s.admin.server.execCfg)
+	defer cleanup()
+	if err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
+		return false
+	}
+	return true
 }
