@@ -21,7 +21,7 @@ import (
 )
 
 func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	m := expr.(*memo.MergeJoinExpr).MergeJoinPrivate
+	m := expr.(*memo.MergeJoinExpr)
 	// TODO(radu): in principle, we could pass through an ordering that covers
 	// more than the equality columns. For example, if we have a merge join
 	// with left ordering a+,b+ and right ordering x+,y+ we could guarantee
@@ -54,4 +54,29 @@ func mergeJoinBuildChildReqOrdering(
 	default:
 		return physical.OrderingChoice{}
 	}
+}
+
+func mergeJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	m := expr.(*memo.MergeJoinExpr)
+	// This code parallels the one in mergeJoinCanProvideOrdering: the required
+	// ordering has to be provided by one of the inputs (as allowed by the join
+	// type).
+	var provided opt.Ordering
+	switch m.JoinType {
+	case opt.InnerJoinOp:
+		if m.LeftOrdering.Implies(required) {
+			provided = m.Left.ProvidedPhysical().Ordering
+		} else {
+			provided = m.Right.ProvidedPhysical().Ordering
+		}
+
+	case opt.LeftJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
+		provided = m.Left.ProvidedPhysical().Ordering
+
+	case opt.RightJoinOp:
+		provided = m.Right.ProvidedPhysical().Ordering
+	}
+	// The input's ordering satisfies both <required> and the ordering required by
+	// the merge join itself; it may need to be trimmed.
+	return trimProvided(provided, required, &expr.Relational().FuncDeps)
 }
