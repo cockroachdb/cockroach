@@ -665,6 +665,10 @@ type cluster struct {
 	// cloned or when we attach to an existing roachprod cluster.
 	// If not set, Destroy() only wipes the cluster.
 	owned bool
+	// encryptDefault is true if the cluster should default to having encryption
+	// at rest enabled. The default only applies if encryption is not explicitly
+	// enabled or disabled by options passed to Start.
+	encryptDefault bool
 }
 
 type clusterConfig struct {
@@ -717,13 +721,14 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 	}
 
 	c := &cluster{
-		name:       name,
-		nodes:      cfg.nodes[0].Count,
-		status:     func(...interface{}) {},
-		l:          l,
-		destroyed:  make(chan struct{}),
-		expiration: cfg.nodes[0].expiration(),
-		owned:      true,
+		name:           name,
+		nodes:          cfg.nodes[0].Count,
+		status:         func(...interface{}) {},
+		l:              l,
+		destroyed:      make(chan struct{}),
+		expiration:     cfg.nodes[0].expiration(),
+		owned:          true,
+		encryptDefault: encrypt.asBool(),
 	}
 	registerCluster(c)
 
@@ -769,7 +774,8 @@ func attachToExistingCluster(
 		destroyed:  make(chan struct{}),
 		expiration: nodes[0].expiration(),
 		// If we're attaching to an existing cluster, we're not going to destoy it.
-		owned: false,
+		owned:          false,
+		encryptDefault: encrypt.asBool(),
 	}
 	registerCluster(c)
 
@@ -866,6 +872,7 @@ func (c *cluster) clone() *cluster {
 	cpy := *c
 	// This cloned cluster is not taking ownership. The parent retains it.
 	cpy.owned = false
+	cpy.encryptDefault = encrypt.asBool()
 	cpy.destroyed = nil
 	return &cpy
 }
@@ -1067,7 +1074,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if !argExists(args, "--encrypt") && encrypt.asBool() {
+	if !argExists(args, "--encrypt") && c.encryptDefault {
 		args = append(args, "--encrypt")
 	}
 	return execCmd(ctx, c.l, args...)
