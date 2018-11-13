@@ -140,7 +140,7 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	relational := e.Relational()
-	required := e.Physical()
+	required := e.RequiredPhysical()
 	if required == nil {
 		// required can be nil before optimization has taken place.
 		required = physical.MinRequired

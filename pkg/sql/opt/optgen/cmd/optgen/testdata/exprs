@@ -116,7 +116,7 @@ func (e *ProjectExpr) NextExpr() RelExpr {
 	return e.next
 }
 
-func (e *ProjectExpr) Physical() *physical.Required {
+func (e *ProjectExpr) RequiredPhysical() *physical.Required {
 	return e.grp.bestProps().required
 }
 
@@ -322,7 +322,7 @@ func (e *SortExpr) NextExpr() RelExpr {
 	return nil
 }
 
-func (e *SortExpr) Physical() *physical.Required {
+func (e *SortExpr) RequiredPhysical() *physical.Required {
 	return e.best.required
 }
 

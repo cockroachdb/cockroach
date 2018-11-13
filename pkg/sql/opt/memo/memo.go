@@ -297,10 +297,10 @@ func (m *Memo) InternPhysicalProps(phys *physical.Required) *physical.Required {
 // expression's memo group. It is called by the optimizer once it determines
 // the lowest cost expression in a group.
 func (m *Memo) SetBestProps(e RelExpr, phys *physical.Required, cost Cost) {
-	if e.Physical() != nil {
-		if e.Physical() != phys || e.Cost() != cost {
+	if e.RequiredPhysical() != nil {
+		if e.RequiredPhysical() != phys || e.Cost() != cost {
 			panic(fmt.Sprintf("cannot overwrite %s (%.9g) with %s (%.9g)",
-				e.Physical(), e.Cost(), phys, cost))
+				e.RequiredPhysical(), e.Cost(), phys, cost))
 		}
 		return
 	}
@@ -314,5 +314,5 @@ func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
-	return ok && rel.Physical() != nil
+	return ok && rel.RequiredPhysical() != nil
 }
