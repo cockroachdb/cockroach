@@ -15,7 +15,11 @@
 package exec
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -76,6 +80,51 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 	b.SetBytes(int64(8 * ColBatchSize))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next()
+	}
+}
+
+func TestGetProjectionConstOperator(t *testing.T) {
+	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
+	binOp := tree.Mult
+	var input Operator
+	colIdx := 3
+	constVal := float64(31.37)
+	constArg := tree.NewDFloat(tree.DFloat(constVal))
+	outputIdx := 5
+	op, err := GetProjectionConstOperator(ct, binOp, input, colIdx, constArg, outputIdx)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &projMultFloat64Float64ConstOp{
+		input:     input,
+		colIdx:    colIdx,
+		constArg:  constVal,
+		outputIdx: outputIdx,
+	}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
+	}
+}
+
+func TestGetProjectionOperator(t *testing.T) {
+	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16}
+	binOp := tree.Mult
+	var input Operator
+	col1Idx := 5
+	col2Idx := 7
+	outputIdx := 9
+	op, err := GetProjectionOperator(ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &projMultInt16Int16Op{
+		input:     input,
+		col1Idx:   col1Idx,
+		col2Idx:   col2Idx,
+		outputIdx: outputIdx,
+	}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
 	}
 }
 

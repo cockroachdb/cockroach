@@ -47,3 +47,60 @@ SELECT DISTINCT(a), b FROM a LIMIT 10
 3  7
 4  8
 4  9
+
+# Simple filter.
+query I
+SELECT b FROM a WHERE b < 3
+----
+0
+1
+2
+
+# Filter on the result of a projection.
+query II
+SELECT a, b FROM a WHERE a * 2 < b LIMIT 5
+----
+0  1
+1  3
+2  5
+3  7
+4  9
+
+# Simple projection.
+query I
+SELECT b + 1 FROM a WHERE b < 3
+----
+1
+2
+3
+
+# Multiple step projection.
+query III
+SELECT a, b, (a + 1) * (b + 2) FROM a WHERE a < 3
+----
+0  0  2
+0  1  3
+1  2  8
+1  3  10
+2  4  18
+2  5  21
+
+# Mismatched constant type in projection. Not handled yet but should fall back
+# gracefully.
+query I
+SELECT (a + 1.0::DECIMAL)::INT FROM a LIMIT 1
+----
+1
+
+# Mismatched column types in projection. Not handled yet but should fall back
+# gracefully.
+statement ok
+CREATE TABLE intdec (a INT, b DECIMAL)
+
+statement ok
+INSERT INTO intdec VALUES (1, 2.0)
+
+query I
+SELECT (a + b)::INT FROM intdec
+----
+3

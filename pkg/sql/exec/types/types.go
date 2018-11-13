@@ -16,10 +16,13 @@ package types
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/apd"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // T represents an exec physical type - a bytes representation of a particular
@@ -154,4 +157,116 @@ func (t T) GoTypeName() string {
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
+}
+
+// GetDatumToPhysicalFn returns a function for converting a datum of the given
+// ColumnType to the corresponding Go type.
+func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, error) {
+	switch ct.SemanticType {
+	case sqlbase.ColumnType_BOOL:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DBool)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DBool, found %s", reflect.TypeOf(datum))
+			}
+			return bool(*d), nil
+		}
+	case sqlbase.ColumnType_BYTES:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DBytes)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DBytes, found %s", reflect.TypeOf(datum))
+			}
+			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		}
+	case sqlbase.ColumnType_INT:
+		switch ct.Width {
+		case 8:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int8(*d), nil
+			}
+		case 16:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int16(*d), nil
+			}
+		case 32:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int32(*d), nil
+			}
+		case 0, 64:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int64(*d), nil
+			}
+		}
+		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
+	case sqlbase.ColumnType_DATE:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DDate)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
+			}
+			return int64(*d), nil
+		}
+	case sqlbase.ColumnType_FLOAT:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DFloat)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DFloat, found %s", reflect.TypeOf(datum))
+			}
+			return float64(*d), nil
+		}
+	case sqlbase.ColumnType_OID:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DOid)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DOid, found %s", reflect.TypeOf(datum))
+			}
+			return int64(d.DInt), nil
+		}
+	case sqlbase.ColumnType_STRING:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DString)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
+			}
+			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		}
+	case sqlbase.ColumnType_NAME:
+		return func(datum tree.Datum) (interface{}, error) {
+			wrapper, ok := datum.(*tree.DOidWrapper)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DOidWrapper, found %s", reflect.TypeOf(datum))
+			}
+			d, ok := wrapper.Wrapped.(*tree.DString)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(wrapper))
+			}
+			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		}
+	case sqlbase.ColumnType_DECIMAL:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DDecimal)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
+			}
+			return d.Decimal, nil
+		}
+	}
+	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
 }
