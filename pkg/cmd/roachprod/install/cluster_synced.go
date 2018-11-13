@@ -134,13 +134,18 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
 
 		var waitCmd string
 		if wait {
-			waitCmd = `
+			waitCmd = fmt.Sprintf(`
   for pid in ${pids}; do
+    echo "${pid}: checking" >> %[1]s/roachprod.log
     while kill -0 ${pid}; do
+      kill -0 ${pid} >> %[1]s/roachprod.log 2>&1
+      echo "${pid}: still alive [$?]" >> %[1]s/roachprod.log
+      ps axeww -o pid -o command >> %[1]s/roachprod.log
       sleep 1
     done
+    echo "${pid}: dead" >> %[1]s/roachprod.log
   done
-`
+`, c.Impl.LogDir(c, c.Nodes[i]))
 		}
 
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
