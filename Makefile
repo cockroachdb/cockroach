@@ -695,13 +695,13 @@ PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_p
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
 EXECGEN_TARGETS = \
-	pkg/sql/exec/sum_agg.og.go \
-  pkg/sql/exec/distinct.og.go \
-  pkg/sql/exec/projection_ops.og.go \
-  pkg/sql/exec/rowstovec.og.go \
-  pkg/sql/exec/selection_ops.og.go \
-  pkg/sql/exec/colvec.og.go \
-  pkg/sql/exec/hashjoiner.og.go
+  pkg/sql/exec/sum_agg.eg.go \
+  pkg/sql/exec/distinct.eg.go \
+  pkg/sql/exec/projection_ops.eg.go \
+  pkg/sql/exec/rowstovec.eg.go \
+  pkg/sql/exec/selection_ops.eg.go \
+  pkg/sql/exec/colvec.eg.go \
+  pkg/sql/exec/hashjoiner.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1315,10 +1315,13 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
-pkg/sql/exec/sum_agg.og.go: pkg/sql/exec/sum_agg_tmpl.go
-pkg/sql/exec/distinct.og.go: pkg/sql/exec/distinct_tmpl.go
+pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
+pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
+	@# Remove generated files with the old suffix to avoid conflicts.
+	@# See https://github.com/cockroachdb/cockroach/pull/32265.
+	@rm -f pkg/sql/exec/*.og.go
 	execgen $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt

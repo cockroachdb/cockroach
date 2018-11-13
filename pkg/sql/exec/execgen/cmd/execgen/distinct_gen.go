@@ -50,5 +50,5 @@ func genDistinctOps(wr io.Writer) error {
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genDistinctOps, "distinct.og.go")
+	registerGenerator(genDistinctOps, "distinct.eg.go")
 }

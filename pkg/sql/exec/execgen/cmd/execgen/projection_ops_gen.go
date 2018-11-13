@@ -248,5 +248,5 @@ func genProjectionOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genProjectionOps, "projection_ops.og.go")
+	registerGenerator(genProjectionOps, "projection_ops.eg.go")
 }

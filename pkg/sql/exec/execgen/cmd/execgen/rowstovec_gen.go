@@ -118,7 +118,7 @@ func genRowsToVec(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRowsToVec, "rowstovec.og.go")
+	registerGenerator(genRowsToVec, "rowstovec.eg.go")
 }
 
 // getWidths returns allowable ColumnType.Width values for the specified
