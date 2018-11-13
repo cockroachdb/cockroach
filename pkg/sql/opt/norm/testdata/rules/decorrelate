@@ -847,7 +847,7 @@ project
  │    │    │    │    ├── right ordering: +8
  │    │    │    │    ├── key: (8)
  │    │    │    │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
- │    │    │    │    ├── ordering: +(6|8)
+ │    │    │    │    ├── ordering: +(6|8) [provided: +6]
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    ├── key: (6)
@@ -894,7 +894,7 @@ semi-join (merge)
  │    ├── right ordering: +8
  │    ├── key: (8)
  │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
- │    ├── ordering: +(6|8)
+ │    ├── ordering: +(6|8) [provided: +6]
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -931,7 +931,7 @@ anti-join (merge)
  │    ├── right ordering: +8
  │    ├── key: (8)
  │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
- │    ├── ordering: +(6|8)
+ │    ├── ordering: +(6|8) [provided: +6]
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -986,7 +986,7 @@ project
       │    │    │    ├── right ordering: +8
       │    │    │    ├── key: (8)
       │    │    │    ├── fd: (6)==(8), (8)==(6)
-      │    │    │    ├── ordering: +(6|8)
+      │    │    │    ├── ordering: +(6|8) [provided: +6]
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:6(int!null)
       │    │    │    │    ├── key: (6)
@@ -2505,7 +2505,7 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string)
       │    │    ├── key: (1,3)
       │    │    ├── fd: (1)-->(2), (3)-->(4-6)
-      │    │    ├── ordering: +5,+6 opt(4)
+      │    │    ├── ordering: +5,+6 opt(4) [provided: +5,+6]
       │    │    └── left-join
       │    │         ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string)
       │    │         ├── key: (1,3)
@@ -2566,12 +2566,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4)
+ │    ├── ordering: +1 opt(4) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4)
+ │    │    └── ordering: +1 opt(4) [provided: +1]
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
@@ -2703,12 +2703,12 @@ anti-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4)
+ │    ├── ordering: +1 opt(4) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4)
+ │    │    └── ordering: +1 opt(4) [provided: +1]
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
