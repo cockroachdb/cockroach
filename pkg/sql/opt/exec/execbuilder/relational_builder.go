@@ -415,17 +415,39 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	joinType := joinOpToJoinType(join.Op())
+	leftExpr := join.Child(0).(memo.RelExpr)
+	rightExpr := join.Child(1).(memo.RelExpr)
+	filters := join.Child(2).(*memo.FiltersExpr)
+
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+		leftExpr.Relational().OutputCols,
+		rightExpr.Relational().OutputCols,
+		*filters,
+	)
+
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
-		join.Child(0).(memo.RelExpr),
-		join.Child(1).(memo.RelExpr),
-		join.Child(2).(opt.ScalarExpr),
+		leftExpr,
+		rightExpr,
+		memo.ExtractRemainingJoinFilters(*filters, leftEq, rightEq),
 		joinType,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 	ep := execPlan{outputCols: outputCols}
-	ep.root, err = b.factory.ConstructHashJoin(joinType, left.root, right.root, onExpr)
+
+	// Convert leftEq/rightEq to ordinals.
+	eqColsBuf := make([]exec.ColumnOrdinal, 2*len(leftEq))
+	leftEqOrdinals := eqColsBuf[:len(leftEq):len(leftEq)]
+	rightEqOrdinals := eqColsBuf[len(leftEq):]
+	for i := range leftEq {
+		leftEqOrdinals[i] = left.getColumnOrdinal(leftEq[i])
+		rightEqOrdinals[i] = right.getColumnOrdinal(rightEq[i])
+	}
+
+	ep.root, err = b.factory.ConstructHashJoin(
+		joinType, left.root, right.root, leftEqOrdinals, rightEqOrdinals, onExpr,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -436,7 +458,7 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	joinType := joinOpToJoinType(join.JoinType)
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
-		join.Left, join.Right, &join.On, joinType,
+		join.Left, join.Right, join.On, joinType,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -456,7 +478,10 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 
 // initJoinBuild builds the inputs to the join as well as the ON expression.
 func (b *Builder) initJoinBuild(
-	leftChild memo.RelExpr, rightChild memo.RelExpr, onCond opt.ScalarExpr, joinType sqlbase.JoinType,
+	leftChild memo.RelExpr,
+	rightChild memo.RelExpr,
+	filters memo.FiltersExpr,
+	joinType sqlbase.JoinType,
 ) (leftPlan, rightPlan execPlan, onExpr tree.TypedExpr, outputCols opt.ColMap, _ error) {
 	leftPlan, err := b.buildRelational(leftChild)
 	if err != nil {
@@ -474,8 +499,8 @@ func (b *Builder) initJoinBuild(
 		ivarMap: allCols,
 	}
 
-	if onCond.Op() != opt.UnknownOp {
-		onExpr, err = b.buildScalar(&ctx, onCond)
+	if len(filters) != 0 {
+		onExpr, err = b.buildScalar(&ctx, &filters)
 		if err != nil {
 			return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 		}
