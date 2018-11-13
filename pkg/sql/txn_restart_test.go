@@ -1610,7 +1610,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 
 	// ROLLBACK TO SAVEPOINT with a wrong name
 	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
-	if !testutils.IsError(err, "SAVEPOINT not supported except for COCKROACH_RESTART") {
+	if !testutils.IsError(err, "SAVEPOINT not supported except for cockroach_restart") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
