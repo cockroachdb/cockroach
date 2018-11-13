@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -417,7 +418,26 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "0" },
 	},
-
+	// CockroachDB extension. See docs on SessionData.ForceSavepointRestart.
+	// https://github.com/cockroachdb/cockroach/issues/30588
+	`force_savepoint_restart`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ForceSavepointRestart)
+		},
+		GetStringVal: makeBoolGetStringValFn("force_savepoint_restart"),
+		Set: func(_ context.Context, m *sessionDataMutator, val string) error {
+			b, err := parsePostgresBool(val)
+			if err != nil {
+				return err
+			}
+			if b {
+				telemetry.Count("sql.force_savepoint_restart")
+			}
+			m.SetForceSavepointRestart(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html
 	`integer_datetimes`: makeReadOnlyVar("on"),
 
@@ -433,7 +453,6 @@ var varGen = map[string]sessionVar{
 			return fmt.Sprintf("%d", evalCtx.NodeID)
 		},
 	},
-
 	// CockroachDB extension (inspired by MySQL).
 	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {

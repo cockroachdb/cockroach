@@ -107,6 +107,10 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// activeSavepointName stores the name of the active savepoint,
+	// or is empty if no savepoint is active.
+	activeSavepointName tree.Name
 }
 
 // txnType represents the type of a SQL transaction.
