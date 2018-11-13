@@ -30,13 +30,12 @@ import (
 // optimization (e.g. a merge join requires the inputs to be sorted in a
 // particular order).
 //
-// Physical properties can be provided by an operator or required of it. Some
-// operators "naturally" provide a physical property such as ordering on a
-// particular column. Other operators require one or more of their operands to
-// provide a particular physical property. When an expression is optimized, it
-// is always with respect to a particular set of required physical properties.
-// The goal is to find the lowest cost expression that provides those
-// properties while still remaining logically equivalent.
+// Required properties are derived top-to-bottom - there is a required physical
+// property on the root, and each expression can require physical properties on
+// one or more of its operands. When an expression is optimized, it is always
+// with respect to a particular set of required physical properties.  The goal
+// is to find the lowest cost expression that provides those properties while
+// still remaining logically equivalent.
 type Required struct {
 	// Presentation specifies the naming, membership (including duplicates),
 	// and order of result columns. If Presentation is not defined, then no
