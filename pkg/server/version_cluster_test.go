@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -164,7 +163,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	}
 
 	knobs := base.TestingKnobs{
-		Store: &storagebase.StoreTestingKnobs{
+		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
 		Upgrade: &server.UpgradeTestingKnobs{
@@ -215,7 +214,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 
 	knobs := base.TestingKnobs{
-		Store: &storagebase.StoreTestingKnobs{
+		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
 		Upgrade: &server.UpgradeTestingKnobs{
@@ -335,7 +334,7 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 			}
 
 			knobs := base.TestingKnobs{
-				Store: &storagebase.StoreTestingKnobs{
+				Store: &storage.StoreTestingKnobs{
 					BootstrapVersion: &bootstrapVersion,
 				},
 			}
@@ -383,7 +382,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	}
 
 	knobs := base.TestingKnobs{
-		Store: &storagebase.StoreTestingKnobs{
+		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
 	}
@@ -440,7 +439,7 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 	}
 
 	knobs := base.TestingKnobs{
-		Store: &storagebase.StoreTestingKnobs{
+		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
 	}

@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -52,7 +54,7 @@ import (
 func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				DisableSplitQueue: true,
 				DisableMergeQueue: true,
 			},
@@ -1642,7 +1644,7 @@ func TestBadRequest(t *testing.T) {
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var storeKnobs storagebase.StoreTestingKnobs
+	var storeKnobs storage.StoreTestingKnobs
 	// Set up a filter to so that the first CPut operation will
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
@@ -1784,7 +1786,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
-	var storeKnobs storagebase.StoreTestingKnobs
+	var storeKnobs storage.StoreTestingKnobs
 	keyA := roachpb.Key("a")
 	var expectPoison int64
 	commitCh := make(chan error, 1)
@@ -1846,7 +1848,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var filterFn atomic.Value
-	var storeKnobs storagebase.StoreTestingKnobs
+	var storeKnobs storage.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()

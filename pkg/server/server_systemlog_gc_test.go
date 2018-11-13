@@ -21,11 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -178,7 +179,7 @@ func TestLogGCTrigger(t *testing.T) {
 	}
 
 	gcDone := make(chan struct{})
-	storeKnobs := &storagebase.StoreTestingKnobs{
+	storeKnobs := &storage.StoreTestingKnobs{
 		SystemLogsGCGCDone: gcDone,
 		SystemLogsGCPeriod: time.Nanosecond,
 	}

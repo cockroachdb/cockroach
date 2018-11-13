@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -115,7 +117,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				EvalKnobs: storagebase.BatchEvalTestingKnobs{
 					TestingEvalFilter: filter,
 				},
@@ -1101,7 +1103,7 @@ func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Add a request filter which cancels the ctx when it sees a rollback.
-	var storeKnobs storagebase.StoreTestingKnobs
+	var storeKnobs storage.StoreTestingKnobs
 	key := roachpb.Key("a")
 	ctx, cancel := context.WithCancel(context.Background())
 	var rollbacks int
