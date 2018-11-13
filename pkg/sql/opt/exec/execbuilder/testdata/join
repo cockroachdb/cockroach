@@ -101,7 +101,8 @@ limit                     ·         ·
  │                        count     1
  └── join                 ·         ·
       │                   type      inner
-      │                   equality  (x, x) = (x, x)
+      │                   equality  (x) = (x)
+      │                   pred      x = x
       ├── join            ·         ·
       │    │              type      inner
       │    │              equality  (x) = (x)
@@ -339,7 +340,8 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 3   ·              equality   (relnamespace) = (oid)
 4   join           ·          ·
 4   ·              type       inner
-4   ·              equality   (attrelid, confrelid) = (oid, oid)
+4   ·              equality   (attrelid) = (oid)
+4   ·              pred       confrelid = oid
 5   join           ·          ·
 5   ·              type       inner
 5   ·              equality   (attnum) = (column167)
@@ -363,7 +365,8 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   ·              equality   (relnamespace) = (oid)
 8   join           ·          ·
 8   ·              type       inner
-8   ·              equality   (attrelid, conrelid) = (oid, oid)
+8   ·              equality   (attrelid) = (oid)
+8   ·              pred       conrelid = oid
 9   join           ·          ·
 9   ·              type       inner
 9   ·              equality   (attnum) = (column166)
