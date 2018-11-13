@@ -360,8 +360,8 @@ func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenti
 type webSessionUserKey struct{}
 type webSessionIDKey struct{}
 
-const webSessionUserKeyStr = "webSessionUser"
-const webSessionIDKeyStr = "webSessionID"
+const webSessionUserKeyStr = "websessionuser"
+const webSessionIDKeyStr = "websessionid"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, cookie, err := am.getSession(w, req)
