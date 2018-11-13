@@ -740,6 +740,10 @@ func applyColumnMutation(
 		col.Nullable = true
 
 	case *tree.AlterTableDropStored:
+		if !col.IsComputed() {
+			return pgerror.NewErrorf(pgerror.CodeInvalidColumnDefinitionError,
+				"column %q is not a computed column", col.Name)
+		}
 		col.ComputeExpr = nil
 	}
 	return nil
