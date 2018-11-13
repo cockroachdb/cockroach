@@ -135,3 +135,98 @@ func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
 	}
 	panic("aggregate input not a Variable")
 }
+
+// ExtractJoinEqualityColumns returns pairs of columns (one from the left side,
+// one from the right side) which are constrained to be equal in a join (and
+// have equivalent types).
+func ExtractJoinEqualityColumns(
+	leftCols, rightCols opt.ColSet, on FiltersExpr,
+) (leftEq opt.ColList, rightEq opt.ColList) {
+	for i := range on {
+		condition := on[i].Condition
+		ok, left, right := isJoinEquality(leftCols, rightCols, condition)
+		if !ok {
+			continue
+		}
+		// Don't allow any column to show up twice.
+		// TODO(radu): need to figure out the right thing to do in cases
+		// like: left.a = right.a AND left.a = right.b
+		duplicate := false
+		for i := range leftEq {
+			if leftEq[i] == left || rightEq[i] == right {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			leftEq = append(leftEq, left)
+			rightEq = append(rightEq, right)
+		}
+	}
+	return leftEq, rightEq
+}
+
+func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
+	if eq, ok := condition.(*EqExpr); ok {
+		if leftVar, ok := eq.Left.(*VariableExpr); ok {
+			if rightVar, ok := eq.Right.(*VariableExpr); ok {
+				return leftVar, rightVar, true
+			}
+		}
+	}
+	return nil, nil, false
+}
+
+func isJoinEquality(
+	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
+) (ok bool, left, right opt.ColumnID) {
+	lvar, rvar, ok := isVarEquality(condition)
+	if !ok {
+		return false, 0, 0
+	}
+
+	// Don't allow mixed types (see #22519).
+	if !lvar.DataType().Equivalent(rvar.DataType()) {
+		return false, 0, 0
+	}
+
+	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
+		return true, lvar.Col, rvar.Col
+	}
+	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
+		return true, rvar.Col, lvar.Col
+	}
+
+	return false, 0, 0
+}
+
+// ExtractRemainingJoinFilters calculates the remaining ON condition after
+// removing equalities that are handled separately. The given function
+// determines if an equality is redundant. The result is empty if there are no
+// remaining conditions.
+func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) FiltersExpr {
+	var newFilters FiltersExpr
+	for i := range on {
+		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
+		if ok {
+			a, b := leftVar.Col, rightVar.Col
+			found := false
+			for j := range leftEq {
+				if (a == leftEq[j] && b == rightEq[j]) ||
+					(a == rightEq[j] && b == leftEq[j]) {
+					found = true
+					break
+				}
+			}
+			if found {
+				// Skip this condition.
+				continue
+			}
+		}
+		if newFilters == nil {
+			newFilters = make(FiltersExpr, 0, len(on)-i)
+		}
+		newFilters = append(newFilters, on[i])
+	}
+	return newFilters
+}
