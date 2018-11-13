@@ -120,7 +120,28 @@ func NewOrderedAggregator(
 		return nil, err
 	}
 
-	a := &orderedAggregator{
+	a := &orderedAggregator{}
+	if len(groupCols) == 0 {
+		// If there were no groupCols, we can't rely on the distinct operators to
+		// mark the first row as distinct, so we have to do it ourselves. Set up a
+		// oneShotOp to set the first row to distinct.
+		op = &oneShotOp{
+			input: op,
+			fn: func(batch ColBatch) {
+				if batch.Length() == 0 {
+					return
+				}
+				if sel := batch.Selection(); sel != nil {
+					groupCol[sel[0]] = true
+				} else {
+					groupCol[0] = true
+				}
+			},
+			outputSourceRef: &a.input,
+		}
+	}
+
+	*a = orderedAggregator{
 		input:    op,
 		aggCols:  aggCols,
 		aggTyps:  aggTyps,
@@ -189,10 +210,6 @@ func (a *orderedAggregator) Next() ColBatch {
 	}
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
-		// zero out a.groupCol. This is necessary because distinct ors the
-		// uniqueness of a value with the groupCol, allowing the operators to be
-		// linked.
-		copy(a.groupCol, zeroBoolVec)
 		batch := a.input.Next()
 		for i, fn := range a.aggregateFuncs {
 			fn.Compute(batch, a.aggCols[i])
@@ -202,6 +219,10 @@ func (a *orderedAggregator) Next() ColBatch {
 			a.done = true
 			break
 		}
+		// zero out a.groupCol. This is necessary because distinct ors the
+		// uniqueness of a value with the groupCol, allowing the operators to be
+		// linked.
+		copy(a.groupCol, zeroBoolVec)
 	}
 
 	if a.scratch.resumeIdx > a.scratch.outputSize {
