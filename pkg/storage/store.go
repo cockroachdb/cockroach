@@ -4469,6 +4469,11 @@ func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
 }
 
+// GetTxnWaitKnobs is part of txnwait.StoreInterface.
+func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
+	return s.TestingKnobs().TxnWait
+}
+
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
 }

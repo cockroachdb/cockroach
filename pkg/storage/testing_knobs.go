@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -173,6 +174,8 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
+	// TxnWait contains knobs for txnwait.Queue instances.
+	TxnWait txnwait.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
