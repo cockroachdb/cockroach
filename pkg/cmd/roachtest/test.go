@@ -273,6 +273,11 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 			return fmt.Errorf("%s: unable to parse min-version: %s: %+v",
 				spec.Name, spec.MinVersion, err)
 		}
+		if spec.minVersion.Prerelease() != "" {
+			// Specifying a prerelease version as a MinVersion is too confusing
+			// to be useful. The comparison is not straightforward.
+			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", spec.minVersion)
+		}
 	}
 	return nil
 }

@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	st "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	humanize "github.com/dustin/go-humanize"
@@ -35,7 +34,7 @@ func registerLoadSplits(r *registry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
-		MinVersion: st.VersionByKey(st.VersionLoadSplits).String(),
+		MinVersion: "2.2.0",
 		Nodes:      nodes(numNodes),
 		Stable:     true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
