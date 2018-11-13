@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -236,11 +236,11 @@ func (mf *memoFormatter) formatExpr(e opt.Expr) {
 		}
 		fmt.Fprintf(mf.buf, " G%d", mf.group(child)+1)
 	}
-	mf.formatPrivate(e, &props.Physical{})
+	mf.formatPrivate(e, &physical.Required{})
 	mf.buf.WriteString(")")
 }
 
-func (mf *memoFormatter) formatBest(best memo.RelExpr, required *props.Physical) {
+func (mf *memoFormatter) formatBest(best memo.RelExpr, required *physical.Required) {
 	fmt.Fprintf(mf.buf, "(%s", best.Op())
 
 	for i := 0; i < best.ChildCount(); i++ {
@@ -257,7 +257,7 @@ func (mf *memoFormatter) formatBest(best memo.RelExpr, required *props.Physical)
 	mf.buf.WriteString(")")
 }
 
-func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *props.Physical) {
+func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required) {
 	private := e.Private()
 	if private == nil {
 		return

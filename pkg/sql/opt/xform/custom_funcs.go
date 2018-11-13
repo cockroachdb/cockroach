@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -402,7 +402,7 @@ func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, required physical.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
 	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
@@ -420,7 +420,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 // NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
 //       since that can require IndexJoin operators to be generated.
 func (c *CustomFuncs) CanLimitConstrainedScan(
-	scanPrivate *memo.ScanPrivate, required props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
@@ -449,7 +449,10 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 // limited Scan operator is created. For a non-covering index, an IndexJoin is
 // constructed to add missing columns to the limited Scan.
 func (c *CustomFuncs) GenerateLimitedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
+	grp memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	limit tree.Datum,
+	required physical.OrderingChoice,
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
@@ -568,8 +571,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		merge.JoinType = originalOp
 		merge.LeftEq = make(opt.Ordering, n)
 		merge.RightEq = make(opt.Ordering, n)
-		merge.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
-		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		merge.LeftOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
+		merge.RightOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
 		for i := 0; i < n; i++ {
 			eqIdx, _ := colToEq.Get(int(o[i].ID()))
 			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
@@ -893,7 +896,7 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 		}
 		o = o[:oIdx]
 
-		var newOrd props.OrderingChoice
+		var newOrd physical.OrderingChoice
 		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
 
 		// Simplify the ordering according to the input's FDs. Note that this is not
@@ -935,8 +938,8 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 // with the Replace(Min|Max)WithLimit exploration rules.
 func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	op opt.Operator, col opt.ColumnID,
-) props.OrderingChoice {
-	oc := props.OrderingChoice{}
+) physical.OrderingChoice {
+	oc := physical.OrderingChoice{}
 	switch op {
 	case opt.MinOp:
 		oc.AppendCol(col, false /* descending */)

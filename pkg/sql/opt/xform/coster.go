@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
@@ -39,7 +39,7 @@ type Coster interface {
 	// expression. The optimizer does not expect the cost to correspond to any
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
-	ComputeCost(candidate memo.RelExpr, required *props.Physical) memo.Cost
+	ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -88,7 +88,7 @@ func (c *coster) Init(mem *memo.Memo, perturbation float64) {
 // Note: each custom function to compute the cost of an operator calculates
 // the cost based on Big-O estimated complexity. Most constant factors are
 // ignored for now.
-func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) memo.Cost {
+func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
 	var cost memo.Cost
 	switch candidate.Op() {
 	case opt.SortOp:
@@ -176,7 +176,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 	return cost
 }
 
-func (c *coster) computeSortCost(sort *memo.SortExpr, required *props.Physical) memo.Cost {
+func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
 	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
 	// The constant term is necessary for cases where the estimated row count is
 	// very small.
@@ -193,7 +193,7 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *props.Physical) 
 	return cost
 }
 
-func (c *coster) computeScanCost(scan *memo.ScanExpr, required *props.Physical) memo.Cost {
+func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
 	// Scanning an index with a few columns is faster than scanning an index with
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
@@ -324,7 +324,7 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *props.Physical) memo.Cost {
+func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.Required) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
 

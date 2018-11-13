@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -211,7 +211,7 @@ func (o *Optimizer) Optimize() opt.Expr {
 // optimizeExpr calls either optimizeGroup or optimizeScalarExpr depending on
 // the type of the expression (relational or scalar).
 func (o *Optimizer) optimizeExpr(
-	e opt.Expr, required *props.Physical,
+	e opt.Expr, required *physical.Required,
 ) (cost memo.Cost, fullyOptimized bool) {
 	switch t := e.(type) {
 	case memo.RelExpr:
@@ -392,7 +392,7 @@ func (o *Optimizer) optimizeExpr(
 //              ├── variable: a.x [type=int]
 //              └── const: 1 [type=int]
 //
-func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *props.Physical) *groupState {
+func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required) *groupState {
 	// Always start with the first expression in the group.
 	grp = grp.FirstExpr()
 
@@ -448,7 +448,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *props.Physical) *g
 // can provide the required properties at a lower cost. The lowest cost
 // expression is saved to groupState.
 func (o *Optimizer) optimizeGroupMember(
-	state *groupState, member memo.RelExpr, required *props.Physical,
+	state *groupState, member memo.RelExpr, required *physical.Required,
 ) (fullyOptimized bool) {
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
@@ -500,7 +500,7 @@ func (o *Optimizer) optimizeScalarExpr(
 	fullyOptimized = true
 	for i, n := 0, scalar.ChildCount(); i < n; i++ {
 		// Optimize the child with respect to properties that allow anything.
-		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), props.MinPhysProps)
+		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), physical.MinRequired)
 
 		// Accumulate cost of children.
 		cost += childCost
@@ -531,7 +531,7 @@ func (o *Optimizer) optimizeScalarExpr(
 // off, and so on. Afterwards, the group will have computed a lowest cost
 // expression for each sublist of physical properties, from all down to none.
 func (o *Optimizer) enforceProps(
-	state *groupState, member memo.RelExpr, required *props.Physical,
+	state *groupState, member memo.RelExpr, required *physical.Required,
 ) (fullyOptimized bool) {
 	inner := *required
 
@@ -545,7 +545,7 @@ func (o *Optimizer) enforceProps(
 	// least likely to be expensive to enforce to most likely.
 	var enforcer memo.RelExpr
 	if !inner.Ordering.Any() {
-		inner.Ordering = props.OrderingChoice{}
+		inner.Ordering = physical.OrderingChoice{}
 		enforcer = &memo.SortExpr{Input: member}
 	} else {
 		// No remaining properties, so no more enforcers.
@@ -572,7 +572,7 @@ func (o *Optimizer) enforceProps(
 
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
-func (o *Optimizer) shouldExplore(required *props.Physical) bool {
+func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 	return required.Ordering.Any()
 }
 
@@ -607,7 +607,7 @@ func (o *Optimizer) shouldExplore(required *props.Physical) bool {
 // because there is never a case where a relational expression is referenced
 // multiple times in the final tree, but with different physical properties
 // required by each of those references.
-func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *props.Physical) opt.Expr {
+func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
 	var relParent memo.RelExpr
 	switch t := parent.(type) {
 	case memo.RelExpr:
@@ -627,12 +627,12 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *props.Physic
 	// Iterate over the expression's children, replacing any that have a lower
 	// cost alternative.
 	var mutable opt.MutableExpr
-	childProps := props.MinPhysProps
+	childProps := physical.MinRequired
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		before := parent.Child(i)
 
 		// Relational parent expression can have different props for each child,
-		// whereas Scalar parent expressions always uses props.MinPhysProps (set
+		// whereas Scalar parent expressions always uses physical.MinRequired (set
 		// above).
 		if relParent != nil {
 			childProps = o.buildChildPhysicalProps(relParent, i, parentProps)
@@ -662,14 +662,14 @@ func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost 
 
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
-func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *props.Physical) *groupState {
+func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {
 	return o.stateMap[groupStateKey{group: grp, required: required}]
 }
 
 // ensureOptState looks up the state associated with the given group and
 // properties. If none is associated yet, then ensureOptState allocates new
 // state and returns it.
-func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *props.Physical) *groupState {
+func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required) *groupState {
 	key := groupStateKey{group: grp, required: required}
 	state, ok := o.stateMap[key]
 	if !ok {
@@ -739,7 +739,7 @@ func (o *Optimizer) optimizeRootWithProps() {
 // respect to a set of physical properties.
 type groupStateKey struct {
 	group    memo.RelExpr
-	required *props.Physical
+	required *physical.Required
 }
 
 // groupState is temporary storage that's associated with each group that's
@@ -755,7 +755,7 @@ type groupState struct {
 	// required is the set of physical properties that must be provided by this
 	// lowest cost expression. An expression that cannot provide these properties
 	// cannot be the best expression, no matter how low its cost.
-	required *props.Physical
+	required *physical.Required
 
 	// cost is the estimated execution cost for this expression. The best
 	// expression for a given group and set of physical properties is the

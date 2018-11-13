@@ -17,10 +17,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	m := expr.(*memo.MergeJoinExpr).MergeJoinPrivate
 	// TODO(radu): in principle, we could pass through an ordering that covers
 	// more than the equality columns. For example, if we have a merge join
@@ -44,14 +44,14 @@ func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoi
 }
 
 func mergeJoinBuildChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
 	switch childIdx {
 	case 0:
 		return parent.(*memo.MergeJoinExpr).LeftOrdering
 	case 1:
 		return parent.(*memo.MergeJoinExpr).RightOrdering
 	default:
-		return props.OrderingChoice{}
+		return physical.OrderingChoice{}
 	}
 }

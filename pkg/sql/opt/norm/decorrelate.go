@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -632,14 +633,16 @@ func (c *CustomFuncs) MakeGrouping(groupingCols opt.ColSet) *memo.GroupingPrivat
 // MakeOrderedGrouping constructs a new GroupingPrivate using the given
 // grouping columns and OrderingChoice private.
 func (c *CustomFuncs) MakeOrderedGrouping(
-	groupingCols opt.ColSet, ordering props.OrderingChoice,
+	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
 }
 
 // ExtractGroupingOrdering returns the ordering associated with the input
 // GroupingPrivate.
-func (c *CustomFuncs) ExtractGroupingOrdering(private *memo.GroupingPrivate) props.OrderingChoice {
+func (c *CustomFuncs) ExtractGroupingOrdering(
+	private *memo.GroupingPrivate,
+) physical.OrderingChoice {
 	return private.Ordering
 }
 

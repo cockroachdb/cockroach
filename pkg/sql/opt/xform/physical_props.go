@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // canProvidePhysicalProps returns true if the given expression can provide the
@@ -32,7 +32,7 @@ import (
 // Operators that do this should return true from the appropriate canProvide
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
-func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Physical) bool {
+func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
 	// All operators can provide the Presentation property, so no need to check
 	// for that.
 	return ordering.CanProvide(e, &required.Ordering)
@@ -47,9 +47,9 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // repeatedly as physical properties are derived for each child. On each call,
 // buildChildPhysicalProps updates the childProps argument.
 func (o *Optimizer) buildChildPhysicalProps(
-	parent memo.RelExpr, nth int, parentProps *props.Physical,
-) *props.Physical {
-	var childProps props.Physical
+	parent memo.RelExpr, nth int, parentProps *physical.Required,
+) *physical.Required {
+	var childProps physical.Required
 
 	// The only operation that requires a presentation of its input is Explain.
 	if parent.Op() == opt.ExplainOp {

@@ -17,10 +17,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func rowNumberCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func rowNumberCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// By construction, any prefix of the ordering required of the input is also
 	// ordered by the ordinality column. For example, if the required input
 	// ordering is +a,+b, then any of these orderings can be provided:
@@ -56,10 +56,10 @@ func rowNumberCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoi
 }
 
 func rowNumberBuildChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
 	if childIdx != 0 {
-		return props.OrderingChoice{}
+		return physical.OrderingChoice{}
 	}
 	// RowNumber always requires its internal ordering.
 	return parent.(*memo.RowNumberExpr).Ordering
