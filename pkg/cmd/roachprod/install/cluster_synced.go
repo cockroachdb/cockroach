@@ -132,40 +132,31 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
 		}
 		defer session.Close()
 
+		var waitCmd string
+		if wait {
+			waitCmd = `
+  for pid in ${pids}; do
+    while kill -0 ${pid}; do
+      sleep 1
+    done
+  done
+`
+		}
+
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
 mkdir -p logs
 echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
-count=0
-while :; do
-  pids=$(ps axeww -o pid -o command | \
-    sed 's/export ROACHPROD=//g' | \
-    awk '/ROACHPROD=(%[2]d%[3]s)[ \/]/ { print $1 }')
-  if [ -z "${pids}" ]; then
-    break
-  fi
-`, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag())
-
-		if wait {
-			cmd += `
-  if [ ${count} -gt 0 ]; then
-    sleep 1
-  fi
-  ((count++))
-`
-		}
-
-		cmd += fmt.Sprintf(`
-  kill -%d ${pids}
-`, sig)
-
-		if !wait {
-			cmd += "  break\n"
-		}
-		cmd += "done\n"
-
+pids=$(ps axeww -o pid -o command | \
+  sed 's/export ROACHPROD=//g' | \
+  awk '/ROACHPROD=(%[2]d%[3]s)[ \/]/ { print $1 }')
+if [ -n "${pids}" ]; then
+  kill -%[4]d ${pids}
+%[5]s
+fi
+`, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag(), sig, waitCmd)
 		return session.CombinedOutput(cmd)
 	})
 }
