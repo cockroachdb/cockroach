@@ -442,7 +442,7 @@ project
       │    │    ├── right ordering: +5
       │    │    ├── key: (5)
       │    │    ├── fd: (1)-->(2-4), (1)==(5), (5)==(1)
-      │    │    ├── ordering: +(1|5)
+      │    │    ├── ordering: +(1|5) [provided: +1]
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       │    │    │    ├── key: (1)

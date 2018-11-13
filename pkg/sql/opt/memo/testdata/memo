@@ -297,7 +297,7 @@ memo (optimized, ~4KB, required=[presentation: x:7,y:8])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized, ~2KB, required=[presentation: array_agg:3])
+memo (optimized, ~3KB, required=[presentation: array_agg:3])
  ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── [presentation: array_agg:3]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -313,7 +313,7 @@ memo (optimized, ~2KB, required=[presentation: array_agg:3])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
-memo (optimized, ~2KB, required=[presentation: array_agg:3])
+memo (optimized, ~3KB, required=[presentation: array_agg:3])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:3]
  │         ├── best: (project G2 G3 array_agg)

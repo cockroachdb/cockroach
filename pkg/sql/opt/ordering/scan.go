@@ -110,6 +110,39 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
+func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	scan := expr.(*memo.ScanExpr)
+	md := scan.Memo().Metadata()
+	index := md.Table(scan.Table).Index(scan.Index)
+	fds := &scan.Relational().FuncDeps
+
+	// We need to know the direction of the scan.
+	reverse := ScanIsReverse(scan, required)
+
+	// We generate the longest ordering that this scan can provide, then we trim
+	// it. This is the longest prefix of index columns that are output by the scan
+	// (ignoring constant columns, in the case of constrained scans).
+	constCols := fds.ComputeClosure(opt.ColSet{})
+	numCols := index.KeyColumnCount()
+	provided := make(opt.Ordering, 0, numCols)
+	for i := 0; i < numCols; i++ {
+		indexCol := index.Column(i)
+		colID := scan.Table.ColumnID(indexCol.Ordinal)
+		if !scan.Cols.Contains(int(colID)) {
+			// Column not in output; we are done.
+			break
+		}
+		if constCols.Contains(int(colID)) {
+			// Column constrained to a constant, ignore.
+			continue
+		}
+		direction := (indexCol.Descending != reverse) // != is bool XOR
+		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
+	}
+
+	return trimProvided(provided, required, fds)
+}
+
 func init() {
 	memo.ScanIsReverseFn = func(
 		md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,

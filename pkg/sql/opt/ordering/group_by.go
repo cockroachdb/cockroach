@@ -60,6 +60,26 @@ func groupByBuildChildReqOrdering(
 	return result
 }
 
+func groupByBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	groupBy := expr.(*memo.GroupByExpr)
+	provided := groupBy.Input.ProvidedPhysical().Ordering
+	inputFDs := &groupBy.Input.Relational().FuncDeps
+
+	// GroupBy can only provide orderings on grouping columns. We retain the
+	// longest prefix of grouping columns (or columns equivalent to any of them).
+	groupingCols := inputFDs.ComputeEquivClosure(groupBy.GroupingCols)
+	for i := range provided {
+		if !groupingCols.Contains(int(provided[i].ID())) {
+			provided = provided[:i]
+			break
+		}
+	}
+	provided = remapProvided(provided, inputFDs, groupBy.GroupingCols)
+	// Since the input's provided ordering has to satisfy both <required> and the
+	// GroupBy internal ordering, it may need to be trimmed.
+	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+}
+
 func distinctOnCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// DistinctOn may require a certain ordering of its input, but can also pass
 	// through a stronger ordering on the grouping columns.
@@ -73,6 +93,13 @@ func distinctOnBuildChildReqOrdering(
 		return physical.OrderingChoice{}
 	}
 	return required.Intersection(&parent.(*memo.DistinctOnExpr).Ordering)
+}
+
+func distinctOnBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	// The input's provided ordering satisfies both <required> and the DistinctOn
+	// internal ordering; it may need to be trimmed.
+	d := expr.(*memo.DistinctOnExpr)
+	return trimProvided(d.Input.ProvidedPhysical().Ordering, required, &d.Relational().FuncDeps)
 }
 
 // StreamingGroupingCols returns the subset of grouping columns that form a

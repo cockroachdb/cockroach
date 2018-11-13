@@ -1260,7 +1260,7 @@ semi-join (merge)
  ├── sort
  │    ├── columns: person_id:10(int) order_id:11(int!null)
  │    ├── fd: ()-->(11)
- │    ├── ordering: +10 opt(11)
+ │    ├── ordering: +10 opt(11) [provided: +10]
  │    └── select
  │         ├── columns: person_id:10(int) order_id:11(int!null)
  │         ├── fd: ()-->(11)
@@ -1486,10 +1486,10 @@ semi-join (merge)
  ├── select
  │    ├── columns: person_id:7(int!null) addresses:8(string!null)
  │    ├── fd: ()-->(8)
- │    ├── ordering: +7 opt(8)
+ │    ├── ordering: +7 opt(8) [provided: +7]
  │    ├── scan person_addresses
  │    │    ├── columns: person_id:7(int!null) addresses:8(string)
- │    │    └── ordering: +7 opt(8)
+ │    │    └── ordering: +7 opt(8) [provided: +7]
  │    └── filters
  │         └── addresses = 'Home address' [type=bool, outer=(8), constraints=(/8: [/'Home address' - /'Home address']; tight), fd=()-->(8)]
  └── filters (true)

@@ -355,13 +355,13 @@ GenerateMergeJoins
          │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
          │    ├── key: (1)
          │    ├── fd: ()-->(2), (1)-->(4)
-  +      │    ├── ordering: +1 opt(2)
+  +      │    ├── ordering: +1 opt(2) [provided: +1]
          │    ├── scan a
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2)
+  +      │    │    └── ordering: +1 opt(2) [provided: +1]
          │    └── filters
          │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters
@@ -389,12 +389,12 @@ GenerateLookupJoins
          │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
          │    ├── key: (1)
          │    ├── fd: ()-->(2), (1)-->(4)
-  -      │    ├── ordering: +1 opt(2)
+  -      │    ├── ordering: +1 opt(2) [provided: +1]
          │    ├── scan a
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
          │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2)
+  -      │    │    └── ordering: +1 opt(2) [provided: +1]
   +      │    │    └── fd: (1)-->(2,4)
          │    └── filters
          │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]

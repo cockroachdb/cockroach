@@ -796,7 +796,7 @@ memo (optimized, ~5KB, required=[presentation: sum:5])
 memo
 SELECT sum(w) FROM kuvw GROUP BY v
 ----
-memo (optimized, ~4KB, required=[presentation: sum:5])
+memo (optimized, ~5KB, required=[presentation: sum:5])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:5]
  │         ├── best: (project G2 G3 sum)
@@ -821,7 +821,7 @@ memo (optimized, ~4KB, required=[presentation: sum:5])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY u,w) GROUP BY v
 ----
-memo (optimized, ~4KB, required=[presentation: array_agg:5])
+memo (optimized, ~5KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
