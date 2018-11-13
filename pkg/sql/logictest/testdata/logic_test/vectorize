@@ -104,3 +104,10 @@ query I
 SELECT (a + b)::INT FROM intdec
 ----
 3
+
+# AND expressions.
+query II
+SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
+----
+0  1
+1  2
