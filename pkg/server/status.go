@@ -1352,13 +1352,36 @@ func (s *statusServer) ListLocalSessions(
 		return nil, remoteDebuggingErr
 	}
 
+	var showAll bool
+	sessionUser, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// If the client is asking to see more than just their own sessions, verify
+	// that they should be allowed to.
+	if sessionUser != req.Username {
+		superuser := (sessionUser == security.RootUser || s.isSuperUser(ctx, sessionUser))
+		if req.Username != "" && !superuser {
+			return nil, grpcstatus.Errorf(
+				codes.PermissionDenied,
+				"client user %q does not have permission to view sessions from user %q",
+				sessionUser, req.Username)
+		}
+		// If the user isn't a superuser, then a request with an empty username is
+		// implicitly a request for the client's own sessions.
+		if req.Username == "" && !superuser {
+			req.Username = sessionUser
+		}
+		showAll = (req.Username == "" && superuser)
+	}
+
 	registry := s.sessionRegistry
 
 	sessions := registry.SerializeAll()
 	userSessions := make([]serverpb.Session, 0, len(sessions))
 
 	for _, session := range sessions {
-		if !(req.Username == security.RootUser || req.Username == session.Username) {
+		if req.Username != session.Username && !showAll {
 			continue
 		}
 
@@ -1692,4 +1715,43 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 		return nil, err
 	}
 	return &serverpb.JSONResponse{Data: data}, nil
+}
+
+func userFromContext(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		// If the incoming context has metadata but no attached web session user,
+		// it's a gRPC / internal SQL connection which has root on the cluster.
+		return security.RootUser, nil
+	}
+	usernames, ok := md[webSessionUserKeyStr]
+	if !ok {
+		// If the incoming context has metadata but no attached web session user,
+		// it's a gRPC / internal SQL connection which has root on the cluster.
+		return security.RootUser, nil
+	}
+	if len(usernames) != 1 {
+		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
+		return "", fmt.Errorf(
+			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
+	}
+	return usernames[0], nil
+}
+
+type superUserChecker interface {
+	RequireSuperUser(ctx context.Context, action string) error
+}
+
+func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
+	planner, cleanup := sql.NewInternalPlanner(
+		"check-superuser",
+		client.NewTxn(ctx, s.db, s.gossip.NodeID.Get(), client.RootTxn),
+		username,
+		&sql.MemoryMetrics{},
+		s.admin.server.execCfg)
+	defer cleanup()
+	if err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
+		return false
+	}
+	return true
 }
