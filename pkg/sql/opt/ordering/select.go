@@ -17,18 +17,19 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func selectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func selectCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// Select operator can always pass through ordering to its input.
 	return true
 }
 
 func selectBuildChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
 	if childIdx != 0 {
-		return props.OrderingChoice{}
+		return physical.OrderingChoice{}
 	}
 	return trimColumnGroups(required, &parent.(*memo.SelectExpr).Input.Relational().FuncDeps)
 }
@@ -39,7 +40,9 @@ func selectBuildChildReqOrdering(
 // equivalences that the input expression does not (for example a Select with an
 // equality condition); the columns in a group must be equivalent at the level
 // of the operator where the ordering is required.
-func trimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) props.OrderingChoice {
+func trimColumnGroups(
+	required *physical.OrderingChoice, fds *props.FuncDepSet,
+) physical.OrderingChoice {
 	res := *required
 	copied := false
 	for i := range res.Columns {

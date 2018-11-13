@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -145,7 +145,7 @@ func (b *Builder) buildScalar(
 			types.TArray{Typ: elemType},
 		)
 
-		var oc props.OrderingChoice
+		var oc physical.OrderingChoice
 		oc.FromOrdering(s.ordering)
 
 		out = b.factory.ConstructCoalesce(memo.ScalarListExpr{

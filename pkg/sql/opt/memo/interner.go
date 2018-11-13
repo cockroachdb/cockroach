@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -109,7 +109,7 @@ func (in *interner) Count() int {
 	return in.cache.Count()
 }
 
-var physPropsType = reflect.TypeOf((*props.Physical)(nil))
+var physPropsType = reflect.TypeOf((*physical.Required)(nil))
 var physPropsTypePtr = uint64(reflect.ValueOf(physPropsType).Pointer())
 
 // InternPhysicalProps interns a set of physical properties using the same
@@ -117,8 +117,8 @@ var physPropsTypePtr = uint64(reflect.ValueOf(physPropsType).Pointer())
 // This intern method does not force the incoming physical properties to escape
 // to the heap. It does this by making a copy of the physical properties before
 // adding them to the cache.
-func (in *interner) InternPhysicalProps(val *props.Physical) *props.Physical {
-	// Hash the props.Physical reflect type to distinguish it from other values.
+func (in *interner) InternPhysicalProps(val *physical.Required) *physical.Required {
+	// Hash the physical.Required reflect type to distinguish it from other values.
 	in.hasher.Init()
 	in.hasher.HashUint64(physPropsTypePtr)
 	in.hasher.HashPhysProps(val)
@@ -127,7 +127,7 @@ func (in *interner) InternPhysicalProps(val *props.Physical) *props.Physical {
 	in.cache.Start(in.hasher.hash)
 	for in.cache.Next() {
 		// There's an existing item, so check for equality.
-		if existing, ok := in.cache.Item().(*props.Physical); ok {
+		if existing, ok := in.cache.Item().(*physical.Required); ok {
 			if in.hasher.IsPhysPropsEqual(val, existing) {
 				// Found equivalent item, so return it.
 				return existing
@@ -424,7 +424,7 @@ func (h *hasher) HashOrdering(val opt.Ordering) {
 	h.hash = hash
 }
 
-func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
+func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
 	h.HashColSet(val.Optional)
 
 	for i := range val.Columns {
@@ -486,7 +486,7 @@ func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 	h.hash *= prime64
 }
 
-func (h *hasher) HashPhysProps(val *props.Physical) {
+func (h *hasher) HashPhysProps(val *physical.Required) {
 	for i := range val.Presentation {
 		col := &val.Presentation[i]
 		h.HashString(col.Label)
@@ -679,7 +679,7 @@ func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
+func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
 	return l.Equals(&r)
 }
 
@@ -723,7 +723,7 @@ func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
 	return l == r
 }
 
-func (h *hasher) IsPhysPropsEqual(l, r *props.Physical) bool {
+func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
 }
 

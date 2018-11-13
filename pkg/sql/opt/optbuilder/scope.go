@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -212,19 +212,19 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 }
 
 // makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
-func (s *scope) makeOrderingChoice() props.OrderingChoice {
-	var oc props.OrderingChoice
+func (s *scope) makeOrderingChoice() physical.OrderingChoice {
+	var oc physical.OrderingChoice
 	oc.FromOrdering(s.ordering)
 	return oc
 }
 
 // makePhysicalProps constructs physical properties using the columns in the
 // scope for presentation and s.ordering for required ordering.
-func (s *scope) makePhysicalProps() *props.Physical {
-	p := &props.Physical{}
+func (s *scope) makePhysicalProps() *physical.Required {
+	p := &physical.Required{}
 
 	if len(s.cols) > 0 {
-		p.Presentation = make(props.Presentation, 0, len(s.cols))
+		p.Presentation = make(physical.Presentation, 0, len(s.cols))
 		for i := range s.cols {
 			col := &s.cols[i]
 			if !col.hidden {

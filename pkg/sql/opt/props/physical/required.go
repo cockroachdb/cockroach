@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package props
+package physical
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-// Physical properties are interesting characteristics of an expression that
+// Required properties are interesting characteristics of an expression that
 // impact its layout, presentation, or location, but not its logical content.
 // Examples include row order, column naming, and data distribution (physical
 // location of data ranges). Physical properties exist outside of the relational
@@ -37,7 +37,7 @@ import (
 // is always with respect to a particular set of required physical properties.
 // The goal is to find the lowest cost expression that provides those
 // properties while still remaining logically equivalent.
-type Physical struct {
+type Required struct {
 	// Presentation specifies the naming, membership (including duplicates),
 	// and order of result columns. If Presentation is not defined, then no
 	// particular column presentation is required or provided.
@@ -50,18 +50,18 @@ type Physical struct {
 	Ordering OrderingChoice
 }
 
-// MinPhysProps are the default physical properties that require nothing and
+// MinRequired are the default physical properties that require nothing and
 // provide nothing.
-var MinPhysProps = &Physical{}
+var MinRequired = &Required{}
 
 // Defined is true if any physical property is defined. If none is defined, then
-// this is an instance of MinPhysProps.
-func (p *Physical) Defined() bool {
+// this is an instance of MinRequired.
+func (p *Required) Defined() bool {
 	return !p.Presentation.Any() || !p.Ordering.Any()
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
-func (p *Physical) ColSet() opt.ColSet {
+func (p *Required) ColSet() opt.ColSet {
 	colSet := p.Ordering.ColSet()
 	for _, col := range p.Presentation {
 		colSet.Add(int(col.ID))
@@ -69,7 +69,7 @@ func (p *Physical) ColSet() opt.ColSet {
 	return colSet
 }
 
-func (p *Physical) String() string {
+func (p *Required) String() string {
 	hasProjection := !p.Presentation.Any()
 	hasOrdering := !p.Ordering.Any()
 
@@ -100,7 +100,7 @@ func (p *Physical) String() string {
 }
 
 // Equals returns true if the two physical properties are identical.
-func (p *Physical) Equals(rhs *Physical) bool {
+func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering)
 }
 

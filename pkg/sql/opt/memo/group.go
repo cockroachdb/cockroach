@@ -16,6 +16,7 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // exprGroup represents a group of relational query plans that are logically
@@ -52,7 +53,7 @@ type exprGroup interface {
 type bestProps struct {
 	// Required properties with respect to which the best expression was
 	// optimized.
-	required *props.Physical
+	required *physical.Required
 
 	// Cost of the best expression.
 	cost Cost

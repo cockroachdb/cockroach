@@ -147,7 +147,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ColList":        {fullName: "opt.ColList", passByVal: true},
 		"TableID":        {fullName: "opt.TableID", passByVal: true},
 		"Ordering":       {fullName: "opt.Ordering", passByVal: true},
-		"OrderingChoice": {fullName: "props.OrderingChoice", passByVal: true},
+		"OrderingChoice": {fullName: "physical.OrderingChoice", passByVal: true},
 		"TupleOrdinal":   {fullName: "memo.TupleOrdinal", passByVal: true},
 		"ScanLimit":      {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":      {fullName: "memo.ScanFlags", passByVal: true},
@@ -164,7 +164,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Constraint":     {fullName: "*constraint.Constraint", isPointer: true},
 		"FuncProps":      {fullName: "*tree.FunctionProperties", isPointer: true},
 		"FuncOverload":   {fullName: "*tree.Overload", isPointer: true},
-		"PhysProps":      {fullName: "*props.Physical", isPointer: true},
+		"PhysProps":      {fullName: "*physical.Required", isPointer: true},
 		"RelProps":       {fullName: "props.Relational"},
 		"ScalarProps":    {fullName: "props.Scalar"},
 	}
