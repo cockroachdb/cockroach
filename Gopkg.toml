@@ -113,3 +113,7 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"

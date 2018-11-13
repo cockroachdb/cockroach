@@ -1363,15 +1363,24 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7d23b292d47779a336067fed1e72c12a92c1254c26ede2906ecb39a70472e7bd"
+  digest = "1:c1be45470234f3937c7c267b6ba610d5602fd56984d2b4ff0324cbdfe7c1ba63"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
     "blowfish",
+    "curve25519",
+    "ed25519",
+    "ed25519/internal/edwards25519",
+    "internal/chacha20",
+    "internal/subtle",
+    "poly1305",
+    "ssh",
+    "ssh/agent",
+    "ssh/knownhosts",
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "bd6f299fb381e4c3393d1c4b1f0b94f5e77650c8"
+  revision = "3d3f9f413869b949e48070b5bc593aa22cc2b8f2"
 
 [[projects]]
   branch = "master"
@@ -1753,6 +1762,9 @@
     "go.etcd.io/etcd/raft",
     "go.etcd.io/etcd/raft/raftpb",
     "golang.org/x/crypto/bcrypt",
+    "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/agent",
+    "golang.org/x/crypto/ssh/knownhosts",
     "golang.org/x/crypto/ssh/terminal",
     "golang.org/x/net/html",
     "golang.org/x/net/http2",
