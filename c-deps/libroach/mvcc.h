@@ -18,6 +18,7 @@
 #include "db.h"
 #include "encoding.h"
 #include "iterator.h"
+#include "keys.h"
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "status.h"
 #include "timestamp.h"
@@ -106,9 +107,7 @@ template <bool reverse> class mvccScanner {
     if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
       return results_;
     }
-    if (cur_key_ == start_key_) {
-      getAndAdvance();
-    }
+    getAndAdvance();
     return fillResults();
   }
 
@@ -125,26 +124,17 @@ template <bool reverse> class mvccScanner {
       if (!iterSeekReverse(EncodeKey(start_key_, 0, 0))) {
         return results_;
       }
-      for (; cur_key_.compare(end_key_) >= 0;) {
-        if (!getAndAdvance()) {
-          break;
-        }
-      }
-      if (kvs_->Count() == max_keys_ && advanceKey() && cur_key_.compare(end_key_) >= 0) {
-        results_.resume_key = ToDBSlice(cur_key_);
-      }
     } else {
       if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
         return results_;
       }
-      for (; cur_key_.compare(end_key_) < 0;) {
-        if (!getAndAdvance()) {
-          break;
-        }
-      }
-      if (kvs_->Count() == max_keys_ && advanceKey() && cur_key_.compare(end_key_) < 0) {
-        results_.resume_key = ToDBSlice(cur_key_);
-      }
+    }
+
+    while (getAndAdvance()) {
+    }
+
+    if (kvs_->Count() == max_keys_ && advanceKey()) {
+      results_.resume_key = ToDBSlice(cur_key_);
     }
 
     return fillResults();
@@ -289,15 +279,6 @@ template <bool reverse> class mvccScanner {
   // greater than cur_key_. Returns false if the iterator is exhausted
   // or an error occurs.
   bool nextKey() {
-    // Check to see if the next key is the end key. This avoids
-    // advancing the iterator unnecessarily. For example, SQL can take
-    // advantage of this when doing single row reads with an
-    // appropriately set end key.
-    if (cur_key_.size() + 1 == end_key_.size() && end_key_.starts_with(cur_key_) &&
-        end_key_[cur_key_.size()] == '\0') {
-      return false;
-    }
-
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
     for (int i = 0; i < iters_before_seek_; ++i) {
@@ -351,12 +332,6 @@ template <bool reverse> class mvccScanner {
   // than the specified key. Returns false if the iterator is
   // exhausted or an error occurs.
   bool prevKey(const rocksdb::Slice& key) {
-    if (peeked_ && iter_rep_->key().compare(end_key_) < 0) {
-      // No need to look at the previous key if it is less than our
-      // end key.
-      return false;
-    }
-
     key_buf_.assign(key.data(), key.size());
 
     for (int i = 0; i < iters_before_seek_; ++i) {
