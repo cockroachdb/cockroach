@@ -146,5 +146,5 @@ func genSelectionOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSelectionOps, "selection_ops.og.go")
+	registerGenerator(genSelectionOps, "selection_ops.eg.go")
 }

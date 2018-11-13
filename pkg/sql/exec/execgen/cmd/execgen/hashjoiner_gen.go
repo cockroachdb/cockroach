@@ -188,5 +188,5 @@ func genHashJoinerDistinct(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashJoinerDistinct, "hashjoiner.og.go")
+	registerGenerator(genHashJoinerDistinct, "hashjoiner.eg.go")
 }
