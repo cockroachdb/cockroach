@@ -21,6 +21,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -151,7 +152,7 @@ func TestLogMerges(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
 		},

@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1517,7 +1518,7 @@ func TestImportControlJob(t *testing.T) {
 
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 
@@ -1636,7 +1637,7 @@ func TestImportWorkerFailure(t *testing.T) {
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
-	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 
@@ -1723,7 +1724,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 
@@ -1854,7 +1855,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 

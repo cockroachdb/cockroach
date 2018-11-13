@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -287,7 +289,7 @@ func TestErrorOnRollback(t *testing.T) {
 	// We're going to inject an error into our EndTransaction.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				TestingProposalFilter: func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
 					if !fArgs.Req.IsSingleRequest() {
 						return nil

@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -123,7 +124,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		if ambiguousSuccess {
-			params.Knobs.Store = &storagebase.StoreTestingKnobs{
+			params.Knobs.Store = &storage.StoreTestingKnobs{
 				TestingResponseFilter: func(args roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 					if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 						return maybeRPCError(req.(*roachpb.ConditionalPutRequest))

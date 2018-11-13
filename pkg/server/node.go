@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -213,7 +212,7 @@ func bootstrapCluster(
 		cfg.Clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	cfg.Gossip = nil
-	cfg.TestingKnobs = storagebase.StoreTestingKnobs{}
+	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	tr := cfg.Settings.Tracer

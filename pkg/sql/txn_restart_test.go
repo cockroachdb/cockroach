@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -1296,7 +1298,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	var clockUpdate int32
 	testKey := []byte("test_key")
-	storeTestingKnobs := &storagebase.StoreTestingKnobs{
+	storeTestingKnobs := &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
@@ -1393,7 +1395,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	var cmdFilters tests.CommandFilters
 	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
 	testKey := []byte("test_key")
-	testingKnobs := &storagebase.StoreTestingKnobs{
+	testingKnobs := &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
@@ -1467,7 +1469,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
-					Store: &storagebase.StoreTestingKnobs{
+					Store: &storage.StoreTestingKnobs{
 						EvalKnobs: storagebase.BatchEvalTestingKnobs{
 							TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
 								_, ok := fArgs.Req.(*roachpb.ScanRequest)
