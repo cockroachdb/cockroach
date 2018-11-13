@@ -15,7 +15,9 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
@@ -37,4 +39,49 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
 	return projectOrderingToInput(parent.Child(0).(memo.RelExpr), required)
+}
+
+func indexJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	// If an index join has a requirement on some input columns, those columns
+	// must be output columns (or equivalent to them). We may still need to remap
+	// using column equivalencies.
+	indexJoin := expr.(*memo.IndexJoinExpr)
+	rel := indexJoin.Relational()
+	return remapProvided(indexJoin.Input.ProvidedPhysical().Ordering, &rel.FuncDeps, rel.OutputCols)
+}
+
+func lookupJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	lookupJoin := expr.(*memo.LookupJoinExpr)
+	childProvided := lookupJoin.Input.ProvidedPhysical().Ordering
+
+	// The lookup join includes an implicit projection (lookupJoin.Cols); some of
+	// the input columns might not be output columns so we may need to remap them.
+	// First check if we need to.
+	needsRemap := false
+	for i := range childProvided {
+		if !lookupJoin.Cols.Contains(int(childProvided[i].ID())) {
+			needsRemap = true
+			break
+		}
+	}
+	if !needsRemap {
+		// Fast path: we don't need to remap any columns.
+		return childProvided
+	}
+
+	// Because of the implicit projection, the FDs of the LookupJoin don't include
+	// all the columns we care about; we have to recreate the FDs of the join
+	// before the projection. These are the FDs of the input plus the equality
+	// constraints implied by the lookup join.
+	var fds props.FuncDepSet
+	fds.CopyFrom(&lookupJoin.Input.Relational().FuncDeps)
+
+	md := lookupJoin.Memo().Metadata()
+	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
+	for i, colID := range lookupJoin.KeyCols {
+		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal)
+		fds.AddEquivalency(colID, indexColID)
+	}
+
+	return remapProvided(childProvided, &fds, lookupJoin.Cols)
 }
