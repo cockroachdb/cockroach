@@ -270,6 +270,10 @@ func registerUpgrade(r *registry) {
 }
 
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
+	// This is ugly, but we can't pass `--encrypt=false` to old versions of
+	// Cokroach.
+	c.encryptDefault = false
+
 	nodes := c.Range(1, 3)
 	goos := ifLocal(runtime.GOOS, "linux")
 	const headVersion = "HEAD"
