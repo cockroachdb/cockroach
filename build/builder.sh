@@ -168,7 +168,7 @@ gid=$(id -g)
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
-docker run --privileged -i ${tty-} --rm \
+docker run --init --privileged -i ${tty-} --rm \
   -u "$uid:$gid" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
