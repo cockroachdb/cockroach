@@ -17,13 +17,16 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"os/user"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
 )
 
 func main() {
+	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
 	// Path to a local dir where the test logs and artifacts collected from
@@ -67,8 +70,9 @@ func main() {
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
-	rootCmd.PersistentFlags().BoolVarP(
-		&encrypt, "encrypt", "", encrypt, "start cluster with encryption at rest turned on")
+	f := rootCmd.PersistentFlags().VarPF(
+		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
+	f.NoOptDefVal = "true"
 
 	var listCmd = &cobra.Command{
 		Use:   "list [tests]",
