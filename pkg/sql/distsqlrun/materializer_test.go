@@ -19,6 +19,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -73,6 +74,71 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	}
 	if row != nil {
 		t.Fatal("unexpected not nil row", row)
+	}
+}
+
+func TestMaterializeTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	types := []sqlbase.ColumnType{
+		{SemanticType: sqlbase.ColumnType_BOOL},
+		{SemanticType: sqlbase.ColumnType_INT},
+		{SemanticType: sqlbase.ColumnType_FLOAT},
+		{SemanticType: sqlbase.ColumnType_DECIMAL},
+		{SemanticType: sqlbase.ColumnType_DATE},
+		{SemanticType: sqlbase.ColumnType_STRING},
+		{SemanticType: sqlbase.ColumnType_BYTES},
+		{SemanticType: sqlbase.ColumnType_NAME},
+		{SemanticType: sqlbase.ColumnType_OID},
+	}
+	inputRow := sqlbase.EncDatumRow{
+		sqlbase.EncDatum{Datum: tree.DBoolTrue},
+		sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(31))},
+		sqlbase.EncDatum{Datum: tree.NewDFloat(37.41)},
+		sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: *apd.New(43, 47)}},
+		sqlbase.EncDatum{Datum: tree.NewDDate(53)},
+		sqlbase.EncDatum{Datum: tree.NewDString("hello")},
+		sqlbase.EncDatum{Datum: tree.NewDBytes("ciao")},
+		sqlbase.EncDatum{Datum: tree.NewDName("aloha")},
+		sqlbase.EncDatum{Datum: tree.NewDOid(59)},
+	}
+	input := NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+	c, err := newColumnarizer(flowCtx, 0, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outputToInputColIdx := make([]int, len(types))
+	for i := range outputToInputColIdx {
+		outputToInputColIdx[i] = i
+	}
+	m, err := newMaterializer(flowCtx, 1, c, types, outputToInputColIdx, &PostProcessSpec{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	row, meta := m.Next()
+	if meta != nil {
+		t.Fatalf("unexpected meta %+v", meta)
+	}
+	if row == nil {
+		t.Fatal("unexpected nil row")
+	}
+	for i := range inputRow {
+		inDatum := inputRow[i].Datum
+		outDatum := row[i].Datum
+		if inDatum.Compare(&evalCtx, outDatum) != 0 {
+			t.Fatal("unequal datums", inDatum, outDatum)
+		}
 	}
 }
 
