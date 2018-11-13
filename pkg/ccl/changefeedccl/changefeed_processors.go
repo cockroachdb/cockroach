@@ -150,7 +150,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
 		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
-		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr,
+		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr, metrics,
 	)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
@@ -158,7 +158,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
+	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.

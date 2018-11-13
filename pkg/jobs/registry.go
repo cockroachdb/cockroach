@@ -138,6 +138,7 @@ func MakeRegistry(
 	ex sqlutil.InternalExecutor,
 	nodeID *base.NodeIDContainer,
 	settings *cluster.Settings,
+	histogramWindowInterval time.Duration,
 	planFn planHookMaker,
 ) *Registry {
 	r := &Registry{
@@ -152,7 +153,7 @@ func MakeRegistry(
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
-	r.metrics.InitHooks()
+	r.metrics.InitHooks(histogramWindowInterval)
 	return r
 }
 

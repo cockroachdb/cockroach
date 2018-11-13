@@ -39,13 +39,17 @@ func TestRegistryCancelation(t *testing.T) {
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	// Not using the server.DefaultHistogramWindowInterval constant because
+	// of a dep cycle.
+	const histogramWindowInterval = 60 * time.Second
+
 	var db *client.DB
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
 		log.AmbientContext{}, stopper, clock, db, nil /* ex */, FakeNodeID, cluster.NoSettings,
-		FakePHS)
+		histogramWindowInterval, FakePHS)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(nodeCount)

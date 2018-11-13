@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,11 +125,12 @@ func createBenchmarkChangefeed(
 	encoder := makeJSONEncoder(details.Opts)
 	sink := makeBenchSink()
 
+	metrics := MakeMetrics(server.DefaultHistogramWindowInterval).(*Metrics)
 	buf := makeBuffer()
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(),
-		spans, details, initialHighWater, buf, leaseMgr,
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf,
+		leaseMgr, metrics,
 	)
 
 	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
@@ -139,7 +141,8 @@ func createBenchmarkChangefeed(
 		m:        th,
 	}
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
-	tickFn := emitEntries(s.ClusterSettings(), details, encoder, sink, rowsFn, TestingKnobs{})
+	tickFn := emitEntries(
+		s.ClusterSettings(), details, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = poller.Run(ctx) }()
