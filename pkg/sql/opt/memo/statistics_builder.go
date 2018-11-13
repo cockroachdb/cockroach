@@ -310,8 +310,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet, e.(*RowNumberExpr))
 
-	case opt.ZipOp:
-		return sb.colStatZip(colSet, e.(*ZipExpr))
+	case opt.ProjectSetOp:
+		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
@@ -1594,11 +1594,13 @@ func (sb *statisticsBuilder) colStatRowNumber(
 	return colStat
 }
 
-// +-----+
-// | Zip |
-// +-----+
+// +-------------+
+// | Project Set |
+// +-------------+
 
-func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildProjectSet(
+	projectSet *ProjectSetExpr, relProps *props.Relational,
+) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
@@ -1607,15 +1609,12 @@ func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) 
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
-	for _, child := range zip.Funcs {
-		if fn, ok := child.(*FunctionExpr); ok {
+	for i := range projectSet.Zip {
+		if fn, ok := projectSet.Zip[i].Func.(*FunctionExpr); ok {
 			if fn.Overload.Generator != nil {
-				// Use a small row count; this allows use of lookup join in cases like
-				// using json_array_elements with a small constant array.
-				//
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = 10
+				s.RowCount = unknownGeneratorRowCount
 				break
 			}
 		}
@@ -1624,24 +1623,106 @@ func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) 
 		s.RowCount = 1
 	}
 
+	// Multiply by the input row count to get the total.
+	inputStats := &projectSet.Input.Relational().Stats
+	s.RowCount *= inputStats.RowCount
+
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, zip *ZipExpr) *props.ColumnStatistic {
-	s := &zip.Relational().Stats
+func (sb *statisticsBuilder) colStatProjectSet(
+	colSet opt.ColSet, projectSet *ProjectSetExpr,
+) *props.ColumnStatistic {
+	s := &projectSet.Relational().Stats
+	if s.RowCount == 0 {
+		// Short cut if cardinality is 0.
+		colStat, _ := s.ColStats.Add(colSet)
+		return colStat
+	}
+
+	inputProps := projectSet.Input.Relational()
+	inputStats := inputProps.Stats
+	inputCols := inputProps.OutputCols
 
 	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	colStat.NullCount = 0
 
-	// TODO(rytaft): We may want to determine which generator function the
-	// columns in colSet correspond to, and estimate the distinct count based on
-	// the type of generator function and its parameters.
-	if s.RowCount == 1 {
-		colStat.DistinctCount = 1
-	} else {
-		colStat.DistinctCount = s.RowCount * unknownDistinctCountRatio
+	// Some of the requested columns may be from the input.
+	reqInputCols := colSet.Intersection(inputCols)
+	if !reqInputCols.Empty() {
+		inputColStat := sb.colStatFromChild(reqInputCols, projectSet, 0 /* childIdx */)
+		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount * (s.RowCount / inputStats.RowCount)
 	}
-	colStat.NullCount = s.RowCount * unknownNullCountRatio
-	if colSet.SubsetOf(zip.Relational().NotNullCols) {
+
+	// Other requested columns may be from the output columns of the zip.
+	zipCols := projectSet.Zip.OutputCols()
+	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
+	if !reqZipCols.Empty() {
+		// Calculate the the distinct count and null count for the zip columns
+		// after the cross join has been applied.
+		zipColsDistinctCount := float64(1)
+		zipColsNullCount := float64(0)
+		for i := range projectSet.Zip {
+			item := &projectSet.Zip[i]
+			if item.Cols.ToSet().Intersects(reqZipCols) {
+				if fn, ok := item.Func.(*FunctionExpr); ok && fn.Overload.Generator != nil {
+					// The columns(s) contain a generator function.
+					// TODO(rytaft): We may want to determine which generator function the
+					// requested columns correspond to, and estimate the distinct count and
+					// null count based on the type of generator function and its parameters.
+					zipColsDistinctCount *= unknownGeneratorRowCount * unknownGeneratorDistinctCountRatio
+					zipColsNullCount += (s.RowCount - zipColsNullCount) * unknownNullCountRatio
+				} else {
+					// The columns(s) contain a scalar function or expression.
+					// These columns can contain many null values if the zip also
+					// contains a generator function. For example:
+					//
+					//    SELECT * FROM ROWS FROM (generate_series(0, 3), upper('abc'));
+					//
+					// Produces:
+					//
+					//     generate_series | upper
+					//    -----------------+-------
+					//                   0 | ABC
+					//                   1 | NULL
+					//                   2 | NULL
+					//                   3 | NULL
+					//
+					// After the cross product with the input, the total number of nulls
+					// for the column(s) equals (output row count - input row count).
+					// (Also subtract the expected chance of collisions with nulls
+					// already collected.)
+					zipColsNullCount += (s.RowCount - inputStats.RowCount) * (1 - zipColsNullCount/s.RowCount)
+				}
+
+				if item.ScalarProps(projectSet.Memo()).OuterCols.Intersects(inputProps.OutputCols) {
+					// The column(s) are correlated with the input, so they may have a
+					// distinct value for each distinct row of the input.
+					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
+				}
+			}
+		}
+
+		// Multiply the distinct counts in case colStat.DistinctCount is
+		// already populated with a statistic from the subset of columns
+		// provided by the input. Multiplying the counts gives a worst-case
+		// estimate of the joint distinct count.
+		colStat.DistinctCount *= zipColsDistinctCount
+
+		// Assuming null columns are completely independent, calculate
+		// the expected value of having nulls in either column set.
+		f1 := zipColsNullCount / s.RowCount
+		f2 := colStat.NullCount / s.RowCount
+		colStat.NullCount = s.RowCount * (f1 + f2 - f1*f2)
+	}
+
+	// The distinct count and null count should be no larger than the row count.
+	colStat.DistinctCount = min(s.RowCount, colStat.DistinctCount)
+	colStat.NullCount = min(s.RowCount, colStat.NullCount)
+
+	if colSet.SubsetOf(projectSet.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
 	return colStat
@@ -1787,6 +1868,14 @@ const (
 	// This is the ratio of null column values to number of rows for nullable
 	// columns, which is used in the absence of any real statistics.
 	unknownNullCountRatio = 0.01
+
+	// Use a small row count for generator functions; this allows use of lookup
+	// join in cases like using json_array_elements with a small constant array.
+	unknownGeneratorRowCount = 10
+
+	// Since the generator row count is so small, we need a larger distinct count
+	// ratio for generator functions.
+	unknownGeneratorDistinctCountRatio = 0.7
 )
 
 // applyFilter uses constraints to update the distinct counts for the

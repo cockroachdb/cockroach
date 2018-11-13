@@ -533,6 +533,14 @@ func (h *hasher) HashAggregationsExpr(val AggregationsExpr) {
 	}
 }
 
+func (h *hasher) HashZipExpr(val ZipExpr) {
+	for i := range val {
+		item := &val[i]
+		h.HashColList(item.Cols)
+		h.HashScalarExpr(item.Func)
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -769,6 +777,18 @@ func (h *hasher) IsAggregationsExprEqual(l, r AggregationsExpr) bool {
 	}
 	for i := range l {
 		if l[i].Col != r[i].Col || l[i].Agg != r[i].Agg {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
 			return false
 		}
 	}

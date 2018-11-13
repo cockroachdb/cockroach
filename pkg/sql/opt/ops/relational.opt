@@ -679,28 +679,24 @@ define RowNumberPrivate {
 	ColID ColumnID
 }
 
-# Zip represents a functional zip over generators a,b,c, which returns tuples of
+# ProjectSet represents a relational operator which zips through a list of
+# generators for every row of the input.
+#
+# As a reminder, a functional zip over generators a,b,c returns tuples of
 # values from a,b,c picked "simultaneously". NULLs are used when a generator is
-# "shorter" than another. In SQL, these generators can be either a generator
-# function such as generate_series(), or a scalar function such as
-# upper(). For example, consider this query:
+# "shorter" than another.  For example:
 #
-#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
 #
-# It is equivalent to (Zip [(Function generate_series), (Function upper)]).
-# It produces:
+# ProjectSet corresponds to a relational operator project(R, a, b, c, ...)
+# which, for each row in R, produces all the rows produced by zip(a, b, c, ...)
+# with the values of R prefixed. Formally, this performs a lateral cross join
+# of R with zip(a,b,c).
 #
-#     generate_series | upper
-#    -----------------+-------
-#                   0 | ABC
-#                   1 | NULL
-#
-# In the Zip operation, Funcs represents the list of functions, and Cols
-# represents the columns output by the functions. Funcs and Cols might not be
-# the same length since a single function may output multiple columns
-# (e.g., pg_get_keywords() outputs three columns).
+# See the Zip header for more details.
 [Relational]
-define Zip {
-    Funcs ScalarListExpr
-    Cols  ColList
+define ProjectSet {
+    Input RelExpr
+    Zip   ZipExpr
 }
+

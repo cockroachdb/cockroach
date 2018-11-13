@@ -926,16 +926,14 @@ project
            │         ├── sort
            │         │    ├── columns: generate_series:1(int)
            │         │    ├── ordering: -1
-           │         │    └── inner-join-apply
+           │         │    └── project-set
            │         │         ├── columns: generate_series:1(int)
            │         │         ├── values
            │         │         │    └── tuple [type=tuple]
-           │         │         ├── zip
-           │         │         │    ├── columns: generate_series:1(int)
-           │         │         │    └── function: generate_series [type=int]
-           │         │         │         ├── const: 1 [type=int]
-           │         │         │         └── const: 100 [type=int]
-           │         │         └── filters (true)
+           │         │         └── zip
+           │         │              └── function: generate_series [type=int]
+           │         │                   ├── const: 1 [type=int]
+           │         │                   └── const: 100 [type=int]
            │         └── aggregations
            │              └── array-agg [type=int[]]
            │                   └── variable: generate_series [type=int]

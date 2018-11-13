@@ -186,6 +186,27 @@ func (n AggregationsExpr) OutputCols() opt.ColSet {
 	return colSet
 }
 
+// OuterCols returns the set of outer columns needed by any of the zip
+// expressions.
+func (n ZipExpr) OuterCols(mem *Memo) opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
+	}
+	return colSet
+}
+
+// OutputCols returns the set of columns constructed by the Zip expression.
+func (n ZipExpr) OutputCols() opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		for _, col := range n[i].Cols {
+			colSet.Add(int(col))
+		}
+	}
+	return colSet
+}
+
 // TupleOrdinal is an ordinal index into an expression of type Tuple. It is
 // used by the ColumnAccess scalar expression.
 type TupleOrdinal uint32

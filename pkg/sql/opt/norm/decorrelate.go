@@ -244,7 +244,7 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.Col
 	newRows := make(memo.ScalarListExpr, 0, len(rows))
 
 	var hoister subqueryHoister
-	hoister.init(c, c.constructNoColsRow())
+	hoister.init(c, c.ConstructNoColsRow())
 	for _, item := range rows {
 		newRows = append(newRows, hoister.hoistAll(item))
 	}
@@ -255,8 +255,8 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.Col
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outCols)
 }
 
-// HoistZipSubquery searches the Zip operator's functions for correlated
-// subqueries. Any found queries are hoisted into LeftJoinApply or
+// HoistProjectSetSubquery searches the ProjectSet operator's functions for
+// correlated subqueries. Any found queries are hoisted into LeftJoinApply or
 // InnerJoinApply operators, depending on subquery cardinality:
 //
 //   SELECT generate_series
@@ -278,23 +278,26 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.Col
 //     ON True
 //   )
 //
-// The dummy VALUES clause with a singleton empty row is added to the tree in
-// order to use the hoister, which requires an initial input query. While a
-// right join would be slightly better here, this is such a fringe case that
-// it's not worth the extra code complication.
-func (c *CustomFuncs) HoistZipSubquery(funcs memo.ScalarListExpr, cols opt.ColList) memo.RelExpr {
-	newFuncs := make(memo.ScalarListExpr, 0, len(funcs))
+func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipExpr) memo.RelExpr {
+	newZip := make(memo.ZipExpr, 0, len(zip))
 
 	var hoister subqueryHoister
-	hoister.init(c, c.constructNoColsRow())
-	for _, item := range funcs {
-		newFuncs = append(newFuncs, hoister.hoistAll(item))
+	hoister.init(c, input)
+	for i := range zip {
+		item := &zip[i]
+		if item.ScalarProps(c.mem).Rule.HasHoistableSubquery {
+			replaced := hoister.hoistAll(item.Func)
+			newZip = append(newZip, memo.ZipItem{
+				Func:           replaced,
+				ZipItemPrivate: memo.ZipItemPrivate{Cols: item.Cols},
+			})
+		} else {
+			newZip = append(newZip, *item)
+		}
 	}
 
-	zip := c.f.ConstructZip(newFuncs, cols)
-	join := c.f.ConstructInnerJoinApply(hoister.input(), zip, memo.TrueFilter)
-	outCols := zip.Relational().OutputCols
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outCols)
+	projectSet := c.f.ConstructProjectSet(hoister.input(), newZip)
+	return c.f.ConstructProject(projectSet, memo.EmptyProjectionsExpr, c.OutputCols(input))
 }
 
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds
@@ -668,9 +671,9 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExp
 	return c.f.DynamicConstruct(op, left, right).(opt.ScalarExpr)
 }
 
-// constructNoColsRow returns a Values operator having a single row with zero
+// ConstructNoColsRow returns a Values operator having a single row with zero
 // columns.
-func (c *CustomFuncs) constructNoColsRow() memo.RelExpr {
+func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
 	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
 }
 
