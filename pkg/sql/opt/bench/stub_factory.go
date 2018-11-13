@@ -66,7 +66,10 @@ func (f *stubFactory) ConstructRender(
 }
 
 func (f *stubFactory) ConstructHashJoin(
-	joinType sqlbase.JoinType, left, right exec.Node, onCond tree.TypedExpr,
+	joinType sqlbase.JoinType,
+	left, right exec.Node,
+	leftEqCols, rightEqCols []exec.ColumnOrdinal,
+	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
