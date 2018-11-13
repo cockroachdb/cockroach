@@ -387,49 +387,60 @@ func TestHashJoinerInt64(t *testing.T) {
 
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
-		runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
-			leftSource, rightSource := sources[0], sources[1]
 
-			spec := hashJoinerSpec{
-				left: hashJoinerSourceSpec{
-					eqCols:      tc.leftEqCols,
-					outCols:     tc.leftOutCols,
-					sourceTypes: tc.leftTypes,
-					source:      leftSource,
-				},
+		buildFlags := []bool{false}
+		if tc.buildDistinct {
+			buildFlags = append(buildFlags, true)
+		}
 
-				right: hashJoinerSourceSpec{
-					eqCols:      tc.rightEqCols,
-					outCols:     tc.rightOutCols,
-					sourceTypes: tc.rightTypes,
-					source:      rightSource,
-				},
+		for _, buildDistinct := range buildFlags {
+			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
+				runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+					leftSource, rightSource := sources[0], sources[1]
 
-				buildRightSide: tc.buildRightSide,
-				buildDistinct:  tc.buildDistinct,
-			}
+					spec := hashJoinerSpec{
+						left: hashJoinerSourceSpec{
+							eqCols:      tc.leftEqCols,
+							outCols:     tc.leftOutCols,
+							sourceTypes: tc.leftTypes,
+							source:      leftSource,
+						},
 
-			hj := &hashJoinEqInnerOp{
-				spec: spec,
-			}
+						right: hashJoinerSourceSpec{
+							eqCols:      tc.rightEqCols,
+							outCols:     tc.rightOutCols,
+							sourceTypes: tc.rightTypes,
+							source:      rightSource,
+						},
 
-			nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-			nLeftOutCols := len(tc.leftOutCols)
-			nLeftCols := len(tc.leftTypes)
+						buildRightSide: tc.buildRightSide,
+						buildDistinct:  tc.buildDistinct,
+					}
 
-			cols := make([]int, nOutCols)
-			copy(cols, tc.leftOutCols)
+					hj := &hashJoinEqInnerOp{
+						spec: spec,
+					}
 
-			for i, colIdx := range tc.rightOutCols {
-				cols[i+nLeftOutCols] = colIdx + nLeftCols
-			}
+					nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
+					nLeftOutCols := len(tc.leftOutCols)
+					nLeftCols := len(tc.leftTypes)
 
-			out := newOpTestOutput(hj, cols, tc.expectedTuples)
+					cols := make([]int, nOutCols)
+					copy(cols, tc.leftOutCols)
 
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
-		})
+					for i, colIdx := range tc.rightOutCols {
+						cols[i+nLeftOutCols] = colIdx + nLeftCols
+					}
+
+					out := newOpTestOutput(hj, cols, tc.expectedTuples)
+
+					if err := out.Verify(); err != nil {
+						t.Fatal(err)
+					}
+				})
+			})
+
+		}
 	}
 }
 
@@ -452,43 +463,47 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	batch.SetLength(ColBatchSize)
 
-	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(batch, nBatches)
-				rightSource := newRepeatableBatchSource(batch)
+	for _, buildDistinct := range []bool{true, false} {
+		b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
+			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+					// batch) * nCols (number of columns / row) * 2 (number of sources).
+					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						leftSource := newFiniteBatchSource(batch, nBatches)
+						rightSource := newRepeatableBatchSource(batch)
 
-				spec := hashJoinerSpec{
-					left: hashJoinerSourceSpec{
-						eqCols:      []int{0, 2},
-						outCols:     []int{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-					},
+						spec := hashJoinerSpec{
+							left: hashJoinerSourceSpec{
+								eqCols:      []int{0, 2},
+								outCols:     []int{0, 1},
+								sourceTypes: sourceTypes,
+								source:      leftSource,
+							},
 
-					right: hashJoinerSourceSpec{
-						eqCols:      []int{1, 3},
-						outCols:     []int{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-					},
+							right: hashJoinerSourceSpec{
+								eqCols:      []int{1, 3},
+								outCols:     []int{2, 3},
+								sourceTypes: sourceTypes,
+								source:      rightSource,
+							},
 
-					buildDistinct: true,
-				}
+							buildDistinct: buildDistinct,
+						}
 
-				hj := &hashJoinEqInnerOp{
-					spec: spec,
-				}
+						hj := &hashJoinEqInnerOp{
+							spec: spec,
+						}
 
-				hj.Init()
+						hj.Init()
 
-				for i := 0; i < nBatches; i++ {
-					hj.Next()
-				}
+						for i := 0; i < nBatches; i++ {
+							hj.Next()
+						}
+					}
+				})
 			}
 		})
 	}

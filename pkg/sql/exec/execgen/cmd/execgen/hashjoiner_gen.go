@@ -104,7 +104,7 @@ func (ht *hashTable) rehash(
 // checkCol determines if the current key column in the groupID buckets
 // matches the specified equality column key. If there is a match, then the key
 // is added to differs. If the bucket has reached the end, the key is rejected.
-func (prober *hashJoinProber) fastCheckCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	{{range .}}
 		case types.{{.ExecType}}:

@@ -15,8 +15,6 @@
 package exec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -581,7 +579,8 @@ func (prober *hashJoinProber) fastProbe() ColBatch {
 			prober.findNext(nToCheck)
 		}
 
-		prober.fastCollect(batch, batchSize, sel)
+		nResults := prober.fastCollect(batch, batchSize, sel)
+		prober.congregate(nResults, batch, batchSize, sel)
 
 		// Since is possible for the hash join to return an empty group, we should
 		// loop until we have a non-empty output batch, or an empty input batch.
@@ -615,7 +614,7 @@ func (prober *hashJoinProber) lookupInitial(batchSize uint16, sel []uint16) {
 // not been found. The new length of toCheck is returned by this function.
 func (prober *hashJoinProber) fastCheck(nToCheck uint16, sel []uint16) uint16 {
 	for i, t := range prober.ht.keyTypes {
-		prober.fastCheckCol(t, i, nToCheck, sel)
+		prober.checkCol(t, i, nToCheck, sel)
 	}
 
 	// Select the indices that differ and put them into toCheck.
@@ -641,7 +640,7 @@ func (prober *hashJoinProber) findNext(nToCheck uint16) {
 
 // fastCollect prepares the batch with the joined output columns where the
 // build row index for each probe row is given in the groupID slice.
-func (prober *hashJoinProber) fastCollect(batch ColBatch, batchSize uint16, sel []uint16) {
+func (prober *hashJoinProber) fastCollect(batch ColBatch, batchSize uint16, sel []uint16) uint16 {
 	nResults := uint16(0)
 
 	if sel != nil {
@@ -664,32 +663,7 @@ func (prober *hashJoinProber) fastCollect(batch ColBatch, batchSize uint16, sel 
 		}
 	}
 
-	// Stitch together the resulting inner join rows and add them to the output
-	// batch with the left table columns preceding right table columns.
-	var buildColOffset, probeColOffset int
-	if prober.probeLeftSide {
-		buildColOffset = len(prober.spec.sourceTypes)
-		probeColOffset = 0
-	} else {
-		buildColOffset = 0
-		probeColOffset = prober.nBuildCols
-	}
-
-	for i, colIdx := range prober.buildOutCols {
-		outCol := prober.batch.ColVec(colIdx + buildColOffset)
-		valCol := prober.ht.vals[prober.ht.outCols[i]]
-		colType := prober.ht.outTypes[i]
-		outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
-	}
-
-	for _, colIdx := range prober.spec.outCols {
-		outCol := prober.batch.ColVec(colIdx + probeColOffset)
-		valCol := batch.ColVec(colIdx)
-		colType := prober.spec.sourceTypes[colIdx]
-		outCol.CopyWithSelInt16(valCol, prober.probeIdx, nResults, colType)
-	}
-
-	prober.batch.SetLength(nResults)
+	return nResults
 }
 
 func (prober *hashJoinProber) probe() ColBatch {
@@ -723,7 +697,8 @@ func (prober *hashJoinProber) probe() ColBatch {
 			prober.findNext(nToCheck)
 		}
 
-		prober.collect(batch, batchSize, sel)
+		nResults := prober.collect(batch, batchSize, sel)
+		prober.congregate(nResults, batch, batchSize, sel)
 
 		if prober.batch.Length() > 0 {
 			break
@@ -731,34 +706,6 @@ func (prober *hashJoinProber) probe() ColBatch {
 	}
 
 	return prober.batch
-}
-
-func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
-	switch t {
-	case types.Int64:
-		buildKeys := prober.ht.vals[prober.ht.keyCols[keyColIdx]].Int64()
-		probeKeys := prober.keys[keyColIdx].Int64()
-
-		if sel != nil {
-			for i := uint16(0); i < nToCheck; i++ {
-				if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-					if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
-						prober.differs[prober.toCheck[i]] = true
-					}
-				}
-			}
-		} else {
-			for i := uint16(0); i < nToCheck; i++ {
-				if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-					if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
-						prober.differs[prober.toCheck[i]] = true
-					}
-				}
-			}
-		}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
-	}
 }
 
 func (prober *hashJoinProber) check(nToCheck uint16, sel []uint16) uint16 {
@@ -797,16 +744,15 @@ func (prober *hashJoinProber) check(nToCheck uint16, sel []uint16) uint16 {
 	return nDiffers
 }
 
-func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []uint16) {
+func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []uint16) uint16 {
 	nResults := uint16(0)
-
 	if sel != nil {
 		for i := uint16(0); i < batchSize; i++ {
 			currentID := prober.head[i]
 			for currentID != 0 {
 				if nResults >= ColBatchSize {
-					// todo(changangela): implement output batching
-					panic("hash join resulting batch is larger than ColBatchSize")
+					// todo(changangela): implement output batching properly
+					return nResults
 				}
 				prober.buildIdx[nResults] = currentID - 1
 				prober.probeIdx[nResults] = sel[i]
@@ -820,7 +766,7 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 			for currentID != 0 {
 				if nResults >= ColBatchSize {
 					// todo(changangela): implement output batching
-					panic("hash join resulting batch is larger than ColBatchSize")
+					return nResults
 				}
 				prober.buildIdx[nResults] = currentID - 1
 				prober.probeIdx[nResults] = i
@@ -830,6 +776,14 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 		}
 	}
 
+	return nResults
+}
+
+func (prober *hashJoinProber) congregate(
+	nResults uint16, batch ColBatch, batchSize uint16, sel []uint16,
+) {
+	// Stitch together the resulting inner join rows and add them to the output
+	// batch with the left table columns preceding right table columns.
 	var buildColOffset, probeColOffset int
 	if prober.probeLeftSide {
 		buildColOffset = len(prober.spec.sourceTypes)
