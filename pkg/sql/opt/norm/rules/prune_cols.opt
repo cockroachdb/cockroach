@@ -338,3 +338,28 @@
     (PruneCols $input $needed)
     $explainPrivate
 )
+
+# PruneProjectSetCols discards ProjectSet columns that are never used.
+[PruneProjectSetCols, Normalize]
+(Project
+    $input:(ProjectSet $innerInput:* $zip:*)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (ZipOuterCols $zip)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
+)
+=>
+(Project
+    (ProjectSet
+      (PruneCols $innerInput $needed)
+      $zip
+    )
+    $projections
+    $passthrough
+)

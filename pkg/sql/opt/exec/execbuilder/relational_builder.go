@@ -182,8 +182,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.MergeJoinExpr:
 		ep, err = b.buildMergeJoin(t)
 
-	case *memo.ZipExpr:
-		ep, err = b.buildZip(t)
+	case *memo.ProjectSetExpr:
+		ep, err = b.buildProjectSet(t)
 
 	default:
 		if opt.IsSetOp(e) {
@@ -195,10 +195,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			break
 		}
 		if opt.IsJoinApplyOp(e) {
-			if e.Child(1).Op() == opt.ZipOp {
-				ep, err = b.buildProjectSet(e)
-				break
-			}
 			return execPlan{}, b.decorrelationError()
 		}
 		return execPlan{}, errors.Errorf("unsupported relational op %s", e.Op())
@@ -877,88 +873,48 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	return res, nil
 }
 
-// initZipBuild builds the expressions in a Zip operation and initializes the
-// data structures needed to build a projectSetNode.
-// Note: this function modifies outputCols.
-func (b *Builder) initZipBuild(
-	zip *memo.ZipExpr, outputCols opt.ColMap, scalarCtx buildScalarCtx,
-) (tree.TypedExprs, sqlbase.ResultColumns, []int, opt.ColMap, error) {
-	exprs := make(tree.TypedExprs, len(zip.Funcs))
-	numColsPerGen := make([]int, len(exprs))
-	var err error
-	for i, child := range zip.Funcs {
-		exprs[i], err = b.buildScalar(&scalarCtx, child)
-		if err != nil {
-			return nil, nil, nil, opt.ColMap{}, err
-		}
-
-		if fn, ok := child.(*memo.FunctionExpr); ok && fn.Properties.Class == tree.GeneratorClass {
-			numColsPerGen[i] = len(fn.Properties.ReturnLabels)
-		} else {
-			numColsPerGen[i] = 1
-		}
+func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
+	input, err := b.buildRelational(projectSet.Input)
+	if err != nil {
+		return execPlan{}, err
 	}
 
+	zip := projectSet.Zip
 	md := b.mem.Metadata()
-	resultCols := make(sqlbase.ResultColumns, len(zip.Cols))
-	for i, col := range zip.Cols {
-		resultCols[i].Name = md.ColumnLabel(col)
-		resultCols[i].Typ = md.ColumnType(col)
+	scalarCtx := input.makeBuildScalarCtx()
+
+	exprs := make(tree.TypedExprs, len(zip))
+	zipCols := make(sqlbase.ResultColumns, 0, len(zip))
+	numColsPerGen := make([]int, len(zip))
+
+	ep := execPlan{outputCols: input.outputCols}
+	n := ep.outputCols.Len()
+
+	for i := range zip {
+		item := &zip[i]
+		exprs[i], err = b.buildScalar(&scalarCtx, item.Func)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		for _, col := range item.Cols {
+			zipCols = append(zipCols, sqlbase.ResultColumn{
+				Name: md.ColumnLabel(col),
+				Typ:  md.ColumnType(col),
+			})
+
+			ep.outputCols.Set(int(col), n)
+			n++
+		}
+
+		numColsPerGen[i] = len(item.Cols)
 	}
 
-	numInputCols := outputCols.Len()
-	for i, col := range zip.Cols {
-		outputCols.Set(int(col), i+numInputCols)
-	}
-
-	return exprs, resultCols, numColsPerGen, outputCols, nil
-}
-
-func (b *Builder) buildZip(zip *memo.ZipExpr) (execPlan, error) {
-	exprs, resultCols, numColsPerGen, outputCols, err := b.initZipBuild(
-		zip, opt.ColMap{}, buildScalarCtx{},
-	)
+	ep.root, err = b.factory.ConstructProjectSet(input.root, exprs, zipCols, numColsPerGen)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	// This is an uncorrelated Zip, so the input to the ProjectSet node is empty.
-	input, err := b.factory.ConstructValues([][]tree.TypedExpr{{}}, nil)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	node, err := b.factory.ConstructProjectSet(input, exprs, resultCols, numColsPerGen)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	ep := execPlan{root: node}
-	ep.outputCols = outputCols
-	return ep, nil
-}
-
-func (b *Builder) buildProjectSet(join memo.RelExpr) (execPlan, error) {
-	input, err := b.buildRelational(join.Child(0).(memo.RelExpr))
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	ctx := input.makeBuildScalarCtx()
-	exprs, resultCols, numColsPerGen, outputCols, err := b.initZipBuild(
-		join.Child(1).(*memo.ZipExpr), input.outputCols, ctx,
-	)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	node, err := b.factory.ConstructProjectSet(input.root, exprs, resultCols, numColsPerGen)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	ep := execPlan{root: node}
-	ep.outputCols = outputCols
 	return ep, nil
 }
 

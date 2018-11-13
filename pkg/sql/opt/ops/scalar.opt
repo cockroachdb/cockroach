@@ -232,6 +232,55 @@ define FiltersItem {
     scalar ScalarProps
 }
 
+# Zip represents a functional zip over generators a,b,c, which returns tuples of
+# values from a,b,c picked "simultaneously". NULLs are used when a generator is
+# "shorter" than another. In SQL, these generators can be either generator
+# functions such as generate_series(), or scalar functions or expressions such
+# as upper() or CAST. For example, consider this query:
+#
+#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#
+# It is equivalent to:
+#
+#    (Zip [
+#            (ZipItem (Function generate_series)),
+#            (ZipItem (Function upper))
+#         ]
+#    )
+#
+# It produces:
+#
+#     generate_series | upper
+#    -----------------+-------
+#                   0 | ABC
+#                   1 | NULL
+#
+[Scalar, List]
+define Zip {
+}
+
+# ZipItem contains a generator function or scalar expression that is contained
+# in a Zip. See the Zip header for more details.
+[Scalar, ListItem]
+define ZipItem {
+    Func ScalarExpr
+
+    _ ZipItemPrivate
+}
+
+# ZipItemPrivate contains the list of output columns for the generator function
+# or scalar expression in a ZipItem, as well as a set of lazily-populated
+# scalar properties that apply to the ZipItem. Cols is a list since a single
+# function may output multiple columns (e.g., pg_get_keywords() outputs three
+# columns).
+[Private]
+define ZipItemPrivate {
+    Cols ColList
+
+    # Lazily populated.
+    scalar ScalarProps
+}
+
 # And is the boolean conjunction operator that evalutes to true only if both of
 # its conditions evaluate to true.
 [Scalar, Boolean]

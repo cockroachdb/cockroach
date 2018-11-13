@@ -83,6 +83,105 @@ anti-join (merge)
  └── filters (true)
 
 # --------------------------------------------------
+# DecorrelateProjectSet
+# --------------------------------------------------
+
+opt expect=DecorrelateProjectSet
+SELECT generate_series(0, 5) FROM xy
+----
+inner-join
+ ├── columns: generate_series:3(int)
+ ├── side-effects
+ ├── scan xy
+ ├── project-set
+ │    ├── columns: generate_series:3(int)
+ │    ├── side-effects
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int, side-effects]
+ │              ├── const: 0 [type=int]
+ │              └── const: 5 [type=int]
+ └── filters (true)
+
+opt expect=DecorrelateProjectSet
+SELECT * FROM a WHERE i IN (SELECT generate_series(k, i) FROM xy)
+----
+semi-join-apply
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── inner-join
+ │    ├── columns: generate_series:8(int)
+ │    ├── outer: (1,2)
+ │    ├── side-effects
+ │    ├── scan xy
+ │    ├── project-set
+ │    │    ├── columns: generate_series:8(int)
+ │    │    ├── outer: (1,2)
+ │    │    ├── side-effects
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         └── function: generate_series [type=int, outer=(1,2), side-effects]
+ │    │              ├── variable: k [type=int]
+ │    │              └── variable: i [type=int]
+ │    └── filters (true)
+ └── filters
+      └── i = generate_series [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+opt expect=DecorrelateProjectSet
+SELECT generate_series(0, (SELECT generate_series(1,0) FROM xy)) FROM uv
+----
+inner-join
+ ├── columns: generate_series:6(int)
+ ├── side-effects
+ ├── scan uv
+ ├── project-set
+ │    ├── columns: generate_series:6(int)
+ │    ├── side-effects
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int, side-effects]
+ │              ├── const: 0 [type=int]
+ │              └── subquery [type=int]
+ │                   └── max1-row
+ │                        ├── columns: generate_series:5(int)
+ │                        ├── cardinality: [0 - 1]
+ │                        ├── side-effects
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(5)
+ │                        └── inner-join
+ │                             ├── columns: generate_series:5(int)
+ │                             ├── side-effects
+ │                             ├── scan xy
+ │                             ├── project-set
+ │                             │    ├── columns: generate_series:5(int)
+ │                             │    ├── side-effects
+ │                             │    ├── values
+ │                             │    │    ├── cardinality: [1 - 1]
+ │                             │    │    ├── key: ()
+ │                             │    │    └── tuple [type=tuple]
+ │                             │    └── zip
+ │                             │         └── function: generate_series [type=int, side-effects]
+ │                             │              ├── const: 1 [type=int]
+ │                             │              └── const: 0 [type=int]
+ │                             └── filters (true)
+ └── filters (true)
+
+# --------------------------------------------------
 # TryDecorrelateSelect
 # --------------------------------------------------
 opt expect=TryDecorrelateSelect
@@ -1081,37 +1180,6 @@ project
       └── filters
            └── u IS DISTINCT FROM i [type=bool, outer=(3,6)]
 
-opt expect=TryDecorrelateInnerLeftJoin
-SELECT generate_series(1, (SELECT u FROM uv WHERE u=x))
-FROM xy
-----
-project
- ├── columns: generate_series:5(int)
- ├── side-effects
- └── inner-join-apply
-      ├── columns: x:1(int!null) u:3(int) generate_series:5(int)
-      ├── side-effects
-      ├── left-join (merge)
-      │    ├── columns: x:1(int!null) u:3(int)
-      │    ├── left ordering: +1
-      │    ├── right ordering: +3
-      │    ├── key: (1,3)
-      │    ├── scan xy
-      │    │    ├── columns: x:1(int!null)
-      │    │    ├── key: (1)
-      │    │    └── ordering: +1
-      │    ├── scan uv
-      │    │    ├── columns: u:3(int!null)
-      │    │    ├── key: (3)
-      │    │    └── ordering: +3
-      │    └── filters (true)
-      ├── zip
-      │    ├── columns: generate_series:5(int)
-      │    ├── outer: (3)
-      │    ├── side-effects
-      │    └── generate_series(1, u) [type=int]
-      └── filters (true)
-
 # --------------------------------------------------
 # TryDecorrelateGroupBy
 # --------------------------------------------------
@@ -2099,6 +2167,35 @@ project
       │         └── COALESCE(u, 10) [type=int, outer=(8)]
       └── filters
            └── x = computed [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+
+# Right input of SemiJoin is ProjectSet.
+opt expect=TryDecorrelateSemiJoin
+SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10), generate_series(y, 10))
+----
+group-by
+ ├── columns: x:1(int!null) y:2(int)
+ ├── grouping columns: x:1(int!null)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── project-set
+ │    ├── columns: x:1(int!null) y:2(int) generate_series:3(int) generate_series:4(int)
+ │    ├── side-effects
+ │    ├── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── zip
+ │         ├── function: generate_series [type=int, outer=(1), side-effects]
+ │         │    ├── variable: x [type=int]
+ │         │    └── const: 10 [type=int]
+ │         └── function: generate_series [type=int, outer=(2), side-effects]
+ │              ├── variable: y [type=int]
+ │              └── const: 10 [type=int]
+ └── aggregations
+      └── const-agg [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # --------------------------------------------------
 # TryDecorrelateLimitOne
@@ -3759,16 +3856,16 @@ project
  └── projections
       └── variable: column1 [type=bool, outer=(8)]
 
-# --------------------------------------------------
-# HoistZipSubquery and TryDecorrelateZip
-# --------------------------------------------------
-opt expect=(HoistZipSubquery,TryDecorrelateZip)
+# ---------------------------------------------------
+# HoistProjectSetSubquery + TryDecorrelateProjectSet
+# ---------------------------------------------------
+opt expect=HoistProjectSetSubquery
 SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
 ----
 project
  ├── columns: generate_series:5(int)
  ├── side-effects
- └── inner-join-apply
+ └── project-set
       ├── columns: v:4(int) generate_series:5(int)
       ├── side-effects
       ├── project
@@ -3789,66 +3886,61 @@ project
       │         │    ├── fd: (3)-->(4)
       │         │    └── ordering: +3
       │         └── filters (true)
-      ├── zip
-      │    ├── columns: generate_series:5(int)
-      │    ├── outer: (4)
-      │    ├── side-effects
-      │    └── generate_series(1, v) [type=int]
-      └── filters (true)
+      └── zip
+           └── function: generate_series [type=int, outer=(4), side-effects]
+                ├── const: 1 [type=int]
+                └── variable: v [type=int]
 
 # Zip correlation within EXISTS.
-opt expect=HoistZipSubquery
+opt expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
 ----
-semi-join-apply
+group-by
  ├── columns: x:1(int!null) y:2(int)
+ ├── grouping columns: x:1(int!null)
  ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── scan xy
- │    ├── columns: x:1(int!null) y:2(int)
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- ├── inner-join-apply
- │    ├── columns: v:4(int) generate_series:5(int)
- │    ├── outer: (1)
+ ├── project-set
+ │    ├── columns: x:1(int!null) y:2(int) v:4(int) generate_series:5(int)
  │    ├── side-effects
+ │    ├── fd: (1)-->(2)
  │    ├── project
- │    │    ├── columns: v:4(int)
- │    │    ├── outer: (1)
- │    │    ├── cardinality: [1 - ]
- │    │    └── right-join
- │    │         ├── columns: u:3(int) v:4(int)
- │    │         ├── outer: (1)
- │    │         ├── cardinality: [1 - ]
- │    │         ├── key: (3)
- │    │         ├── fd: (3)-->(4)
+ │    │    ├── columns: x:1(int!null) y:2(int) v:4(int)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── left-join (merge)
+ │    │         ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +3
+ │    │         ├── key: (1,3)
+ │    │         ├── fd: (1)-->(2), (3)-->(4)
+ │    │         ├── scan xy
+ │    │         │    ├── columns: x:1(int!null) y:2(int)
+ │    │         │    ├── key: (1)
+ │    │         │    ├── fd: (1)-->(2)
+ │    │         │    └── ordering: +1
  │    │         ├── scan uv
  │    │         │    ├── columns: u:3(int!null) v:4(int)
  │    │         │    ├── key: (3)
- │    │         │    └── fd: (3)-->(4)
- │    │         ├── values
- │    │         │    ├── cardinality: [1 - 1]
- │    │         │    ├── key: ()
- │    │         │    └── tuple [type=tuple]
- │    │         └── filters
- │    │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │    ├── zip
- │    │    ├── columns: generate_series:5(int)
- │    │    ├── outer: (4)
- │    │    ├── side-effects
- │    │    └── generate_series(1, v) [type=int]
- │    └── filters (true)
- └── filters (true)
+ │    │         │    ├── fd: (3)-->(4)
+ │    │         │    └── ordering: +3
+ │    │         └── filters (true)
+ │    └── zip
+ │         └── function: generate_series [type=int, outer=(4), side-effects]
+ │              ├── const: 1 [type=int]
+ │              └── variable: v [type=int]
+ └── aggregations
+      └── const-agg [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # Function contains multiple subqueries in arguments.
-opt expect=HoistZipSubquery
+opt expect=HoistProjectSetSubquery
 SELECT generate_series((select y FROM xy WHERE x=k), (SELECT v FROM uv WHERE u=k)) FROM a
 ----
 project
  ├── columns: generate_series:10(int)
  ├── side-effects
- └── inner-join-apply
+ └── project-set
       ├── columns: y:7(int) v:9(int) generate_series:10(int)
       ├── side-effects
       ├── project
@@ -3884,15 +3976,13 @@ project
       │         │    ├── fd: (8)-->(9)
       │         │    └── ordering: +8
       │         └── filters (true)
-      ├── zip
-      │    ├── columns: generate_series:10(int)
-      │    ├── outer: (7,9)
-      │    ├── side-effects
-      │    └── generate_series(y, v) [type=int]
-      └── filters (true)
+      └── zip
+           └── function: generate_series [type=int, outer=(7,9), side-effects]
+                ├── variable: y [type=int]
+                └── variable: v [type=int]
 
 # Multiple functions.
-opt expect=HoistZipSubquery
+opt expect=HoistProjectSetSubquery
 SELECT
     generate_series(1, (SELECT v FROM uv WHERE u=k)),
     information_schema._pg_expandarray(ARRAY[(SELECT x FROM xy WHERE x=k)])
@@ -3901,7 +3991,7 @@ FROM a
 project
  ├── columns: generate_series:8(int) information_schema._pg_expandarray:13(tuple{int AS x, int AS n})
  ├── side-effects
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: k:1(int!null) v:7(int) generate_series:8(int) xy.x:9(int) x:11(int) n:12(int)
  │    ├── side-effects
  │    ├── left-join (merge)
@@ -3933,15 +4023,226 @@ project
  │    │    │    ├── key: (9)
  │    │    │    └── ordering: +9
  │    │    └── filters (true)
- │    ├── zip
- │    │    ├── columns: generate_series:8(int) x:11(int) n:12(int)
- │    │    ├── outer: (7,9)
- │    │    ├── side-effects
- │    │    ├── generate_series(1, v) [type=int]
- │    │    └── information_schema._pg_expandarray(ARRAY[xy.x]) [type=tuple{int AS x, int AS n}]
- │    └── filters (true)
+ │    └── zip
+ │         ├── function: generate_series [type=int, outer=(7), side-effects]
+ │         │    ├── const: 1 [type=int]
+ │         │    └── variable: v [type=int]
+ │         └── function: information_schema._pg_expandarray [type=tuple{int AS x, int AS n}, outer=(9), side-effects]
+ │              └── ARRAY[xy.x] [type=int[]]
  └── projections
       └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
+
+exec-ddl
+CREATE TABLE articles (
+  id INT PRIMARY KEY,
+  body STRING,
+  description STRING,
+  title STRING,
+  slug STRING,
+  tag_list STRING[],
+  user_id STRING,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+)
+----
+TABLE articles
+ ├── id int not null
+ ├── body string
+ ├── description string
+ ├── title string
+ ├── slug string
+ ├── tag_list string[]
+ ├── user_id string
+ ├── created_at timestamp
+ ├── updated_at timestamp
+ └── INDEX primary
+      └── id int not null
+
+# Regression test for #31706.
+opt expect=(TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
+SELECT a0.id, a0.body, a0.description, a0.title, a0.slug, a0.tag_list, a0.user_id, a0.created_at, a0.updated_at
+    FROM articles AS a0
+   WHERE EXISTS(SELECT * FROM unnest(a0.tag_list) AS tag WHERE tag = 'dragons')
+ORDER BY a0.created_at
+   LIMIT 10
+  OFFSET 0;
+----
+limit
+ ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ ├── internal-ordering: +8
+ ├── cardinality: [0 - 10]
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-9)
+ ├── ordering: +8
+ ├── offset
+ │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    ├── internal-ordering: +8
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-9)
+ │    ├── ordering: +8
+ │    ├── sort
+ │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │    ├── side-effects
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-9)
+ │    │    ├── ordering: +8
+ │    │    └── group-by
+ │    │         ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │         ├── grouping columns: id:1(int!null)
+ │    │         ├── side-effects
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-9)
+ │    │         ├── select
+ │    │         │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string!null)
+ │    │         │    ├── side-effects
+ │    │         │    ├── fd: ()-->(10), (1)-->(2-9)
+ │    │         │    ├── project-set
+ │    │         │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string)
+ │    │         │    │    ├── side-effects
+ │    │         │    │    ├── fd: (1)-->(2-9)
+ │    │         │    │    ├── scan articles
+ │    │         │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │         │    │    │    ├── key: (1)
+ │    │         │    │    │    └── fd: (1)-->(2-9)
+ │    │         │    │    └── zip
+ │    │         │    │         └── function: unnest [type=string, outer=(6), side-effects]
+ │    │         │    │              └── variable: tag_list [type=string[]]
+ │    │         │    └── filters
+ │    │         │         └── unnest = 'dragons' [type=bool, outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight), fd=()-->(10)]
+ │    │         └── aggregations
+ │    │              ├── const-agg [type=string, outer=(2)]
+ │    │              │    └── variable: body [type=string]
+ │    │              ├── const-agg [type=string, outer=(3)]
+ │    │              │    └── variable: description [type=string]
+ │    │              ├── const-agg [type=string, outer=(4)]
+ │    │              │    └── variable: title [type=string]
+ │    │              ├── const-agg [type=string, outer=(5)]
+ │    │              │    └── variable: slug [type=string]
+ │    │              ├── const-agg [type=string[], outer=(6)]
+ │    │              │    └── variable: tag_list [type=string[]]
+ │    │              ├── const-agg [type=string, outer=(7)]
+ │    │              │    └── variable: user_id [type=string]
+ │    │              ├── const-agg [type=timestamp, outer=(8)]
+ │    │              │    └── variable: created_at [type=timestamp]
+ │    │              └── const-agg [type=timestamp, outer=(9)]
+ │    │                   └── variable: updated_at [type=timestamp]
+ │    └── const: 0 [type=int]
+ └── const: 10 [type=int]
+
+opt expect=TryDecorrelateProjectSet
+SELECT * FROM articles, xy WHERE EXISTS(
+  SELECT * FROM ROWS FROM (generate_series(x, id), length(title), upper(title), unnest(tag_list))
+)
+----
+project
+ ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
+ ├── side-effects
+ ├── key: (1,10)
+ ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11)
+ └── select
+      ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) true_agg:17(bool!null)
+      ├── side-effects
+      ├── key: (1,10)
+      ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11,17)
+      ├── group-by
+      │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) true_agg:17(bool)
+      │    ├── grouping columns: id:1(int!null) x:10(int!null)
+      │    ├── side-effects
+      │    ├── key: (1,10)
+      │    ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11,17)
+      │    ├── project
+      │    │    ├── columns: true:16(bool!null) id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
+      │    │    ├── side-effects
+      │    │    ├── fd: ()-->(16), (1)-->(2-9), (10)-->(11)
+      │    │    ├── project-set
+      │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) generate_series:12(int) length:13(int) upper:14(string) unnest:15(string)
+      │    │    │    ├── side-effects
+      │    │    │    ├── fd: (1)-->(2-9), (10)-->(11)
+      │    │    │    ├── inner-join
+      │    │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
+      │    │    │    │    ├── key: (1,10)
+      │    │    │    │    ├── fd: (1)-->(2-9), (10)-->(11)
+      │    │    │    │    ├── scan articles
+      │    │    │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    └── fd: (1)-->(2-9)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    ├── columns: x:10(int!null) y:11(int)
+      │    │    │    │    │    ├── key: (10)
+      │    │    │    │    │    └── fd: (10)-->(11)
+      │    │    │    │    └── filters (true)
+      │    │    │    └── zip
+      │    │    │         ├── function: generate_series [type=int, outer=(1,10), side-effects]
+      │    │    │         │    ├── variable: x [type=int]
+      │    │    │         │    └── variable: id [type=int]
+      │    │    │         ├── function: length [type=int, outer=(4)]
+      │    │    │         │    └── variable: title [type=string]
+      │    │    │         ├── function: upper [type=string, outer=(4)]
+      │    │    │         │    └── variable: title [type=string]
+      │    │    │         └── function: unnest [type=string, outer=(6), side-effects]
+      │    │    │              └── variable: tag_list [type=string[]]
+      │    │    └── projections
+      │    │         └── true [type=bool]
+      │    └── aggregations
+      │         ├── const-not-null-agg [type=bool, outer=(16)]
+      │         │    └── variable: true [type=bool]
+      │         ├── const-agg [type=int, outer=(11)]
+      │         │    └── variable: y [type=int]
+      │         ├── const-agg [type=string, outer=(2)]
+      │         │    └── variable: body [type=string]
+      │         ├── const-agg [type=string, outer=(3)]
+      │         │    └── variable: description [type=string]
+      │         ├── const-agg [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── const-agg [type=string, outer=(5)]
+      │         │    └── variable: slug [type=string]
+      │         ├── const-agg [type=string[], outer=(6)]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── const-agg [type=string, outer=(7)]
+      │         │    └── variable: user_id [type=string]
+      │         ├── const-agg [type=timestamp, outer=(8)]
+      │         │    └── variable: created_at [type=timestamp]
+      │         └── const-agg [type=timestamp, outer=(9)]
+      │              └── variable: updated_at [type=timestamp]
+      └── filters
+           └── true_agg IS NOT NULL [type=bool, outer=(17), constraints=(/17: (/NULL - ]; tight)]
+
+opt expect=TryDecorrelateProjectSet
+SELECT id FROM articles WHERE title = ANY(
+  SELECT unnest FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
+)
+----
+distinct-on
+ ├── columns: id:1(int!null)
+ ├── grouping columns: id:1(int!null)
+ ├── side-effects
+ ├── key: (1)
+ └── select
+      ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string) unnest:11(string!null) generate_series:12(int) lower:13(string)
+      ├── side-effects
+      ├── fd: (1)-->(4,6), (4)==(11), (11)==(4)
+      ├── project-set
+      │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
+      │    ├── side-effects
+      │    ├── fd: (1)-->(4,6)
+      │    ├── scan articles
+      │    │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[])
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4,6)
+      │    └── zip
+      │         ├── function: upper [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── function: unnest [type=string, outer=(6), side-effects]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── function: generate_series [type=int, side-effects]
+      │         │    ├── const: 0 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── function: lower [type=string]
+      │              └── const: 'ABC' [type=string]
+      └── filters
+           └── title = unnest [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
 
 # --------------------------------------------------
 # NormalizeSelectAnyFilter + NormalizeJoinAnyFilter

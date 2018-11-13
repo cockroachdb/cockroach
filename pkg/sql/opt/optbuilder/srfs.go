@@ -83,7 +83,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	inScope.context = "FROM"
 
 	// Build each of the provided expressions.
-	funcs := make(memo.ScalarListExpr, len(exprs))
+	zip := make(memo.ZipExpr, len(exprs))
 	for i, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
@@ -102,19 +102,20 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		}
 
 		var outCol *scopeColumn
+		startCols := len(outScope.cols)
 		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
-
-		funcs[i] = b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		zip[i].Func = b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		zip[i].Cols = make(opt.ColList, len(outScope.cols)-startCols)
+		for j := startCols; j < len(outScope.cols); j++ {
+			zip[i].Cols[j-startCols] = outScope.cols[j].id
+		}
 	}
 
-	// Get the output columns of the Zip operation and construct the Zip.
-	cols := make(opt.ColList, len(outScope.cols))
-	for i := 0; i < len(cols); i++ {
-		cols[i] = outScope.cols[i].id
-	}
-	outScope.expr = b.factory.ConstructZip(funcs, cols)
+	// Construct the zip as a ProjectSet with empty input.
+	input := b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+	outScope.expr = b.factory.ConstructProjectSet(input, zip)
 	return outScope
 }
 
@@ -141,33 +142,29 @@ func (b *Builder) finishBuildGeneratorFunction(
 	return fn
 }
 
-// constructProjectSet constructs a lateral cross join between the given input
-// group and a Zip operation constructed from the given srfs.
+// constructProjectSet constructs a ProjectSet, which is a lateral cross join
+// between the given input expression and a functional zip constructed from the
+// given srfs.
 //
 // This function is called at most once per SELECT clause, and it is only
-// called if at least one SRF was discovered in the SELECT list. The apply join
+// called if at least one SRF was discovered in the SELECT list. The ProjectSet
 // is necessary in case some of the SRFs depend on the input. For example,
 // consider this query:
 //
 //   SELECT generate_series(t.a, t.a + 1) FROM t
 //
 // In this case, the inputs to generate_series depend on table t, so during
-// execution, generate_series will be called once for each row of t (hence the
-// apply join).
-//
-// If the SRFs do not depend on the input, then the optimizer will replace the
-// apply join with a regular inner join during optimization.
+// execution, generate_series will be called once for each row of t.
 func (b *Builder) constructProjectSet(in memo.RelExpr, srfs []*srf) memo.RelExpr {
-	// Get the output columns and GroupIDs of the Zip operation.
-	cols := make(opt.ColList, 0, len(srfs))
-	funcs := make(memo.ScalarListExpr, len(srfs))
+	// Get the output columns and function expressions of the zip.
+	zip := make(memo.ZipExpr, len(srfs))
 	for i, srf := range srfs {
-		for _, col := range srf.cols {
-			cols = append(cols, col.id)
+		zip[i].Func = srf.fn
+		zip[i].Cols = make(opt.ColList, len(srf.cols))
+		for j, col := range srf.cols {
+			zip[i].Cols[j] = col.id
 		}
-		funcs[i] = srf.fn
 	}
 
-	zip := b.factory.ConstructZip(funcs, cols)
-	return b.factory.ConstructInnerJoinApply(in, zip, memo.TrueFilter)
+	return b.factory.ConstructProjectSet(in, zip)
 }

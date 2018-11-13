@@ -140,8 +140,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 	case opt.RowNumberOp:
 		cost = c.computeRowNumberCost(candidate.(*memo.RowNumberExpr))
 
-	case opt.ZipOp:
-		cost = c.computeZipCost(candidate.(*memo.ZipExpr))
+	case opt.ProjectSetOp:
+		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -372,9 +372,9 @@ func (c *coster) computeRowNumberCost(rowNum *memo.RowNumberExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeZipCost(zip *memo.ZipExpr) memo.Cost {
+func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(zip.Relational().Stats.RowCount) * cpuCostFactor
+	cost := memo.Cost(projectSet.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
 }
 

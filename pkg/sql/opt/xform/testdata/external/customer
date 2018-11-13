@@ -803,10 +803,16 @@ project
  │    │    │    ├── columns: column5:5(uuid) json_array_elements:4(jsonb)
  │    │    │    ├── side-effects
  │    │    │    ├── fd: (4)-->(5)
- │    │    │    ├── zip
+ │    │    │    ├── project-set
  │    │    │    │    ├── columns: json_array_elements:4(jsonb)
  │    │    │    │    ├── side-effects
- │    │    │    │    └── json_array_elements('[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]') [type=jsonb]
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    └── tuple [type=tuple]
+ │    │    │    │    └── zip
+ │    │    │    │         └── function: json_array_elements [type=jsonb, side-effects]
+ │    │    │    │              └── const: '[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]' [type=jsonb]
  │    │    │    └── projections
  │    │    │         └── (json_array_elements->>'secondary_id')::UUID [type=uuid, outer=(4)]
  │    │    └── filters (true)
