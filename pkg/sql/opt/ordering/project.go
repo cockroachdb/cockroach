@@ -15,6 +15,7 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
@@ -68,4 +69,16 @@ func projectOrderingToInput(
 	result := ordering.Copy()
 	result.ProjectCols(childOutCols)
 	return result
+}
+
+func projectBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	p := expr.(*memo.ProjectExpr)
+	// Project can only satisfy required orderings that refer to pass-through
+	// columns; it should always be possible to remap the columns in the input's
+	// provided ordering.
+	return remapProvided(
+		p.Input.ProvidedPhysical().Ordering,
+		&p.Input.Relational().FuncDeps,
+		p.Passthrough,
+	)
 }
