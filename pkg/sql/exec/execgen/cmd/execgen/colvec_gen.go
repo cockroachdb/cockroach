@@ -134,5 +134,5 @@ func genColVec(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genColVec, "colvec.og.go")
+	registerGenerator(genColVec, "colvec.eg.go")
 }
