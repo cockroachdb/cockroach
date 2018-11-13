@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -254,7 +255,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column.
 		inputPruneCols := DerivePruneCols(e.Child(0).(memo.RelExpr))
-		ordering := e.Private().(*props.OrderingChoice).ColSet()
+		ordering := e.Private().(*physical.OrderingChoice).ColSet()
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ordering)
 
 	case opt.RowNumberOp:

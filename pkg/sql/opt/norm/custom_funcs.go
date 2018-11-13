@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -327,13 +328,13 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 
 // HasColsInOrdering returns true if all columns that appear in an ordering are
 // output columns of the input expression.
-func (c *CustomFuncs) HasColsInOrdering(input memo.RelExpr, ordering props.OrderingChoice) bool {
+func (c *CustomFuncs) HasColsInOrdering(input memo.RelExpr, ordering physical.OrderingChoice) bool {
 	return ordering.CanProjectCols(input.Relational().OutputCols)
 }
 
 // OrderingCols returns all non-optional columns that are part of the given
 // OrderingChoice.
-func (c *CustomFuncs) OrderingCols(ordering props.OrderingChoice) opt.ColSet {
+func (c *CustomFuncs) OrderingCols(ordering physical.OrderingChoice) opt.ColSet {
 	return ordering.ColSet()
 }
 
@@ -341,8 +342,8 @@ func (c *CustomFuncs) OrderingCols(ordering props.OrderingChoice) opt.ColSet {
 // not part of the needed column set. Should only be called if HasColsInOrdering
 // is true.
 func (c *CustomFuncs) PruneOrdering(
-	ordering props.OrderingChoice, needed opt.ColSet,
-) props.OrderingChoice {
+	ordering physical.OrderingChoice, needed opt.ColSet,
+) physical.OrderingChoice {
 	if ordering.SubsetOfCols(needed) {
 		return ordering
 	}

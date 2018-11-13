@@ -16,23 +16,23 @@ package ordering
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func limitOrOffsetCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func limitOrOffsetCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// Limit/Offset require a certain ordering of their input, but can also pass
 	// through a stronger ordering. For example:
 	//   SELECT * FROM (SELECT x, y FROM t ORDER BY x LIMIT 10) ORDER BY x,y
 	// In this case the internal ordering is x+, but we can pass through x+,y+
 	// to satisfy both orderings.
-	return required.Intersects(expr.Private().(*props.OrderingChoice))
+	return required.Intersects(expr.Private().(*physical.OrderingChoice))
 }
 
 func limitOrOffsetBuildChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
 	if childIdx != 0 {
-		return props.OrderingChoice{}
+		return physical.OrderingChoice{}
 	}
-	return required.Intersection(parent.Private().(*props.OrderingChoice))
+	return required.Intersection(parent.Private().(*physical.OrderingChoice))
 }

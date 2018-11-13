@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -92,14 +92,16 @@ func (ep *execPlan) getColumnOrdinalSet(cols opt.ColSet) exec.ColumnOrdinalSet {
 
 // reqOrdering converts the ordering in the physical props to an OutputOrdering
 // (according to the outputCols map).
-func (ep *execPlan) reqOrdering(p *props.Physical) exec.OutputOrdering {
+func (ep *execPlan) reqOrdering(p *physical.Required) exec.OutputOrdering {
 	return exec.OutputOrdering(ep.sqlOrderingFromChoice(&p.Ordering))
 }
 
 // sqlOrderingFromChoice converts an OrderingChoice to a ColumnOrdering
 // (according to the outputCols map). An arbitrary column is chosen from each
 // column ordering group.
-func (ep *execPlan) sqlOrderingFromChoice(ordering *props.OrderingChoice) sqlbase.ColumnOrdering {
+func (ep *execPlan) sqlOrderingFromChoice(
+	ordering *physical.OrderingChoice,
+) sqlbase.ColumnOrdering {
 	if ordering.Any() {
 		return nil
 	}
@@ -353,7 +355,7 @@ func (b *Builder) buildSelect(sel *memo.SelectExpr) (execPlan, error) {
 
 // applySimpleProject adds a simple projection on top of an existing plan.
 func (b *Builder) applySimpleProject(
-	input execPlan, cols opt.ColSet, props *props.Physical,
+	input execPlan, cols opt.ColSet, props *physical.Required,
 ) (execPlan, error) {
 	// We have only pass-through columns.
 	colList := make([]exec.ColumnOrdinal, 0, cols.Len())
@@ -783,7 +785,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	// sort is on top of the index join.
 	// TODO(radu): Remove this code once we have support for a more general
 	// lookup join execution path.
-	var ordering *props.OrderingChoice
+	var ordering *physical.OrderingChoice
 	child := join.Input
 	if child.Op() == opt.SortOp {
 		ordering = &child.Physical().Ordering
@@ -990,7 +992,7 @@ func (b *Builder) needProjection(
 // ensureColumns applies a projection as necessary to make the output match the
 // given list of columns; colNames is optional.
 func (b *Builder) ensureColumns(
-	input execPlan, colList opt.ColList, colNames []string, props *props.Physical,
+	input execPlan, colList opt.ColList, colNames []string, props *physical.Required,
 ) (execPlan, error) {
 	cols, needProj := b.needProjection(input, colList)
 	if !needProj {
@@ -1016,7 +1018,7 @@ func (b *Builder) ensureColumns(
 
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
-func (b *Builder) applyPresentation(input execPlan, p *props.Physical) (execPlan, error) {
+func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execPlan, error) {
 	pres := p.Presentation
 	colList := make(opt.ColList, len(pres))
 	colNames := make([]string, len(pres))
@@ -1027,7 +1029,7 @@ func (b *Builder) applyPresentation(input execPlan, p *props.Physical) (execPlan
 	// The required ordering is not useful for a top-level projection (it is used
 	// by the distsql planner for internal nodes); we might not even be able to
 	// represent it because it can refer to columns not in the presentation.
-	return b.ensureColumns(input, colList, colNames, props.MinPhysProps)
+	return b.ensureColumns(input, colList, colNames, physical.MinRequired)
 }
 
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
@@ -1082,7 +1084,7 @@ func (b *Builder) buildShowTrace(show *memo.ShowTraceForSessionExpr) (execPlan, 
 // buildSortedInput is a helper method that can be reused to sort any input plan
 // by the given ordering.
 func (b *Builder) buildSortedInput(
-	input execPlan, ordering *props.OrderingChoice,
+	input execPlan, ordering *physical.OrderingChoice,
 ) (execPlan, error) {
 	colOrd := input.sqlOrderingFromChoice(ordering)
 	node, err := b.factory.ConstructSort(input.root, colOrd)

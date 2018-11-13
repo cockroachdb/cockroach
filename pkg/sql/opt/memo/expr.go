@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -51,7 +52,7 @@ type RelExpr interface {
 	// Physical is the set of physical properties with respect to which this
 	// expression was optimized. Enforcers may be added to the expression tree
 	// to ensure the physical properties are provided.
-	Physical() *props.Physical
+	Physical() *physical.Required
 
 	// FirstExpr returns the first member expression in the memo group (could be
 	// this expression if it happens to be first in the group). Subsequent members

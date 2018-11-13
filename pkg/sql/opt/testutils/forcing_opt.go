@@ -17,7 +17,7 @@ package testutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 )
 
@@ -143,7 +143,7 @@ func (fc *forcingCoster) AddAllowedPath(path exprPath) {
 }
 
 // ComputeCost is part of the xform.Coster interface.
-func (fc *forcingCoster) ComputeCost(e memo.RelExpr, required *props.Physical) memo.Cost {
+func (fc *forcingCoster) ComputeCost(e memo.RelExpr, required *physical.Required) memo.Cost {
 	// If no allowed paths have been added, allow all expressions.
 	if len(fc.allowed) != 0 {
 		// Derive the path of the expression in the tree.
