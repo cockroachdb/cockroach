@@ -329,8 +329,8 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "  return e.next\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
-		// Generate the Physical method.
-		fmt.Fprintf(g.w, "func (e *%s) Physical() *physical.Required {\n", opTyp.name)
+		// Generate the RequiredPhysical method.
+		fmt.Fprintf(g.w, "func (e *%s) RequiredPhysical() *physical.Required {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  return e.grp.bestProps().required\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
@@ -432,8 +432,8 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "  return nil\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
-	// Generate the Physical method.
-	fmt.Fprintf(g.w, "func (e *%s) Physical() *physical.Required {\n", opTyp.name)
+	// Generate the RequiredPhysical method.
+	fmt.Fprintf(g.w, "func (e *%s) RequiredPhysical() *physical.Required {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return e.best.required\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
