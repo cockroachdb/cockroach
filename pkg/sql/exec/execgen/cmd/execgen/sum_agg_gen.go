@@ -50,5 +50,5 @@ func genSumAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSumAgg, "sum_agg.og.go")
+	registerGenerator(genSumAgg, "sum_agg.eg.go")
 }
