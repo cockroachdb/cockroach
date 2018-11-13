@@ -220,6 +220,26 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "ISO, MDY" },
 	},
 
+	// See https://github.com/cockroachdb/cockroach/issues/26925
+	// XXX Link to cleanup issue
+	`default_int_size`: {
+		Set: func(ctx context.Context, m *sessionDataMutator, val string) error {
+			if size, ok := sessiondata.DefaultIntSizeFromString(val); ok {
+				m.SetDefaultIntSize(size)
+				return nil
+			}
+			return newVarValueError("default_int_size", val,
+				sessiondata.DefaultIntSize8.String(),
+				sessiondata.DefaultIntSize4.String())
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.DefaultIntSize.String()
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondata.DefaultIntSize(DefaultIntSize.Get(sv)).String()
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
