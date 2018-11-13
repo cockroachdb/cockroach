@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -106,19 +108,119 @@ func upperBound(c *cmd) keyBound {
 }
 
 type leafNode struct {
-	max   keyBound
+	ref   int32
 	count int16
 	leaf  bool
+	max   keyBound
 	cmds  [maxCmds]*cmd
-}
-
-func newLeafNode() *node {
-	return (*node)(unsafe.Pointer(&leafNode{leaf: true}))
 }
 
 type node struct {
 	leafNode
 	children [maxCmds + 1]*node
+}
+
+func leafToNode(ln *leafNode) *node {
+	return (*node)(unsafe.Pointer(ln))
+}
+
+func nodeToLeaf(n *node) *leafNode {
+	return (*leafNode)(unsafe.Pointer(n))
+}
+
+var leafPool = sync.Pool{
+	New: func() interface{} {
+		return new(leafNode)
+	},
+}
+
+var nodePool = sync.Pool{
+	New: func() interface{} {
+		return new(node)
+	},
+}
+
+func newLeafNode() *node {
+	n := leafToNode(leafPool.Get().(*leafNode))
+	n.leaf = true
+	n.ref = 1
+	return n
+}
+
+func newNode() *node {
+	n := nodePool.Get().(*node)
+	n.ref = 1
+	return n
+}
+
+// mut creates and returns a mutable node reference. If the node is not shared
+// with any other trees then it can be modified in place. Otherwise, it must be
+// cloned to ensure unique ownership. In this way, we enforce a copy-on-write
+// policy which transparently incorporates the idea of local mutations, like
+// Clojure's transients or Haskell's ST monad, where nodes are only copied
+// during the first time that they are modified between Clone operations.
+//
+// When a node is cloned, the provided pointer will be redirected to the new
+// mutable node.
+func mut(n **node) *node {
+	if atomic.LoadInt32(&(*n).ref) == 1 {
+		// Exclusive ownership. Can mutate in place.
+		return *n
+	}
+	// If we do not have unique ownership over the node then we
+	// clone it to gain unique ownership. After doing so, we can
+	// release our reference to the old node.
+	c := (*n).clone()
+	(*n).decRef(true /* recursive */)
+	*n = c
+	return *n
+}
+
+// incRef acquires a reference to the node.
+func (n *node) incRef() {
+	atomic.AddInt32(&n.ref, 1)
+}
+
+// decRef releases a reference to the node. If requested, the method
+// will recurse into child nodes and decrease their refcounts as well.
+func (n *node) decRef(recursive bool) {
+	if atomic.AddInt32(&n.ref, -1) > 0 {
+		// Other references remain. Can't free.
+		return
+	}
+	// Clear and release node into memory pool.
+	if n.leaf {
+		ln := nodeToLeaf(n)
+		*ln = leafNode{}
+		leafPool.Put(ln)
+	} else {
+		// Release child references first, if requested.
+		if recursive {
+			for i := int16(0); i <= n.count; i++ {
+				n.children[i].decRef(true /* recursive */)
+			}
+		}
+		*n = node{}
+		nodePool.Put(n)
+	}
+}
+
+// clone creates a clone of the receiver with a single reference count.
+func (n *node) clone() *node {
+	var c *node
+	if n.leaf {
+		c = newLeafNode()
+		*nodeToLeaf(c) = *nodeToLeaf(n)
+	} else {
+		c = newNode()
+		*c = *n
+		// Increase refcount of each child.
+		for i := int16(0); i <= c.count; i++ {
+			c.children[i].incRef()
+		}
+	}
+	c.ref = 1
+	return c
 }
 
 func (n *node) insertAt(index int, c *cmd, nd *node) {
@@ -246,7 +348,7 @@ func (n *node) split(i int) (*cmd, *node) {
 	if n.leaf {
 		next = newLeafNode()
 	} else {
-		next = &node{}
+		next = newNode()
 	}
 	next.count = n.count - int16(i+1)
 	copy(next.cmds[:], n.cmds[i+1:n.count])
@@ -286,7 +388,7 @@ func (n *node) insert(c *cmd) (replaced, newBound bool) {
 		return false, n.adjustUpperBoundOnInsertion(c, nil)
 	}
 	if n.children[i].count >= maxCmds {
-		splitcmd, splitNode := n.children[i].split(maxCmds / 2)
+		splitcmd, splitNode := mut(&n.children[i]).split(maxCmds / 2)
 		n.insertAt(i, splitcmd, splitNode)
 
 		switch cmp := cmp(c, n.cmds[i]); {
@@ -299,7 +401,7 @@ func (n *node) insert(c *cmd) (replaced, newBound bool) {
 			return true, false
 		}
 	}
-	replaced, newBound = n.children[i].insert(c)
+	replaced, newBound = mut(&n.children[i]).insert(c)
 	if newBound {
 		newBound = n.adjustUpperBoundOnInsertion(c, nil)
 	}
@@ -316,7 +418,7 @@ func (n *node) removeMax() *cmd {
 		n.adjustUpperBoundOnRemoval(out, nil)
 		return out
 	}
-	child := n.children[n.count]
+	child := mut(&n.children[n.count])
 	if child.count <= minCmds {
 		n.rebalanceOrMerge(int(n.count))
 		return n.removeMax()
@@ -336,12 +438,12 @@ func (n *node) remove(c *cmd) (out *cmd, newBound bool) {
 		}
 		return nil, false
 	}
-	child := n.children[i]
-	if child.count <= minCmds {
+	if n.children[i].count <= minCmds {
 		// Child not large enough to remove from.
 		n.rebalanceOrMerge(i)
 		return n.remove(c)
 	}
+	child := mut(&n.children[i])
 	if found {
 		// Replace the cmd being removed with the max cmd in our left child.
 		out = n.cmds[i]
@@ -389,8 +491,8 @@ func (n *node) rebalanceOrMerge(i int) {
 		//                  v
 		//                  a
 		//
-		left := n.children[i-1]
-		child := n.children[i]
+		left := mut(&n.children[i-1])
+		child := mut(&n.children[i])
 		xCmd, grandChild := left.popBack()
 		yCmd := n.cmds[i-1]
 		child.pushFront(yCmd, grandChild)
@@ -428,8 +530,8 @@ func (n *node) rebalanceOrMerge(i int) {
 		//              v
 		//              a
 		//
-		right := n.children[i+1]
-		child := n.children[i]
+		right := mut(&n.children[i+1])
+		child := mut(&n.children[i])
 		xCmd, grandChild := right.popFront()
 		yCmd := n.cmds[i]
 		child.pushBack(yCmd, grandChild)
@@ -464,7 +566,9 @@ func (n *node) rebalanceOrMerge(i int) {
 		if i >= int(n.count) {
 			i = int(n.count - 1)
 		}
-		child := n.children[i]
+		child := mut(&n.children[i])
+		// Make mergeChild mutable, bumping the refcounts on its children if necessary.
+		_ = mut(&n.children[i+1])
 		mergeCmd, mergeChild := n.removeAt(i)
 		child.cmds[child.count] = mergeCmd
 		copy(child.cmds[child.count+1:], mergeChild.cmds[:mergeChild.count])
@@ -474,6 +578,7 @@ func (n *node) rebalanceOrMerge(i int) {
 		child.count += mergeChild.count + 1
 
 		child.adjustUpperBoundOnInsertion(mergeCmd, mergeChild)
+		mergeChild.decRef(false /* recursive */)
 	}
 }
 
@@ -547,25 +652,39 @@ type btree struct {
 	length int
 }
 
-// Reset removes all cmds from the btree.
+// Reset removes all cmds from the btree. In doing so, it allows memory
+// held by the btree to be recycled. Failure to call this method before
+// letting a btree be GCed is safe in that it won't cause a memory leak,
+// but it will prevent btree nodes from being efficiently re-used.
 func (t *btree) Reset() {
-	t.root = nil
+	if t.root != nil {
+		t.root.decRef(true /* recursive */)
+		t.root = nil
+	}
 	t.length = 0
 }
 
-// Silent unused warning.
-var _ = (*btree).Reset
+// Clone clones the btree, lazily.
+func (t *btree) Clone() btree {
+	c := *t
+	if c.root != nil {
+		c.root.incRef()
+	}
+	return c
+}
 
 // Delete removes a cmd equal to the passed in cmd from the tree.
 func (t *btree) Delete(c *cmd) {
 	if t.root == nil || t.root.count == 0 {
 		return
 	}
-	if out, _ := t.root.remove(c); out != nil {
+	if out, _ := mut(&t.root).remove(c); out != nil {
 		t.length--
 	}
 	if t.root.count == 0 && !t.root.leaf {
+		old := t.root
 		t.root = t.root.children[0]
+		old.decRef(false /* recursive */)
 	}
 }
 
@@ -575,8 +694,8 @@ func (t *btree) Set(c *cmd) {
 	if t.root == nil {
 		t.root = newLeafNode()
 	} else if t.root.count >= maxCmds {
-		splitcmd, splitNode := t.root.split(maxCmds / 2)
-		newRoot := &node{}
+		splitcmd, splitNode := mut(&t.root).split(maxCmds / 2)
+		newRoot := newNode()
 		newRoot.count = 1
 		newRoot.cmds[0] = splitcmd
 		newRoot.children[0] = t.root
@@ -584,7 +703,7 @@ func (t *btree) Set(c *cmd) {
 		newRoot.max = newRoot.findUpperBound()
 		t.root = newRoot
 	}
-	if replaced, _ := t.root.insert(c); !replaced {
+	if replaced, _ := mut(&t.root).insert(c); !replaced {
 		t.length++
 	}
 }
