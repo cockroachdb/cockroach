@@ -31,7 +31,7 @@ func TestProject(t *testing.T) {
 	fd.AddConstants(util.MakeFastIntSet(4))
 
 	project := &memo.ProjectExpr{
-		Input: newDummyRelExpr(inProps),
+		Input: newDummyRelExpr(&inProps, nil /* p */),
 	}
 
 	type testCase struct {

@@ -172,12 +172,12 @@ right-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4)
+ │    ├── ordering: +1 opt(4) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4)
+ │    │    └── ordering: +1 opt(4) [provided: +1]
  │    └── filters
  │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2)]
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -226,12 +226,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4)
+ │    ├── ordering: +1 opt(4) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4)
+ │    │    └── ordering: +1 opt(4) [provided: +1]
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan b
@@ -305,12 +305,12 @@ left-join (merge)
  │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    ├── key: (3)
  │    ├── fd: ()-->(6), (3)-->(4,5,7)
- │    ├── ordering: +3 opt(6)
+ │    ├── ordering: +3 opt(6) [provided: +3]
  │    ├── scan a
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4-7)
- │    │    └── ordering: +3 opt(6)
+ │    │    └── ordering: +3 opt(6) [provided: +3]
  │    └── filters
  │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4)]
  │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
@@ -1965,12 +1965,12 @@ project
       │    ├── columns: x:6(int!null) y:7(int!null)
       │    ├── key: (6)
       │    ├── fd: ()-->(7)
-      │    ├── ordering: +6 opt(7)
+      │    ├── ordering: +6 opt(7) [provided: +6]
       │    ├── scan b
       │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    ├── key: (6)
       │    │    ├── fd: (6)-->(7)
-      │    │    └── ordering: +6 opt(7)
+      │    │    └── ordering: +6 opt(7) [provided: +6]
       │    └── filters
       │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
       └── filters (true)

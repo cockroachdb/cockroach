@@ -60,6 +60,21 @@ func groupByBuildChildReqOrdering(
 	return result
 }
 
+func groupByBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	groupBy := expr.(*memo.GroupByExpr)
+	provided := groupBy.Input.ProvidedPhysical().Ordering
+	// Retain the longest prefix of grouping columns in the input ordering.
+	groupingCols := groupBy.Input.Relational().FuncDeps.ComputeClosure(groupBy.GroupingCols)
+	for i := range provided {
+		if !groupingCols.Contains(int(provided[i].ID())) {
+			provided = provided[:i]
+			break
+		}
+	}
+	provided = remapProvided(provided, &groupBy.Input.Relational().FuncDeps, groupBy.GroupingCols)
+	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+}
+
 func distinctOnCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// DistinctOn may require a certain ordering of its input, but can also pass
 	// through a stronger ordering on the grouping columns.
@@ -73,6 +88,14 @@ func distinctOnBuildChildReqOrdering(
 		return physical.OrderingChoice{}
 	}
 	return required.Intersection(&parent.(*memo.DistinctOnExpr).Ordering)
+}
+
+func distinctOnBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	// We can always pass through the input ordering for DistinctOn (it
+	// effectively just filters rows). We may be projecting away some columns, in
+	// which case we must keep a prefix.
+	d := expr.(*memo.DistinctOnExpr)
+	return trimProvided(d.Input.ProvidedPhysical().Ordering, required, &d.Relational().FuncDeps)
 }
 
 // StreamingGroupingCols returns the subset of grouping columns that form a

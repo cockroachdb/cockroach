@@ -61,7 +61,7 @@ SELECT k FROM t ORDER BY k FETCH FIRST ROW ONLY
 limit
  ├── columns: k:1(int!null)
  ├── internal-ordering: +1
- ├── ordering: +1
+ ├── ordering: +1 [provided: ]
  ├── project
  │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
@@ -76,7 +76,7 @@ SELECT k FROM t ORDER BY k OFFSET 3 ROWS FETCH NEXT ROW ONLY
 limit
  ├── columns: k:1(int!null)
  ├── internal-ordering: +1
- ├── ordering: +1
+ ├── ordering: +1 [provided: ]
  ├── offset
  │    ├── columns: k:1(int!null)
  │    ├── internal-ordering: +1
@@ -179,7 +179,7 @@ VALUES (1,1), (2,2) ORDER BY 1 LIMIT 1
 limit
  ├── columns: column1:1(int) column2:2(int)
  ├── internal-ordering: +1
- ├── ordering: +1
+ ├── ordering: +1 [provided: ]
  ├── sort
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── ordering: +1

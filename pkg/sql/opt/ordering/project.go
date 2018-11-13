@@ -15,6 +15,7 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
@@ -68,4 +69,13 @@ func projectOrderingToInput(
 	result := ordering.Copy()
 	result.ProjectCols(childOutCols)
 	return result
+}
+
+func projectBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	p := expr.(*memo.ProjectExpr)
+	return remapProvided(
+		p.Input.ProvidedPhysical().Ordering,
+		&p.Input.Relational().FuncDeps,
+		p.Passthrough,
+	)
 }
