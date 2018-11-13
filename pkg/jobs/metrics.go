@@ -14,7 +14,11 @@
 
 package jobs
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
@@ -25,12 +29,12 @@ type Metrics struct {
 func (Metrics) MetricStruct() {}
 
 // InitHooks initializes the metrics for job monitoring.
-func (m *Metrics) InitHooks() {
+func (m *Metrics) InitHooks(histogramWindowInterval time.Duration) {
 	if MakeChangefeedMetricsHook != nil {
-		m.Changefeed = MakeChangefeedMetricsHook()
+		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
 }
 
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
-var MakeChangefeedMetricsHook func() metric.Struct
+var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
