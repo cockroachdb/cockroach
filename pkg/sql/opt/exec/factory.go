@@ -89,10 +89,14 @@ type Factory interface {
 	) (Node, error)
 
 	// ConstructHashJoin returns a node that runs a hash-join between the results
-	// of two input nodes. The expression can refer to columns from both inputs
-	// using IndexedVars (first the left columns, then the right columns).
+	// of two input nodes. The extraOnCond expression can refer to columns from
+	// both inputs using IndexedVars (first the left columns, then the right
+	// columns).
 	ConstructHashJoin(
-		joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr,
+		joinType sqlbase.JoinType,
+		left, right Node,
+		leftEqCols, rightEqCols []ColumnOrdinal,
+		extraOnCond tree.TypedExpr,
 	) (Node, error)
 
 	// ConstructMergeJoin returns a node that (under distsql) runs a merge join.
