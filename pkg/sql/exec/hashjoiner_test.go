@@ -57,6 +57,43 @@ func TestHashJoinerInt64(t *testing.T) {
 		expectedTuples tuples
 	}{
 		{
+			// Test handling of duplicate equality keys.
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			leftTuples: tuples{
+				{0},
+				{0},
+				{1},
+				{1},
+				{1},
+				{2},
+			},
+			rightTuples: tuples{
+				{1},
+				{0},
+				{2},
+				{2},
+			},
+
+			leftEqCols:   []int{0},
+			rightEqCols:  []int{0},
+			leftOutCols:  []int{0},
+			rightOutCols: []int{},
+
+			buildDistinct: false,
+
+			expectedTuples: tuples{
+				{1},
+				{1},
+				{1},
+				{0},
+				{0},
+				{2},
+				{2},
+			},
+		},
+		{
 			// Test handling of various output column types.
 			leftTypes:  []types.T{types.Bool, types.Int64, types.Bytes, types.Int64},
 			rightTypes: []types.T{types.Int64, types.Float64, types.Int32},
