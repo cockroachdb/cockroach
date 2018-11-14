@@ -110,9 +110,6 @@ func newColOperator(
 
 			switch agg.Func {
 			case AggregatorSpec_AVG:
-				if aggTyps[i][0] != types.Decimal {
-					return nil, errors.New("avg on non-decimal cols not supported")
-				}
 			case AggregatorSpec_SUM_INT:
 			case AggregatorSpec_SUM:
 				switch aggTyps[i][0] {

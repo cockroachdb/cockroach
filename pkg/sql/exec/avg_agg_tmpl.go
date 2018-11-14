@@ -12,14 +12,56 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// {{/*
+// +build execgen_template
+//
+// This file is the execgen template for sum_agg.eg.go. It's formatted in a
+// special way, so it's both valid Go and a valid text/template input. This
+// permits editing this file with editor support.
+//
+// */}}
+
 package exec
 
 import (
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
-type avgDecimalAgg struct {
+// {{/*
+// Declarations to make the template compile properly
+
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
+
+// _ASSIGN_DIV_INT64 is the template division function for assigning the first
+// input to the result of the second input / the third input, where the third
+// input is an int64.
+func _ASSIGN_DIV_INT64(_, _, _ string) {
+	panic("")
+}
+
+// */}}
+
+func newAvgAgg(t types.T) (aggregateFunc, error) {
+	switch t {
+	// {{range .}}
+	case _TYPES_T:
+		return &avg_TYPEAgg{}, nil
+		// {{end}}
+	default:
+		return nil, errors.Errorf("unsupported avg agg type %s", t)
+	}
+}
+
+// {{range .}}
+
+type avg_TYPEAgg struct {
 	done bool
 
 	groups  []bool
@@ -27,48 +69,48 @@ type avgDecimalAgg struct {
 		curIdx int
 		// groupSums[i] keeps track of the sum of elements belonging to the ith
 		// group.
-		groupSums []apd.Decimal
+		groupSums []_GOTYPE
 		// groupCounts[i] keeps track of the number of elements that we've seen
 		// belonging to the ith group.
 		groupCounts []int64
 		// vec points to the output vector.
-		vec []apd.Decimal
+		vec []_GOTYPE
 	}
 }
 
-var _ aggregateFunc = &avgDecimalAgg{}
+var _ aggregateFunc = &avg_TYPEAgg{}
 
-func (a *avgDecimalAgg) Init(groups []bool, v ColVec) {
+func (a *avg_TYPEAgg) Init(groups []bool, v ColVec) {
 	a.groups = groups
-	a.scratch.vec = v.Decimal()
-	a.scratch.groupSums = make([]apd.Decimal, len(a.scratch.vec))
+	a.scratch.vec = v._TemplateType()
+	a.scratch.groupSums = make([]_GOTYPE, len(a.scratch.vec))
 	a.scratch.groupCounts = make([]int64, len(a.scratch.vec))
 	a.Reset()
 }
 
-func (a *avgDecimalAgg) Reset() {
-	copy(a.scratch.groupSums, zeroDecimalBatch)
+func (a *avg_TYPEAgg) Reset() {
+	copy(a.scratch.groupSums, zero_TYPEBatch)
 	copy(a.scratch.groupCounts, zeroInt64Batch)
-	copy(a.scratch.vec, zeroDecimalBatch)
+	copy(a.scratch.vec, zero_TYPEBatch)
 	a.scratch.curIdx = -1
 }
 
-func (a *avgDecimalAgg) CurrentOutputIndex() int {
+func (a *avg_TYPEAgg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
-func (a *avgDecimalAgg) SetOutputIndex(idx int) {
+func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
-		copy(a.scratch.groupSums[idx+1:], zeroDecimalBatch)
+		copy(a.scratch.groupSums[idx+1:], zero_TYPEBatch)
 		copy(a.scratch.groupCounts[idx+1:], zeroInt64Batch)
 		// TODO(asubiotto): We might not have to zero a.scratch.vec since we
 		// overwrite with an independent value.
-		copy(a.scratch.vec[idx+1:], zeroDecimalBatch)
+		copy(a.scratch.vec[idx+1:], zero_TYPEBatch)
 	}
 }
 
-func (a *avgDecimalAgg) Compute(b ColBatch, inputIdxs []uint32) {
+func (a *avg_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
@@ -79,16 +121,13 @@ func (a *avgDecimalAgg) Compute(b ColBatch, inputIdxs []uint32) {
 			// TODO(asubiotto): Wonder how best to template this part (and below).
 			// We'd like to do something similar to AssignFunc, where we have a
 			// separate method call on DDecimal per type.
-			a.scratch.vec[a.scratch.curIdx].SetInt64(a.scratch.groupCounts[a.scratch.curIdx])
-			if _, err := tree.DecimalCtx.Quo(&a.scratch.vec[a.scratch.curIdx], &a.scratch.groupSums[a.scratch.curIdx], &a.scratch.vec[a.scratch.curIdx]); err != nil {
-				panic(err)
-			}
+			_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.groupSums[a.scratch.curIdx]", "a.scratch.groupCounts[a.scratch.curIdx]")
 		}
 		a.scratch.curIdx++
 		a.done = true
 		return
 	}
-	col, sel := b.ColVec(int(inputIdxs[0])).Decimal(), b.Selection()
+	col, sel := b.ColVec(int(inputIdxs[0]))._TemplateType(), b.Selection()
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
@@ -97,9 +136,7 @@ func (a *avgDecimalAgg) Compute(b ColBatch, inputIdxs []uint32) {
 				x = 1
 			}
 			a.scratch.curIdx += x
-			if _, err := tree.DecimalCtx.Add(&a.scratch.groupSums[a.scratch.curIdx], &a.scratch.groupSums[a.scratch.curIdx], &col[i]); err != nil {
-				panic(err)
-			}
+			_ASSIGN_ADD("a.scratch.groupSums[a.scratch.curIdx]", "a.scratch.groupSums[a.scratch.curIdx]", "col[i]")
 			a.scratch.groupCounts[a.scratch.curIdx]++
 		}
 	} else {
@@ -110,17 +147,14 @@ func (a *avgDecimalAgg) Compute(b ColBatch, inputIdxs []uint32) {
 				x = 1
 			}
 			a.scratch.curIdx += x
-			if _, err := tree.DecimalCtx.Add(&a.scratch.groupSums[a.scratch.curIdx], &a.scratch.groupSums[a.scratch.curIdx], &col[i]); err != nil {
-				panic(err)
-			}
+			_ASSIGN_ADD("a.scratch.groupSums[a.scratch.curIdx]", "a.scratch.groupSums[a.scratch.curIdx]", "col[i]")
 			a.scratch.groupCounts[a.scratch.curIdx]++
 		}
 	}
 
 	for i := 0; i < a.scratch.curIdx; i++ {
-		a.scratch.vec[i].SetInt64(a.scratch.groupCounts[i])
-		if _, err := tree.DecimalCtx.Quo(&a.scratch.vec[i], &a.scratch.groupSums[i], &a.scratch.vec[i]); err != nil {
-			panic(err)
-		}
+		_ASSIGN_DIV_INT64("a.scratch.vec[i]", "a.scratch.groupSums[i]", "a.scratch.groupCounts[i]")
 	}
 }
+
+// {{end}}
