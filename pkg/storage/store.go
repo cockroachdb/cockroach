@@ -138,9 +138,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		Settings:   st,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-		Clock:      clock,
+		Settings:                    st,
+		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
@@ -171,6 +171,7 @@ func newRaftConfig(
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
 		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
 		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
 		Storage:                   strg,
