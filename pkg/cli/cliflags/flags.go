@@ -769,8 +769,9 @@ in the history of the cluster.`,
 	}
 
 	SQLFmtLen = FlagInfo{
-		Name:        "print-width",
-		Description: `The line length where sqlfmt will try to wrap.`,
+		Name: "print-width",
+		Description: `
+The line length where sqlfmt will try to wrap.`,
 	}
 
 	SQLFmtSpaces = FlagInfo{
@@ -820,5 +821,29 @@ Maximum size of each log file.
 		Description: `
 Minimum verbosity of messages written to the log file.
 `,
+	}
+
+	WriteSize = FlagInfo{
+		Name: "write-size",
+		Description: `
+Size of blocks to write to storage device.`,
+	}
+
+	SyncInterval = FlagInfo{
+		Name: "sync-interval",
+		Description: `
+Number of bytes to write before running fsync.`,
+	}
+
+	BenchConcurrency = FlagInfo{
+		Name: "concurrency",
+		Description: `
+Number of workers for benchmarking.`,
+	}
+
+	BenchDuration = FlagInfo{
+		Name: "duration",
+		Description: `
+Amount of time to run workers.`,
 	}
 )
