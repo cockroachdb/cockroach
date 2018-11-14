@@ -166,19 +166,20 @@ join       ·               ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
-join            ·         ·                (x, y)           ·
- │              type      semi             ·                ·
- │              equality  (x) = (column5)  ·                ·
- ├── scan       ·         ·                (x, y)           ·
- │              table     a@primary        ·                ·
- │              spans     ALL              ·                ·
- └── render     ·         ·                (column5, x, z)  ·
-      │         render 0  x - 1            ·                ·
-      │         render 1  x                ·                ·
-      │         render 2  z                ·                ·
-      └── scan  ·         ·                (x, z)           ·
-·               table     b@primary        ·                ·
-·               spans     ALL              ·                ·
+join            ·                  ·                (x, y)           ·
+ │              type               semi             ·                ·
+ │              equality           (x) = (column5)  ·                ·
+ │              left cols are key  ·                ·                ·
+ ├── scan       ·                  ·                (x, y)           ·
+ │              table              a@primary        ·                ·
+ │              spans              ALL              ·                ·
+ └── render     ·                  ·                (column5, x, z)  ·
+      │         render 0           x - 1            ·                ·
+      │         render 1           x                ·                ·
+      │         render 2           z                ·                ·
+      └── scan  ·                  ·                (x, z)           ·
+·               table              b@primary        ·                ·
+·               spans              ALL              ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
@@ -197,19 +198,20 @@ join       ·               ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
-join            ·         ·                (x, z)           ·
- │              type      anti             ·                ·
- │              equality  (x) = (column5)  ·                ·
- ├── scan       ·         ·                (x, z)           ·
- │              table     b@primary        ·                ·
- │              spans     ALL              ·                ·
- └── render     ·         ·                (column5, x, y)  ·
-      │         render 0  x - 1            ·                ·
-      │         render 1  x                ·                ·
-      │         render 2  y                ·                ·
-      └── scan  ·         ·                (x, y)           ·
-·               table     a@primary        ·                ·
-·               spans     ALL              ·                ·
+join            ·                  ·                (x, z)           ·
+ │              type               anti             ·                ·
+ │              equality           (x) = (column5)  ·                ·
+ │              left cols are key  ·                ·                ·
+ ├── scan       ·                  ·                (x, z)           ·
+ │              table              b@primary        ·                ·
+ │              spans              ALL              ·                ·
+ └── render     ·                  ·                (column5, x, y)  ·
+      │         render 0           x - 1            ·                ·
+      │         render 1           x                ·                ·
+      │         render 2           y                ·                ·
+      └── scan  ·                  ·                (x, y)           ·
+·               table              a@primary        ·                ·
+·               spans              ALL              ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)

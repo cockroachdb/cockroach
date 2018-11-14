@@ -520,7 +520,9 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
-	leftEq, rightEq := harvestEqualityColumns(leftProps.OutputCols, rightProps.OutputCols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+		leftProps.OutputCols, rightProps.OutputCols, on,
+	)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -553,18 +555,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		}
 
 		if remainingFilters == nil {
-			remainingFilters = c.remainingJoinFilters(
-				on,
-				func(a, b opt.ColumnID) bool {
-					for i := range leftEq {
-						if (a == leftEq[i] && b == rightEq[i]) ||
-							(a == rightEq[i] && b == leftEq[i]) {
-							return true
-						}
-					}
-					return false
-				},
-			)
+			remainingFilters = memo.ExtractRemainingJoinFilters(on, leftEq, rightEq)
 		}
 
 		merge := memo.MergeJoinExpr{Left: left, Right: right, On: remainingFilters}
@@ -588,68 +579,6 @@ func (c *CustomFuncs) GenerateMergeJoins(
 
 		c.e.mem.AddMergeJoinToGroup(&merge, grp)
 	}
-}
-
-// harvestEqualityColumns returns a list of pairs of columns (one from the left
-// side, one from the right side) which are constrained to be equal.
-func harvestEqualityColumns(
-	leftCols, rightCols opt.ColSet, on memo.FiltersExpr,
-) (leftEq opt.ColList, rightEq opt.ColList) {
-	for i := range on {
-		condition := on[i].Condition
-		ok, left, right := isJoinEquality(leftCols, rightCols, condition)
-		if !ok {
-			continue
-		}
-		// Don't allow any column to show up twice.
-		// TODO(radu): need to figure out the right thing to do in cases
-		// like: left.a = right.a AND left.a = right.b
-		duplicate := false
-		for i := range leftEq {
-			if leftEq[i] == left || rightEq[i] == right {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			leftEq = append(leftEq, left)
-			rightEq = append(rightEq, right)
-		}
-	}
-	return leftEq, rightEq
-}
-
-func isJoinEquality(
-	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
-) (ok bool, left, right opt.ColumnID) {
-	eq, ok := condition.(*memo.EqExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	lvar, ok := eq.Left.(*memo.VariableExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	rvar, ok := eq.Right.(*memo.VariableExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	// Don't allow mixed types (see #22519).
-	if !lvar.DataType().Equivalent(rvar.DataType()) {
-		return false, 0, 0
-	}
-
-	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
-		return true, lvar.Col, rvar.Col
-	}
-	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
-		return true, rvar.Col, lvar.Col
-	}
-
-	return false, 0, 0
 }
 
 // GenerateLookupJoins looks at the possible indexes and creates lookup join
@@ -703,7 +632,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 ) {
 	inputProps := input.Relational()
 
-	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -728,6 +657,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// Find the longest prefix of index key columns that are equality columns.
 		numIndexKeyCols := iter.index.LaxKeyColumnCount()
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
+		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 		for j := 0; j < numIndexKeyCols; j++ {
 			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
 			eqIdx, ok := rightEq.Find(idxCol)
@@ -735,27 +665,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+			rightSideCols = append(rightSideCols, idxCol)
 		}
 
-		lookupJoin.On = c.remainingJoinFilters(
-			on,
-			func(a, b opt.ColumnID) bool {
-				for i, leftCol := range lookupJoin.KeyCols {
-					var otherCol opt.ColumnID
-					if a == leftCol {
-						otherCol = b
-					} else if b == leftCol {
-						otherCol = a
-					} else {
-						continue
-					}
-					if otherCol == scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal) {
-						return true
-					}
-				}
-				return false
-			},
-		)
+		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
@@ -1038,27 +951,4 @@ func (it *scanIndexIter) indexCols() opt.ColSet {
 // by the Scan operator.
 func (it *scanIndexIter) isCovering() bool {
 	return it.scanPrivate.Cols.SubsetOf(it.indexCols())
-}
-
-// remainingJoinFilter calculates the remaining ON condition after removing
-// equalities that are handled separately (for merge and lookup joins). The
-// given function determines if an equality is redundant.
-// The result is empty if there are no remaining conditions.
-func (c *CustomFuncs) remainingJoinFilters(
-	on memo.FiltersExpr, removeEquality func(a, b opt.ColumnID) bool,
-) memo.FiltersExpr {
-	newFilters := make(memo.FiltersExpr, 0, len(on))
-	for i := range on {
-		if eq, ok := on[i].Condition.(*memo.EqExpr); ok {
-			if leftVar, ok := eq.Left.(*memo.VariableExpr); ok {
-				if rightVar, ok := eq.Right.(*memo.VariableExpr); ok {
-					if removeEquality(leftVar.Col, rightVar.Col) {
-						continue
-					}
-				}
-			}
-		}
-		newFilters = append(newFilters, on[i])
-	}
-	return newFilters
 }

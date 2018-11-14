@@ -238,6 +238,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				f.FormatNode(&n.pred.rightColNames)
 				f.WriteByte(')')
 				v.observer.attr(name, "equality", f.CloseAndGetString())
+				if n.pred.leftEqKey {
+					v.observer.attr(name, "left cols are key", "")
+				}
+				if n.pred.rightEqKey {
+					v.observer.attr(name, "right cols are key", "")
+				}
 			}
 			if len(n.mergeJoinOrdering) > 0 {
 				// The ordering refers to equality columns
