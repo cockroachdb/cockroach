@@ -240,7 +240,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		}
 	}
 	newTableDesc.Mutations = nil
-
+	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
 	if err := p.createDescriptorWithID(
