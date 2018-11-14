@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 )
@@ -46,7 +47,7 @@ func cockroachNodeBinary(c *SyncedCluster, i int) string {
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
-		gopath := os.Getenv("GOPATH")
+		gopath := envutil.EnvOrDefaultString("GOPATH", "")
 		if gopath == "" {
 			return config.Binary
 		}
@@ -382,7 +383,7 @@ tar cvf certs.tar certs
 	})
 
 	if bootstrapped {
-		license := os.Getenv("COCKROACH_DEV_LICENSE")
+		license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 		if license == "" {
 			fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
 				c.Name)
@@ -516,7 +517,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	})
 
 	results := make([]result, 0, len(c.Nodes))
-	for _ = range c.Nodes {
+	for range c.Nodes {
 		results = append(results, <-resultChan)
 	}
 	sort.Slice(results, func(i, j int) bool {
