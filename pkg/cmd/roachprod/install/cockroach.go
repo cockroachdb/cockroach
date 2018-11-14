@@ -225,7 +225,9 @@ tar cvf certs.tar certs
 					os.Exit(1)
 				}
 				_ = tmpfile.Close()
-				defer os.Remove(tmpfile.Name()) // clean up
+				defer func() {
+					_ = os.Remove(tmpfile.Name()) // clean up
+				}()
 
 				if err := func() error {
 					return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.host(1)), tmpfile.Name())
@@ -512,7 +514,6 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	type result struct {
 		node   int
 		output string
-		err    error
 	}
 	resultChan := make(chan result, len(c.Nodes))
 

@@ -31,10 +31,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	sshKeyPathPrefix = "${HOME}/.ssh/roachprod"
-)
-
 func initHostDir() error {
 	hd := os.ExpandEnv(config.DefaultHostDir)
 	return os.MkdirAll(hd, 0755)
@@ -60,10 +56,14 @@ func syncHosts(cloud *cloud.Cloud) error {
 
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(file, 0, 8, 2, ' ', 0)
-			tw.Write([]byte("# user@host\tlocality\tvpcId\n"))
+			if _, err := tw.Write([]byte("# user@host\tlocality\tvpcId\n")); err != nil {
+				return err
+			}
 			for _, vm := range c.VMs {
-				tw.Write([]byte(fmt.Sprintf(
-					"%s@%s\t%s\t%s\n", vm.RemoteUser, vm.PublicIP, vm.Locality(), vm.VPC)))
+				if _, err := tw.Write([]byte(fmt.Sprintf(
+					"%s@%s\t%s\t%s\n", vm.RemoteUser, vm.PublicIP, vm.Locality(), vm.VPC))); err != nil {
+					return err
+				}
 			}
 			if err := tw.Flush(); err != nil {
 				return errors.Wrapf(err, "problem writing file %s", filename)

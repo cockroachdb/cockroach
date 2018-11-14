@@ -110,10 +110,10 @@ func (Cassandra) NodeURL(_ *SyncedCluster, host string, port int) string {
 
 // NodePort implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodePort(c *SyncedCluster, index int) int {
-	if c.IsLocal() {
-		// TODO(peter): This will require a bit of work to adjust ports in
-		// cassandra.yaml.
-	}
+	// TODO(peter): This will require a bit of work to adjust ports in
+	// cassandra.yaml.
+	// if c.IsLocal() {
+	// }
 	return 9042
 }
 
@@ -135,7 +135,9 @@ func makeCassandraYAML(c *SyncedCluster) (string, error) {
 	defer f.Close()
 
 	w := bufio.NewWriter(f)
-	w.WriteString(cassandraDefaultYAML)
+	if _, err := w.WriteString(cassandraDefaultYAML); err != nil {
+		return "", err
+	}
 	defer w.Flush()
 
 	t, err := template.New("cassandra.yaml").Parse(cassandraDiffYAML)

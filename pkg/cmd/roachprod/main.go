@@ -225,6 +225,7 @@ func verifyClusterName(clusterName string) (string, error) {
 		// The user didn't specify a username prefix. For example, assuming the
 		// account is "peter", `roachprod create perf` should be specified as
 		// `roachprod create peter-perf`.
+		_ = 0
 	}
 
 	// Suggest acceptable cluster names.
@@ -679,7 +680,7 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 		} {
 			cmd.ValidArgs = names
 		}
-		rootCmd.GenBashCompletionFile(bashCompletion)
+		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 	}
 	return vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.ConfigSSH()
@@ -949,7 +950,7 @@ the 'zfs rollback' command:
 			return fmt.Errorf("unknown filesystem %q", fs)
 		}
 
-		c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
+		err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
   sudo zpool destroy -f data1
@@ -960,6 +961,9 @@ fi
 %s
 sudo chmod 777 /mnt/data1
 `, fsCmd))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+		}
 		return nil
 	}),
 }
@@ -1359,7 +1363,7 @@ func main() {
 		startCmd, putCmd, getCmd,
 	} {
 		cmd.Flags().BoolVar(new(bool), "scp", false, "DEPRECATED")
-		cmd.Flags().MarkDeprecated("scp", "always true")
+		_ = cmd.Flags().MarkDeprecated("scp", "always true")
 	}
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")

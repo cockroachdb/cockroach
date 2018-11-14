@@ -36,7 +36,7 @@ type session interface {
 	StdoutPipe() (io.Reader, error)
 	StderrPipe() (io.Reader, error)
 	RequestPty() error
-	Close() error
+	Close()
 }
 
 type remoteSession struct {
@@ -98,9 +98,8 @@ func (s *remoteSession) RequestPty() error {
 	return nil
 }
 
-func (s *remoteSession) Close() error {
+func (s *remoteSession) Close() {
 	s.cancel()
-	return nil
 }
 
 type localSession struct {
@@ -154,9 +153,8 @@ func (s *localSession) RequestPty() error {
 	return nil
 }
 
-func (s *localSession) Close() error {
+func (s *localSession) Close() {
 	s.cancel()
-	return nil
 }
 
 var sshAuthArgsVal []string

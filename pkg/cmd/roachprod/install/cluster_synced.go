@@ -825,7 +825,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 				fmt.Fprintf(&writer, "\n")
 			}
 			linesMu.Unlock()
-			writer.Flush(os.Stdout)
+			_ = writer.Flush(os.Stdout)
 			spinnerIdx++
 		}
 	}
@@ -1005,7 +1005,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 				fmt.Fprintf(&writer, "\n")
 			}
 			linesMu.Unlock()
-			writer.Flush(os.Stdout)
+			_ = writer.Flush(os.Stdout)
 			spinnerIdx++
 		}
 	}
@@ -1221,7 +1221,7 @@ func (c *SyncedCluster) Parallel(
 				fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])
 			}
 			fmt.Fprintf(&writer, "\n")
-			writer.Flush(out)
+			_ = writer.Flush(out)
 			spinnerIdx++
 		}
 	}

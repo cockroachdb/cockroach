@@ -123,6 +123,7 @@ func (jsonVM *jsonVM) toVM(project string) *vm.VM {
 		if len(jsonVM.NetworkInterfaces[0].AccessConfigs) == 0 {
 			vmErrors = append(vmErrors, vm.ErrBadNetwork)
 		} else {
+			_ = jsonVM.NetworkInterfaces[0].AccessConfigs[0].Name // silence unused warning
 			publicIP = jsonVM.NetworkInterfaces[0].AccessConfigs[0].NatIP
 			vpc = lastComponent(jsonVM.NetworkInterfaces[0].Network)
 		}
@@ -165,9 +166,9 @@ type providerOpts struct {
 
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
-	flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
+	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", []string{"us-east1-b", "us-west1-b", "europe-west2-b"}, "DEPRECATED")
-	flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
+	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
 
 	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
 		os.Getenv("GCE_SERVICE_ACCOUNT"), "Service account to use")
@@ -227,7 +228,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
-	defer os.Remove(filename)
+	defer func() {
+		_ = os.Remove(filename)
+	}()
 
 	if !opts.GeoDistributed {
 		p.opts.Zones = []string{p.opts.Zones[0]}
@@ -375,6 +378,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 		return "", fmt.Errorf("active account %q does no belong to domain %s",
 			accounts[0].Account, config.EmailDomain)
 	}
+	_ = accounts[0].Status // silence unused warning
 
 	username := strings.Split(accounts[0].Account, "@")[0]
 	return username, nil

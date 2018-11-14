@@ -58,6 +58,7 @@ func init() {
 		// power roachtest's `(*cluster).Conn` and was failing the nightlies.
 		// log.Printf("please install the AWS CLI utilities " +
 		// 	"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)")
+		_ = 0
 	}
 }
 
@@ -237,6 +238,10 @@ func (p *Provider) Delete(vms vm.List) error {
 				TerminatingInstances []struct {
 					InstanceID string `json:"InstanceId"`
 				}
+			}
+			_ = data.TerminatingInstances // silence unused warning
+			if len(data.TerminatingInstances) > 0 {
+				_ = data.TerminatingInstances[0].InstanceID // silence unused warning
 			}
 			return runJSONCommand(args, &data)
 		})
@@ -422,6 +427,8 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 			if in.State.Name != "pending" && in.State.Name != "running" {
 				continue in
 			}
+			_ = in.PublicDNSName // silence unused warning
+			_ = in.State.Code    // silence unused warning
 
 			// Convert the tag map into a more useful representation
 			tagMap := make(map[string]string, len(in.Tags))
@@ -533,6 +540,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		Instances []struct {
 			InstanceID string `json:"InstanceId"`
 		}
+	}
+	_ = data.Instances // silence unused warning
+	if len(data.Instances) > 0 {
+		_ = data.Instances[0].InstanceID // silence unused warning
 	}
 
 	args := []string{

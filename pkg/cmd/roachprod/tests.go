@@ -152,13 +152,13 @@ func (d *testData) get(concurrency int) *testRun {
 	t := float64(concurrency-a.Concurrency) / float64(b.Concurrency-a.Concurrency)
 	return &testRun{
 		Concurrency: concurrency,
-		Elapsed:     a.Elapsed + float64(b.Elapsed-a.Elapsed)*t,
+		Elapsed:     a.Elapsed + (b.Elapsed-a.Elapsed)*t,
 		Ops:         a.Ops + int64(float64(b.Ops-a.Ops)*t),
-		OpsSec:      a.OpsSec + float64(b.OpsSec-a.OpsSec)*t,
-		AvgLat:      a.AvgLat + float64(b.AvgLat-a.AvgLat)*t,
-		P50Lat:      a.P50Lat + float64(b.P50Lat-a.P50Lat)*t,
-		P95Lat:      a.P95Lat + float64(b.P95Lat-a.P95Lat)*t,
-		P99Lat:      a.P99Lat + float64(b.P99Lat-a.P99Lat)*t,
+		OpsSec:      a.OpsSec + (b.OpsSec-a.OpsSec)*t,
+		AvgLat:      a.AvgLat + (b.AvgLat-a.AvgLat)*t,
+		P50Lat:      a.P50Lat + (b.P50Lat-a.P50Lat)*t,
+		P95Lat:      a.P95Lat + (b.P95Lat-a.P95Lat)*t,
+		P99Lat:      a.P99Lat + (b.P99Lat-a.P99Lat)*t,
 	}
 }
 
@@ -207,11 +207,6 @@ func findTest(name string) (_ func(clusterName, dir string), dir string) {
 		return nil, ""
 	}
 	return tests[m[1]], name
-}
-
-func isTest(name string) bool {
-	fn, _ := findTest(name)
-	return fn != nil
 }
 
 func runTest(name, clusterName string) error {
