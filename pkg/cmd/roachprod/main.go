@@ -118,7 +118,11 @@ func newCluster(name string, reserveLoadGen bool) (*install.SyncedCluster, error
 
 	c, ok := install.Clusters[name]
 	if !ok {
-		return nil, fmt.Errorf(`unknown cluster: %s
+		// NB: We don't use fmt.Errorf due to a linter error about the error
+		// message containing capitals and punctuation. We don't use
+		// errors.New(fmt.Sprintf()) due to a linter error that we should use
+		// fmt.Errorf() instead. Sigh.
+		s := fmt.Sprintf(`unknown cluster: %s
 
 Available clusters:
   %s
@@ -126,6 +130,7 @@ Available clusters:
 Hint: use "roachprod sync" to update the list of available clusters.
 `,
 			name, strings.Join(sortedClusters(), "\n  "))
+		return nil, errors.New(s)
 	}
 
 	switch clusterType {
