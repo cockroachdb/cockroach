@@ -290,20 +290,6 @@ const (
 	indexBackfill
 )
 
-// getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
-// a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
-func getJobIDForMutationWithDescriptor(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) (int64, error) {
-	for _, job := range tableDesc.MutationJobs {
-		if job.MutationID == mutationID {
-			return job.JobID, nil
-		}
-	}
-
-	return 0, errors.Errorf("job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
-}
-
 // nRanges returns the number of ranges that cover a set of spans.
 func (sc *SchemaChanger) nRanges(
 	ctx context.Context, txn *client.Txn, spans []roachpb.Span,
@@ -347,15 +333,16 @@ func (sc *SchemaChanger) distBackfill(
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
+	var prevJobID int64
 	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
-	fractionLeft := 1 - origFractionCompleted
+	var origFractionCompleted, fractionLeft float32
 	readAsOf := sc.clock.Now()
 	for {
 		var spans []roachpb.Span
+		var job *jobs.Job
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			spans, _, _, err = distsqlrun.GetResumeSpans(
+			spans, job, _, err = distsqlrun.GetResumeSpans(
 				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
 			return err
 		}); err != nil {
@@ -364,6 +351,13 @@ func (sc *SchemaChanger) distBackfill(
 
 		if len(spans) <= 0 {
 			break
+		}
+
+		if *job.ID() != prevJobID {
+			prevJobID = *job.ID()
+			origNRanges = -1
+			origFractionCompleted = job.FractionCompleted()
+			fractionLeft = 1 - origFractionCompleted
 		}
 
 		if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -389,7 +383,7 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
+				if err := job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			}

@@ -164,33 +164,31 @@ func GetResumeSpans(
 		return nil, nil, 0, err
 	}
 
-	// Find the index of the first mutation that is being worked on.
-	const noIndex = -1
-	mutationIdx := noIndex
-	if len(tableDesc.Mutations) > 0 {
-		for i, m := range tableDesc.Mutations {
-			if m.MutationID != mutationID {
-				break
-			}
-			if mutationIdx == noIndex && filter(m) {
-				mutationIdx = i
-			}
-		}
-	}
-
-	if mutationIdx == noIndex {
-		return nil, nil, 0, errors.Errorf("mutation %d has completed", mutationID)
-	}
-
-	// Find the job.
+	// Find the first mutation that is being worked on, its job, and its index in the resume span list.
 	var jobID int64
-	if len(tableDesc.MutationJobs) > 0 {
-		for _, job := range tableDesc.MutationJobs {
-			if job.MutationID == mutationID {
-				jobID = job.JobID
-				break
-			}
+	mutationIdx := 0
+	found := false
+	for _, m := range tableDesc.Mutations {
+		if m.MutationID != mutationID {
+			break
 		}
+
+		// Mutations which share the same job are adjacent to each other in the mutations list.
+		if jobID == m.JobID {
+			mutationIdx++
+		} else {
+			jobID = m.JobID
+			mutationIdx = 0
+		}
+
+		if filter(m) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, nil, 0, errors.Errorf("mutation %d has completed", mutationID)
 	}
 
 	if jobID == 0 {

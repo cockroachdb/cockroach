@@ -91,24 +91,14 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	mutationID := tableDesc.Mutations[0].MutationID
-	var jobID int64
-
-	if len(tableDesc.MutationJobs) > 0 {
-		for _, job := range tableDesc.MutationJobs {
-			if job.MutationID == mutationID {
-				jobID = job.JobID
-				break
-			}
-		}
-	}
 
 	details := jobspb.SchemaChangeDetails{ResumeSpanList: []jobspb.ResumeSpanList{
 		{ResumeSpans: resumeSpans}}}
 
-	job, err := registry.LoadJob(ctx, jobID)
+	job, err := registry.LoadJob(ctx, tableDesc.Mutations[0].JobID)
 
 	if err != nil {
-		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
+		t.Fatal(errors.Wrapf(err, "can't find job %d", tableDesc.Mutations[0].JobID))
 	}
 
 	err = job.SetDetails(ctx, details)

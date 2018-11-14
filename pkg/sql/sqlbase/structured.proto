@@ -541,6 +541,9 @@ message DescriptorMutation {
 
   // Indicates that this mutation is a rollback.
   optional bool rollback = 7 [(gogoproto.nullable) = false];
+
+  optional int64 job_id = 8 [(gogoproto.nullable) = false,
+                            (gogoproto.customname) = "JobID"];
 }
 
 // A TableDescriptor represents a table or view and is stored in a
@@ -769,20 +772,7 @@ message TableDescriptor {
   repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "DependedOnBy"];
 
-  message MutationJob {
-    // The mutation id of this mutation job.
-    optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
-
-    // The job id for a mutation job is the id in the system.jobs table of the
-    // schema change job executing the mutation referenced by mutation_id.
-    optional int64 job_id = 2 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "JobID"];
-  }
-
-  // Mutation jobs queued for execution in a FIFO order. Remains synchronized
-  // with the mutations list.
-  repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+  reserved 27;
 
   message SequenceOpts {
     // How much to increment the sequence by when nextval() is called.
