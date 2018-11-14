@@ -654,28 +654,25 @@ func (tc *TableCollection) releaseAllDescriptors() {
 
 // createSchemaChangeJob finalizes the current mutations in the table
 // descriptor and creates a schema change job in the system.jobs table.
-// The identifiers of the mutations and newly-created job are written to a new
-// MutationJob in the table descriptor.
+// Mutations are considered finalized if there is a job ID associated
+// with it, and mutations with the same job ID are adjacent in the list.
+// The identifiers of the finalized mutations and newly-created job are
+// written to the Mutations in the table descriptor
 //
 // The job creation is done within the planner's txn. This is important - if the
 // txn ends up rolling back, the job needs to go away.
 func (p *planner) createSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
+	mutationID := tableDesc.ClusterVersion.NextMutationID
 	span := tableDesc.PrimaryIndexSpan()
-	mutationID, err := tableDesc.FinalizeMutation()
-	if err != nil {
-		return sqlbase.InvalidMutationID, err
-	}
 	var spanList []jobspb.ResumeSpanList
-	for i := 0; i < len(tableDesc.Mutations); i++ {
-		if tableDesc.Mutations[i].MutationID == mutationID {
-			spanList = append(spanList,
-				jobspb.ResumeSpanList{
-					ResumeSpans: []roachpb.Span{span},
-				},
-			)
-		}
+	for i := tableDesc.NumFinalizedMutations; i < len(tableDesc.Mutations); i++ {
+		spanList = append(spanList,
+			jobspb.ResumeSpanList{
+				ResumeSpans: []roachpb.Span{span},
+			},
+		)
 	}
 	jobRecord := jobs.Record{
 		Description:   stmt,
@@ -688,8 +685,17 @@ func (p *planner) createSchemaChangeJob(
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, err
 	}
-	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-		MutationID: mutationID, JobID: *job.ID()})
+
+	// MutationJobs entry for this transaction not created yet.
+	if len(tableDesc.MutationJobs) == len(tableDesc.ClusterVersion.MutationJobs) {
+		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{MutationID: mutationID})
+	}
+
+	mutationJob := &tableDesc.MutationJobs[len(tableDesc.MutationJobs)-1]
+	for i := 0; i < len(tableDesc.Mutations)-tableDesc.NumFinalizedMutations; i++ {
+		mutationJob.JobIDs = append(mutationJob.JobIDs, *job.ID())
+	}
+	tableDesc.NumFinalizedMutations = len(tableDesc.Mutations)
 	return mutationID, nil
 }
 
@@ -846,8 +852,13 @@ func (p *planner) writeTableDescToBatch(
 			}
 		}
 
-		// Schedule a schema changer for later.
-		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
+		// Only queue at most one schema changer for all the mutations created
+		// in the current transaction.
+		if mutationID == sqlbase.InvalidMutationID || !tableDesc.QueuedMutations {
+			// Schedule a schema changer for later.
+			p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
+			tableDesc.QueuedMutations = mutationID != sqlbase.InvalidMutationID
+		}
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {

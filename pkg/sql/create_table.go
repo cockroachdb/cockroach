@@ -819,7 +819,11 @@ func NewMutableCreatedTableDescriptor(tbl sqlbase.TableDescriptor) *sqlbase.Muta
 func NewMutableExistingTableDescriptor(
 	tbl sqlbase.TableDescriptor,
 ) *sqlbase.MutableTableDescriptor {
-	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
+	return &sqlbase.MutableTableDescriptor{
+		TableDescriptor:       tbl,
+		ClusterVersion:        tbl,
+		NumFinalizedMutations: len(tbl.Mutations),
+	}
 }
 
 // InitTableDescriptor returns a blank TableDescriptor.

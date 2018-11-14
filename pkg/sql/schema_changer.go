@@ -104,12 +104,6 @@ type SchemaChanger struct {
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
-	// Keep a reference to the job related to this schema change
-	// so that we don't need to read the job again while updating
-	// the status of the job. This job can be one of two jobs: the
-	// original schema change job for the sql command, or the
-	// rollback job for the rollback of the schema change.
-	job *jobs.Job
 	// Caches updated by DistSQL.
 	rangeDescriptorCache *kv.RangeDescriptorCache
 	leaseHolderCache     *kv.LeaseHolderCache
@@ -815,15 +809,22 @@ func (sc *SchemaChanger) exec(
 		}
 	}()
 
-	// Find our job.
+	// Find and start our jobs.
 	foundJobID := false
 	for _, g := range tableDesc.MutationJobs {
 		if g.MutationID == sc.mutationID {
-			job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
-			if err != nil {
-				return err
+			for _, jobID := range g.JobIDs {
+				job, err := sc.jobRegistry.LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				if err := job.Started(ctx); err != nil {
+					if log.V(2) {
+						log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+					}
+				}
 			}
-			sc.job = job
+
 			foundJobID = true
 			break
 		}
@@ -833,12 +834,6 @@ func (sc *SchemaChanger) exec(
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.
 		return nil
-	}
-
-	if err := sc.job.Started(ctx); err != nil {
-		if log.V(2) {
-			log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.job.ID(), err)
-		}
 	}
 
 	defer waitToUpdateLeases()
@@ -864,7 +859,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	evalCtx *extendedEvalContext,
 ) error {
-	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
+	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.mutationID, err)
 	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
 		// Although the backfill did hit an integrity constraint violation
 		// and made a decision to reverse the mutations,
@@ -964,12 +959,27 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // Returns the updated of the descriptor.
 func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) {
 	isRollback := false
-	jobSucceeded := true
 	now := timeutil.Now().UnixNano()
+	// All jobs related to the current mutation ID
+	var mutationJobs map[int64]struct{}
+	// Jobs related to the current mutationID waiting for GC TTL
+	var gcJobs map[int64]struct{}
 	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
-		jobSucceeded = true
+
+		mutationJobs = make(map[int64]struct{})
+		gcJobs = make(map[int64]struct{})
+		var indexedMutationJobs []int64
+
+		for i, g := range desc.MutationJobs {
+			if g.MutationID == sc.mutationID {
+				// Trim the executed mutation group from the descriptor.
+				desc.MutationJobs = append(desc.MutationJobs[:i], desc.MutationJobs[i+1:]...)
+				indexedMutationJobs = g.JobIDs
+				break
+			}
+		}
 
 		i := 0
 		for _, mutation := range desc.Mutations {
@@ -978,17 +988,33 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
+
+			var jobID int64
+			// This can only occur if:
+			//   - This mutation was created prior to the upgrade of the
+			//     MutationJob proto, where it mapped mutation IDs to a
+			//     single job ID.
+			//   - The ID of the mutation is not unique (only from
+			//     ALTER TABLE ... ADD UNIQUE).
+			// Then the job ID is just the first element in the slice.
+			if i >= len(indexedMutationJobs) {
+				jobID = indexedMutationJobs[0]
+			} else {
+				jobID = indexedMutationJobs[i]
+			}
+
+			mutationJobs[jobID] = struct{}{}
 			isRollback = mutation.Rollback
 			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
 				indexDesc != nil {
 				if sc.canClearRangeForDrop(indexDesc) {
-					jobSucceeded = false
+					gcJobs[jobID] = struct{}{}
 					desc.GCMutations = append(
 						desc.GCMutations,
 						sqlbase.TableDescriptor_GCDescriptorMutation{
 							IndexID:  indexDesc.ID,
 							DropTime: now,
-							JobID:    *sc.job.ID(),
+							JobID:    jobID,
 						})
 				}
 			}
@@ -1005,24 +1031,21 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
 
-		for i, g := range desc.MutationJobs {
-			if g.MutationID == sc.mutationID {
-				// Trim the executed mutation group from the descriptor.
-				desc.MutationJobs = append(desc.MutationJobs[:i], desc.MutationJobs[i+1:]...)
-				break
-			}
-		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if jobSucceeded {
-			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return errors.Wrapf(err, "failed to mark job %d as successful", *sc.job.ID())
-			}
-		} else {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-				return jobs.RunningStatusWaitingGC, nil
-			}); err != nil {
-				return errors.Wrapf(err, "failed to update running status of job %d", *sc.job.ID())
+		for jobID := range mutationJobs {
+			if job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn); err != nil {
+				return err
+			} else if _, ok := gcJobs[jobID]; ok {
+				if err := job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+					return jobs.RunningStatusWaitingGC, nil
+				}); err != nil {
+					return errors.Wrapf(err, "failed to update running status of job %d", *job.ID())
+				}
+			} else {
+				if err := job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+					return errors.Wrapf(err, "failed to mark job %d as successful", *job.ID())
+				}
 			}
 		}
 
@@ -1104,7 +1127,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
 	// Reverse the flow of the state machine.
-	var scJob *jobs.Job
+	var rollbackJobs []*jobs.Job
 	// All the mutations dropped by the reversal of the schema change.
 	// This is created by traversing the mutations list like a graph
 	// where the indexes refer columns. Whenever a column schema change
@@ -1160,17 +1183,33 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		}
 
 		// Mark the schema change job as failed and create a rollback job.
-		scJob, err = sc.createRollbackJob(ctx, txn, tableDesc, causingError)
+		rollbackJobs, err = sc.createRollbackJobs(ctx, txn, tableDesc, causingError)
 		if err != nil {
 			return err
 		}
 
 		// Mark other reversed mutation jobs as failed.
-		for m := range droppedMutations {
-			_, err := markJobFailed(ctx, txn, tableDesc, m, sc.jobRegistry, causingError)
-			if err != nil {
-				return err
+		var newMutationJobs []sqlbase.TableDescriptor_MutationJob
+		for _, g := range tableDesc.MutationJobs {
+			if _, ok := droppedMutations[g.MutationID]; ok {
+				for _, j := range g.JobIDs {
+					if _, err := markJobFailed(ctx, txn, j, sc.jobRegistry, causingError); err != nil {
+						return err
+					}
+				}
+			} else {
+				newMutationJobs = append(newMutationJobs, g)
 			}
+		}
+		tableDesc.MutationJobs = newMutationJobs
+
+		// write descriptor, the version has already been incremented.
+		descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
+		descVal := sqlbase.WrapDescriptor(tableDesc)
+		b := txn.NewBatch()
+		b.Put(descKey, descVal)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
 		}
 
 		// Log "Reverse Schema Change" event. Only the causing error and the
@@ -1191,29 +1230,19 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	if err != nil {
 		return err
 	}
-	// Only update the job if the transaction has succeeded. The schame change
-	// job will now references the rollback job.
-	if scJob != nil {
-		sc.job = scJob
-		return scJob.Started(ctx)
+	// Only update the jobs if the transaction has succeeded.
+	for _, j := range rollbackJobs {
+		if err := j.Started(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// Mark the job associated with the mutation as failed.
+// Mark the job as failed.
 func markJobFailed(
-	ctx context.Context,
-	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	mutationID sqlbase.MutationID,
-	jobRegistry *jobs.Registry,
-	causingError error,
+	ctx context.Context, txn *client.Txn, jobID int64, jobRegistry *jobs.Registry, causingError error,
 ) (*jobs.Job, error) {
-	// Mark job as failed.
-	jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
-	if err != nil {
-		return nil, err
-	}
 	job, err := jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
 		return nil, err
@@ -1224,33 +1253,41 @@ func markJobFailed(
 
 // Mark the current schema change job as failed and create a new rollback job
 // representing the schema change and return it.
-func (sc *SchemaChanger) createRollbackJob(
+func (sc *SchemaChanger) createRollbackJobs(
 	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor, causingError error,
-) (*jobs.Job, error) {
+) ([]*jobs.Job, error) {
+	var rollbackJobs []*jobs.Job
 
-	// Mark job as failed.
-	job, err := markJobFailed(ctx, txn, tableDesc, sc.mutationID, sc.jobRegistry, causingError)
-	if err != nil {
-		return nil, err
-	}
+	for i := 0; i < len(tableDesc.MutationJobs); i++ {
+		if tableDesc.MutationJobs[i].MutationID != sc.mutationID {
+			continue
+		}
 
-	// Create a new rollback job representing the reversal of the mutations.
-	for i := range tableDesc.MutationJobs {
-		if tableDesc.MutationJobs[i].MutationID == sc.mutationID {
+		jobIDs := tableDesc.MutationJobs[i].JobIDs
+
+		for j := 0; j < len(jobIDs); j++ {
+
+			jobID := jobIDs[j]
+
+			job, err := markJobFailed(ctx, txn, jobID, sc.jobRegistry, causingError)
+			if err != nil {
+				return nil, err
+			}
+
 			// Create a roll back job.
 			//
-			// Initialize refresh spans to scan the entire table.
+			// Initialize refresh spans to scan the entire table for each of the
+			// mutations originally associated with the same job.
 			span := tableDesc.PrimaryIndexSpan()
 			var spanList []jobspb.ResumeSpanList
-			for _, m := range tableDesc.Mutations {
-				if m.MutationID == sc.mutationID {
-					spanList = append(spanList,
-						jobspb.ResumeSpanList{
-							ResumeSpans: []roachpb.Span{span},
-						},
-					)
-				}
+			for range job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList {
+				spanList = append(spanList,
+					jobspb.ResumeSpanList{
+						ResumeSpans: []roachpb.Span{span},
+					},
+				)
 			}
+
 			payload := job.Payload()
 			rollbackJob := sc.jobRegistry.NewJob(jobs.Record{
 				Description:   fmt.Sprintf("ROLL BACK JOB %d: %s", *job.ID(), payload.Description),
@@ -1266,21 +1303,15 @@ func (sc *SchemaChanger) createRollbackJob(
 			// be used in other transactions.
 			rollbackJob.WithTxn(nil)
 
-			tableDesc.MutationJobs[i].JobID = *rollbackJob.ID()
-
-			// write descriptor, the version has already been incremented.
-			descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-			descVal := sqlbase.WrapDescriptor(tableDesc)
-			b := txn.NewBatch()
-			b.Put(descKey, descVal)
-			if err := txn.Run(ctx, b); err != nil {
-				return nil, err
+			for ; j < len(jobIDs) && jobIDs[j] == jobID; j++ {
+				jobIDs[j] = *rollbackJob.ID()
 			}
-			return rollbackJob, nil
+
+			rollbackJobs = append(rollbackJobs, rollbackJob)
 		}
+		break
 	}
-	// Cannot get here.
-	return nil, fmt.Errorf("no job found for table %d mutation %d", sc.tableID, sc.mutationID)
+	return rollbackJobs, nil
 }
 
 // deleteIndexMutationsWithReversedColumns deletes mutations with a

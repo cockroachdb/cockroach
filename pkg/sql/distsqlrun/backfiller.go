@@ -164,17 +164,17 @@ func GetResumeSpans(
 		return nil, nil, 0, err
 	}
 
-	// Find the index of the first mutation that is being worked on.
+	// Find the first mutation that is being worked on.
 	const noIndex = -1
 	mutationIdx := noIndex
-	if len(tableDesc.Mutations) > 0 {
-		for i, m := range tableDesc.Mutations {
-			if m.MutationID != mutationID {
-				break
-			}
-			if mutationIdx == noIndex && filter(m) {
-				mutationIdx = i
-			}
+	for i, m := range tableDesc.Mutations {
+		if m.MutationID != mutationID {
+			break
+		}
+
+		if filter(m) {
+			mutationIdx = i
+			break
 		}
 	}
 
@@ -182,12 +182,34 @@ func GetResumeSpans(
 		return nil, nil, 0, errors.Errorf("mutation %d has completed", mutationID)
 	}
 
-	// Find the job.
+	// Find the job and the mutation's index in the resume span list.
 	var jobID int64
+	var resumeListIdx int
 	if len(tableDesc.MutationJobs) > 0 {
 		for _, job := range tableDesc.MutationJobs {
 			if job.MutationID == mutationID {
-				jobID = job.JobID
+				// This can only occur if:
+				//   - This mutation was created prior to the upgrade of the
+				//     MutationJob proto, where it mapped mutation IDs to a
+				//     single job ID.
+				//   - The ID of the mutation is not unique (only from
+				//     ALTER TABLE ... ADD UNIQUE).
+				// Then the job ID is just the first element in the slice, and
+				// and the resume index is found using the old method.
+				if mutationIdx >= len(job.JobIDs) {
+					resumeListIdx = mutationIdx
+					jobID = job.JobIDs[0]
+					break
+				}
+
+				jobID = job.JobIDs[mutationIdx]
+
+				// (i+1) is the index of the first occurrence of jobID in the list.
+				i := mutationIdx - 1
+				for ; i >= 0 && job.JobIDs[i] == jobID; i-- {
+				}
+				resumeListIdx = mutationIdx - (i + 1)
+
 				break
 			}
 		}
@@ -205,8 +227,7 @@ func GetResumeSpans(
 	if !ok {
 		return nil, nil, 0, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
-	// Return the resume spans from the job using the mutation idx.
-	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
+	return details.ResumeSpanList[resumeListIdx].ResumeSpans, job, resumeListIdx, nil
 }
 
 // SetResumeSpansInJob addeds a list of resume spans into a job details field.

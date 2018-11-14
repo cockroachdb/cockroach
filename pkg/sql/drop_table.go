@@ -363,15 +363,9 @@ func (p *planner) initiateDropTable(
 
 	// Mark all jobs scheduled for schema changes as successful.
 	jobIDs := make(map[int64]struct{})
-	var id sqlbase.MutationID
-	for _, m := range tableDesc.Mutations {
-		if id != m.MutationID {
-			id = m.MutationID
-			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc.TableDesc(), id)
-			if err != nil {
-				return err
-			}
-			jobIDs[jobID] = struct{}{}
+	for _, m := range tableDesc.MutationJobs {
+		for _, id := range m.JobIDs {
+			jobIDs[id] = struct{}{}
 		}
 	}
 	for _, gcm := range tableDesc.GCMutations {

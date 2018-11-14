@@ -772,12 +772,13 @@ message TableDescriptor {
   message MutationJob {
     // The mutation id of this mutation job.
     optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+                                    (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
 
-    // The job id for a mutation job is the id in the system.jobs table of the
-    // schema change job executing the mutation referenced by mutation_id.
-    optional int64 job_id = 2 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "JobID"];
+    // The IDs in the system.jobs table of the schema change jobs executing
+    // the mutation referenced by mutation_id. The length of this is equal
+    // to the number of mutations with the same mutation ID. The ordering
+    // remains synchronized with the mutations list.
+    repeated int64 job_ids = 2 [(gogoproto.customname) = "JobIDs"];
   }
 
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
