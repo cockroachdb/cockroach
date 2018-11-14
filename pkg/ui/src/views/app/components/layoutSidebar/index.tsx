@@ -33,6 +33,8 @@ import statementsIcon from "!!raw-loader!assets/sidebarIcons/statements.svg";
 import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
 import gearIcon from "!!raw-loader!assets/sidebarIcons/gear.svg";
 
+import "./navigation-bar.styl";
+
 interface IconLinkProps {
   icon: string;
   title?: string;
