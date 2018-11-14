@@ -773,7 +773,19 @@ func mvccGetMetadata(
 		if err := iter.ValueProto(meta); err != nil {
 			return false, 0, 0, err
 		}
-		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())), nil
+		if meta.Txn == nil && !meta.IsInline() {
+			// Shh. This intent doesn't really exist.
+			iter.Next()
+			if ok, err := iter.Valid(); !ok {
+				return false, 0, 0, err
+			}
+			unsafeKey = iter.UnsafeKey()
+			if !unsafeKey.Key.Equal(metaKey.Key) {
+				return false, 0, 0, nil
+			}
+		} else {
+			return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())), nil
+		}
 	}
 
 	meta.Reset()
@@ -1286,7 +1298,10 @@ func mvccPutInternal(
 			return err
 		}
 		if value == nil {
-			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
+			metaKeySize, metaValSize = 0, 0
+			_, _, err = buf.putMeta(engine, metaKey, &enginepb.MVCCMetadata{
+				Timestamp: buf.meta.Timestamp,
+			})
 		} else {
 			buf.meta = enginepb.MVCCMetadata{RawBytes: value}
 			metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, &buf.meta)
@@ -2243,7 +2258,9 @@ func mvccResolveWriteIntent(
 			metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err = engine.Clear(metaKey)
+			_, _, err = buf.putMeta(engine, metaKey, &enginepb.MVCCMetadata{
+				Timestamp: meta.Timestamp,
+			})
 		}
 		if err != nil {
 			return false, err
@@ -2323,7 +2340,9 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = engine.Clear(metaKey); err != nil {
+		if _, _, err = buf.putMeta(engine, metaKey, &enginepb.MVCCMetadata{
+			Timestamp: meta.Timestamp,
+		}); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -2341,7 +2360,9 @@ func mvccResolveWriteIntent(
 		KeyBytes: mvccVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err := engine.Clear(metaKey); err != nil {
+	if _, _, err = buf.putMeta(engine, metaKey, &enginepb.MVCCMetadata{
+		Timestamp: meta.Timestamp,
+	}); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
@@ -2775,6 +2796,15 @@ func ComputeStatsGo(
 
 		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()
+		if !isValue {
+			if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
+				return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+			}
+			if meta.Txn == nil && !meta.IsInline() {
+				// Shh. This intent doesn't really exist.
+				continue
+			}
+		}
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
 
@@ -2795,12 +2825,6 @@ func ComputeStatsGo(
 			}
 			totalBytes := metaKeySize + metaValSize
 			first = true
-
-			if !implicitMeta {
-				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
-					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-				}
-			}
 
 			if isSys {
 				ms.SysBytes += totalBytes

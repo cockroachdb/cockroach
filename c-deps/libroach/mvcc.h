@@ -221,7 +221,11 @@ template <bool reverse> class mvccScanner {
     }
 
     if (!meta_.has_txn()) {
-      return setStatus(FmtStatus("intent without transaction"));
+      // Shh. This intent doesn't really exist.
+      if (check_uncertainty_) {
+        return seekVersion(txn_max_timestamp_, true);
+      }
+      return seekVersion(timestamp_, false);
     }
 
     const bool own_intent = (meta_.txn().id() == txn_id_);

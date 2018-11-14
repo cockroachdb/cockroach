@@ -168,6 +168,11 @@ func (i *MVCCIncrementalIterator) advance() {
 				i.valid = false
 				return
 			}
+			if !i.meta.IsInline() && i.meta.Txn == nil {
+				// Shh. This intent doesn't really exist.
+				i.iter.Next()
+				continue
+			}
 		}
 		if i.meta.IsInline() {
 			// Inline values are only used in non-user data. They're not needed

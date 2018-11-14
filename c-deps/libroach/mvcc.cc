@@ -117,6 +117,15 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
 
     const bool isSys = (rocksdb::Slice(decoded_key).compare(kLocalMax) < 0);
     const bool isValue = (wall_time != 0 || logical != 0);
+    if (!isValue) {
+      if (!meta.ParseFromArray(value.data(), value.size())) {
+        stats.status = FmtStatus("unable to decode MVCCMetadata");
+        return stats;
+      }
+      if (!meta.has_txn() && !meta.has_raw_bytes()) {
+        continue;
+      }
+    }
     const bool implicitMeta = isValue && decoded_key != prev_key;
     prev_key.assign(decoded_key.data(), decoded_key.size());
 
@@ -134,11 +143,6 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
       const int64_t meta_val_size = implicitMeta ? 0 : value.size();
       const int64_t total_bytes = meta_key_size + meta_val_size;
       first = true;
-
-      if (!implicitMeta && !meta.ParseFromArray(value.data(), value.size())) {
-        stats.status = FmtStatus("unable to decode MVCCMetadata");
-        return stats;
-      }
 
       if (isSys) {
         stats.sys_bytes += total_bytes;
