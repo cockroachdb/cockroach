@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	isatty "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 )
 
 // serverCfg is used as the client-side copy of default server
@@ -135,6 +135,12 @@ func initCLIDefaults() {
 	sqlfmtCtx.noSimplify = !cfg.Simplify
 	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
 	sqlfmtCtx.execStmts = nil
+
+	systemBenchCtx.concurrency = 1
+	systemBenchCtx.duration = 60 * time.Second
+	systemBenchCtx.tempDir = "."
+	systemBenchCtx.writeSize = 32 << 10
+	systemBenchCtx.syncInterval = 512 << 10
 
 	initPreFlagsDefaults()
 
@@ -297,6 +303,16 @@ var nodeCtx struct {
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
+}
+
+// systemBenchCtx captures the command-line parameters of the `bench` command.
+// Defaults set by InitCLIDefaults() above.
+var systemBenchCtx struct {
+	concurrency  int
+	duration     time.Duration
+	tempDir      string
+	writeSize    int64
+	syncInterval int64
 }
 
 // sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
