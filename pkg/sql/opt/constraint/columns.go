@@ -115,6 +115,16 @@ func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
 	return true
 }
 
+// ColSet returns the columns as a ColSet.
+func (c *Columns) ColSet() opt.ColSet {
+	var r opt.ColSet
+	r.Add(int(c.firstCol.ID()))
+	for _, c := range c.otherCols {
+		r.Add(int(c.ID()))
+	}
+	return r
+}
+
 func (c Columns) String() string {
 	var b strings.Builder
 
