@@ -21,9 +21,12 @@ import (
 )
 
 var (
-	Binary     = "cockroach"
+	// Binary TODO(peter): document
+	Binary = "cockroach"
+	// SlackToken TODO(peter): document
 	SlackToken string
-	OSUser     *user.User
+	// OSUser TODO(peter): document
+	OSUser *user.User
 )
 
 func init() {

@@ -22,11 +22,13 @@ import (
 	"strings"
 )
 
+// Writer TODO(peter): document
 type Writer struct {
 	buf       bytes.Buffer
 	lineCount int
 }
 
+// Flush TODO(peter): document
 func (w *Writer) Flush(out io.Writer) error {
 	if len(w.buf.Bytes()) == 0 {
 		return nil

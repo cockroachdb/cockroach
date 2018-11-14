@@ -36,7 +36,8 @@ import (
 
 const (
 	defaultProject = "cockroach-ephemeral"
-	ProviderName   = "gce"
+	// ProviderName is gce.
+	ProviderName = "gce"
 )
 
 // init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
@@ -185,10 +186,12 @@ func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
 		"Project to create cluster in")
 }
 
+// Provider TODO(peter): document
 type Provider struct {
 	opts providerOpts
 }
 
+// CleanSSH TODO(peter): document
 func (p *Provider) CleanSSH() error {
 	args := []string{"compute", "config-ssh", "--project", p.opts.Project, "--quiet", "--remove"}
 	cmd := exec.Command("gcloud", args...)
@@ -200,6 +203,7 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
+// ConfigSSH TODO(peter): document
 func (p *Provider) ConfigSSH() error {
 	args := []string{"compute", "config-ssh", "--project", p.opts.Project, "--quiet"}
 	cmd := exec.Command("gcloud", args...)
@@ -211,6 +215,7 @@ func (p *Provider) ConfigSSH() error {
 	return nil
 }
 
+// Create TODO(peter): document
 func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.Project != defaultProject {
 		fmt.Printf("WARNING: --lifetime functionality requires "+
@@ -277,7 +282,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		i += nodesPerZone
 
 		totalNodes -= float64(nodesPerZone)
-		totalZones -= 1
+		totalZones--
 		nodesPerZone = int(math.Ceil(totalNodes / totalZones))
 
 		g.Go(func() error {
@@ -295,6 +300,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	return g.Wait()
 }
 
+// Delete TODO(peter): document
 func (p *Provider) Delete(vms vm.List) error {
 	zoneMap := make(map[string][]string)
 	for _, v := range vms {
@@ -330,6 +336,7 @@ func (p *Provider) Delete(vms vm.List) error {
 	return g.Wait()
 }
 
+// Extend TODO(peter): document
 func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to
 	// perform the iteration here.
@@ -351,6 +358,7 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	return nil
 }
 
+// FindActiveAccount TODO(peter): document
 func (p *Provider) FindActiveAccount() (string, error) {
 	args := []string{"auth", "list", "--format", "json", "--filter", "status~ACTIVE"}
 
@@ -372,11 +380,12 @@ func (p *Provider) FindActiveAccount() (string, error) {
 	return username, nil
 }
 
+// Flags TODO(peter): document
 func (p *Provider) Flags() vm.ProviderFlags {
 	return &p.opts
 }
 
-// Query gcloud to produce a list of VM info objects.
+// List queries gcloud to produce a list of VM info objects.
 func (p *Provider) List() (vm.List, error) {
 	args := []string{"compute", "instances", "list", "--project", p.opts.Project, "--format", "json"}
 
@@ -395,6 +404,7 @@ func (p *Provider) List() (vm.List, error) {
 	return vms, nil
 }
 
+// Name TODO(peter): document
 func (p *Provider) Name() string {
 	return ProviderName
 }

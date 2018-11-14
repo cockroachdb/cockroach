@@ -35,12 +35,12 @@ import (
 )
 
 type status struct {
-	good    []*CloudCluster
-	warn    []*CloudCluster
-	destroy []*CloudCluster
+	good    []*Cluster
+	warn    []*Cluster
+	destroy []*Cluster
 }
 
-func (s *status) add(c *CloudCluster, now time.Time) {
+func (s *status) add(c *Cluster, now time.Time) {
 	exp := c.ExpiresAt()
 	if exp.After(now) {
 		if exp.Before(now.Add(2 * time.Hour)) {
@@ -60,7 +60,7 @@ func (s *status) notificationHash() string {
 	// Use stdlib hash function, since we don't need any crypto guarantees
 	hash := fnv.New32a()
 
-	for i, list := range [][]*CloudCluster{s.good, s.warn, s.destroy} {
+	for i, list := range [][]*Cluster{s.good, s.warn, s.destroy} {
 		hash.Write([]byte{byte(i)})
 
 		var data []string
@@ -161,7 +161,7 @@ func postStatus(client *slack.Client, channel string, dryrun bool, s *status, ba
 		}
 	}
 
-	makeStatusFields := func(clusters []*CloudCluster) []slack.AttachmentField {
+	makeStatusFields := func(clusters []*Cluster) []slack.AttachmentField {
 		var names []string
 		var expirations []string
 		for _, c := range clusters {

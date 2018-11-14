@@ -27,8 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 )
 
+// Cassandra TODO(peter): document
 type Cassandra struct{}
 
+// Start implements the ClusterImpl.NodeDir interface.
 func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 	yamlPath, err := makeCassandraYAML(c)
 	if err != nil {
@@ -86,6 +88,7 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 	})
 }
 
+// NodeDir implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodeDir(c *SyncedCluster, index int) string {
 	if c.IsLocal() {
 		// TODO(peter): This will require a bit of work to adjust paths in
@@ -95,14 +98,17 @@ func (Cassandra) NodeDir(c *SyncedCluster, index int) string {
 	return "/mnt/data1/cassandra"
 }
 
+// LogDir implements the ClusterImpl.NodeDir interface.
 func (Cassandra) LogDir(c *SyncedCluster, index int) string {
 	panic("Cassandra.LogDir unimplemented")
 }
 
+// NodeURL implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodeURL(_ *SyncedCluster, host string, port int) string {
 	return fmt.Sprintf("'cassandra://%s:%d'", host, port)
 }
 
+// NodePort implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodePort(c *SyncedCluster, index int) int {
 	if c.IsLocal() {
 		// TODO(peter): This will require a bit of work to adjust ports in
@@ -111,6 +117,7 @@ func (Cassandra) NodePort(c *SyncedCluster, index int) int {
 	return 9042
 }
 
+// NodeUIPort implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodeUIPort(c *SyncedCluster, index int) int {
 	return 0 // unimplemented
 }

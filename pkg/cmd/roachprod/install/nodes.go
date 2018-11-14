@@ -30,6 +30,7 @@ func allNodes(total int) []int {
 	return r
 }
 
+// ListNodes TODO(peter): document
 func ListNodes(s string, total int) ([]int, error) {
 	if s == "all" {
 		return allNodes(total), nil
