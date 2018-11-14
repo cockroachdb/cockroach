@@ -2092,9 +2092,15 @@ func (r *Replica) sendWithRangeID(
 // evaluation of a batch, only allow or disallow it.
 func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
 	r.mu.RLock()
+	if !r.mu.destroyStatus.IsAlive() {
+		err := r.mu.destroyStatus.err
+		r.mu.RUnlock()
+		return roachpb.NewError(err)
+	}
 	desc := r.mu.state.Desc
 	threshold := r.mu.state.GCThreshold
 	r.mu.RUnlock()
+
 	if !threshold.Less(ts) {
 		return &roachpb.BatchTimestampBeforeGCError{
 			Timestamp: ts,
@@ -3126,11 +3132,6 @@ func (r *Replica) executeReadOnlyBatch(
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
-	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
-	if _, err := r.IsDestroyed(); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
 	rSpan, err := keys.Range(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -3689,14 +3690,6 @@ func (r *Replica) propose(
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (_ chan proposalResult, _ func() bool, _ int64, pErr *roachpb.Error) {
-	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
-	r.mu.RLock()
-	if !r.mu.destroyStatus.IsAlive() {
-		err := r.mu.destroyStatus.err
-		r.mu.RUnlock()
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-	r.mu.RUnlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
