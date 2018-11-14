@@ -4,6 +4,7 @@ const path = require("path");
 const rimraf = require("rimraf");
 const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+const VisualizerPlugin = require("webpack-visualizer-plugin");
 
 // Remove a broken dependency that Yarn insists upon installing before every
 // Webpack compile. We also do this when installing dependencies via Make, but
@@ -124,6 +125,7 @@ module.exports = (env) => {
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
       new DashboardPlugin(),
+      new VisualizerPlugin({ filename: `../dist/stats.${env.dist}.html` }),
     ],
 
     // https://webpack.js.org/configuration/stats/
