@@ -81,14 +81,14 @@ func cockroachNodeBinary(c *SyncedCluster, i int) string {
 }
 
 func getCockroachVersion(c *SyncedCluster, i int) (*version.Version, error) {
-	session, err := c.newSession(i)
+	sess, err := c.newSession(i)
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer sess.Close()
 
 	cmd := cockroachNodeBinary(c, i) + " version"
-	out, err := session.CombinedOutput(cmd)
+	out, err := sess.CombinedOutput(cmd)
 	if err != nil {
 		return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
@@ -139,12 +139,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		var existsErr error
 		display := fmt.Sprintf("%s: checking certs", c.Name)
 		c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-			session, err := c.newSession(1)
+			sess, err := c.newSession(1)
 			if err != nil {
 				return nil, err
 			}
-			defer session.Close()
-			_, existsErr = session.CombinedOutput(`test -e ` + filepath.Join(dir, `certs.tar`))
+			defer sess.Close()
+			_, existsErr = sess.CombinedOutput(`test -e ` + filepath.Join(dir, `certs.tar`))
 			return nil, nil
 		})
 
@@ -167,11 +167,11 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 			// Generate the ca, client and node certificates on the first node.
 			c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-				session, err := c.newSession(1)
+				sess, err := c.newSession(1)
 				if err != nil {
 					return nil, err
 				}
-				defer session.Close()
+				defer sess.Close()
 
 				var nodeNames []string
 				if c.IsLocal() {
@@ -199,7 +199,7 @@ mkdir -p certs
 %[1]s cert create-node localhost %[2]s --certs-dir=certs --ca-key=certs/ca.key
 tar cvf certs.tar certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "))
-				if out, err := session.CombinedOutput(cmd); err != nil {
+				if out, err := sess.CombinedOutput(cmd); err != nil {
 					msg = fmt.Sprintf("%s: %v", out, err)
 				}
 				return nil, nil
@@ -244,19 +244,19 @@ tar cvf certs.tar certs
 			// Skip the the first node which is where we generated the certs.
 			nodes = nodes[1:]
 			c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-				session, err := c.newSession(nodes[i])
+				sess, err := c.newSession(nodes[i])
 				if err != nil {
 					return nil, err
 				}
-				defer session.Close()
+				defer sess.Close()
 
-				session.SetStdin(bytes.NewReader(certsTar))
+				sess.SetStdin(bytes.NewReader(certsTar))
 				var cmd string
 				if c.IsLocal() {
 					cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[i])
 				}
 				cmd += `tar xf -`
-				if out, err := session.CombinedOutput(cmd); err != nil {
+				if out, err := sess.CombinedOutput(cmd); err != nil {
 					return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 				}
 				return nil, nil
@@ -289,11 +289,11 @@ tar cvf certs.tar certs
 			return nil, err
 		}
 
-		session, err := c.newSession(nodes[i])
+		sess, err := c.newSession(nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		port := r.NodePort(c, nodes[i])
 
@@ -389,7 +389,7 @@ tar cvf certs.tar certs
 			c.Env + " " + binary + " start " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout 2>> " + logDir + "/cockroach.stderr" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr; exit $x)"
-		if out, err := session.CombinedOutput(cmd); err != nil {
+		if out, err := sess.CombinedOutput(cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
 		// NB: if cockroach started successfully, we ignore the output as it is
@@ -407,11 +407,11 @@ tar cvf certs.tar certs
 		var msg string
 		display = fmt.Sprintf("%s: initializing cluster settings", c.Name)
 		c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-			session, err := c.newSession(1)
+			sess, err := c.newSession(1)
 			if err != nil {
 				return nil, err
 			}
-			defer session.Close()
+			defer sess.Close()
 
 			var cmd string
 			if c.IsLocal() {
@@ -429,7 +429,7 @@ SET CLUSTER SETTING enterprise.license = '%s';"`, license) + ` &&
 			touch ` + dir + `/settings-initialized
 fi
 `
-			out, err := session.CombinedOutput(cmd)
+			out, err := sess.CombinedOutput(cmd)
 			if err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}
@@ -508,11 +508,11 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		var cmd string
 		if c.IsLocal() {
@@ -522,7 +522,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 			r.NodeURL(c, "localhost", r.NodePort(c, c.Nodes[i])) + " " +
 			ssh.Escape(args)
 
-		out, err := session.CombinedOutput(cmd)
+		out, err := sess.CombinedOutput(cmd)
 		if err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}

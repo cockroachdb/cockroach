@@ -128,9 +128,9 @@ func (e *expander) expand(c *SyncedCluster, arg string) string {
 			e.maybeExpandLogDir,
 		}
 		for _, f := range expanders {
-			s, expanded := f(c, s)
+			v, expanded := f(c, s)
 			if expanded {
-				return s
+				return v
 			}
 		}
 		return s
