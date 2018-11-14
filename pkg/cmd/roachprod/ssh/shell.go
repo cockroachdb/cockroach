@@ -23,6 +23,7 @@ import (
 
 const shellMetachars = "|&;()<> \t\n$\\`"
 
+// Escape1 TODO(peter): document
 func Escape1(arg string) string {
 	if strings.ContainsAny(arg, shellMetachars) {
 		// Argument contains shell metacharacters. Double quote the
@@ -34,6 +35,7 @@ func Escape1(arg string) string {
 	return arg
 }
 
+// Escape TODO(peter): document
 func Escape(args []string) string {
 	escaped := make([]string, len(args))
 	for i := range args {

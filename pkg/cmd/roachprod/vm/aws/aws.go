@@ -30,6 +30,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// ProviderName is aws.
 const ProviderName = "aws"
 
 // init will inject the AWS provider into vm.Providers, but only
@@ -234,7 +235,7 @@ func (p *Provider) Delete(vms vm.List) error {
 		g.Go(func() error {
 			var data struct {
 				TerminatingInstances []struct {
-					InstanceId string
+					InstanceID string `json:"InstanceId"`
 				}
 			}
 			return runJSONCommand(args, &data)
@@ -382,15 +383,15 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 	var data struct {
 		Reservations []struct {
 			Instances []struct {
-				InstanceId string
+				InstanceID string `json:"InstanceId"`
 				LaunchTime string
 				Placement  struct {
 					AvailabilityZone string
 				}
-				PrivateDnsName   string
-				PrivateIpAddress string
-				PublicDnsName    string
-				PublicIpAddress  string
+				PrivateDNSName   string `json:"PrivateDnsName"`
+				PrivateIPAddress string `json:"PrivateIpAddress"`
+				PublicDNSName    string `json:"PublicDnsName"`
+				PublicIPAddress  string `json:"PublicIpAddress"`
 				State            struct {
 					Code int
 					Name string
@@ -399,7 +400,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 					Key   string
 					Value string
 				}
-				VpcId        string
+				VpcID        string `json:"VpcId"`
 				InstanceType string
 			}
 		}
@@ -450,16 +451,16 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 
 			m := vm.VM{
 				CreatedAt:   createdAt,
-				DNS:         in.PrivateDnsName,
+				DNS:         in.PrivateDNSName,
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
-				PrivateIP:   in.PrivateIpAddress,
+				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
-				ProviderID:  in.InstanceId,
-				PublicIP:    in.PublicIpAddress,
+				ProviderID:  in.InstanceID,
+				PublicIP:    in.PublicIPAddress,
 				RemoteUser:  p.opts.RemoteUserName,
-				VPC:         in.VpcId,
+				VPC:         in.VpcID,
 				MachineType: in.InstanceType,
 				Zone:        in.Placement.AvailabilityZone,
 			}
@@ -484,7 +485,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if err != nil {
 		return err
 	}
-	amiId, ok := amiMap[region]
+	amiID, ok := amiMap[region]
 	if !ok {
 		return errors.Errorf("could not find an AMI image id for region %s", region)
 	}
@@ -505,7 +506,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if err != nil {
 		return err
 	}
-	sgId, ok := sgMap[region]
+	sgID, ok := sgMap[region]
 	if !ok {
 		return errors.Errorf("could not find a security group id for region %s", region)
 	}
@@ -514,7 +515,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if err != nil {
 		return err
 	}
-	subnetId, ok := subnetMap[zone]
+	subnetID, ok := subnetMap[zone]
 	if !ok {
 		return errors.Errorf("could not find a subnet id for zone %s", zone)
 	}
@@ -530,7 +531,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	var data struct {
 		Instances []struct {
-			InstanceId string
+			InstanceID string `json:"InstanceId"`
 		}
 	}
 
@@ -538,12 +539,12 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
-		"--image-id", amiId,
+		"--image-id", amiID,
 		"--instance-type", machineType,
 		"--key-name", keyName,
 		"--region", region,
-		"--security-group-ids", sgId,
-		"--subnet-id", subnetId,
+		"--security-group-ids", sgID,
+		"--subnet-id", subnetID,
 		"--tag-specifications", tagSpecs,
 		"--user-data", awsStartupScript,
 	}

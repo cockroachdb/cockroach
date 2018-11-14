@@ -975,7 +975,7 @@ var runCmd = &cobra.Command{
 		// Use "ssh" if an interactive session was requested (i.e. there is no
 		// remote command to run).
 		if len(args) == 1 {
-			return c.Ssh(nil, args[1:])
+			return c.SSH(nil, args[1:])
 		}
 
 		cmd := strings.TrimSpace(strings.Join(args[1:], " "))

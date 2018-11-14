@@ -15,7 +15,7 @@
 
 package ui
 
-// Compare error objects by their Error() value.
+// ErrorsByError compares error objects by their Error() value.
 type ErrorsByError []error
 
 func (l ErrorsByError) Len() int {

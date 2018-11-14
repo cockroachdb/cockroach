@@ -84,13 +84,14 @@ func (vm *VM) Locality() string {
 	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
 }
 
+// List TODO(peter): document
 type List []VM
 
 func (vl List) Len() int           { return len(vl) }
 func (vl List) Swap(i, j int)      { vl[i], vl[j] = vl[j], vl[i] }
 func (vl List) Less(i, j int) bool { return vl[i].Name < vl[j].Name }
 
-// Extract all VM.Name entries from the List
+// Names sxtracts all VM.Name entries from the List
 func (vl List) Names() []string {
 	ret := make([]string, len(vl))
 	for i, vm := range vl {
@@ -108,7 +109,7 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
-// Extract all VM.Zone entries from the List
+// Zones extracts all VM.Zone entries from the List
 func (vl List) Zones() []string {
 	ret := make([]string, len(vl))
 	for i, vm := range vl {
@@ -125,12 +126,14 @@ type CreateOpts struct {
 	VMProviders    []string
 }
 
-// A hook point for Providers to supply additional, provider-specific flags to various
-// roachprod commands.  In general, the flags should be prefixed with the provider's name
-// to prevent collision between similar options.
+// ProviderFlags is a hook point for Providers to supply additional,
+// provider-specific flags to various roachprod commands. In general, the flags
+// should be prefixed with the provider's name to prevent collision between
+// similar options.
 //
-// If a new command is added (perhaps `roachprod enlarge`) that needs additional provider-
-// specific flags, add a similarly-named method `ConfigureEnlargeFlags` to mix in the additional flags.
+// If a new command is added (perhaps `roachprod enlarge`) that needs
+// additional provider- specific flags, add a similarly-named method
+// `ConfigureEnlargeFlags` to mix in the additional flags.
 type ProviderFlags interface {
 	// Configures a FlagSet with any options relevant to the `create` command.
 	ConfigureCreateFlags(*pflag.FlagSet)
@@ -195,7 +198,8 @@ func FanOut(list List, action func(Provider, List) error) error {
 // Memoizes return value from FindActiveAccounts.
 var cachedActiveAccounts map[string]string
 
-// FindActiveAccount queries the active providers for the name of the user account.
+// FindActiveAccounts queries the active providers for the name of the user
+// account.
 func FindActiveAccounts() (map[string]string, error) {
 	source := cachedActiveAccounts
 
@@ -227,7 +231,8 @@ func FindActiveAccounts() (map[string]string, error) {
 	return ret, nil
 }
 
-// ForProvider resolves the Provider with the given name and executes the action.
+// ForProvider resolves the Provider with the given name and executes the
+// action.
 func ForProvider(named string, action func(Provider) error) error {
 	p, ok := Providers[named]
 	if !ok {

@@ -41,6 +41,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ClusterImpl TODO(peter): document
 type ClusterImpl interface {
 	Start(c *SyncedCluster, extraArgs []string)
 	NodeDir(c *SyncedCluster, index int) string
@@ -86,12 +87,15 @@ func (c *SyncedCluster) locality(index int) string {
 	return c.Localities[index-1]
 }
 
+// IsLocal TODO(peter): document
+//
 // TODO(tschottdorf): roachprod should cleanly encapsulate the home directory
 // which is currently the biggest culprit for awkward one-offs.
 func (c *SyncedCluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
+// ServerNodes TODO(peter): document
 func (c *SyncedCluster) ServerNodes() []int {
 	if c.LoadGen == -1 {
 		return c.Nodes
@@ -125,6 +129,7 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// Start TODO(peter): document
 func (c *SyncedCluster) Start() {
 	c.Impl.Start(c, c.Args)
 }
@@ -136,6 +141,7 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 	return newRemoteSession(c.user(i), c.host(i))
 }
 
+// Stop TODO(peter): document
 func (c *SyncedCluster) Stop(sig int, wait bool) {
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
@@ -182,6 +188,7 @@ fi
 	})
 }
 
+// Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe() {
 	display := fmt.Sprintf("%s: wiping", c.Name)
 	c.Stop(9, true /* wait */)
@@ -208,6 +215,7 @@ rm -fr certs* ;
 	})
 }
 
+// Status TODO(peter): document
 func (c *SyncedCluster) Status() {
 	display := fmt.Sprintf("%s: status", c.Name)
 	results := make([]string, len(c.Nodes))
@@ -250,27 +258,29 @@ fi
 	}
 }
 
-type nodeMonitorInfo struct {
+// NodeMonitorInfo TODO(peter): document
+type NodeMonitorInfo struct {
 	Index int
 	Msg   string
 }
 
-func (c *SyncedCluster) Monitor() chan nodeMonitorInfo {
-	ch := make(chan nodeMonitorInfo)
+// Monitor TODO(peter): document
+func (c *SyncedCluster) Monitor() chan NodeMonitorInfo {
+	ch := make(chan NodeMonitorInfo)
 	nodes := c.ServerNodes()
 
 	for i := range nodes {
 		go func(i int) {
 			sess, err := c.newSession(nodes[i])
 			if err != nil {
-				ch <- nodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
 			if err != nil {
-				ch <- nodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 
@@ -281,7 +291,7 @@ func (c *SyncedCluster) Monitor() chan nodeMonitorInfo {
 					if err == io.EOF {
 						return
 					}
-					ch <- nodeMonitorInfo{nodes[i], string(line)}
+					ch <- NodeMonitorInfo{nodes[i], string(line)}
 				}
 			}(p)
 
@@ -316,7 +326,7 @@ done
 			// Request a PTY so that the script will receive will receive a SIGPIPE
 			// when the session is closed.
 			if err := sess.RequestPty(); err != nil {
-				ch <- nodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 			// Give the session a valid stdin pipe so that nc won't exit immediately.
@@ -325,12 +335,12 @@ done
 			// when the roachprod process is killed.
 			inPipe, err := sess.StdinPipe()
 			if err != nil {
-				ch <- nodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 			defer inPipe.Close()
 			if err := sess.Run(cmd); err != nil {
-				ch <- nodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 		}(i)
@@ -339,6 +349,7 @@ done
 	return ch
 }
 
+// Run TODO(peter): document
 func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd string) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
@@ -409,6 +420,7 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 	return nil
 }
 
+// Wait TODO(peter): document
 func (c *SyncedCluster) Wait() error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
 	errs := make([]error, len(c.Nodes))
@@ -445,6 +457,7 @@ func (c *SyncedCluster) Wait() error {
 	return nil
 }
 
+// SetupSSH TODO(peter): document
 func (c *SyncedCluster) SetupSSH() error {
 	if c.IsLocal() {
 		return nil
@@ -567,6 +580,7 @@ exit 1
 	return nil
 }
 
+// CockroachVersions TODO(peter): document
 func (c *SyncedCluster) CockroachVersions() map[string]int {
 	sha := make(map[string]int)
 	var mu syncutil.Mutex
@@ -597,6 +611,7 @@ func (c *SyncedCluster) CockroachVersions() map[string]int {
 	return sha
 }
 
+// RunLoad TODO(peter): document
 func (c *SyncedCluster) RunLoad(cmd string, stdout, stderr io.Writer) error {
 	if c.LoadGen == 0 {
 		log.Fatalf("%s: no load generator node specified", c.Name)
@@ -650,6 +665,7 @@ func formatProgress(p float64) string {
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
+// Put TODO(peter): document
 func (c *SyncedCluster) Put(src, dest string) {
 	// NB: This value was determined with a few experiments. Higher values were
 	// not tested.
@@ -828,6 +844,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 	}
 }
 
+// Get TODO(peter): document
 func (c *SyncedCluster) Get(src, dest string) {
 	// TODO(peter): Only get 10 nodes at a time. When a node completes, output a
 	// line indicating that.
@@ -1022,7 +1039,8 @@ func (c *SyncedCluster) pgurls(nodes []int) map[int]string {
 	return m
 }
 
-func (c *SyncedCluster) Ssh(sshArgs, args []string) error {
+// SSH TODO(peter): document
+func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	if len(c.Nodes) != 1 && len(args) == 0 {
 		// If trying to ssh to more than 1 node and the ssh session is interative,
 		// try sshing with an iTerm2 split screen configuration.
@@ -1113,6 +1131,7 @@ func (c *SyncedCluster) stopLoad() {
 	})
 }
 
+// Parallel TODO(peter): document
 func (c *SyncedCluster) Parallel(
 	display string, count, concurrency int, fn func(i int) ([]byte, error),
 ) {
