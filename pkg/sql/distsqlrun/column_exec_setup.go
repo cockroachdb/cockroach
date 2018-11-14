@@ -280,6 +280,12 @@ func planExpressionOperators(
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, nil
+	case *tree.AndExpr:
+		leftOp, _, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		return planExpressionOperators(t.TypedRight(), ct, leftOp)
 	case *tree.ComparisonExpr:
 		// TODO(solon): Handle the case where a ComparisonExpr is a projection,
 		// e.g. SELECT a > b FROM t. Currently we assume it is a selection.
