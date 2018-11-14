@@ -32,6 +32,26 @@ select
            ├── variable: x [type=int]
            └── const: 1 [type=int]
 
+# Verify that 1 is determined to be constant (from the intersection of the
+# constraints).
+opt
+SELECT * FROM a WHERE x > 0 AND x < 2
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── fd: ()-->(1)
+ ├── prune: (2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+      │    ├── variable: x [type=int]
+      │    └── const: 0 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
+           ├── variable: x [type=int]
+           └── const: 2 [type=int]
+
 opt
 SELECT * FROM a WHERE x >= 1
 ----

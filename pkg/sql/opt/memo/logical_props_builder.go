@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1150,6 +1151,39 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 	for i := range filters {
 		filterProps := filters[i].ScalarProps(b.mem)
 		fdset.AddFrom(&filterProps.FuncDeps)
+	}
+
+	if len(filters) <= 1 {
+		return
+	}
+
+	// Some columns can only be determined to be constant from multiple
+	// constraints (e.g. x <= 1 AND x >= 1); we intersect the constraints and
+	// extract const columns from the intersection. But intersection is expensive
+	// so we first do a quick check to rule out cases where each constraint refers
+	// to a different set of columns.
+	var cols opt.ColSet
+	possibleIntersection := false
+	for i := range filters {
+		if c := filters[i].ScalarProps(b.mem).Constraints; c != nil {
+			s := c.ExtractCols()
+			if cols.Intersects(s) {
+				possibleIntersection = true
+				break
+			}
+			cols.UnionWith(s)
+		}
+	}
+
+	if possibleIntersection {
+		intersection := constraint.Unconstrained
+		for i := range filters {
+			if c := filters[i].ScalarProps(b.mem).Constraints; c != nil {
+				intersection = intersection.Intersect(b.evalCtx, c)
+			}
+		}
+		constCols := intersection.ExtractConstCols(b.evalCtx)
+		fdset.AddConstants(constCols)
 	}
 }
 
