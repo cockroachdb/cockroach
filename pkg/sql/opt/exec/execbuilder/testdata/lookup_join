@@ -166,7 +166,7 @@ distinct               ·            ·               (title)                   
  │                     order key    title           ·                             ·
  └── render            ·            ·               (title)                       ·
       │                render 0     title           ·                             ·
-      └── lookup-join  ·            ·               (title, shelf, title, shelf)  ·
+      └── lookup-join  ·            ·               (title, shelf, title, shelf)  +title
            │           type         inner           ·                             ·
            │           pred         @2 != @4        ·                             ·
            ├── scan    ·            ·               (title, shelf)                +title
@@ -230,7 +230,7 @@ EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = 
 tree              field     description      columns              ordering
 render            ·         ·                (name)               +name
  │                render 0  name             ·                    ·
- └── lookup-join  ·         ·                (name, book, title)  ·
+ └── lookup-join  ·         ·                (name, book, title)  +name
       │           type      inner            ·                    ·
       ├── scan    ·         ·                (name, book)         +name
       │           table     authors@primary  ·                    ·
@@ -270,10 +270,21 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9r8zAMxu_vpzA666Vx2l
 ####################################
 
 statement ok
-CREATE TABLE small (a INT, b INT, c INT, d INT)
+CREATE TABLE small (a INT PRIMARY KEY, b INT, c INT, d INT)
 
 statement ok
 CREATE TABLE large (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+statement ok
+ALTER TABLE small SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+statement ok
+ALTER TABLE small EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+statement ok
+INSERT INTO small SELECT x, 2*x, 3*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
 
 statement ok
 ALTER TABLE small INJECT STATISTICS '[
@@ -344,6 +355,27 @@ lookup-join  ·      ·              (b, a)  ·
  │           spans  ALL            ·       ·
  └── scan    ·      ·              (a)     ·
 ·            table  large@primary  ·       ·
+
+# Left join should preserve input order.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
+----
+render            ·         ·              (a, b)     +a
+ │                render 0  a              ·          ·
+ │                render 1  b              ·          ·
+ └── lookup-join  ·         ·              (a, a, b)  +a
+      │           type      left outer     ·          ·
+      │           pred      (@3 % 6) = 0   ·          ·
+      ├── scan    ·         ·              (a)        +a
+      │           table     small@primary  ·          ·
+      │           spans     ALL            ·          ·
+      └── scan    ·         ·              (a, b)     ·
+·                 table     large@primary  ·          ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlUGLm0AUx-_9FMMfCi2dso6abHag4GULWRYtwZ6KBxsfwdY4MqPQZcl3L9HSaNiMQnLwlpnJP7_3fm-YvKJUGYXpngzkDwhwuODwwOGDY4GEo9JqS8YoffxKF1hnfyAdjrysmvq4nXBslSbIV9R5XRAk4vRnQRtKM9J3DjgyqtO8aDGVzvepfgnMPi0KcERNLVkgkBw4VFOfftPU6Y4gxYFP5z6pvPyHXQyx8UtFkj0_fo1Z9D1-3LCnaB2C_y-nSPWOwPGs1O-mYr9UXjJVtpVxRCH7EHjsPVtKKddh_JF9YU738dQBD7yLTbgXmzjVrnRGmrJh2YH4hOTwRqeh-qyqOzGUewnvDfBi-uzELWc3wu3Nbjnf2bnT5bm3lDfC7cm7n688b7o875byRrg9eav5yvOny_NvKW-E25P3MF95I_8bGzKVKg1Nek2d43tM2Y6699uoRm_pm1bbFtMtozbXbmRk6u5UdIt12R0dC-yHhTXsDsLiPOzaySNoz5r27WH_mroX1vDSTl5eQ763hld28uoa8oN9Vs7INbFfsnN2cnj3NwAA__8Lbyf-
 
 # Left join against covering secondary index
 query TTTTT
