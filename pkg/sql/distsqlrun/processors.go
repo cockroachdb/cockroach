@@ -680,6 +680,8 @@ func (pb *ProcessorBase) DrainHelper() *ProducerMetadata {
 			continue
 		}
 		if meta != nil {
+			if meta.Err != nil {
+			}
 			return meta
 		}
 	}

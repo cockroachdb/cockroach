@@ -143,10 +143,9 @@ func (BytesEncodeFormat) EnumDescriptor() ([]byte, []int) { return fileDescripto
 
 type SetupFlowRequest struct {
 	// TxnCoordMeta is the TxnCoordMeta for the transaction in which the flow
-	// will run. If nil, the flow will not run in a transaction higher-level
-	// transaction (i.e. it is responsible for managing its own transactions,
-	// if any). Most flows expect to run in a txn, but some, like backfills,
-	// don't.
+	// will run. If nil, the flow will not run in a higher-level transaction (i.e.
+	// it is responsible for managing its own transactions, if any). Most flows
+	// expect to run in a txn, but some, like backfills, don't.
 	TxnCoordMeta *cockroach_roachpb1.TxnCoordMeta `protobuf:"bytes,7,opt,name=txn_coord_meta,json=txnCoordMeta" json:"txn_coord_meta,omitempty"`
 	// deprecated_txn used to play the role that TxnCoordMeta now plays. It
 	// can be removed in v2.2.
@@ -323,7 +322,9 @@ func NewDistSQLClient(cc *grpc.ClientConn) DistSQLClient {
 	return &distSQLClient{cc}
 }
 
-func (c *distSQLClient) RunSyncFlow(ctx context.Context, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error) {
+func (c *distSQLClient) RunSyncFlow(
+	ctx context.Context, opts ...grpc.CallOption,
+) (DistSQL_RunSyncFlowClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[0], c.cc, "/cockroach.sql.distsqlrun.DistSQL/RunSyncFlow", opts...)
 	if err != nil {
 		return nil, err
@@ -354,7 +355,9 @@ func (x *distSQLRunSyncFlowClient) Recv() (*ProducerMessage, error) {
 	return m, nil
 }
 
-func (c *distSQLClient) SetupFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (*SimpleResponse, error) {
+func (c *distSQLClient) SetupFlow(
+	ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption,
+) (*SimpleResponse, error) {
 	out := new(SimpleResponse)
 	err := grpc.Invoke(ctx, "/cockroach.sql.distsqlrun.DistSQL/SetupFlow", in, out, c.cc, opts...)
 	if err != nil {
@@ -363,7 +366,9 @@ func (c *distSQLClient) SetupFlow(ctx context.Context, in *SetupFlowRequest, opt
 	return out, nil
 }
 
-func (c *distSQLClient) FlowStream(ctx context.Context, opts ...grpc.CallOption) (DistSQL_FlowStreamClient, error) {
+func (c *distSQLClient) FlowStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (DistSQL_FlowStreamClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[1], c.cc, "/cockroach.sql.distsqlrun.DistSQL/FlowStream", opts...)
 	if err != nil {
 		return nil, err
@@ -447,7 +452,12 @@ func (x *distSQLRunSyncFlowServer) Recv() (*ConsumerSignal, error) {
 	return m, nil
 }
 
-func _DistSQL_SetupFlow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DistSQL_SetupFlow_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(SetupFlowRequest)
 	if err := dec(in); err != nil {
 		return nil, err
