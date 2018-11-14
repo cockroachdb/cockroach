@@ -172,6 +172,7 @@ func newRaftConfig(
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
 		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
 		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
 		Storage:                   strg,
