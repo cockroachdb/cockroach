@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1147,9 +1148,20 @@ func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
 // addFiltersToFuncDep returns the union of all functional dependencies from
 // each condition in the filters.
 func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *props.FuncDepSet) {
+	c := constraint.Unconstrained
 	for i := range filters {
 		filterProps := filters[i].ScalarProps(b.mem)
 		fdset.AddFrom(&filterProps.FuncDeps)
+		if filterProps.Constraints != nil {
+			c = c.Intersect(b.evalCtx, filterProps.Constraints)
+		}
+	}
+	if len(filters) > 1 {
+		// Some columns can only be determined to be constant from multiple
+		// constraints (e.g. x <= 1 AND x >= 1); we intersect the constraints and
+		// extract const columns from the intersection.
+		constCols := c.ExtractConstCols(b.evalCtx)
+		fdset.AddConstants(constCols)
 	}
 }
 
