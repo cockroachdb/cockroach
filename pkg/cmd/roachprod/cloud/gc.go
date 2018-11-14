@@ -61,7 +61,7 @@ func (s *status) notificationHash() string {
 	hash := fnv.New32a()
 
 	for i, list := range [][]*Cluster{s.good, s.warn, s.destroy} {
-		hash.Write([]byte{byte(i)})
+		_, _ = hash.Write([]byte{byte(i)})
 
 		var data []string
 		for _, c := range list {
@@ -72,11 +72,11 @@ func (s *status) notificationHash() string {
 		sort.Strings(data)
 
 		for _, d := range data {
-			hash.Write([]byte(d))
+			_, _ = hash.Write([]byte(d))
 		}
 	}
 
-	bytes := hash.Sum(make([]byte, 0, hash.BlockSize()))
+	bytes := hash.Sum(nil)
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 

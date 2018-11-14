@@ -72,10 +72,14 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 	// Align columns left and separate with at least two spaces.
 	tw := tabwriter.NewWriter(file, 0, 8, 2, ' ', 0)
-	tw.Write([]byte("# user@host\tlocality\n"))
+	if _, err := tw.Write([]byte("# user@host\tlocality\n")); err != nil {
+		return err
+	}
 	for i := 0; i < len(names); i++ {
-		tw.Write([]byte(fmt.Sprintf(
-			"%s@%s\t%s\n", config.OSUser.Username, "127.0.0.1", "region=local,zone=local")))
+		if _, err := tw.Write([]byte(fmt.Sprintf(
+			"%s@%s\t%s\n", config.OSUser.Username, "127.0.0.1", "region=local,zone=local"))); err != nil {
+			return err
+		}
 	}
 	if err := tw.Flush(); err != nil {
 		return errors.Wrapf(err, "problem writing file %s", path)

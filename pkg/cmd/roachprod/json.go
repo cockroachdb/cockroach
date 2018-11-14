@@ -21,14 +21,6 @@ import (
 	"log"
 )
 
-func prettyJSON(v interface{}) string {
-	data, err := json.MarshalIndent(v, "", "\t")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(data)
-}
-
 func saveJSON(path string, v interface{}) {
 	data, err := json.MarshalIndent(v, "", "\t")
 	if err != nil {

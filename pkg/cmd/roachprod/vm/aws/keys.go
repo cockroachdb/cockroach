@@ -64,6 +64,7 @@ func sshKeyImport(keyName string, region string) error {
 	var data struct {
 		KeyName string
 	}
+	_ = data.KeyName // silence unused warning
 	args := []string{
 		"ec2", "import-key-pair",
 		"--region", region,
@@ -92,7 +93,7 @@ func (p *Provider) sshKeyName() (string, error) {
 	if _, err := hash.Write(keyBytes); err != nil {
 		return "", err
 	}
-	hashBytes := hash.Sum(make([]byte, 0, hash.BlockSize()))
+	hashBytes := hash.Sum(nil)
 	hashText := base64.URLEncoding.EncodeToString(hashBytes)
 
 	return fmt.Sprintf("%s-%s", user, hashText), nil

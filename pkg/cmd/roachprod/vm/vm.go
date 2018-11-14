@@ -109,15 +109,6 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
-// Zones extracts all VM.Zone entries from the List
-func (vl List) Zones() []string {
-	ret := make([]string, len(vl))
-	for i, vm := range vl {
-		ret[i] = vm.Zone
-	}
-	return ret
-}
-
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
 	UseLocalSSD    bool
