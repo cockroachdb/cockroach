@@ -42,12 +42,8 @@ func RefreshRange(
 		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
 	}
 
-	// Use a time-bounded iterator to avoid unnecessarily iterating over
-	// older data.
 	iter := batch.NewIterator(engine.IterOptions{
-		MinTimestampHint: h.Txn.OrigTimestamp,
-		MaxTimestampHint: h.Txn.Timestamp,
-		UpperBound:       args.EndKey,
+		UpperBound: args.EndKey,
 	})
 	defer iter.Close()
 	// Iterate over values until we discover any value written at or
