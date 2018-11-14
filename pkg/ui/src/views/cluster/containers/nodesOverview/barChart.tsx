@@ -91,8 +91,7 @@ export class BytesBarChart extends React.Component<BytesBarChartProps> {
     chartEnter.append("rect")
       .attr("class", "bar-chart__bar used")
       .attr("height", 5) // This attr's for FF, the CSS rule is for Chrome.
-      .attr("y", (chartHeight - 5) / 2)
-      .attr("fill", "#3a7de1");
+      .attr("y", (chartHeight - 5) / 2);
 
     chart.selectAll(".bar-chart__bar.used")
       .attr("width", chartWidth * props.used / props.usable);
