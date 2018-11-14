@@ -29,8 +29,9 @@ import (
 
 const vmNameFormat = "user-<clusterid>-<nodeid>"
 
+// Cloud TODO(peter): document
 type Cloud struct {
-	Clusters map[string]*CloudCluster `json:"clusters"`
+	Clusters map[string]*Cluster `json:"clusters"`
 	// Any VM in this list can be expected to have at least one element
 	// in its Errors field.
 	BadInstances vm.List `json:"bad_instances"`
@@ -39,14 +40,14 @@ type Cloud struct {
 // Clone creates a deep copy of the receiver.
 func (c *Cloud) Clone() *Cloud {
 	cc := *c
-	cc.Clusters = make(map[string]*CloudCluster, len(c.Clusters))
+	cc.Clusters = make(map[string]*Cluster, len(c.Clusters))
 	for k, v := range c.Clusters {
 		cc.Clusters[k] = v
 	}
 	return &cc
 }
 
-// Collate Cloud.BadInstances by errors.
+// BadInstanceErrors TODO(peter): document
 func (c *Cloud) BadInstanceErrors() map[error]vm.List {
 	ret := map[error]vm.List{}
 
@@ -67,14 +68,14 @@ func (c *Cloud) BadInstanceErrors() map[error]vm.List {
 
 func newCloud() *Cloud {
 	return &Cloud{
-		Clusters: make(map[string]*CloudCluster),
+		Clusters: make(map[string]*Cluster),
 	}
 }
 
-// A CloudCluster is created by querying various vm.Provider instances.
+// A Cluster is created by querying various vm.Provider instances.
 //
 // TODO(benesch): unify with syncedCluster.
-type CloudCluster struct {
+type Cluster struct {
 	Name string `json:"name"`
 	User string `json:"user"`
 	// This is the earliest creation and shortest lifetime across VMs.
@@ -85,7 +86,7 @@ type CloudCluster struct {
 
 // Clouds returns the names of all of the various cloud providers used
 // by the VMs in the cluster.
-func (c *CloudCluster) Clouds() []string {
+func (c *Cluster) Clouds() []string {
 	present := make(map[string]bool)
 	for _, m := range c.VMs {
 		present[m.Provider] = true
@@ -99,22 +100,25 @@ func (c *CloudCluster) Clouds() []string {
 	return ret
 }
 
-func (c *CloudCluster) ExpiresAt() time.Time {
+// ExpiresAt TODO(peter): document
+func (c *Cluster) ExpiresAt() time.Time {
 	return c.CreatedAt.Add(c.Lifetime)
 }
 
-func (c *CloudCluster) GCAt() time.Time {
+// GCAt TODO(peter): document
+func (c *Cluster) GCAt() time.Time {
 	// NB: GC is performed every hour. We calculate the lifetime of the cluster
 	// taking the GC time into account to accurately reflect when the cluster
 	// will be destroyed.
 	return c.ExpiresAt().Add(time.Hour - 1).Truncate(time.Hour)
 }
 
-func (c *CloudCluster) LifetimeRemaining() time.Duration {
+// LifetimeRemaining TODO(peter): document
+func (c *Cluster) LifetimeRemaining() time.Duration {
 	return time.Until(c.GCAt())
 }
 
-func (c *CloudCluster) String() string {
+func (c *Cluster) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s: %d", c.Name, len(c.VMs))
 	if !c.IsLocal() {
@@ -123,7 +127,8 @@ func (c *CloudCluster) String() string {
 	return buf.String()
 }
 
-func (c *CloudCluster) PrintDetails() {
+// PrintDetails TODO(peter): document
+func (c *Cluster) PrintDetails() {
 	fmt.Printf("%s: %s ", c.Name, c.Clouds())
 	if !c.IsLocal() {
 		l := c.LifetimeRemaining().Round(time.Second)
@@ -140,7 +145,8 @@ func (c *CloudCluster) PrintDetails() {
 	}
 }
 
-func (c *CloudCluster) IsLocal() bool {
+// IsLocal TODO(peter): document
+func (c *Cluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
@@ -156,6 +162,7 @@ func namesFromVM(v vm.VM) (string, string, error) {
 	return parts[0], strings.Join(parts[:len(parts)-1], "-"), nil
 }
 
+// ListCloud TODO(peter): document
 func ListCloud() (*Cloud, error) {
 	cloud := newCloud()
 
@@ -180,7 +187,7 @@ func ListCloud() (*Cloud, error) {
 			}
 
 			if _, ok := cloud.Clusters[clusterName]; !ok {
-				cloud.Clusters[clusterName] = &CloudCluster{
+				cloud.Clusters[clusterName] = &Cluster{
 					Name:      clusterName,
 					User:      userName,
 					CreatedAt: v.CreatedAt,
@@ -209,6 +216,7 @@ func ListCloud() (*Cloud, error) {
 	return cloud, nil
 }
 
+// CreateCluster TODO(peter): document
 func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
 	providerCount := len(opts.VMProviders)
 	if providerCount == 0 {
@@ -230,13 +238,15 @@ func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
 	})
 }
 
-func DestroyCluster(c *CloudCluster) error {
+// DestroyCluster TODO(peter): document
+func DestroyCluster(c *Cluster) error {
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.Delete(vms)
 	})
 }
 
-func ExtendCluster(c *CloudCluster, extension time.Duration) error {
+// ExtendCluster TODO(peter): document
+func ExtendCluster(c *Cluster, extension time.Duration) error {
 	newLifetime := c.Lifetime + extension
 
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {

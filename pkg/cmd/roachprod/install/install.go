@@ -23,7 +23,7 @@ import (
 	"github.com/hashicorp/go-version"
 )
 
-// Memoizes cluster info for install operations
+// Clusters memoizes cluster info for install operations
 var Clusters = map[string]*SyncedCluster{}
 
 var installCmds = map[string]string{
@@ -150,6 +150,7 @@ sudo apt-get install -y \
 `,
 }
 
+// SortedCmds TODO(peter): document
 func SortedCmds() []string {
 	cmds := make([]string, 0, len(installCmds))
 	for cmd := range installCmds {
@@ -159,6 +160,7 @@ func SortedCmds() []string {
 	return cmds
 }
 
+// Install TODO(peter): document
 func Install(c *SyncedCluster, args []string) error {
 	do := func(title, cmd string) error {
 		var buf bytes.Buffer
@@ -182,6 +184,7 @@ func Install(c *SyncedCluster, args []string) error {
 	return nil
 }
 
+// VersionSatifies TODO(peter): document
 func VersionSatifies(v *version.Version, constraintString string) bool {
 	constraints, err := version.NewConstraint(constraintString)
 	if err != nil {

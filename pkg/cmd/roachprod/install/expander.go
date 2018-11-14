@@ -87,7 +87,7 @@ func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool) 
 	return e.maybeExpandMap(c, e.pgPorts, m[1])
 }
 
-func (e *expander) maybeExpandUiPort(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false
@@ -123,7 +123,7 @@ func (e *expander) expand(c *SyncedCluster, arg string) string {
 		expanders := []expanderFunc{
 			e.maybeExpandPgURL,
 			e.maybeExpandPgPort,
-			e.maybeExpandUiPort,
+			e.maybeExpandUIPort,
 			e.maybeExpandStoreDir,
 			e.maybeExpandLogDir,
 		}

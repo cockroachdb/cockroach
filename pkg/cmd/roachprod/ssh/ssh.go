@@ -40,6 +40,8 @@ import (
 
 var knownHosts ssh.HostKeyCallback
 var knownHostsOnce sync.Once
+
+// InsecureIgnoreHostKey TODO(peter): document
 var InsecureIgnoreHostKey bool
 
 func getKnownHosts() ssh.HostKeyCallback {
@@ -147,6 +149,7 @@ var sshState = struct {
 	clients: map[string]*sshClient{},
 }
 
+// NewSSHSession TODO(peter): document
 func NewSSHSession(user, host string) (*ssh.Session, error) {
 	if host == "127.0.0.1" || host == "localhost" {
 		return nil, errors.New("unable to ssh to localhost; file a bug")
@@ -179,6 +182,7 @@ func NewSSHSession(user, host string) (*ssh.Session, error) {
 	return client.NewSession()
 }
 
+// IsSigKill TODO(peter): document
 func IsSigKill(err error) bool {
 	switch t := err.(type) {
 	case *ssh.ExitError:
@@ -187,6 +191,7 @@ func IsSigKill(err error) bool {
 	return false
 }
 
+// ProgressWriter TODO(peter): document
 type ProgressWriter struct {
 	Writer   io.Writer
 	Done     int64
@@ -203,6 +208,7 @@ func (p *ProgressWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// SCPPut TODO(peter): document
 func SCPPut(src, dest string, progress func(float64), session *ssh.Session) error {
 	f, err := os.Open(src)
 	if err != nil {
@@ -241,6 +247,8 @@ func SCPPut(src, dest string, progress func(float64), session *ssh.Session) erro
 	}
 }
 
+// SCPGet TODO(peter): document
+//
 // TODO(benesch): Make progress handling for directories less confusing. The
 // SCP protocol makes this challenging, as it does not send the total size of
 // all files.

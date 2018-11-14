@@ -33,11 +33,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// StartOpts TODO(peter): document
 var StartOpts struct {
 	Encrypt    bool
 	Sequential bool
 }
 
+// Cockroach TODO(peter): document
 type Cockroach struct{}
 
 func cockroachNodeBinary(c *SyncedCluster, i int) string {
@@ -105,6 +107,7 @@ func getCockroachVersion(c *SyncedCluster, i int) (*version.Version, error) {
 	return version, nil
 }
 
+// GetAdminUIPort returns the admin UI port for ths specified RPC port.
 func GetAdminUIPort(connPort int) int {
 	return connPort + 1
 }
@@ -118,6 +121,7 @@ func argExists(args []string, target string) int {
 	return -1
 }
 
+// Start implements the ClusterImpl.NodeDir interface.
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	// Check to see if node 1 was started indicating the cluster was
 	// bootstrapped.
@@ -443,6 +447,7 @@ fi
 	}
 }
 
+// NodeDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodeDir(c *SyncedCluster, index int) string {
 	if c.IsLocal() {
 		return os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/data", index))
@@ -450,6 +455,7 @@ func (Cockroach) NodeDir(c *SyncedCluster, index int) string {
 	return "/mnt/data1/cockroach"
 }
 
+// LogDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) LogDir(c *SyncedCluster, index int) string {
 	dir := "${HOME}/logs"
 	if c.IsLocal() {
@@ -458,6 +464,7 @@ func (Cockroach) LogDir(c *SyncedCluster, index int) string {
 	return dir
 }
 
+// NodeURL implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 	url := fmt.Sprintf("'postgres://root@%s:%d", host, port)
 	if c.Secure {
@@ -470,6 +477,7 @@ func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 	return url
 }
 
+// NodePort implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodePort(c *SyncedCluster, index int) int {
 	const basePort = 26257
 	port := basePort
@@ -479,10 +487,12 @@ func (Cockroach) NodePort(c *SyncedCluster, index int) int {
 	return port
 }
 
-func (cr Cockroach) NodeUIPort(c *SyncedCluster, index int) int {
-	return GetAdminUIPort(cr.NodePort(c, index))
+// NodeUIPort implements the ClusterImpl.NodeDir interface.
+func (r Cockroach) NodeUIPort(c *SyncedCluster, index int) int {
+	return GetAdminUIPort(r.NodePort(c, index))
 }
 
+// SQL implements the ClusterImpl.NodeDir interface.
 func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	if len(args) == 0 || len(c.Nodes) == 1 {
 		// If no arguments, we're going to get an interactive SQL shell. Require
@@ -494,7 +504,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 		binary := cockroachNodeBinary(c, c.Nodes[0])
 		allArgs := []string{binary, "sql", "--url", url}
 		allArgs = append(allArgs, ssh.Escape(args))
-		return c.Ssh([]string{"-t"}, allArgs)
+		return c.SSH([]string{"-t"}, allArgs)
 	}
 
 	// Otherwise, assume the user provided the "-e" flag, so we can reasonably
