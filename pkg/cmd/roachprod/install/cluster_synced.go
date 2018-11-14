@@ -142,11 +142,11 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
 		display += " and waiting"
 	}
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		var waitCmd string
 		if wait {
@@ -178,7 +178,7 @@ if [ -n "${pids}" ]; then
 %[5]s
 fi
 `, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag(), sig, waitCmd)
-		return session.CombinedOutput(cmd)
+		return sess.CombinedOutput(cmd)
 	})
 }
 
@@ -186,11 +186,11 @@ func (c *SyncedCluster) Wipe() {
 	display := fmt.Sprintf("%s: wiping", c.Name)
 	c.Stop(9, true /* wait */)
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		var cmd string
 		if c.IsLocal() {
@@ -204,7 +204,7 @@ rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo
 rm -fr certs* ;
 `
 		}
-		return session.CombinedOutput(cmd)
+		return sess.CombinedOutput(cmd)
 	})
 }
 
@@ -212,12 +212,12 @@ func (c *SyncedCluster) Status() {
 	display := fmt.Sprintf("%s: status", c.Name)
 	results := make([]string, len(c.Nodes))
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			results[i] = err.Error()
 			return nil, nil
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		binary := cockroachNodeBinary(c, c.Nodes[i])
 		cmd := fmt.Sprintf(`out=$(ps axeww -o pid -o ucomm -o command | \
@@ -232,7 +232,7 @@ else
   echo ${out}
 fi
 `
-		out, err := session.CombinedOutput(cmd)
+		out, err := sess.CombinedOutput(cmd)
 		var msg string
 		if err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
@@ -261,14 +261,14 @@ func (c *SyncedCluster) Monitor() chan nodeMonitorInfo {
 
 	for i := range nodes {
 		go func(i int) {
-			session, err := c.newSession(nodes[i])
+			sess, err := c.newSession(nodes[i])
 			if err != nil {
 				ch <- nodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
-			defer session.Close()
+			defer sess.Close()
 
-			p, err := session.StdoutPipe()
+			p, err := sess.StdoutPipe()
 			if err != nil {
 				ch <- nodeMonitorInfo{nodes[i], err.Error()}
 				return
@@ -315,7 +315,7 @@ done
 
 			// Request a PTY so that the script will receive will receive a SIGPIPE
 			// when the session is closed.
-			if err := session.RequestPty(); err != nil {
+			if err := sess.RequestPty(); err != nil {
 				ch <- nodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
@@ -323,13 +323,13 @@ done
 			// When nc does exit, we write to stdout, which has a side effect of
 			// checking whether the stdout pipe has broken. This allows us to detect
 			// when the roachprod process is killed.
-			inPipe, err := session.StdinPipe()
+			inPipe, err := sess.StdinPipe()
 			if err != nil {
 				ch <- nodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
 			defer inPipe.Close()
-			if err := session.Run(cmd); err != nil {
+			if err := sess.Run(cmd); err != nil {
 				ch <- nodeMonitorInfo{nodes[i], err.Error()}
 				return
 			}
@@ -350,19 +350,19 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 	errors := make([]error, len(nodes))
 	results := make([]string, len(nodes))
 	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(nodes[i])
+		sess, err := c.newSession(nodes[i])
 		if err != nil {
 			errors[i] = err
 			results[i] = err.Error()
 			return nil, nil
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		// Argument template expansion is node specific (e.g. for {store-dir}).
 		e := expander{
 			node: nodes[i],
 		}
-		cmd := e.expand(c, cmd)
+		expandedCmd := e.expand(c, cmd)
 
 		// Be careful about changing these command strings. In particular, we need
 		// to support running commands in the background on both local and remote
@@ -373,19 +373,19 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		// That command should return immediately. And a "roachprod status" should
 		// reveal that the sleep command is running on the cluster.
 		nodeCmd := fmt.Sprintf(`export ROACHPROD=%d%s && bash -c %s`,
-			nodes[i], c.Tag, ssh.Escape1(cmd))
+			nodes[i], c.Tag, ssh.Escape1(expandedCmd))
 		if c.IsLocal() {
 			nodeCmd = fmt.Sprintf("cd ${HOME}/local/%d ; %s", nodes[i], nodeCmd)
 		}
 
 		if stream {
-			session.SetStdout(stdout)
-			session.SetStderr(stderr)
-			errors[i] = session.Run(nodeCmd)
+			sess.SetStdout(stdout)
+			sess.SetStderr(stderr)
+			errors[i] = sess.Run(nodeCmd)
 			return nil, nil
 		}
 
-		out, err := session.CombinedOutput(nodeCmd)
+		out, err := sess.CombinedOutput(nodeCmd)
 		msg := strings.TrimSpace(string(out))
 		if err != nil {
 			errors[i] = err
@@ -414,14 +414,14 @@ func (c *SyncedCluster) Wait() error {
 	errs := make([]error, len(c.Nodes))
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
 		for j := 0; j < 600; j++ {
-			session, err := c.newSession(c.Nodes[i])
+			sess, err := c.newSession(c.Nodes[i])
 			if err != nil {
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-			defer session.Close()
+			defer sess.Close()
 
-			_, err = session.CombinedOutput("test -e /mnt/data1/.roachprod-initialized")
+			_, err = sess.CombinedOutput("test -e /mnt/data1/.roachprod-initialized")
 			if err != nil {
 				time.Sleep(500 * time.Millisecond)
 				continue
@@ -460,11 +460,11 @@ func (c *SyncedCluster) SetupSSH() error {
 	var msg string
 	var sshTar []byte
 	c.Parallel("generating ssh key", 1, 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(1)
+		sess, err := c.newSession(1)
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		// Create the ssh key and then tar up the public, private and
 		// authorized_keys files and output them to stdout. We'll take this output
@@ -478,10 +478,10 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		session.SetStdout(&stdout)
-		session.SetStderr(&stderr)
+		sess.SetStdout(&stdout)
+		sess.SetStderr(&stderr)
 
-		if err := session.Run(cmd); err != nil {
+		if err := sess.Run(cmd); err != nil {
 			msg = fmt.Sprintf("~ %s\n%v\n%s", cmd, err, stderr.String())
 		} else {
 			sshTar = stdout.Bytes()
@@ -497,15 +497,15 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	// Skip the the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
 	c.Parallel("distributing ssh key", len(nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(nodes[i])
+		sess, err := c.newSession(nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
-		session.SetStdin(bytes.NewReader(sshTar))
+		sess.SetStdin(bytes.NewReader(sshTar))
 		cmd := `tar xf -`
-		if out, err := session.CombinedOutput(cmd); err != nil {
+		if out, err := sess.CombinedOutput(cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
 		return nil, nil
@@ -534,11 +534,11 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		ips = append(ips, c.host(i))
 	}
 	c.Parallel("scanning hosts", len(c.Nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		// Note that this is not idempotent. If we run the ssh-keyscan multiple
 		// times on the same node the known_hosts file will grow. This isn't a
@@ -558,7 +558,7 @@ for i in {1..20}; do
 done
 exit 1
 `
-		if out, err := session.CombinedOutput(cmd); err != nil {
+		if out, err := sess.CombinedOutput(cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
 		return nil, nil
@@ -574,14 +574,14 @@ func (c *SyncedCluster) CockroachVersions() map[string]int {
 	display := fmt.Sprintf("%s: cockroach version", c.Name)
 	nodes := c.ServerNodes()
 	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.Nodes[i])
+		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		cmd := config.Binary + " version | awk '/Build Tag:/ {print $NF}'"
-		out, err := session.CombinedOutput(cmd)
+		out, err := sess.CombinedOutput(cmd)
 		var s string
 		if err != nil {
 			s = fmt.Sprintf("%s: %v", out, err)
@@ -915,7 +915,12 @@ func (c *SyncedCluster) Get(src, dest string) {
 					}
 					defer in.Close()
 
-					p := &ssh.ProgressWriter{out, 0, info.Size(), progress}
+					p := &ssh.ProgressWriter{
+						Writer:   out,
+						Done:     0,
+						Total:    info.Size(),
+						Progress: progress,
+					}
 					_, err = io.Copy(p, in)
 					return err
 				}
@@ -1095,16 +1100,16 @@ func (c *SyncedCluster) stopLoad() {
 
 	display := fmt.Sprintf("%s: stopping load", c.Name)
 	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-		session, err := c.newSession(c.LoadGen)
+		sess, err := c.newSession(c.LoadGen)
 		if err != nil {
 			return nil, err
 		}
-		defer session.Close()
+		defer sess.Close()
 
 		cmd := fmt.Sprintf("kill -9 $(lsof -t -i :%d -i :%d) 2>/dev/null || true",
 			Cockroach{}.NodePort(c, c.Nodes[i]),
 			Cassandra{}.NodePort(c, c.Nodes[i]))
-		return session.CombinedOutput(cmd)
+		return sess.CombinedOutput(cmd)
 	})
 }
 
