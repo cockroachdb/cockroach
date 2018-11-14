@@ -30,7 +30,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -6941,14 +6941,14 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated.",
-	false,
+	true,
 )
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting.",
-	200, // 200 req/s
+	250, // 250 req/s
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
