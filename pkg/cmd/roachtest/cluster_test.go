@@ -209,3 +209,47 @@ hi
 		}
 	})
 }
+
+func TestClusterMachineType(t *testing.T) {
+	testCases := []struct {
+		machineType      string
+		expectedCPUCount int
+	}{
+		// AWS machine types
+		{"m5.large", 2},
+		{"m5.xlarge", 4},
+		{"m5.2xlarge", 8},
+		{"m5.4xlarge", 16},
+		{"m5.12xlarge", 48},
+		{"m5.24xlarge", 96},
+		{"m5d.large", 2},
+		{"m5d.xlarge", 4},
+		{"m5d.2xlarge", 8},
+		{"m5d.4xlarge", 16},
+		{"m5d.12xlarge", 48},
+		{"m5d.24xlarge", 96},
+		{"c5d.large", 2},
+		{"c5d.xlarge", 4},
+		{"c5d.2xlarge", 8},
+		{"c5d.4xlarge", 16},
+		{"c5d.9xlarge", 36},
+		{"c5d.18xlarge", 72},
+		// GCE machine types
+		{"n1-standard-1", 1},
+		{"n1-standard-2", 2},
+		{"n1-standard-4", 4},
+		{"n1-standard-8", 8},
+		{"n1-standard-16", 16},
+		{"n1-standard-32", 32},
+		{"n1-standard-64", 64},
+		{"n1-standard-96", 96},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.machineType, func(t *testing.T) {
+			cpuCount := MachineTypeToCPUs(tc.machineType)
+			if tc.expectedCPUCount != cpuCount {
+				t.Fatalf("expected %d CPUs, but found %d", tc.expectedCPUCount, cpuCount)
+			}
+		})
+	}
+}
