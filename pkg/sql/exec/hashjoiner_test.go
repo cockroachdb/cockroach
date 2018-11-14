@@ -500,6 +500,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 						hj.Init()
 
 						for i := 0; i < nBatches; i++ {
+							// Technically, the non-distinct hash join will produce much more
+							// than nBatches of output.
 							hj.Next()
 						}
 					}

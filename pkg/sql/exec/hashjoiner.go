@@ -532,6 +532,10 @@ type hashJoinProber struct {
 	// probeLeftSide indicates whether the prober is probing on the left source or
 	// the right source.
 	probeLeftSide bool
+
+	// prevBatch, if not nil, indicates that the previous probe input batch has
+	// not been fully processed.
+	prevBatch ColBatch
 }
 
 func makeHashJoinProber(
@@ -586,43 +590,52 @@ func makeHashJoinProber(
 func (prober *hashJoinProber) probe() ColBatch {
 	prober.batch.SetLength(0)
 
-	// Reset each element of head to 0 to indicate that the probe key has not been
-	// found in the build table.
-	for i := range prober.head {
-		prober.head[i] = 0
-	}
-
-	for {
-		batch := prober.spec.source.Next()
+	if batch := prober.prevBatch; batch != nil {
+		prober.prevBatch = nil
 		batchSize := batch.Length()
-
-		if batchSize == 0 {
-			break
-		}
-
-		for i, colIdx := range prober.spec.eqCols {
-			prober.keys[i] = batch.ColVec(colIdx)
-		}
-
 		sel := batch.Selection()
-
-		// Initialize groupID with the initial hash buckets and toCheck with all
-		// applicable indices.
-		prober.lookupInitial(batchSize, sel)
-		nToCheck := batchSize
-
-		for nToCheck > 0 {
-			// Continue searching for the build table matching keys while the toCheck
-			// array is non-empty.
-			nToCheck = prober.check(nToCheck, sel)
-			prober.findNext(nToCheck)
-		}
 
 		nResults := prober.collect(batch, batchSize, sel)
 		prober.congregate(nResults, batch, batchSize, sel)
+	} else {
+		// Reset each element of head to 0 to indicate that the probe key has not been
+		// found in the build table.
+		for i := range prober.head {
+			prober.head[i] = 0
+		}
 
-		if prober.batch.Length() > 0 {
-			break
+		for {
+			batch := prober.spec.source.Next()
+			batchSize := batch.Length()
+
+			if batchSize == 0 {
+				break
+			}
+
+			for i, colIdx := range prober.spec.eqCols {
+				prober.keys[i] = batch.ColVec(colIdx)
+			}
+
+			sel := batch.Selection()
+
+			// Initialize groupID with the initial hash buckets and toCheck with all
+			// applicable indices.
+			prober.lookupInitial(batchSize, sel)
+			nToCheck := batchSize
+
+			for nToCheck > 0 {
+				// Continue searching for the build table matching keys while the toCheck
+				// array is non-empty.
+				nToCheck = prober.check(nToCheck, sel)
+				prober.findNext(nToCheck)
+			}
+
+			nResults := prober.collect(batch, batchSize, sel)
+			prober.congregate(nResults, batch, batchSize, sel)
+
+			if prober.batch.Length() > 0 {
+				break
+			}
 		}
 	}
 
@@ -701,12 +714,14 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 			currentID := prober.head[i]
 			for currentID != 0 {
 				if nResults >= ColBatchSize {
-					// todo(changangela): implement output batching properly
+					// todo(changangela): use better method for output batching
+					prober.prevBatch = batch
 					return nResults
 				}
 				prober.buildIdx[nResults] = currentID - 1
 				prober.probeIdx[nResults] = sel[i]
 				currentID = prober.ht.same[currentID]
+				prober.head[i] = currentID
 				nResults++
 			}
 		}
@@ -716,11 +731,13 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 			for currentID != 0 {
 				if nResults >= ColBatchSize {
 					// todo(changangela): implement output batching
+					prober.prevBatch = batch
 					return nResults
 				}
 				prober.buildIdx[nResults] = currentID - 1
 				prober.probeIdx[nResults] = i
 				currentID = prober.ht.same[currentID]
+				prober.head[i] = currentID
 				nResults++
 			}
 		}
