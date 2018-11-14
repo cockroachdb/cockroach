@@ -67,14 +67,6 @@ ignored = [
   source = "https://github.com/cockroachdb/vitess"
   branch = "no-flag-names-parens"
 
-# The master version of go.uuid has an incompatible interface and (as
-# of 2018-06-06) a serious bug. Don't upgrade without making sure
-# that bug is fixed.
-# https://github.com/cockroachdb/cockroach/issues/26332
-[[constraint]]
-  name = "github.com/satori/go.uuid"
-  version = "v1.2.0"
-
 # We want https://github.com/go-yaml/yaml/pull/381
 [[constraint]]
   name = "gopkg.in/yaml.v2"

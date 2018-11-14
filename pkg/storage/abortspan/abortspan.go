@@ -52,7 +52,7 @@ func New(rangeID roachpb.RangeID) *AbortSpan {
 func fillUUID(b byte) uuid.UUID {
 	var ret uuid.UUID
 	for i := range ret.GetBytes() {
-		ret.UUID[i] = b
+		ret[i] = b
 	}
 	return ret
 }
