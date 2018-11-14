@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -91,7 +92,7 @@ func (p *Provider) Flags() vm.ProviderFlags {
 // how many nodes we should have
 func (p *Provider) List() (ret vm.List, _ error) {
 	if sc, ok := install.Clusters[ProviderName]; ok {
-		now := time.Now()
+		now := timeutil.Now()
 		for range sc.VMs {
 			ret = append(ret, vm.VM{
 				Name:        "localhost",

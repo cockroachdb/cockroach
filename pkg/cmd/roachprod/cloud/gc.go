@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/nlopes/slack"
 )
 
@@ -108,9 +109,7 @@ func findUserChannel(client *slack.Client, email string) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
-func postStatus(
-	client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List,
-) {
+func postStatus(client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List) {
 	if dryrun {
 		tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
 		for _, c := range s.good {
@@ -158,12 +157,12 @@ func postStatus(
 					c.LifetimeRemaining().Round(time.Second)))
 		}
 		return []slack.AttachmentField{
-			slack.AttachmentField{
+			{
 				Title: "name",
 				Value: strings.Join(names, "\n"),
 				Short: true,
 			},
-			slack.AttachmentField{
+			{
 				Title: "expiration",
 				Value: strings.Join(expirations, "\n"),
 				Short: true,
@@ -267,7 +266,7 @@ func shouldSend(channel string, status *status) (bool, error) {
 // fails on failure to perform cloud actions. All others actions (load/save
 // file, email) do not abort.
 func GCClusters(cloud *Cloud, dryrun bool) error {
-	now := time.Now()
+	now := timeutil.Now()
 
 	var names []string
 	for name := range cloud.Clusters {

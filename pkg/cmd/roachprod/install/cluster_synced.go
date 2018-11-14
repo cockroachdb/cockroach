@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 	"github.com/pkg/errors"
 )
@@ -553,7 +554,7 @@ exit 1
 
 func (c *SyncedCluster) CockroachVersions() map[string]int {
 	sha := make(map[string]int)
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 
 	display := fmt.Sprintf("%s: cockroach version", c.Name)
 	nodes := c.ServerNodes()
@@ -656,7 +657,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 
 	results := make(chan result, len(c.Nodes))
 	lines := make([]string, len(c.Nodes))
-	var linesMu sync.Mutex
+	var linesMu syncutil.Mutex
 	var wg sync.WaitGroup
 	wg.Add(len(c.Nodes))
 
@@ -829,7 +830,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 	var writer ui.Writer
 	results := make(chan result, len(c.Nodes))
 	lines := make([]string, len(c.Nodes))
-	var linesMu sync.Mutex
+	var linesMu syncutil.Mutex
 
 	var wg sync.WaitGroup
 	for i := range c.Nodes {
@@ -1092,7 +1093,9 @@ func (c *SyncedCluster) stopLoad() {
 	})
 }
 
-func (c *SyncedCluster) Parallel(display string, count, concurrency int, fn func(i int) ([]byte, error)) {
+func (c *SyncedCluster) Parallel(
+	display string, count, concurrency int, fn func(i int) ([]byte, error),
+) {
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
 	}

@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -289,7 +289,7 @@ func (p *Provider) List() (vm.List, error) {
 	}
 
 	var ret vm.List
-	var mux sync.Mutex
+	var mux syncutil.Mutex
 	var g errgroup.Group
 
 	for _, r := range regions {

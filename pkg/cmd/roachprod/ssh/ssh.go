@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -117,7 +118,7 @@ func newSSHClient(user, host string) (*ssh.Client, net.Conn, error) {
 }
 
 type sshClient struct {
-	sync.Mutex
+	syncutil.Mutex
 	*ssh.Client
 }
 
@@ -126,7 +127,7 @@ var sshState = struct {
 	signersInit sync.Once
 
 	clients  map[string]*sshClient
-	clientMu sync.Mutex
+	clientMu syncutil.Mutex
 }{
 	clients: map[string]*sshClient{},
 }
