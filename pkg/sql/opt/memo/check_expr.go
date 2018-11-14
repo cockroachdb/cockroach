@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -182,9 +183,9 @@ func (m *Memo) checkExpr(e opt.Expr) {
 func checkExprOrdering(e opt.Expr) {
 	// Verify that orderings stored in operators only refer to columns produced by
 	// their input.
-	var ordering props.OrderingChoice
+	var ordering physical.OrderingChoice
 	switch t := e.Private().(type) {
-	case *props.OrderingChoice:
+	case *physical.OrderingChoice:
 		ordering = *t
 	case *RowNumberPrivate:
 		ordering = t.Ordering

@@ -17,10 +17,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	ok, _ := ScanPrivateCanProvide(
 		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
@@ -33,7 +33,7 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
+func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
 		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
@@ -49,7 +49,7 @@ func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
 func ScanPrivateCanProvide(
-	md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
+	md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
 ) (ok bool, reverse bool) {
 	// Scan naturally orders according to scanned index's key columns. A scan can
 	// be executed either as a forward or as a reverse scan (unless it has a row
@@ -112,7 +112,7 @@ func ScanPrivateCanProvide(
 
 func init() {
 	memo.ScanIsReverseFn = func(
-		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
+		md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -139,10 +140,10 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	relational := e.Relational()
-	physical := e.Physical()
-	if physical == nil {
-		// Physical can be nil before optimization has taken place.
-		physical = props.MinPhysProps
+	required := e.RequiredPhysical()
+	if required == nil {
+		// required can be nil before optimization has taken place.
+		required = physical.MinRequired
 	}
 
 	// Special cases for merge-join and lookup-join: we want the type of the join
@@ -154,12 +155,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *LookupJoinExpr:
 		fmt.Fprintf(f.Buffer, "%v (lookup", t.JoinType)
-		FormatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
-		FormatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), required)
 
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
@@ -197,7 +198,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		colList = opt.ColSetToList(e.Relational().OutputCols)
 	}
 
-	f.formatColumns(e, tp, colList, physical.Presentation)
+	f.formatColumns(e, tp, colList, required.Presentation)
 
 	switch t := e.(type) {
 	// Special-case handling for GroupBy private; print grouping columns
@@ -301,8 +302,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 	}
 
-	if !physical.Ordering.Any() {
-		tp.Childf("ordering: %s", physical.Ordering.String())
+	if !required.Ordering.Any() {
+		tp.Childf("ordering: %s", required.Ordering.String())
 	}
 
 	if !f.HasFlags(ExprFmtHideRuleProps) {
@@ -444,12 +445,12 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	if private != nil {
 		f.Buffer.WriteRune(':')
-		FormatPrivate(f, private, &props.Physical{})
+		FormatPrivate(f, private, &physical.Required{})
 	}
 }
 
 func (f *ExprFmtCtx) formatColumns(
-	nd RelExpr, tp treeprinter.Node, cols opt.ColList, presentation props.Presentation,
+	nd RelExpr, tp treeprinter.Node, cols opt.ColList, presentation physical.Presentation,
 ) {
 	if presentation.Any() {
 		f.formatColList(nd, tp, "columns:", cols)
@@ -534,10 +535,10 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
 // happen in reverse (the code lives in the ordering package, and depending on
 // that directly would be a dependency loop).
-var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *props.OrderingChoice) bool
+var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *physical.OrderingChoice) bool
 
 // FormatPrivate outputs a description of the private to f.Buffer.
-func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical) {
+func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Required) {
 	if private == nil {
 		return
 	}
@@ -595,7 +596,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 	case *FunctionPrivate:
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
-	case *props.OrderingChoice:
+	case *physical.OrderingChoice:
 		if !t.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t)
 		}

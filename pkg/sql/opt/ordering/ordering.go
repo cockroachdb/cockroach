@@ -19,13 +19,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required ordering.
-func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func CanProvide(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	if required.Any() {
 		return true
 	}
@@ -39,8 +39,8 @@ func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 // given child in order to satisfy a required ordering. Can only be called if
 // CanProvide is true for the required ordering.
 func BuildChildRequired(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
 	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
 	if util.RaceEnabled && !result.Any() {
 		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
@@ -49,11 +49,11 @@ func BuildChildRequired(
 }
 
 type funcs struct {
-	canProvideOrdering func(expr memo.RelExpr, required *props.OrderingChoice) bool
+	canProvideOrdering func(expr memo.RelExpr, required *physical.OrderingChoice) bool
 
 	buildChildReqOrdering func(
-		parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-	) props.OrderingChoice
+		parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+	) physical.OrderingChoice
 }
 
 var funcMap [opt.NumOperators]funcs
@@ -125,18 +125,18 @@ func init() {
 	}
 }
 
-func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	return false
 }
 
 func noChildReqOrdering(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
-) props.OrderingChoice {
-	return props.OrderingChoice{}
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	return physical.OrderingChoice{}
 }
 
 // checkRequired runs sanity checks on the ordering required of an operator.
-func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
+func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 	rel := expr.Relational()
 
 	// Verify that the ordering only refers to output columns.

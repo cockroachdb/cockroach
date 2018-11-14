@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -115,7 +116,7 @@ func (e *ProjectExpr) NextExpr() RelExpr {
 	return e.next
 }
 
-func (e *ProjectExpr) Physical() *props.Physical {
+func (e *ProjectExpr) RequiredPhysical() *physical.Required {
 	return e.grp.bestProps().required
 }
 
@@ -321,7 +322,7 @@ func (e *SortExpr) NextExpr() RelExpr {
 	return nil
 }
 
-func (e *SortExpr) Physical() *props.Physical {
+func (e *SortExpr) RequiredPhysical() *physical.Required {
 	return e.best.required
 }
 

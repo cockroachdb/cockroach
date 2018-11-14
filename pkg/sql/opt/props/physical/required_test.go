@@ -12,31 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package props_test
+package physical_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func TestPhysicalProps(t *testing.T) {
+func TestRequiredProps(t *testing.T) {
 	// Empty props.
-	phys := &props.Physical{}
-	testPhysicalProps(t, phys, "[]")
+	phys := &physical.Required{}
+	testRequiredProps(t, phys, "[]")
 
 	if phys.Defined() {
 		t.Error("no props should be defined")
 	}
 
 	// Presentation props.
-	presentation := props.Presentation{
+	presentation := physical.Presentation{
 		opt.LabeledColumn{Label: "a", ID: 1},
 		opt.LabeledColumn{Label: "b", ID: 2},
 	}
-	phys = &props.Physical{Presentation: presentation}
-	testPhysicalProps(t, phys, "[presentation: a:1,b:2]")
+	phys = &physical.Required{Presentation: presentation}
+	testRequiredProps(t, phys, "[presentation: a:1,b:2]")
 
 	if presentation.Any() {
 		t.Error("presentation should not be empty")
@@ -46,17 +46,17 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should equal itself")
 	}
 
-	if presentation.Equals(props.Presentation{}) {
+	if presentation.Equals(physical.Presentation{}) {
 		t.Error("presentation should not equal the empty presentation")
 	}
 
 	// Add ordering props.
-	ordering := props.ParseOrderingChoice("+1,+5")
+	ordering := physical.ParseOrderingChoice("+1,+5")
 	phys.Ordering = ordering
-	testPhysicalProps(t, phys, "[presentation: a:1,b:2] [ordering: +1,+5]")
+	testRequiredProps(t, phys, "[presentation: a:1,b:2] [ordering: +1,+5]")
 }
 
-func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {
+func testRequiredProps(t *testing.T, physProps *physical.Required, expected string) {
 	t.Helper()
 	actual := physProps.String()
 	if actual != expected {
