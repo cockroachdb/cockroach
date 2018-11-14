@@ -1189,7 +1189,7 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	gofmt -s -w $@
 	goimports -w $@
 
-pkg/ui/yarn.opt.installed:
+pkg/ui/yarn.opt.installed: pkg/ui/opt/package.json
 	$(NODE_RUN) -C pkg/ui/opt yarn install
 	touch $@
 
@@ -1202,6 +1202,13 @@ ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
 ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 	cd pkg/ui && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --env.dist=ccl --port $(PORT) $(WEBPACK_DEV_SERVER_FLAGS)
+
+.PHONY: ui-stats
+ui-stats: export WEBPACK_STATS_GENERATE = 1
+ui-stats: pkg/ui/yarn.opt.installed
+ui-stats: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
+ui-stats: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+ui-stats: pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.

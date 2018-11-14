@@ -1,5 +1,6 @@
 {
   "devDependencies": {
-    "webpack-dashboard": "^1.0.1"
+    "webpack-dashboard": "^1.0.1",
+    "webpack-visualizer-plugin": "^0.1.11"
   }
 }
