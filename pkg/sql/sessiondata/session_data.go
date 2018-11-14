@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
@@ -83,9 +84,9 @@ type SessionData struct {
 	// Vectorize enables automatic planning of vectorized operators.
 	Vectorize bool
 	// DefaultIntSize controls the interpretation of the INT type.
-	// See discussion on the DefaultIntSize type.
+	// See discussion on the IntSize type.
 	// XXX link to cleanup issue
-	DefaultIntSize DefaultIntSize
+	DefaultIntSize intsize.IntSize
 }
 
 // DataConversionConfig contains the parameters that influence
@@ -341,45 +342,5 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 		return SerialUsesSQLSequences, true
 	default:
 		return 0, false
-	}
-}
-
-// DefaultIntSize controls the interpretation of the INT sql type.
-// This exists to enable a smooth transition from
-// INT := INT8 to INT := INT4.
-// XXX link to cleanup issue to delete.
-type DefaultIntSize int64
-
-const (
-	// DefaultIntSizeUnset means that INT := INT8 for versions <= 2.2
-	// and INT := INT4 for versions > 2.2.
-	DefaultIntSizeUnset DefaultIntSize = 4 * iota
-	// DefaultIntSize4 means that INT := INT4.
-	DefaultIntSize4
-	// DefaultIntSize8 means that INT := INT8.
-	DefaultIntSize8
-)
-
-// DefaultIntSizeFromString converts a string into a DefaultIntSize.
-func DefaultIntSizeFromString(val string) (_ DefaultIntSize, ok bool) {
-	switch val {
-	case "INT4":
-		return DefaultIntSize4, true
-	case "INT8":
-		return DefaultIntSize8, true
-	default:
-		return 0, false
-	}
-}
-
-func (s DefaultIntSize) String() string {
-	switch s {
-	case DefaultIntSize4:
-		return "INT4"
-	// XXX link to cleanup issue to switch legacy to INT4.
-	case DefaultIntSizeUnset, DefaultIntSize8:
-		return "INT8"
-	default:
-		return fmt.Sprintf("invalid (%d)", s)
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -224,19 +225,19 @@ var varGen = map[string]sessionVar{
 	// XXX Link to cleanup issue
 	`default_int_size`: {
 		Set: func(ctx context.Context, m *sessionDataMutator, val string) error {
-			if size, ok := sessiondata.DefaultIntSizeFromString(val); ok {
+			if size, ok := intsize.FromString(val); ok {
 				m.SetDefaultIntSize(size)
 				return nil
 			}
 			return newVarValueError("default_int_size", val,
-				sessiondata.DefaultIntSize8.String(),
-				sessiondata.DefaultIntSize4.String())
+				intsize.Eight.String(),
+				intsize.Four.String())
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.SessionData.DefaultIntSize.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.DefaultIntSize(DefaultIntSize.Get(sv)).String()
+			return intsize.IntSize(DefaultIntSize.Get(sv)).String()
 		},
 	},
 

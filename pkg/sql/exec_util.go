@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -155,10 +156,10 @@ var DefaultIntSize = settings.RegisterEnumSetting(
 	"sql.default_int_size",
 	"the default size of the INT type in bytes",
 	// XXX link to cleanup issue to switch this to INT4.
-	sessiondata.DefaultIntSize8.String(),
+	intsize.Eight.String(),
 	map[int64]string{
-		int64(sessiondata.DefaultIntSize8): sessiondata.DefaultIntSize8.String(),
-		int64(sessiondata.DefaultIntSize4): sessiondata.DefaultIntSize4.String(),
+		int64(intsize.Eight): intsize.Eight.String(),
+		int64(intsize.Four):  intsize.Four.String(),
 	},
 )
 
@@ -1618,7 +1619,7 @@ func (m *sessionDataMutator) SetDatabase(dbName string) {
 	m.data.Database = dbName
 }
 
-func (m *sessionDataMutator) SetDefaultIntSize(size sessiondata.DefaultIntSize) {
+func (m *sessionDataMutator) SetDefaultIntSize(size intsize.IntSize) {
 	m.data.DefaultIntSize = size
 }
 
