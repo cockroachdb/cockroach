@@ -347,7 +347,9 @@ func makeClusterName(name string) string {
 	return makeGCEClusterName(name)
 }
 
-func machineTypeToCPUs(s string) int {
+// MachineTypeToCPUs returns a CPU count for either a GCE or AWS
+// machine type.
+func MachineTypeToCPUs(s string) int {
 	{
 		// GCE machine types.
 		var v int
@@ -362,49 +364,29 @@ func machineTypeToCPUs(s string) int {
 		}
 	}
 
-	// AWS machine types. Yeah, there is probably something more algorithmic that
-	// could be done here, but does it matter?
-	switch s {
-	case "m5.large":
-		return 2
-	case "m5.xlarge":
-		return 4
-	case "m5.2xlarge":
-		return 8
-	case "m5.4xlarge":
-		return 16
-	case "m5.12xlarge":
-		return 48
-	case "m5.24xlarge":
-		return 96
+	typeAndSize := strings.Split(s, ".")
 
-	case "m5d.large":
-		return 2
-	case "m5d.xlarge":
-		return 4
-	case "m5d.2xlarge":
-		return 8
-	case "m5d.4xlarge":
-		return 16
-	case "m5d.12xlarge":
-		return 48
-	case "m5d.24xlarge":
-		return 96
+	if len(typeAndSize) == 2 {
+		size := typeAndSize[1]
 
-	case "i3.large":
-		return 2
-	case "i3.xlarge":
-		return 4
-	case "i3.2xlarge":
-		return 8
-	case "i3.4xlarge":
-		return 16
-	case "i3.8xlarge":
-		return 32
-	case "i3.16xlarge":
-		return 64
-	case "i3.metal":
-		return 72
+		switch size {
+		case "large":
+			return 2
+		case "xlarge":
+			return 4
+		case "2xlarge":
+			return 8
+		case "4xlarge":
+			return 16
+		case "9xlarge":
+			return 36
+		case "12xlarge":
+			return 48
+		case "18xlarge":
+			return 72
+		case "24xlarge":
+			return 96
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", s)
@@ -415,17 +397,17 @@ func machineTypeToCPUs(s string) int {
 func awsMachineType(cpus int) string {
 	switch {
 	case cpus <= 2:
-		return "m5d.large"
+		return "c5d.large"
 	case cpus <= 4:
-		return "m5d.xlarge"
+		return "c5d.xlarge"
 	case cpus <= 8:
-		return "m5d.2xlarge"
+		return "c5d.2xlarge"
 	case cpus <= 16:
-		return "m5d.4xlarge"
+		return "c5d.4xlarge"
 	case cpus <= 48:
-		return "m5d.12xlarge"
+		return "c5d.12xlarge"
 	default:
-		return "m5d.24xlarge"
+		return "c5d.24xlarge"
 	}
 }
 
@@ -852,7 +834,7 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 	}
 	if cpus := nodes[0].CPUs; cpus != 0 {
 		for i, vm := range cDetails.VMs {
-			vmCPUs := machineTypeToCPUs(vm.MachineType)
+			vmCPUs := MachineTypeToCPUs(vm.MachineType)
 			if vmCPUs < cpus {
 				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
 			}
