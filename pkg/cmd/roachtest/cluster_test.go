@@ -209,3 +209,37 @@ hi
 		}
 	})
 }
+
+func TestClusterAWSCPUCount(t *testing.T) {
+	testCases := []struct {
+		awsMachineType   string
+		expectedCPUCount int
+	}{
+		{"m5.large", 2},
+		{"m5.xlarge", 4},
+		{"m5.2xlarge", 8},
+		{"m5.4xlarge", 16},
+		{"m5.12xlarge", 48},
+		{"m5.24xlarge", 96},
+		{"m5d.large", 2},
+		{"m5d.xlarge", 4},
+		{"m5d.2xlarge", 8},
+		{"m5d.4xlarge", 16},
+		{"m5d.12xlarge", 48},
+		{"m5d.24xlarge", 96},
+		{"c5.large", 2},
+		{"c5.xlarge", 4},
+		{"c5.2xlarge", 8},
+		{"c5.4xlarge", 16},
+		{"c5.9xlarge", 36},
+		{"c5.18xlarge", 72},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			cpuCount := MachineTypeToCPUs(tc.awsMachineType)
+			if tc.expectedCPUCount != cpuCount {
+				t.Fatalf("expected %d CPUs, but found %d", tc.expectedCPUCount, cpuCount)
+			}
+		})
+	}
+}
