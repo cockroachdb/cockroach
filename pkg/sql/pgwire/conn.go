@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -63,9 +64,10 @@ const (
 type conn struct {
 	conn net.Conn
 
-	sessionArgs sql.SessionArgs
-	execCfg     *sql.ExecutorConfig
-	metrics     *ServerMetrics
+	sessionArgs        sql.SessionArgs
+	resultsBufferBytes int64
+	execCfg            *sql.ExecutorConfig
+	metrics            *ServerMetrics
 
 	// rd is a buffered reader consuming conn. All reads from conn go through
 	// this.
@@ -93,6 +95,26 @@ type conn struct {
 	readBuf    pgwirebase.ReadBuffer
 	msgBuilder writeBuffer
 }
+
+// ATTENTION: After changing this value in a unit test, you probably want to
+// open a new connection pool since the connections in the existing one are not
+// affected.
+//
+// TODO(andrei): This setting is under "sql.defaults", but there's no way to
+// control the setting on a per-connection basis. We should introduce a
+// corresponding session variable.
+var connResultsBufferSize = settings.RegisterByteSizeSetting(
+	"sql.defaults.results_buffer.size",
+	"size of the buffer that accumulates results for a statement or a batch "+
+		"of statements before they are sent to the client. Note that auto-retries "+
+		"generally only happen while no results have been delivered to the client, so "+
+		"reducing this size can increase the number of retriable errors a client "+
+		"receives. On the other hand, increasing the buffer size can increase the "+
+		"delay until the client receives the first result row. "+
+		"Updating the setting only affects new connections. "+
+		"Setting to 0 disables any buffering.",
+	16<<10, // 16 KiB
+)
 
 // serveConn creates a conn that will serve the netConn. It returns once the
 // network connection is closed.
@@ -150,7 +172,7 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, execCfg)
+	c := newConn(netConn, sArgs, metrics, execCfg, connResultsBufferSize.Get(&execCfg.Settings.SV))
 
 	if err := c.handleAuthentication(ctx, insecure); err != nil {
 		_ = c.conn.Close()
@@ -164,14 +186,19 @@ func serveConn(
 }
 
 func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, execCfg *sql.ExecutorConfig,
+	netConn net.Conn,
+	sArgs sql.SessionArgs,
+	metrics *ServerMetrics,
+	execCfg *sql.ExecutorConfig,
+	resultsBufferBytes int64,
 ) *conn {
 	c := &conn{
-		conn:        netConn,
-		sessionArgs: sArgs,
-		execCfg:     execCfg,
-		metrics:     metrics,
-		rd:          *bufio.NewReader(netConn),
+		conn:               netConn,
+		sessionArgs:        sArgs,
+		resultsBufferBytes: resultsBufferBytes,
+		execCfg:            execCfg,
+		metrics:            metrics,
+		rd:                 *bufio.NewReader(netConn),
 	}
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
@@ -1095,7 +1122,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 // maybeFlush flushes the buffer to the network connection if it exceeded
 // connResultsBufferSizeBytes.
 func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if c.writerState.buf.Len() <= c.execCfg.ConnResultsBufferBytes {
+	if int64(c.writerState.buf.Len()) <= c.resultsBufferBytes {
 		return false, nil
 	}
 	return true, c.Flush(pos)
