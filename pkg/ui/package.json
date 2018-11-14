@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@types/analytics-node": "^0.0.32",
+    "@types/assert": "^1.4.0",
     "@types/bytebuffer": "^5.0.33",
     "@types/chai": "^4.1.0",
     "@types/classnames": "^0.0.32",

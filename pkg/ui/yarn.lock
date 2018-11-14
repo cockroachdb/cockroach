@@ -56,6 +56,10 @@
   version "0.0.32"
   resolved "https://registry.yarnpkg.com/@types/analytics-node/-/analytics-node-0.0.32.tgz#4bd500d2b63f519d9e180e4d3c02d187b55bab6d"
 
+"@types/assert@^1.4.0":
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/@types/assert/-/assert-1.4.0.tgz#95a469cbb1bb94b21e9deb5fd1939859c613a87f"
+
 "@types/bytebuffer@^5.0.33":
   version "5.0.34"
   resolved "https://registry.yarnpkg.com/@types/bytebuffer/-/bytebuffer-5.0.34.tgz#43f7140503a593acc700f818fe23343ae911bcdf"
