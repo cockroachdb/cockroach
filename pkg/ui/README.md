@@ -122,6 +122,21 @@ To run the tests outside of CI:
 $ make test
 ```
 
+## Viewing bundle statistics
+
+To see a sunburst chart of our generated bundle, run:
+
+```shell
+$ make stats
+```
+
+And then open up the generated files:
+
+```shell
+$ open ./distccl/stats.html
+$ open ./distoss/stats.html
+```
+
 ## Managing dependencies
 
 The NPM registry (and the Yarn proxy in front of it) have historically proven
