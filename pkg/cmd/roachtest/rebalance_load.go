@@ -99,6 +99,15 @@ func registerRebalanceLoad(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
+			t.Status("disable load based splitting")
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+				// If the cluster setting doesn't exist, the cluster version is < 2.2.0 and
+				// so Load based Splitting doesn't apply anyway and the error should be ignored.
+				if !strings.Contains(err.Error(), "unknown cluster setting") {
+					return err
+				}
+			}
+
 			if _, err := db.ExecContext(
 				ctx, `SET CLUSTER SETTING kv.allocator.load_based_rebalancing=$1::string`, rebalanceMode,
 			); err != nil {
@@ -131,9 +140,10 @@ func registerRebalanceLoad(r *registry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:   `rebalance-leases-by-load`,
-		Nodes:  nodes(4), // the last node is just used to generate load
-		Stable: true,
+		Name:       `rebalance-leases-by-load`,
+		Nodes:      nodes(4), // the last node is just used to generate load
+		MinVersion: "2.1.0",
+		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
@@ -143,9 +153,10 @@ func registerRebalanceLoad(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   `rebalance-replicas-by-load`,
-		Nodes:  nodes(7), // the last node is just used to generate load
-		Stable: false,    // TODO(a-robinson): Promote to stable
+		Name:       `rebalance-replicas-by-load`,
+		Nodes:      nodes(7), // the last node is just used to generate load
+		MinVersion: "2.1.0",
+		Stable:     false, // TODO(a-robinson): Promote to stable
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
