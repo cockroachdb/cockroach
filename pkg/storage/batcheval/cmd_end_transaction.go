@@ -438,11 +438,8 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	min, max := txn.InclusiveTimeBounds()
 	iter := batch.NewIterator(engine.IterOptions{
-		MinTimestampHint: min,
-		MaxTimestampHint: max,
-		UpperBound:       desc.EndKey.AsRawKey(),
+		UpperBound: desc.EndKey.AsRawKey(),
 	})
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
