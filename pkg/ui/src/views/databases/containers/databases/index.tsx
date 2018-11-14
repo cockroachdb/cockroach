@@ -31,6 +31,8 @@ import DatabaseSummaryTables from "src/views/databases/containers/databaseTables
 import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
 import NonTableSummary from "./nonTableSummary";
 
+import "./databases.styl";
+
 const databasePages = [
   { value: "tables", label: "Tables" },
   { value: "grants", label: "Grants" },
