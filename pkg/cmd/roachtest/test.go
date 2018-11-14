@@ -268,11 +268,17 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 		// prereleases of the specified version. Otherwise, "v2.1.0" would compare
 		// greater than "v2.1.0-alpha.x".
 		var err error
-		spec.minVersion, err = version.NewVersion(spec.MinVersion + "-0")
+		spec.minVersion, err = version.NewVersion(spec.MinVersion)
 		if err != nil {
 			return fmt.Errorf("%s: unable to parse min-version: %s: %+v",
 				spec.Name, spec.MinVersion, err)
 		}
+		if spec.minVersion.Prerelease() != "" {
+			// Specifying a prerelease version as a MinVersion is too confusing
+			// to be useful. The comparison is not straightforward.
+			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", spec.minVersion)
+		}
+		spec.minVersion = version.Must(version.NewVersion(spec.MinVersion + "-0"))
 	}
 	return nil
 }
@@ -743,13 +749,17 @@ func (t *test) ArtifactsDir() string {
 // versions are Cockroach build tag version numbers, not the internal cluster
 // version number.
 func (t *test) IsBuildVersion(minVersion string) bool {
-	// We append "-0" to the min-version spec so that we capture all
-	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
-	// greater than "v2.1.0-alpha.x".
-	vers, err := version.NewVersion(minVersion + "-0")
+	vers, err := version.NewVersion(minVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if p := vers.Prerelease(); p != "" {
+		panic("cannot specify a prerelease: " + p)
+	}
+	// We append "-0" to the min-version spec so that we capture all
+	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
+	// greater than "v2.1.0-alpha.x".
+	vers = version.Must(version.NewVersion(minVersion + "-0"))
 	return !t.registry.buildVersion.LessThan(vers)
 }
 
