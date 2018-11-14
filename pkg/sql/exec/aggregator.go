@@ -174,7 +174,7 @@ func NewOrderedAggregator(
 		switch aggFns[i] {
 		// AVG.
 		case 1:
-			a.aggregateFuncs[i] = &avgDecimalAgg{}
+			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
 		// SUM, SUM_INT.
 		case 10, 11:
 			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
