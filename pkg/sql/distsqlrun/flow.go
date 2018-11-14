@@ -139,6 +139,11 @@ func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
 	return ctx.testingKnobs
 }
 
+// Stopper returns the stopper for this flowCtx.
+func (ctx *FlowCtx) Stopper() *stop.Stopper {
+	return ctx.stopper
+}
+
 type flowStatus int
 
 // Flow status indicators.
