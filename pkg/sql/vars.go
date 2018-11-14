@@ -230,8 +230,8 @@ var varGen = map[string]sessionVar{
 				return nil
 			}
 			return newVarValueError("default_int_size", val,
-				intsize.Eight.String(),
-				intsize.Four.String())
+				intsize.INT8.String(),
+				intsize.INT4.String())
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.SessionData.DefaultIntSize.String()

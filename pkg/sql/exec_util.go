@@ -156,10 +156,10 @@ var DefaultIntSize = settings.RegisterEnumSetting(
 	"sql.default_int_size",
 	"the default size of the INT type in bytes",
 	// XXX link to cleanup issue to switch this to INT4.
-	intsize.Eight.String(),
+	intsize.INT8.String(),
 	map[int64]string{
-		int64(intsize.Eight): intsize.Eight.String(),
-		int64(intsize.Four):  intsize.Four.String(),
+		int64(intsize.INT8): intsize.INT8.String(),
+		int64(intsize.INT4): intsize.INT4.String(),
 	},
 )
 

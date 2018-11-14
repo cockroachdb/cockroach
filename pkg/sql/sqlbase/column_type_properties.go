@@ -669,16 +669,11 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {
-			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
-				// Width is defined in bits.
-				width := uint(typ.Width - 1)
-
-				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
-				shifted := v >> width
-				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+			if size, ok := intsize.FromWidth(int(typ.Width)); ok {
+				if !v.RangeCheck(size) {
 					return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
-						typ.VisibleType, tree.ErrNameString(name))
+						size, tree.ErrNameString(name))
 				}
 			}
 		}

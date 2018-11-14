@@ -22,33 +22,31 @@ import (
 	"strings"
 )
 
-// IntSize is an enum that represents the size, in bytes, of an INT.
-// This exists to allow us to transition from INT := INT8 in
-// version <= 2.2 to INT := INT4.
-type IntSize uint64
+// IntSize is an enum that represents the size, in bits, of an INT.
+type IntSize int
 
 const (
 	// Unknown INT size; this should only be seen when getting SessionData
 	// from an older node version.  Should never be seen once all nodes
 	// have reached 2.2.
 	Unknown IntSize = 0
-	// Two byte INT.
-	Two IntSize = 1 << iota
-	// Four byte INT.
-	Four
-	// Eight byte INT.
-	Eight
+	// INT2 is a two byte INT.
+	INT2 IntSize = 8 << iota
+	// INT4 is a four byte INT.
+	INT4
+	// INT8 is an eight byte INT.
+	INT8
 )
 
-// FromString can be used to parse user-provided input to
+// FromString can be used to parse user-provided input.
 func FromString(val string) (_ IntSize, ok bool) {
 	switch strings.ToUpper(val) {
 	case "INT2":
-		return Two, true
+		return INT2, true
 	case "INT4":
-		return Four, true
+		return INT4, true
 	case "INT8":
-		return Eight, true
+		return INT8, true
 	default:
 		return 0, false
 	}
@@ -56,43 +54,31 @@ func FromString(val string) (_ IntSize, ok bool) {
 
 // FromWidth is the inverse of IntSize.Width().
 func FromWidth(width int) (_ IntSize, ok bool) {
-	switch width {
-	case 16:
-		return Two, true
-	case 32:
-		return Four, true
-	case 64:
-		return Eight, true
-	default:
-		return 0, false
+	if width == 16 || width == 32 || width == 64 {
+		return IntSize(width), true
 	}
+	return 0, false
 }
 
 func (s IntSize) String() string {
 	switch s {
 	// TODO(bob): Version 2.3: Change the default to INT4.
-	case Unknown, Eight:
+	case Unknown, INT8:
 		return "INT8"
-	case Four:
+	case INT4:
 		return "INT4"
-	case Two:
+	case INT2:
 		return "INT2"
 	default:
-		panic(fmt.Sprintf("unknown IntSize(%d)", s))
+		return fmt.Sprintf("unknown IntSize(%d)", s)
 	}
 }
 
 // Width returns the number of bits that the given size represents.
 func (s IntSize) Width() int {
-	switch s {
-	// TODO(bob): Version 2.3: Change the default to INT4.
-	case Unknown, Eight:
+	if s == Unknown {
+		// TODO(bob): Version 2.3: Change the default to 32.
 		return 64
-	case Four:
-		return 32
-	case Two:
-		return 16
-	default:
-		panic(fmt.Sprintf("unknown IntSize(%d)", s))
 	}
+	return int(s)
 }

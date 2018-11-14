@@ -708,20 +708,14 @@ func (d *DInt) Format(ctx *FmtCtx) {
 	}
 }
 
-// Resize will perform a narrowing cast on the DInt, returning
-// a pointer to a value which could be stored in an INT of the
-// requested size.
-func (d *DInt) Resize(size intsize.IntSize) *DInt {
-	switch size {
-	case intsize.Unknown, intsize.Eight:
-		return d
-	case intsize.Four:
-		return NewDInt(DInt(int32(*d)))
-	case intsize.Two:
-		return NewDInt(DInt(int16(*d)))
-	default:
-		panic(fmt.Sprintf("unknown IntSize(%d)", size))
-	}
+// RangeCheck determines whether or not the value is within the
+// acceptable range for the given INT size (e.g. INT2, INT4, INT8).
+func (d *DInt) RangeCheck(size intsize.IntSize) (ok bool) {
+	v := *d
+	// We're performing bounds checks inline with Go's implementation
+	// of min and max ints in Math.go.
+	shifted := v >> uint(size.Width()-1)
+	return !(v >= 0 && shifted > 0) && !(v < 0 && shifted < -1)
 }
 
 // Size implements the Datum interface.
