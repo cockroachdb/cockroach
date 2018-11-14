@@ -346,10 +346,19 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// The raft log index of a pending preemptive snapshot. Used to prohibit
-		// raft log truncation while a preemptive snapshot is in flight. A value of
-		// 0 indicates that there is no pending snapshot.
-		pendingSnapshotIndex uint64
+		// A map of raft log index of pending preemptive snapshots to deadlines.
+		// Used to prohibit raft log truncations that would leave a gap between
+		// the snapshot and the new first index. The map entry has a zero
+		// deadline while the snapshot is being sent and turns nonzero when the
+		// snapshot has completed, preventing truncation for a grace period
+		// (since there is a race between the snapshot completing and its being
+		// reflected in the raft status used to make truncation decisions).
+		//
+		// NB: If we kept only one value, we could end up in situations in which
+		// we're either giving some snapshots no grace period, or keep an
+		// already finished snapshot "pending" for extended periods of time
+		// (preventing log truncation).
+		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
 		// raftLogSize is the approximate size in bytes of the persisted raft log.
 		// On server restart, this value is assumed to be zero to avoid costly scans
 		// of the raft log. This will be correct when all log entries predating this
@@ -5122,6 +5131,10 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 				lastAppResp = message
 				drop = true
 			}
+
+			if r.maybeDropMsgAppResp(ctx, message) {
+				drop = true
+			}
 		}
 		if !drop {
 			r.sendRaftMessage(ctx, message)
@@ -5130,6 +5143,63 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 	if lastAppResp.Index > 0 {
 		r.sendRaftMessage(ctx, lastAppResp)
 	}
+}
+
+// maybeDropMsgAppResp returns true if the outgoing Raft message should be
+// dropped. It does so if sending the message would likely result in an errant
+// Raft snapshot after a split.
+func (r *Replica) maybeDropMsgAppResp(ctx context.Context, msg raftpb.Message) bool {
+	if !msg.Reject {
+		return false
+	}
+
+	r.mu.RLock()
+	ticks := r.mu.ticks
+	initialized := r.isInitializedRLocked()
+	r.mu.RUnlock()
+
+	if initialized {
+		return false
+	}
+
+	if ticks > r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
+		log.Infof(ctx, "allowing MsgAppResp for uninitialized replica")
+		return false
+	}
+
+	if msg.RejectHint != 0 {
+		log.Fatalf(ctx, "received reject hint %d from supposedly uninitialized replica", msg.RejectHint)
+	}
+
+	// This replica has a blank state, i.e. its last index is zero (because we
+	// start our Raft log at index 10). In particular, it's not a preemptive
+	// snapshot. This happens in two cases:
+	//
+	// 1. a rebalance operation is adding a new replica of the range to this
+	// node. We always send a preemptive snapshot before attempting to do so, so
+	// we wouldn't enter this branch as the replica would be initialized. We
+	// would however enter this branch if the preemptive snapshot got GC'ed
+	// before the actual replica change came through.
+	//
+	// 2. a split executed that created this replica as its right hand side, but
+	// this node's pre-split replica hasn't executed the split trigger (yet).
+	// The expectation is that it will do so momentarily, however if we don't
+	// drop this rejection, the Raft leader will try to catch us up via a
+	// snapshot. In 99.9% of cases this is a wasted effort since the pre-split
+	// replica already contains the data this replica will hold. The remaining
+	// 0.01% constitute the case in which our local replica of the pre-split
+	// range requires a snapshot which catches it up "past" the split trigger,
+	// in which case the trigger will never be executed (the snapshot instead
+	// wipes out the data the split trigger would've tried to put into this
+	// range). A similar scenario occurs if there's a rebalance operation that
+	// rapidly removes the pre-split replica, so that it never catches up (nor
+	// via log nor via snapshot); in that case too, the Raft snapshot is
+	// required to materialize the split's right hand side replica (i.e. this
+	// one). We're delaying the snapshot for a short amount of time only, so
+	// this seems tolerable.
+	log.VEventf(ctx, 2, "dropping rejection from index %d to index %d", msg.Index, msg.RejectHint)
+
+	return true
 }
 
 // sendRaftMessage sends a Raft message.
@@ -6952,29 +7022,67 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
-func (r *Replica) setPendingSnapshotIndex(index uint64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// We allow the pendingSnapshotIndex to change from 0 to 1 and then from 1 to
-	// a value greater than 1. Any other change indicates 2 current preemptive
-	// snapshots on the same replica which is disallowed.
-	if (index == 1 && r.mu.pendingSnapshotIndex != 0) ||
-		(index > 1 && r.mu.pendingSnapshotIndex != 1) {
-		// NB: this path can be hit if the replicate queue and scatter work
-		// concurrently. It's still good to return an error to avoid duplicating
-		// work, but we make it a benign one (so that it isn't logged).
-		return &benignError{errors.Errorf(
-			"%s: can't set pending snapshot index to %d; pending snapshot already present: %d",
-			r, index, r.mu.pendingSnapshotIndex)}
-	}
-	r.mu.pendingSnapshotIndex = index
-	return nil
+type snapTruncationInfo struct {
+	index    uint64
+	deadline time.Time
 }
 
-func (r *Replica) clearPendingSnapshotIndex() {
+func (r *Replica) addSnapshotLogTruncationConstraintLocked(
+	ctx context.Context, snapUUID uuid.UUID, index uint64,
+) {
+	if r.mu.snapshotLogTruncationConstraints == nil {
+		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
+	}
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if ok {
+		// Uh-oh, there's either a programming error (resulting in the same snapshot
+		// fed into this method twice) or a UUID collision. We discard the update
+		// (which is benign) but log it loudly. If the index is the same, it's
+		// likely the former, otherwise the latter.
+		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, index)
+		return
+	}
+
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{index: index}
+}
+
+func (r *Replica) completeSnapshotLogTruncationConstraint(
+	ctx context.Context, snapUUID uuid.UUID, now time.Time,
+) {
+	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
+
 	r.mu.Lock()
-	r.mu.pendingSnapshotIndex = 0
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if !ok {
+		// UUID collision while adding the snapshot in originally. Nothing
+		// else to do.
+		return
+	}
+
+	item.deadline = deadline
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
+}
+
+func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
+	now time.Time,
+) (minSnapIndex uint64) {
+	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
+		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
+			// The snapshot has finished and its grace period has passed.
+			// Ignore it when making truncation decisions.
+			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+			continue
+		}
+		if minSnapIndex == 0 || minSnapIndex > item.index {
+			minSnapIndex = item.index
+		}
+	}
+	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
+		// Save a little bit of memory.
+		r.mu.snapshotLogTruncationConstraints = nil
+	}
+	return minSnapIndex
 }
 
 func (r *Replica) startKey() roachpb.RKey {
@@ -7061,8 +7169,8 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 }
 
 func calcReplicaMetrics(
-	ctx context.Context,
-	now hlc.Timestamp,
+	_ context.Context,
+	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
 	zone *config.ZoneConfig,
 	livenessMap IsLiveMap,

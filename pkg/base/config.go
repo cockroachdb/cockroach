@@ -111,6 +111,9 @@ var (
 	// will send to a follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
+
+	defaultRaftPostSplitSuppressSnapshotTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_POST_SPLIT_SUPPRESS_SNAPSHOT_TICKS", 20)
 )
 
 type lazyHTTPClient struct {
@@ -476,6 +479,8 @@ type RaftConfig struct {
 	// translates to ~1024 commands that might be executed in the handling of a
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
+
+	RaftPostSplitSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -509,6 +514,10 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftMaxInflightMsgs == 0 {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
+	}
+
+	if cfg.RaftPostSplitSuppressSnapshotTicks == 0 {
+		cfg.RaftPostSplitSuppressSnapshotTicks = defaultRaftPostSplitSuppressSnapshotTicks
 	}
 }
 
