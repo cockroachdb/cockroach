@@ -758,7 +758,7 @@ The --args and --env flags can be used to pass arbitrary command line flags and
 environment variables to the cockroach process.
 ` + tagHelp + `
 The "start" command takes care of setting up the --join address and specifying
-reasonable defautls for other flags. One side-effect of this convenience is
+reasonable defaults for other flags. One side-effect of this convenience is
 that node 1 is special and must be started for the cluster to be initialized.
 
 If the COCKROACH_DEV_LICENSE environment variable is set the enterprise.license

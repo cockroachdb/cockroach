@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var duration time.Duration
@@ -347,7 +348,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		Env:     c.Env,
 		Args:    c.Args,
 		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
-		Date:    time.Now().Format("2006-01-02T15_04_05"),
+		Date:    timeutil.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir(testName, m.Bin)
@@ -445,7 +446,7 @@ func nightly(clusterName, dir string) {
 		Env:     c.Env,
 		Args:    c.Args,
 		Test:    "nightly",
-		Date:    time.Now().Format("2006-01-02T15_04_05"),
+		Date:    timeutil.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir("nightly", m.Bin)
@@ -510,7 +511,7 @@ func splits(clusterName, dir string) {
 		Env:     c.Env,
 		Args:    c.Args,
 		Test:    "splits",
-		Date:    time.Now().Format("2006-01-02T15_04_05"),
+		Date:    timeutil.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir("splits", m.Bin)

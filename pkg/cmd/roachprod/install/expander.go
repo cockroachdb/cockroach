@@ -20,7 +20,9 @@ type expander struct {
 	uiPorts map[int]string
 }
 
-func (e *expander) maybeExpandMap(c *SyncedCluster, m map[int]string, nodeSpec string) (string, bool) {
+func (e *expander) maybeExpandMap(
+	c *SyncedCluster, m map[int]string, nodeSpec string,
+) (string, bool) {
 	if nodeSpec == "" {
 		nodeSpec = "all"
 	} else {
