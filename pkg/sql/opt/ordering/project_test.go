@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -64,7 +65,7 @@ func TestProject(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		req := props.ParseOrderingChoice(tc.req)
+		req := physical.ParseOrderingChoice(tc.req)
 		res := "no"
 		if projectCanProvideOrdering(project, &req) {
 			res = projectBuildChildReqOrdering(project, &req, 0).String()

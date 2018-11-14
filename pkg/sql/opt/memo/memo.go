@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -126,7 +126,7 @@ type Memo struct {
 
 	// rootProps are the physical properties required of the root memo expression.
 	// It is set via a call to SetRoot.
-	rootProps *props.Physical
+	rootProps *physical.Required
 
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
@@ -192,13 +192,13 @@ func (m *Memo) RootExpr() opt.Expr {
 
 // RootProps returns the physical properties required of the root memo group,
 // previously set via a call to SetRoot.
-func (m *Memo) RootProps() *props.Physical {
+func (m *Memo) RootProps() *physical.Required {
 	return m.rootProps
 }
 
 // SetRoot stores the root memo expression when it is a relational expression,
 // and also stores the physical properties required of the root group.
-func (m *Memo) SetRoot(e RelExpr, phys *props.Physical) {
+func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	m.rootExpr = e
 	if m.rootProps != phys {
 		m.rootProps = m.InternPhysicalProps(phys)
@@ -285,22 +285,22 @@ func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog o
 // yet been added. If the same props was added previously, then return a pointer
 // to the previously added props. This allows interned physical props to be
 // compared for equality using simple pointer comparison.
-func (m *Memo) InternPhysicalProps(physical *props.Physical) *props.Physical {
+func (m *Memo) InternPhysicalProps(phys *physical.Required) *physical.Required {
 	// Special case physical properties that require nothing of operator.
-	if !physical.Defined() {
-		return props.MinPhysProps
+	if !phys.Defined() {
+		return physical.MinRequired
 	}
-	return m.interner.InternPhysicalProps(physical)
+	return m.interner.InternPhysicalProps(phys)
 }
 
 // SetBestProps updates the physical properties and cost of a relational
 // expression's memo group. It is called by the optimizer once it determines
 // the lowest cost expression in a group.
-func (m *Memo) SetBestProps(e RelExpr, phys *props.Physical, cost Cost) {
-	if e.Physical() != nil {
-		if e.Physical() != phys || e.Cost() != cost {
+func (m *Memo) SetBestProps(e RelExpr, phys *physical.Required, cost Cost) {
+	if e.RequiredPhysical() != nil {
+		if e.RequiredPhysical() != phys || e.Cost() != cost {
 			panic(fmt.Sprintf("cannot overwrite %s (%.9g) with %s (%.9g)",
-				e.Physical(), e.Cost(), phys, cost))
+				e.RequiredPhysical(), e.Cost(), phys, cost))
 		}
 		return
 	}
@@ -314,5 +314,5 @@ func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
-	return ok && rel.Physical() != nil
+	return ok && rel.RequiredPhysical() != nil
 }
