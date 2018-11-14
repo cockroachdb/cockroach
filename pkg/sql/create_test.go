@@ -439,9 +439,6 @@ SELECT * FROM t.kv%d
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Make the connections' results buffers really small so that it overflows
-		// when we produce a few results.
-		ConnResultsBufferBytes: 10,
 		// Andrei is too lazy to figure out the incantation for telling pgx about
 		// our test certs.
 		Insecure: true,

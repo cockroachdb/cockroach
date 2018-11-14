@@ -686,17 +686,30 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			UseDatabase: "d",
-			Knobs:       knobs,
-			// TODO(dan): HACK until the changefeed can control pgwire flushing.
-			ConnResultsBufferBytes: 1,
+			Knobs: knobs,
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
-		f := makeSinkless(s, db)
-		testFn(t, db, f)
+
+		// Now that we've updated sql.defaults.results_buffer.size, open a new
+		// conn pool so that connections use the new setting.
+		pgURL, cleanupFunc := sqlutils.PGUrl(
+			t, s.ServingAddr(), "sinklessTest" /* prefix */, url.User(security.RootUser),
+		)
+		defer cleanupFunc()
+		pgURL.Path = "d"
+		noBufferDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer noBufferDB.Close()
+
+		f := makeSinkless(s, noBufferDB)
+		testFn(t, noBufferDB, f)
 	}
 }
 
