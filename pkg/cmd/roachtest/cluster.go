@@ -365,30 +365,30 @@ func machineTypeToCPUs(s string) int {
 	// AWS machine types. Yeah, there is probably something more algorithmic that
 	// could be done here, but does it matter?
 	switch s {
-	case "m5.large":
+	case "c5.large":
 		return 2
-	case "m5.xlarge":
+	case "c5.xlarge":
 		return 4
-	case "m5.2xlarge":
+	case "c5.2xlarge":
 		return 8
-	case "m5.4xlarge":
+	case "c5.4xlarge":
 		return 16
-	case "m5.12xlarge":
+	case "c5.12xlarge":
 		return 48
-	case "m5.24xlarge":
+	case "c5.24xlarge":
 		return 96
 
-	case "m5d.large":
+	case "c5d.large":
 		return 2
-	case "m5d.xlarge":
+	case "c5d.xlarge":
 		return 4
-	case "m5d.2xlarge":
+	case "c5d.2xlarge":
 		return 8
-	case "m5d.4xlarge":
+	case "c5d.4xlarge":
 		return 16
-	case "m5d.12xlarge":
+	case "c5d.12xlarge":
 		return 48
-	case "m5d.24xlarge":
+	case "c5d.24xlarge":
 		return 96
 
 	case "i3.large":
@@ -415,17 +415,17 @@ func machineTypeToCPUs(s string) int {
 func awsMachineType(cpus int) string {
 	switch {
 	case cpus <= 2:
-		return "m5d.large"
+		return "c5d.large"
 	case cpus <= 4:
-		return "m5d.xlarge"
+		return "c5d.xlarge"
 	case cpus <= 8:
-		return "m5d.2xlarge"
+		return "c5d.2xlarge"
 	case cpus <= 16:
-		return "m5d.4xlarge"
+		return "c5d.4xlarge"
 	case cpus <= 48:
-		return "m5d.12xlarge"
+		return "c5d.12xlarge"
 	default:
-		return "m5d.24xlarge"
+		return "c5d.24xlarge"
 	}
 }
 
