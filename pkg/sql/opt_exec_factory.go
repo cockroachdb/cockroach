@@ -255,7 +255,11 @@ func (ef *execFactory) RenameColumns(n exec.Node, colNames []string) (exec.Node,
 
 // ConstructHashJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructHashJoin(
-	joinType sqlbase.JoinType, left, right exec.Node, onCond tree.TypedExpr,
+	joinType sqlbase.JoinType,
+	left, right exec.Node,
+	leftEqCols, rightEqCols []exec.ColumnOrdinal,
+	leftEqColsAreKey, rightEqColsAreKey bool,
+	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
 	p := ef.planner
 	leftSrc := asDataSource(left)
@@ -266,16 +270,28 @@ func (ef *execFactory) ConstructHashJoin(
 	if err != nil {
 		return nil, err
 	}
-	onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
-	// Try to harvest equality columns from the ON expression.
-	onAndExprs := splitAndExpr(p.EvalContext(), onCond, nil /* exprs */)
-	for _, e := range onAndExprs {
-		if e != tree.DBoolTrue && !pred.tryAddEqualityFilter(e, leftSrc.info, rightSrc.info) {
-			pred.onCond = mergeConj(pred.onCond, e)
-		}
+
+	numEqCols := len(leftEqCols)
+	// Save some allocations by putting both sides in the same slice.
+	intBuf := make([]int, 2*numEqCols)
+	pred.leftEqualityIndices = intBuf[:numEqCols:numEqCols]
+	pred.rightEqualityIndices = intBuf[numEqCols:]
+	nameBuf := make(tree.NameList, 2*numEqCols)
+	pred.leftColNames = nameBuf[:numEqCols:numEqCols]
+	pred.rightColNames = nameBuf[numEqCols:]
+
+	for i := range leftEqCols {
+		pred.leftEqualityIndices[i] = int(leftEqCols[i])
+		pred.rightEqualityIndices[i] = int(rightEqCols[i])
+		pred.leftColNames[i] = tree.Name(leftSrc.info.SourceColumns[leftEqCols[i]].Name)
+		pred.rightColNames[i] = tree.Name(rightSrc.info.SourceColumns[rightEqCols[i]].Name)
 	}
+	pred.leftEqKey = leftEqColsAreKey
+	pred.rightEqKey = rightEqColsAreKey
+
+	pred.onCond = pred.iVarHelper.Rebind(
+		extraOnCond, false /* alsoReset */, false, /* normalizeToNonNil */
+	)
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }

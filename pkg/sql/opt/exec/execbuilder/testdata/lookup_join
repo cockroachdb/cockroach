@@ -191,26 +191,26 @@ ALTER TABLE authors INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-tree                      field        description                     columns                                   ordering
-distinct                  ·            ·                               (name)                                    weak-key(name)
- │                        distinct on  name                            ·                                         ·
- └── render               ·            ·                               (name)                                    ·
-      │                   render 0     name                            ·                                         ·
-      └── join            ·            ·                               (title, shelf, name, book, title, shelf)  ·
-           │              type         inner                           ·                                         ·
-           │              equality     (title, book) = (title, title)  ·                                         ·
-           │              pred         shelf != shelf                  ·                                         ·
-           ├── join       ·            ·                               (title, shelf, name, book)                ·
-           │    │         type         cross                           ·                                         ·
-           │    ├── scan  ·            ·                               (title, shelf)                            ·
-           │    │         table        books2@primary                  ·                                         ·
-           │    │         spans        ALL                             ·                                         ·
-           │    └── scan  ·            ·                               (name, book)                              ·
-           │              table        authors@primary                 ·                                         ·
-           │              spans        ALL                             ·                                         ·
-           └── scan       ·            ·                               (title, shelf)                            ·
-·                         table        books@primary                   ·                                         ·
-·                         spans        ALL                             ·                                         ·
+tree                      field        description                          columns                                   ordering
+distinct                  ·            ·                                    (name)                                    weak-key(name)
+ │                        distinct on  name                                 ·                                         ·
+ └── render               ·            ·                                    (name)                                    ·
+      │                   render 0     name                                 ·                                         ·
+      └── join            ·            ·                                    (title, shelf, name, book, title, shelf)  ·
+           │              type         inner                                ·                                         ·
+           │              equality     (title) = (title)                    ·                                         ·
+           │              pred         (book = title) AND (shelf != shelf)  ·                                         ·
+           ├── join       ·            ·                                    (title, shelf, name, book)                ·
+           │    │         type         cross                                ·                                         ·
+           │    ├── scan  ·            ·                                    (title, shelf)                            ·
+           │    │         table        books2@primary                       ·                                         ·
+           │    │         spans        ALL                                  ·                                         ·
+           │    └── scan  ·            ·                                    (name, book)                              ·
+           │              table        authors@primary                      ·                                         ·
+           │              spans        ALL                                  ·                                         ·
+           └── scan       ·            ·                                    (title, shelf)                            ·
+·                         table        books@primary                        ·                                         ·
+·                         spans        ALL                                  ·                                         ·
 
 # Verify data placement.
 query TTITI colnames
@@ -222,7 +222,7 @@ NULL       NULL     10        {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09r4zAQxe_7Kbxz2oAWW_4XMAR02MNmD8kSeis5KNY0EXUsI8nQEvLdi21oYjdW_lx61Hh-857eWAcolcAF36OB7BkoEEhgTaDSKkdjlG7KXdNcvEEWEJBlVdumvCaQK42QHcBKWyBksFC_VeWnQECg5bJo244EVG1PkLF8i5BNj-RsMHUPfuKbAlfIBWo_6I2HSss91-9so9SrCYHAsraZxyhhEYxp00e16WVtXttdk9WYXjiqd5KpS6UFahTD9K63XDD9l5vdPyVL1H7Y9_wZT0hYRFg8ajp6NKTIsaDb9hN_Z15x336BL_ZXYzeezLTc7roDnTQ3WXgs9X7OPHb678YvldyT5x9prCxz6yd9N4yOzk9786-81BWaSpUGb3qqQZMYii12GzCq1jn-1ypvZbrjsuXagkBju6_T7jAvu0-NwXOYOuGoB9MhHN4Bh0M4csKJWzm-A_6inDjh1B1Y6oSDAbw-_vgIAAD__0987gU=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk0-L2zAQxe_9FOqcElCx5X8LhoAKe-j24C1LbyUHrTVNRB3LSDK0hHz3YhuS2I2VP5febGl-8968QXuotcRC7NBC_gMYUEhhTaExukRrtemOh6IX-RvykIKqm9Z1x2sKpTYI-R6cchVCDoX-pJsgAwoSnVBVX3agoFt3gqwTG4T86UDPGjN_4-_ivcI3FBJNEI7aQ2PUTpg__F3rXzYCCq-tywlnlMcwp80e1WaXtUXrtl1Wc3rRrN5Jpq21kWhQTtO7XnLB9Bdht1-1qtEE0djzMZ6I8pjyZNZ0_GhIsWdBt-0n-Z95JWP7Ff50C86WK6M22_6rm6EgC56QFeHpknwunsmCZ-TjivBoeZxwfrz0nmSflXWqLl2Qjn1xNts_G_W_8mbf0Da6tnjTow277FBucNiF1a0p8ZvRZS8z_L72XH8g0brh9mn4eamHq87gOcy8cDyC2RSO7oCjKRx74dSvnNwB_6OceuHMH1jmhcMJvD58-BsAAP__2dLv4w==
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
