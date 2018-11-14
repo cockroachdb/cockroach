@@ -649,7 +649,8 @@ func (*TableReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProc
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
-// values in the input stream (join by lookup).
+// values in the input stream (join by lookup). The output always preserves the
+// order of the input rows.
 //
 // The "internal columns" of a JoinReader (see ProcessorSpec) are either the
 // columns of the table or the concatenation of the columns of the input stream
@@ -689,8 +690,10 @@ type JoinReaderSpec struct {
 	OnExpr Expression `protobuf:"bytes,4,opt,name=on_expr,json=onExpr" json:"on_expr"`
 	// For lookup joins. Filter expression to be applied to index rows before
 	// joining to the input.
-	IndexFilterExpr Expression                      `protobuf:"bytes,5,opt,name=index_filter_expr,json=indexFilterExpr" json:"index_filter_expr"`
-	Type            cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	IndexFilterExpr Expression `protobuf:"bytes,5,opt,name=index_filter_expr,json=indexFilterExpr" json:"index_filter_expr"`
+	// For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
+	// supported.
+	Type cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
 	// For index joins that are sources to mutation statements - what visibility
 	// of columns should we return? Mutations sometimes need to see in-progress
 	// schema change columns, in which case this field will be changed from its

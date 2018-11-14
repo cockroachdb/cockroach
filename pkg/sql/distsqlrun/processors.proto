@@ -231,7 +231,8 @@ message TableReaderSpec {
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
-// values in the input stream (join by lookup).
+// values in the input stream (join by lookup). The output always preserves the
+// order of the input rows.
 //
 // The "internal columns" of a JoinReader (see ProcessorSpec) are either the
 // columns of the table or the concatenation of the columns of the input stream
@@ -277,6 +278,8 @@ message JoinReaderSpec {
   // joining to the input.
   optional Expression index_filter_expr = 5 [(gogoproto.nullable) = false];
 
+  // For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
+  // supported.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 
   // For index joins that are sources to mutation statements - what visibility
