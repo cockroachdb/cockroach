@@ -329,6 +329,7 @@ func (ex *connExecutor) execBind(
 		}
 
 		ptCtx := tree.NewParseTimeContext(ex.sessionData.DurationAdditionMode,
+			ex.sessionData.DefaultIntSize,
 			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
 
 		for i, arg := range bindCmd.Args {

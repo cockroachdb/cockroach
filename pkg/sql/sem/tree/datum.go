@@ -27,6 +27,7 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -1649,6 +1650,8 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 // acceptable and will result in reasonable defaults being applied.
 type ParseTimeContext interface {
 	duration.Context
+	// GetDefaultIntSize returns the size of the INT type.
+	GetDefaultIntSize() intsize.IntSize
 	// GetRelativeParseTime returns the transaction time in the session's
 	// timezone (i.e. now()). This is used to calculate relative dates,
 	// like "tomorrow", and also provides a default time.Location for
@@ -1662,21 +1665,30 @@ var _ ParseTimeContext = &simpleParseTimeContext{}
 
 // NewParseTimeContext constructs a ParseTimeContext that returns
 // the given values.
-func NewParseTimeContext(mode duration.AdditionMode, relativeParseTime time.Time) ParseTimeContext {
+func NewParseTimeContext(
+	mode duration.AdditionMode, intSize intsize.IntSize, relativeParseTime time.Time,
+) ParseTimeContext {
 	return &simpleParseTimeContext{
 		AdditionMode:      mode,
+		DefaultIntSize:    intSize,
 		RelativeParseTime: relativeParseTime,
 	}
 }
 
 type simpleParseTimeContext struct {
 	AdditionMode      duration.AdditionMode
+	DefaultIntSize    intsize.IntSize
 	RelativeParseTime time.Time
 }
 
 // GetAdditionMode implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetAdditionMode() duration.AdditionMode {
 	return ctx.AdditionMode
+}
+
+// GetDefaultIntSize implements ParseTimeContext.
+func (ctx simpleParseTimeContext) GetDefaultIntSize() intsize.IntSize {
+	return ctx.DefaultIntSize
 }
 
 // GetRelativeParseTime implements ParseTimeContext.

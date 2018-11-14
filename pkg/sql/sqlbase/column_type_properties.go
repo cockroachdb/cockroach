@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -110,7 +111,7 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 // This must be used on ColumnTypes produced from
 // DatumTypeToColumnType if the origin of the type was a coltypes.T
 // (e.g. via CastTargetToDatumType).
-func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
+func PopulateTypeAttrs(ctx *tree.EvalContext, base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
 	case *coltypes.TBitArray:
 		if t.Width > math.MaxInt32 {
@@ -122,11 +123,20 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		}
 
 	case *coltypes.TInt:
-		base.Width = int32(t.Width)
+		if t.Width == 0 {
+			if ctx == nil {
+				base.Width = int32(intsize.Unknown.Width())
+			} else {
+				base.Width = int32(ctx.GetDefaultIntSize().Width())
+			}
+		} else {
+			base.Width = int32(t.Width)
+		}
 
 		// For 2.1 nodes only Width is sufficient, but we also populate
 		// VisibleType for compatibility with pre-2.1 nodes.
-		switch t.Width {
+		// TODO(bob): Version 2.3: Retire VisibleType for INTS.
+		switch base.Width {
 		case 16:
 			base.VisibleType = ColumnType_SMALLINT
 		case 64:
@@ -164,7 +174,7 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
-		base, err = PopulateTypeAttrs(base, t.ParamType)
+		base, err = PopulateTypeAttrs(ctx, base, t.ParamType)
 		if err != nil {
 			return ColumnType{}, err
 		}

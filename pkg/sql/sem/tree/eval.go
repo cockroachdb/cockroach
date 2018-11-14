@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
@@ -2608,6 +2609,11 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	// field appears as fractional part.
 	res.Decimal.Exponent = -10
 	return &res
+}
+
+// GetDefaultIntSize implements ParseTimeContext.
+func (ctx *EvalContext) GetDefaultIntSize() intsize.IntSize {
+	return ctx.SessionData.DefaultIntSize
 }
 
 // GetRelativeParseTime implements ParseTimeContext.

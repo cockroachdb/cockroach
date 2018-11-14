@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -215,6 +216,13 @@ func (sc *SemaContext) GetLocation() *time.Location {
 // GetAdditionMode implements ParseTimeContext.
 func (sc *SemaContext) GetAdditionMode() duration.AdditionMode {
 	return duration.AdditionModeCompatible
+}
+
+// GetDefaultIntSize implements ParseTimeContext.  It always
+// returns intsize.Unknown, which will trigger version-specific,
+// default behavior.
+func (sc *SemaContext) GetDefaultIntSize() intsize.IntSize {
+	return intsize.Unknown
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
