@@ -32,7 +32,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,7 +65,6 @@ type conn struct {
 
 	sessionArgs        sql.SessionArgs
 	resultsBufferBytes int64
-	execCfg            *sql.ExecutorConfig
 	metrics            *ServerMetrics
 
 	// rd is a buffered reader consuming conn. All reads from conn go through
@@ -95,27 +93,6 @@ type conn struct {
 	readBuf    pgwirebase.ReadBuffer
 	msgBuilder writeBuffer
 }
-
-// ATTENTION: After changing this value in a unit test, you probably want to
-// open a new connection pool since the connections in the existing one are not
-// affected.
-//
-// TODO(andrei): This setting is under "sql.defaults", but there's no way to
-// control the setting on a per-connection basis. We should introduce a
-// corresponding session variable.
-var connResultsBufferSize = settings.RegisterByteSizeSetting(
-	"sql.defaults.conn_results_buffer_size",
-	"the size of each connection's results buffer. Within a query (or a batch "+
-		"of queries), CRDB buffers results until the buffer overflows, at which point "+
-		"the results are delivered to the client. Once any results are delivered, "+
-		"CRDB can no longer perform automatic retries for the transactions in "+
-		"question. On the other hand, increasing the buffer size can increase the "+
-		"latency the client perceives until the first result row for a query is "+
-		"delivered.\n"+
-		"Updating the setting only affects future connections.\n"+
-		"Setting to 0 disables any buffering.",
-	16<<10, // 16 KiB
-)
 
 // serveConn creates a conn that will serve the netConn. It returns once the
 // network connection is closed.
@@ -159,11 +136,12 @@ func serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
+	resultsBufferBytes int64,
 	metrics *ServerMetrics,
 	reserved mon.BoundAccount,
 	sqlServer *sql.Server,
 	draining func() bool,
-	execCfg *sql.ExecutorConfig,
+	ie *sql.InternalExecutor,
 	stopper *stop.Stopper,
 	insecure bool,
 ) error {
@@ -173,9 +151,9 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, execCfg, connResultsBufferSize.Get(&execCfg.Settings.SV))
+	c := newConn(netConn, sArgs, metrics, resultsBufferBytes)
 
-	if err := c.handleAuthentication(ctx, insecure); err != nil {
+	if err := c.handleAuthentication(ctx, insecure, ie); err != nil {
 		_ = c.conn.Close()
 		reserved.Close(ctx)
 		return err
@@ -187,17 +165,12 @@ func serveConn(
 }
 
 func newConn(
-	netConn net.Conn,
-	sArgs sql.SessionArgs,
-	metrics *ServerMetrics,
-	execCfg *sql.ExecutorConfig,
-	resultsBufferBytes int64,
+	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, resultsBufferBytes int64,
 ) *conn {
 	c := &conn{
 		conn:               netConn,
 		sessionArgs:        sArgs,
 		resultsBufferBytes: resultsBufferBytes,
-		execCfg:            execCfg,
 		metrics:            metrics,
 		rd:                 *bufio.NewReader(netConn),
 	}
@@ -1289,7 +1262,9 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // name, if different from the one given initially. Note: at this
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
-func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
+func (c *conn) handleAuthentication(
+	ctx context.Context, insecure bool, ie *sql.InternalExecutor,
+) error {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 		return err
@@ -1298,7 +1273,7 @@ func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.execCfg, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
+		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
