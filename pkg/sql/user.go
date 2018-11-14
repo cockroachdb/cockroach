@@ -27,7 +27,7 @@ import (
 // GetUserHashedPassword returns the hashedPassword for the given username if
 // found in system.users.
 func GetUserHashedPassword(
-	ctx context.Context, execCfg *ExecutorConfig, metrics *MemoryMetrics, username string,
+	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
 ) (bool, []byte, error) {
 	normalizedUsername := tree.Name(username).Normalize()
 	// Always return no password for the root user, even if someone manually inserts one.
@@ -37,7 +37,7 @@ func GetUserHashedPassword(
 
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 		`WHERE username=$1 AND "isRole" = false`
-	values, err := execCfg.InternalExecutor.QueryRow(
+	values, err := ie.QueryRow(
 		ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
 	if err != nil {
 		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)

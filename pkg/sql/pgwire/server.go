@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -39,6 +40,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
+// ATTENTION: After changing this value in a unit test, you probably want to
+// open a new connection pool since the connections in the existing one are not
+// affected.
+//
+// TODO(andrei): This setting is under "sql.defaults", but there's no way to
+// control the setting on a per-connection basis. We should introduce a
+// corresponding session variable.
+var connResultsBufferSize = settings.RegisterByteSizeSetting(
+	"sql.defaults.results_buffer.size",
+	"size of the buffer that accumulates results for a statement or a batch "+
+		"of statements before they are sent to the client. Note that auto-retries "+
+		"generally only happen while no results have been delivered to the client, so "+
+		"reducing this size can increase the number of retriable errors a client "+
+		"receives. On the other hand, increasing the buffer size can increase the "+
+		"delay until the client receives the first result row. "+
+		"Updating the setting only affects new connections. "+
+		"Setting to 0 disables any buffering.",
+	16<<10, // 16 KiB
 )
 
 const (
@@ -452,8 +473,11 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
 			baseSQLMemoryBudget, err)
 	}
-	return serveConn(ctx, conn, sArgs, &s.metrics, reserved, s.SQLServer,
-		s.IsDraining, s.execCfg, s.stopper, s.cfg.Insecure)
+	return serveConn(
+		ctx, conn, sArgs,
+		connResultsBufferSize.Get(&s.execCfg.Settings.SV),
+		&s.metrics, reserved, s.SQLServer,
+		s.IsDraining, s.execCfg.InternalExecutor, s.stopper, s.cfg.Insecure)
 }
 
 func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
