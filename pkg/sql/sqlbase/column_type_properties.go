@@ -125,6 +125,8 @@ func PopulateTypeAttrs(ctx *tree.EvalContext, base ColumnType, typ coltypes.T) (
 	case *coltypes.TInt:
 		if t.Width == 0 {
 			if ctx == nil {
+				// We'll see a nil context when setting up virtual tables.
+				// In this case, we'll default to our hard-coded default.
 				base.Width = int32(intsize.Unknown.Width())
 			} else {
 				base.Width = int32(ctx.GetDefaultIntSize().Width())

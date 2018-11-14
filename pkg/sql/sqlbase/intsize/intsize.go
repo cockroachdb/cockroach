@@ -32,15 +32,19 @@ const (
 	// from an older node version.  Should never be seen once all nodes
 	// have reached 2.2.
 	Unknown IntSize = 0
+	// Two byte INT.
+	Two IntSize = 1 << iota
 	// Four byte INT.
-	Four IntSize = 4
+	Four
 	// Eight byte INT.
-	Eight IntSize = 8
+	Eight
 )
 
 // FromString can be used to parse user-provided input to
 func FromString(val string) (_ IntSize, ok bool) {
 	switch strings.ToUpper(val) {
+	case "INT2":
+		return Two, true
 	case "INT4":
 		return Four, true
 	case "INT8":
@@ -53,6 +57,8 @@ func FromString(val string) (_ IntSize, ok bool) {
 // FromWidth is the inverse of IntSize.Width().
 func FromWidth(width int) (_ IntSize, ok bool) {
 	switch width {
+	case 16:
+		return Two, true
 	case 32:
 		return Four, true
 	case 64:
@@ -69,6 +75,8 @@ func (s IntSize) String() string {
 		return "INT8"
 	case Four:
 		return "INT4"
+	case Two:
+		return "INT2"
 	default:
 		panic(fmt.Sprintf("unknown IntSize(%d)", s))
 	}
@@ -82,6 +90,8 @@ func (s IntSize) Width() int {
 		return 64
 	case Four:
 		return 32
+	case Two:
+		return 16
 	default:
 		panic(fmt.Sprintf("unknown IntSize(%d)", s))
 	}

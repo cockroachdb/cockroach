@@ -2937,8 +2937,11 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				res = DZero
 			}
 		case *DInt:
-			// TODO(knz): enforce the coltype width here.
-			res = v
+			if size, ok := intsize.FromWidth(typ.Width); ok {
+				res = v.Resize(size)
+			} else {
+				return nil, errors.Errorf("unsupported cast width %d", typ.Width)
+			}
 		case *DFloat:
 			f := float64(*v)
 			// Use `<=` and `>=` here instead of just `<` and `>` because when

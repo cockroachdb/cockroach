@@ -708,6 +708,22 @@ func (d *DInt) Format(ctx *FmtCtx) {
 	}
 }
 
+// Resize will perform a narrowing cast on the DInt, returning
+// a pointer to a value which could be stored in an INT of the
+// requested size.
+func (d *DInt) Resize(size intsize.IntSize) *DInt {
+	switch size {
+	case intsize.Unknown, intsize.Eight:
+		return d
+	case intsize.Four:
+		return NewDInt(DInt(int32(*d)))
+	case intsize.Two:
+		return NewDInt(DInt(int16(*d)))
+	default:
+		panic(fmt.Sprintf("unknown IntSize(%d)", size))
+	}
+}
+
 // Size implements the Datum interface.
 func (d *DInt) Size() uintptr {
 	return unsafe.Sizeof(*d)
