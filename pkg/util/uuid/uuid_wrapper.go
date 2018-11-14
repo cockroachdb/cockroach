@@ -15,12 +15,9 @@
 package uuid
 
 import (
-	cryptorand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"math"
-	"math/big"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -106,16 +103,16 @@ func FastMakeV4() UUID {
 	return u
 }
 
+// defaultRandReader is an io.Reader that calls through to "math/rand".Read
+// which is safe for concurrent use.
+type defaultRandReader struct{}
+
+func (r defaultRandReader) Read(p []byte) (n int, err error) {
+	return rand.Read(p)
+}
+
 // fastGen is a non-cryptographically secure Generator.
-var fastGen = func() Generator {
-	maxInt := big.NewInt(math.MaxInt64)
-	seed, err := cryptorand.Int(cryptorand.Reader, maxInt)
-	if err != nil {
-		panic(errors.Wrap(err, "failed to seed rand"))
-	}
-	r := rand.New(rand.NewSource(seed.Int64()))
-	return NewGenWithReader(r)
-}()
+var fastGen = NewGenWithReader(defaultRandReader{})
 
 // NewPopulatedUUID returns a populated UUID.
 func NewPopulatedUUID(r interface {
