@@ -194,7 +194,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NULL,
+   x INT8 NULL,
    FAMILY "primary" (x, rowid)
 )
 

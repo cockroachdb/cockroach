@@ -199,17 +199,17 @@ CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
 query TT
 SHOW CREATE TABLE all_interleaves
 ----
-all_interleaves   CREATE TABLE all_interleaves (
-                    b INT NOT NULL,
-                    c INT NULL,
-                    d INT NULL,
-                    CONSTRAINT "primary" PRIMARY KEY (b ASC),
-                    INDEX all_interleaves_c_idx (c ASC),
-                    UNIQUE INDEX all_interleaves_d_key (d ASC),
-                    INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
-                    UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
-                    FAMILY "primary" (b, c, d)
-                  ) INTERLEAVE IN PARENT p1_1 (b)
+all_interleaves                  CREATE TABLE all_interleaves (
+                                 b INT8 NOT NULL,
+                                 c INT8 NULL,
+                                 d INT8 NULL,
+                                 CONSTRAINT "primary" PRIMARY KEY (b ASC),
+                                 INDEX all_interleaves_c_idx (c ASC),
+                                 UNIQUE INDEX all_interleaves_d_key (d ASC),
+                                 INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
+                                 UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
+                                 FAMILY "primary" (b, c, d)
+) INTERLEAVE IN PARENT p1_1 (b)
 
 statement error pgcode 42P01 relation "missing" does not exist
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
@@ -306,7 +306,7 @@ query TT
 SHOW CREATE TABLE interdb
 ----
 interdb                                      CREATE TABLE interdb (
-                                             x INT NOT NULL,
+                                             x INT8 NOT NULL,
                                              CONSTRAINT "primary" PRIMARY KEY (x ASC),
                                              FAMILY "primary" (x)
 ) INTERLEAVE IN PARENT other.public.foo (x)

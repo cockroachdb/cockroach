@@ -11,17 +11,17 @@ SELECT create_statement, create_nofks, alter_statements, validate_statements FRO
 ----
 create_statement  create_nofks  alter_statements  validate_statements
 CREATE TABLE t (
-   a INT NULL,
+   a INT8 NULL,
    CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid),
    INDEX t_auto_index_fk_a_ref_t (a ASC),
    FAMILY "primary" (a, rowid)
 )  CREATE TABLE t (
-   a INT NULL,
+   a INT8 NULL,
    INDEX t_auto_index_fk_a_ref_t (a ASC),
    FAMILY "primary" (a, rowid)
 )  {"ALTER TABLE t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid)"}  {"ALTER TABLE t VALIDATE CONSTRAINT fk_a_ref_t"}
 CREATE TABLE v (
-   "'" INT NULL,
+   "'" INT8 NULL,
    s STRING NULL,
    CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v (s),
    UNIQUE INDEX v_s_key (s ASC),
@@ -29,7 +29,7 @@ CREATE TABLE v (
    INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
    FAMILY "primary" ("'", s, rowid)
 )  CREATE TABLE v (
-   "'" INT NULL,
+   "'" INT8 NULL,
    s STRING NULL,
    UNIQUE INDEX v_s_key (s ASC),
    INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
