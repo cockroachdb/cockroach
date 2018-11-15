@@ -594,7 +594,7 @@ func (t *btree) Set(c *cmd) {
 // iterator after modifications are made to the tree. If modifications are made,
 // create a new iterator.
 func (t *btree) MakeIter() iterator {
-	return iterator{t: t, pos: -1}
+	return iterator{r: t.root, pos: -1}
 }
 
 // Height returns the height of the tree.
@@ -647,36 +647,79 @@ func (n *node) writeString(b *strings.Builder) {
 	}
 }
 
-// iterator is responsible for search and traversal within a btree.
-type iterator struct {
-	t    *btree
-	n    *node
-	pos  int16
+// iterStack represents a stack of (node, pos) tuples, which captures
+// iteration state as an iterator descends a btree.
+type iterStack struct {
+	a    iterStackArr
+	aLen int16 // -1 when using s
 	s    []iterFrame
-	sBuf [3]iterFrame // avoids allocation of s up to height 4
-	o    overlapScan
 }
+
+// Used to avoid allocations for stacks below a certain size.
+type iterStackArr [3]iterFrame
 
 type iterFrame struct {
 	n   *node
 	pos int16
 }
 
+func (is *iterStack) push(f iterFrame) {
+	if is.aLen == -1 {
+		is.s = append(is.s, f)
+	} else if int(is.aLen) == len(is.a) {
+		is.s = make([]iterFrame, int(is.aLen)+1, 2*int(is.aLen))
+		copy(is.s, is.a[:])
+		is.s[int(is.aLen)] = f
+		is.aLen = -1
+	} else {
+		is.a[is.aLen] = f
+		is.aLen++
+	}
+}
+
+func (is *iterStack) pop() iterFrame {
+	if is.aLen == -1 {
+		f := is.s[len(is.s)-1]
+		is.s = is.s[:len(is.s)-1]
+		return f
+	}
+	is.aLen--
+	return is.a[is.aLen]
+}
+
+func (is *iterStack) len() int {
+	if is.aLen == -1 {
+		return len(is.s)
+	}
+	return int(is.aLen)
+}
+
+func (is *iterStack) reset() {
+	if is.aLen == -1 {
+		is.s = is.s[:0]
+	} else {
+		is.aLen = 0
+	}
+}
+
+// iterator is responsible for search and traversal within a btree.
+type iterator struct {
+	r   *node
+	n   *node
+	pos int16
+	s   iterStack
+	o   overlapScan
+}
+
 func (i *iterator) reset() {
-	i.n = i.t.root
-	i.s = i.s[:0]
+	i.n = i.r
 	i.pos = -1
+	i.s.reset()
 	i.o = overlapScan{}
 }
 
-// descend descends into the node's child at position pos. It maintains a
-// stack of (parent, position) pairs so that the tree can be ascended again
-// later.
 func (i *iterator) descend(n *node, pos int16) {
-	if i.s == nil {
-		i.s = i.sBuf[:0]
-	}
-	i.s = append(i.s, iterFrame{n: n, pos: pos})
+	i.s.push(iterFrame{n: n, pos: pos})
 	i.n = n.children[pos]
 	i.pos = 0
 }
@@ -684,8 +727,7 @@ func (i *iterator) descend(n *node, pos int16) {
 // ascend ascends up to the current node's parent and resets the position
 // to the one previously set for this parent node.
 func (i *iterator) ascend() {
-	f := i.s[len(i.s)-1]
-	i.s = i.s[:len(i.s)-1]
+	f := i.s.pop()
 	i.n = f.n
 	i.pos = f.pos
 }
@@ -765,7 +807,7 @@ func (i *iterator) Next() {
 		if i.pos < i.n.count {
 			return
 		}
-		for len(i.s) > 0 && i.pos >= i.n.count {
+		for i.s.len() > 0 && i.pos >= i.n.count {
 			i.ascend()
 		}
 		return
@@ -790,7 +832,7 @@ func (i *iterator) Prev() {
 		if i.pos >= 0 {
 			return
 		}
-		for len(i.s) > 0 && i.pos < 0 {
+		for i.s.len() > 0 && i.pos < 0 {
 			i.ascend()
 			i.pos--
 		}
@@ -923,10 +965,6 @@ func (i *iterator) findNextOverlap() {
 	for {
 		if i.pos > i.n.count {
 			// Iterate up tree.
-			if len(i.s) == 0 {
-				// Should have already hit upper-bound constraint.
-				panic("unreachable")
-			}
 			i.ascend()
 		} else if !i.n.leaf {
 			// Iterate down tree.
