@@ -59,7 +59,7 @@ func (ti *tableInserter) finalize(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (ti *tableInserter) tableDesc() *sqlbase.TableDescriptor {
+func (ti *tableInserter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
 

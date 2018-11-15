@@ -99,7 +99,7 @@ func ProcessComputedColumns(
 	ctx context.Context,
 	cols []ColumnDescriptor,
 	tn *tree.TableName,
-	tableDesc *TableDescriptor,
+	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
@@ -125,7 +125,7 @@ func ProcessComputedColumns(
 // input columns earlier in the slice.
 func MakeComputedExprs(
 	cols []ColumnDescriptor,
-	tableDesc *TableDescriptor,
+	tableDesc *ImmutableTableDescriptor,
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,

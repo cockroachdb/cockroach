@@ -32,7 +32,7 @@ const histogramSamples = 10000
 const histogramBuckets = 200
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *PlanningCtx, desc *sqlbase.TableDescriptor, stats []requestedStat,
+	planCtx *PlanningCtx, desc *sqlbase.ImmutableTableDescriptor, stats []requestedStat,
 ) (PhysicalPlan, error) {
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}

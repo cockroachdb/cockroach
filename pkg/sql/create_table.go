@@ -138,7 +138,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		var foundExternalReference bool
 		for id := range refs {
-			if t := params.p.Tables().getUncommittedTableByID(id); t == nil || !t.IsNewTable() {
+			if t := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
 				foundExternalReference = true
 				break
 			}
@@ -197,7 +197,12 @@ func (n *createTableNode) startExec(params runParams) error {
 		// Instantiate a row inserter and table writer. It has a 1-1
 		// mapping to the definitions in the descriptor.
 		ri, err := row.MakeInserter(
-			params.p.txn, desc.TableDesc(), nil, desc.Columns, row.SkipFKs, &params.p.alloc)
+			params.p.txn,
+			sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
+			nil,
+			desc.Columns,
+			row.SkipFKs,
+			&params.p.alloc)
 		if err != nil {
 			return err
 		}

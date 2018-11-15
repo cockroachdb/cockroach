@@ -551,7 +551,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.disableBatchLimit()
 
 	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, scan)
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc, tableScan.index.ID))
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc.TableDesc(), tableScan.index.ID))
 
 	return &indexJoinNode{
 		index:             scan,
@@ -624,7 +624,7 @@ func (ef *execFactory) ConstructLookupJoin(
 
 // Helper function to create a scanNode from just a table / index descriptor
 func (ef *execFactory) constructScanForZigzag(
-	indexDesc *sqlbase.IndexDescriptor, tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor, tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (*scanNode, error) {
 	colCount := len(indexDesc.ColumnIDs) + len(indexDesc.ExtraColumnIDs)
 	colCount += len(indexDesc.StoreColumnIDs)
