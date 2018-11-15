@@ -80,7 +80,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 			if flags.requireMutable {
 				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil, nil
 			}
-			return t.desc, nil, nil
+			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil, nil
 		}
 		if _, ok := scEntry.allTableNames[tableName]; ok {
 			return nil, nil, pgerror.Unimplemented(name.Schema()+"."+tableName,

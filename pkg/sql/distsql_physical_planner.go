@@ -822,11 +822,11 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 }
 
 func getIndexIdx(n *scanNode) (uint32, error) {
-	if n.index == &n.desc.PrimaryIndex {
+	if n.index.ID == n.desc.PrimaryIndex.ID {
 		return 0, nil
 	}
 	for i := range n.desc.Indexes {
-		if n.index == &n.desc.Indexes[i] {
+		if n.index.ID == n.desc.Indexes[i].ID {
 			// IndexIdx is 1 based (0 means primary index).
 			return uint32(i + 1), nil
 		}
@@ -841,7 +841,7 @@ func initTableReaderSpec(
 ) (*distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlplan.NewTableReaderSpec()
 	*s = distsqlrun.TableReaderSpec{
-		Table:      *n.desc,
+		Table:      *n.desc.TableDesc(),
 		Reverse:    n.reverse,
 		IsCheck:    n.run.isCheck,
 		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
@@ -880,7 +880,7 @@ func initTableReaderSpec(
 
 // scanNodeOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
-	desc *sqlbase.TableDescriptor, colID sqlbase.ColumnID, visibility scanVisibility,
+	desc *sqlbase.ImmutableTableDescriptor, colID sqlbase.ColumnID, visibility scanVisibility,
 ) int {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == colID {
@@ -1817,7 +1817,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table:      *n.index.desc,
+		Table:      *n.index.desc.TableDesc(),
 		IndexIdx:   0,
 		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
@@ -1885,7 +1885,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table: *n.table.desc,
+		Table: *n.table.desc.TableDesc(),
 		Type:  n.joinType,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
@@ -2179,7 +2179,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			return PhysicalPlan{}, err
 		}
 		core.JoinReader = &distsqlrun.JoinReaderSpec{
-			Table:           *(lookupJoinScan.desc),
+			Table:           *lookupJoinScan.desc.TableDesc(),
 			IndexIdx:        indexIdx,
 			LookupColumns:   lookupCols,
 			OnExpr:          onExpr,

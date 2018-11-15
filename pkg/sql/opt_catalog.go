@@ -61,7 +61,7 @@ func (oc *optCatalog) ResolveDataSource(
 	if err != nil {
 		return nil, err
 	}
-	return oc.newDataSource(desc, name)
+	return oc.newDataSource(desc.TableDesc(), name)
 }
 
 // ResolveDataSourceByID is part of the opt.Catalog interface.
@@ -85,7 +85,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	}
 
 	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.newDataSource(desc, &name)
+	return oc.newDataSource(desc.TableDesc(), &name)
 }
 
 // newDataSource returns a data source wrapper for the given table descriptor.

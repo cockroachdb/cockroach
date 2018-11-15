@@ -108,7 +108,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(params.ctx, params.p, tableDesc, &n.n.Table); err != nil {
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc.TableDesc(), &n.n.Table); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:

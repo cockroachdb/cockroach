@@ -53,7 +53,7 @@ type cascader struct {
 // a possible cascade. It returns a cascader if one is required and nil if not.
 func makeDeleteCascader(
 	txn *client.Txn,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID TableLookupsByID,
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
@@ -109,7 +109,7 @@ Outer:
 // a possible cascade. It returns a cascader if one is required and nil if not.
 func makeUpdateCascader(
 	txn *client.Txn,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID TableLookupsByID,
 	updateCols []sqlbase.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
@@ -191,7 +191,7 @@ func (c *cascader) clear(ctx context.Context) {
 // spanForIndexValues creates a span against an index to extract the primary
 // keys needed for cascading.
 func spanForIndexValues(
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	prefixLen int,
 	indexColIDs map[sqlbase.ColumnID]int,
@@ -210,7 +210,7 @@ func spanForIndexValues(
 	if nulls {
 		return roachpb.Span{}, nil
 	}
-	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table, index, prefixLen, indexColIDs, values, keyPrefix)
+	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -228,13 +228,13 @@ func spanForIndexValues(
 func batchRequestForIndexValues(
 	ctx context.Context,
 	referencedIndex *sqlbase.IndexDescriptor,
-	referencingTable *sqlbase.TableDescriptor,
+	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
 	values cascadeQueueElement,
 ) (roachpb.BatchRequest, map[sqlbase.ColumnID]int, error) {
 
 	//TODO(bram): consider caching some of these values
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(referencingTable, referencingIndex.ID)
+	keyPrefix := sqlbase.MakeIndexKeyPrefix(referencingTable.TableDesc(), referencingIndex.ID)
 	prefixLen := len(referencingIndex.ColumnIDs)
 	if len(referencedIndex.ColumnIDs) < prefixLen {
 		prefixLen = len(referencedIndex.ColumnIDs)
@@ -274,7 +274,9 @@ func batchRequestForIndexValues(
 // spanForPKValues creates a span against the primary index of a table and is
 // used to fetch rows for cascading.
 func spanForPKValues(
-	table *sqlbase.TableDescriptor, fetchColIDtoRowIndex map[sqlbase.ColumnID]int, values tree.Datums,
+	table *sqlbase.ImmutableTableDescriptor,
+	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
+	values tree.Datums,
 ) (roachpb.Span, error) {
 	return spanForIndexValues(
 		table,
@@ -282,14 +284,14 @@ func spanForPKValues(
 		len(table.PrimaryIndex.ColumnIDs),
 		fetchColIDtoRowIndex,
 		values,
-		sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID),
+		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
 	)
 }
 
 // batchRequestForPKValues creates a batch request against the primary index of
 // a table and is used to fetch rows for cascading.
 func batchRequestForPKValues(
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
 	values *sqlbase.RowContainer,
 ) (roachpb.BatchRequest, error) {
@@ -310,7 +312,7 @@ func batchRequestForPKValues(
 // fetch the primary keys of the rows that will be affected by a cascading
 // action.
 func (c *cascader) addIndexPKRowFetcher(
-	table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	table *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor,
 ) (Fetcher, error) {
 	// Is there a cached row fetcher?
 	rowFetchersForTable, exists := c.indexPKRowFetchers[table.ID]
@@ -358,7 +360,9 @@ func (c *cascader) addIndexPKRowFetcher(
 }
 
 // addRowDeleter creates the row deleter and primary index row fetcher.
-func (c *cascader) addRowDeleter(table *sqlbase.TableDescriptor) (Deleter, Fetcher, error) {
+func (c *cascader) addRowDeleter(
+	table *sqlbase.ImmutableTableDescriptor,
+) (Deleter, Fetcher, error) {
 	// Is there a cached row fetcher and deleter?
 	if rowDeleter, exists := c.rowDeleters[table.ID]; exists {
 		rowFetcher, existsFetcher := c.deleterRowFetchers[table.ID]
@@ -414,7 +418,9 @@ func (c *cascader) addRowDeleter(table *sqlbase.TableDescriptor) (Deleter, Fetch
 }
 
 // addRowUpdater creates the row updater and primary index row fetcher.
-func (c *cascader) addRowUpdater(table *sqlbase.TableDescriptor) (Updater, Fetcher, error) {
+func (c *cascader) addRowUpdater(
+	table *sqlbase.ImmutableTableDescriptor,
+) (Updater, Fetcher, error) {
 	// Is there a cached updater?
 	rowUpdater, existsUpdater := c.rowUpdaters[table.ID]
 	if existsUpdater {
@@ -477,7 +483,7 @@ func (c *cascader) addRowUpdater(table *sqlbase.TableDescriptor) (Updater, Fetch
 func (c *cascader) deleteRows(
 	ctx context.Context,
 	referencedIndex *sqlbase.IndexDescriptor,
-	referencingTable *sqlbase.TableDescriptor,
+	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
 	values cascadeQueueElement,
 	traceKV bool,
@@ -629,7 +635,7 @@ func (c *cascader) deleteRows(
 func (c *cascader) updateRows(
 	ctx context.Context,
 	referencedIndex *sqlbase.IndexDescriptor,
-	referencingTable *sqlbase.TableDescriptor,
+	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
@@ -892,7 +898,7 @@ func (c *cascader) updateRows(
 }
 
 type cascadeQueueElement struct {
-	table *sqlbase.TableDescriptor
+	table *sqlbase.ImmutableTableDescriptor
 	// These row containers are defined elsewhere and their memory is not managed
 	// by the queue. The updated values can be nil for deleted rows. If it does
 	// exist, every row in originalValues must have a corresponding row in
@@ -914,7 +920,7 @@ type cascadeQueue []cascadeQueueElement
 // all the rows following that index.
 func (q *cascadeQueue) enqueue(
 	ctx context.Context,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	originalValues *sqlbase.RowContainer,
 	updatedValues *sqlbase.RowContainer,
 	colIDtoRowIndex map[sqlbase.ColumnID]int,
@@ -944,7 +950,7 @@ func (q *cascadeQueue) dequeue() (cascadeQueueElement, bool) {
 // remaining indexes to ensure that no orphans were created.
 func (c *cascader) cascadeAll(
 	ctx context.Context,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	originalValues tree.Datums,
 	updatedValues tree.Datums,
 	colIDtoRowIndex map[sqlbase.ColumnID]int,

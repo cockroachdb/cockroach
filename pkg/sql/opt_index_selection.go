@@ -233,7 +233,7 @@ func (p *planner) selectIndex(
 
 	var err error
 	s.spans, err = spansFromConstraint(
-		s.desc, c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
+		s.desc.TableDesc(), c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
@@ -288,7 +288,7 @@ func (p *planner) selectIndex(
 }
 
 type indexInfo struct {
-	desc        *sqlbase.TableDescriptor
+	desc        *sqlbase.ImmutableTableDescriptor
 	index       *sqlbase.IndexDescriptor
 	cost        float64
 	covering    bool // Does the index cover the required IndexedVars?
@@ -496,9 +496,9 @@ func (v *indexInfo) makeIndexConstraints(
 }
 
 func unconstrainedSpans(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
+	tableDesc *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
 ) (roachpb.Spans, error) {
-	return spansFromConstraint(tableDesc, index, nil, exec.ColumnOrdinalSet{}, forDelete)
+	return spansFromConstraint(tableDesc.TableDesc(), index, nil, exec.ColumnOrdinalSet{}, forDelete)
 }
 
 // spansFromConstraint converts the spans in a Constraint to roachpb.Spans.

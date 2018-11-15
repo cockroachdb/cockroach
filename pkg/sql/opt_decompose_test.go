@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testTableDesc() *sqlbase.TableDescriptor {
-	return &sqlbase.TableDescriptor{
+func testTableDesc() *sqlbase.ImmutableTableDescriptor {
+	return sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{
 		Name:     "test",
 		ID:       1001,
 		ParentID: 1000,
@@ -56,7 +56,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 		},
 		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
 		FormatVersion: sqlbase.FamilyFormatVersion,
-	}
+	})
 }
 
 func makeSelectNode(t *testing.T, p *planner) *renderNode {

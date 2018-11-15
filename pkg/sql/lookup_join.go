@@ -65,7 +65,7 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 	// Make sure the table node has a span (full scan).
 	var err error
 	lj.table.spans, err = spansFromConstraint(
-		lj.table.desc, lj.table.index, nil /* constraint */, exec.ColumnOrdinalSet{},
+		lj.table.desc.TableDesc(), lj.table.index, nil /* constraint */, exec.ColumnOrdinalSet{},
 		false /* forDelete */)
 	if err != nil {
 		return err

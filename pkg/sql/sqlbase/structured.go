@@ -104,12 +104,19 @@ const (
 type MutationID uint32
 
 // MutableTableDescriptor is a custom type for TableDescriptors
-// going through mutations.
+// going through schema mutations.
 type MutableTableDescriptor struct {
 	TableDescriptor
 
 	// ClusterVersion represents the version of the table descriptor read from the store.
 	ClusterVersion TableDescriptor
+}
+
+// ImmutableTableDescriptor is a custom type for TableDescriptors
+// It holds precomputed values and the underlying TableDescriptor
+// should be const.
+type ImmutableTableDescriptor struct {
+	TableDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -167,6 +174,10 @@ func NewMutableCreatedTableDescriptor(tbl TableDescriptor) *MutableTableDescript
 // This is for an existing table.
 func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescriptor {
 	return &MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
+}
+
+func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
+	return &ImmutableTableDescriptor{TableDescriptor: tbl}
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
@@ -2537,5 +2548,10 @@ func (desc *TableDescriptor) TableDesc() *TableDescriptor {
 
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
+	return &desc.TableDescriptor
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
 }

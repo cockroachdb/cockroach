@@ -151,7 +151,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 				if flags.requireMutable {
 					return sqlbase.NewMutableExistingTableDescriptor(*desc), dbDesc, nil
 				}
-				return desc, dbDesc, nil
+				return sqlbase.NewImmutableTableDescriptor(*desc), dbDesc, nil
 			}
 		}
 	}

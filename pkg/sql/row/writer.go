@@ -58,7 +58,7 @@ type Inserter struct {
 // insertCols must contain every column in the primary key.
 func MakeInserter(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables TableLookupsByID,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
@@ -94,7 +94,7 @@ func MakeInserter(
 
 	if checkFKs == CheckFKs {
 		var err error
-		if ri.Fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables,
+		if ri.Fks, err = makeFKInsertHelper(txn, tableDesc, fkTables,
 			ri.InsertColIDtoRowIndex, alloc); err != nil {
 			return ri, err
 		}
@@ -407,7 +407,7 @@ const (
 // passed in requestedCols will be included in FetchCols at the beginning.
 func MakeUpdater(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables TableLookupsByID,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
@@ -440,7 +440,7 @@ var returnTruePseudoError error = returnTrue{}
 // create a cascader.
 func makeUpdaterWithoutCascader(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables TableLookupsByID,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
@@ -607,7 +607,7 @@ func makeUpdaterWithoutCascader(
 	}
 
 	var err error
-	if ru.Fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables,
+	if ru.Fks, err = makeFKUpdateHelper(txn, tableDesc, fkTables,
 		ru.FetchColIDtoRowIndex, alloc); err != nil {
 		return Updater{}, err
 	}
@@ -871,7 +871,7 @@ type Deleter struct {
 // passed in requestedCols will be included in FetchCols.
 func MakeDeleter(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables TableLookupsByID,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
@@ -898,7 +898,7 @@ func MakeDeleter(
 // additional cascader.
 func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables TableLookupsByID,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
@@ -955,7 +955,7 @@ func makeRowDeleterWithoutCascader(
 	}
 	if checkFKs == CheckFKs {
 		var err error
-		if rd.Fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables,
+		if rd.Fks, err = makeFKDeleteHelper(txn, tableDesc, fkTables,
 			fetchColIDtoRowIndex, alloc); err != nil {
 			return Deleter{}, err
 		}
@@ -1043,7 +1043,7 @@ func (rd *Deleter) DeleteIndexRow(
 		}
 	}
 	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.Helper.TableDesc, idx, rd.FetchColIDtoRowIndex, values)
+		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}

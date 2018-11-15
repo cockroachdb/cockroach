@@ -41,7 +41,7 @@ var scanNodePool = sync.Pool{
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	desc  *sqlbase.TableDescriptor
+	desc  *sqlbase.ImmutableTableDescriptor
 	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -298,7 +298,7 @@ func (n *scanNode) initTable(
 	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) error {
-	n.desc = desc
+	n.desc = sqlbase.NewImmutableTableDescriptor(*desc)
 
 	if !p.skipSelectPrivilegeChecks {
 		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {

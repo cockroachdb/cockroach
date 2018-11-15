@@ -32,7 +32,7 @@ import (
 )
 
 func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
-	desc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+	desc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 	p := planner{}
 	scan := p.Scan()
@@ -43,7 +43,7 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	}
 	scan.initOrdering(0 /* exactPrefix */, p.EvalContext())
 	scan.spans, err = spansFromConstraint(
-		desc, &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
+		desc.TableDesc(), &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
 		return nil, err
 	}

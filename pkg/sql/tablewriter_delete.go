@@ -370,7 +370,7 @@ func (td *tableDeleter) deleteIndexScan(
 	return resume, err
 }
 
-func (td *tableDeleter) tableDesc() *sqlbase.TableDescriptor {
+func (td *tableDeleter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return td.rd.Helper.TableDesc
 }
 

@@ -168,7 +168,7 @@ func (p *planner) Delete(
 		},
 	}
 
-	dn.run.fastPathInterleaved = canDeleteFastInterleaved(*desc, fkTables)
+	dn.run.fastPathInterleaved = canDeleteFastInterleaved(desc, fkTables)
 
 	// Finally, handle RETURNING, if any.
 	r, err := p.Returning(ctx, dn, n.Returning, desiredTypes, alias)
@@ -356,7 +356,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
-func canDeleteFastInterleaved(table TableDescriptor, fkTables row.TableLookupsByID) bool {
+func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.TableLookupsByID) bool {
 	// If there are no interleaved tables then don't take the fast path.
 	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
 	hasInterleaved := false
