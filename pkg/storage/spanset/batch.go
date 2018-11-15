@@ -181,16 +181,12 @@ func (s *Iterator) MVCCGet(
 
 // MVCCScan is part of the engine.Iterator interface.
 func (s *Iterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts engine.MVCCScanOptions,
 ) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return nil, 0, nil, nil, err
 	}
-	return s.i.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
+	return s.i.MVCCScan(start, end, max, timestamp, opts)
 }
 
 // SetUpperBound is part of the engine.Iterator interface.
