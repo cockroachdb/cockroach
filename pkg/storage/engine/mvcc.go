@@ -1670,10 +1670,8 @@ func MVCCDeleteRange(
 	return keys, resumeSpan, int64(len(kvs)), err
 }
 
-// mvccScanToKvs scans the key range [key,endKey) up to some maximum number
-// of results. Specify reverse=true to scan in descending instead of ascending
-// order. If iter is not specified, a new iterator is created from engine. It
-// returns the found keys and values in a slice of roachpb.KeyValue.
+// mvccScanToKvs converts the raw key/value pairs returned by Iterator.MVCCScan
+// into a slice of roachpb.KeyValues.
 func mvccScanToKvs(
 	ctx context.Context,
 	iter Iterator,
@@ -1739,11 +1737,32 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-// MVCCScan scans the key range [key,endKey) key up to some maximum number of
-// results in ascending order. If it hits max, it returns a span to be used in
-// the next call to this function. Use MaxInt64 for not limit. If the limit is
-// not hit, the returned span will be nil. Otherwise, it will be the sub-span of
-// [key,endKey) that has not been scanned.
+// MVCCScan scans the key range [key, endKey) in the provided engine up to some
+// maximum number of results in ascending order. If it hits max, it returns a
+// "resume span" to be used in the next call to this function. If the limit is
+// not hit, the resume span will be nil. Otherwise, it will be the sub-span of
+// [key, endKey) that has not been scanned.
+//
+// For an unbounded scan, specify a max of MaxInt64. A max of zero means to
+// return no keys at all, which is probably not what you intend.
+//
+// TODO(benesch): Evaluate whether our behavior when max is zero still makes
+// sense. See #8084 for historical context.
+//
+// Only keys that with a timestamp less than or equal to the supplied timestamp
+// will be included in the scan results. If a transaction is provided and the
+// scan encounters a value with a timestamp between the supplied timestamp and
+// the transaction's max timestamp, an uncertainty error will be returned.
+//
+// When scanning inconsistently, any encountered intents will be placed in the
+// dedicated result parameter. By contrast, when scanning consistently, any
+// encountered intents will cause the scan to return a WriteIntentError with the
+// intents embedded within, and the intents result parameter will be nil. In
+// this case a resume span will be returned; this is the only case in which a
+// resume span is returned alongside a non-nil error.
+//
+// Note that transactional scans must be consistent. Put another way, only
+// non-transactional scans may be inconsistent.
 func MVCCScan(
 	ctx context.Context,
 	engine Reader,
@@ -1776,9 +1795,7 @@ func MVCCScanToBytes(
 	return iter.MVCCScan(key, endKey, max, timestamp, txn, consistent, false /* reverse */, false /* tombstones */)
 }
 
-// MVCCReverseScan scans the key range [start,end) key up to some maximum
-// number of results in descending order. If it hits max, it returns a span to
-// be used in the next call to this function.
+// MVCCReverseScan is like MVCCScan, but it returns keys in descending order.
 func MVCCReverseScan(
 	ctx context.Context,
 	engine Reader,
