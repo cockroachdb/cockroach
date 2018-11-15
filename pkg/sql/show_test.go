@@ -79,7 +79,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
@@ -98,7 +98,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
@@ -116,7 +116,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s),
@@ -128,7 +128,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT PRIMARY KEY
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 )`,
@@ -142,7 +142,7 @@ func TestShowCreateTable(t *testing.T) {
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
 	d DATE NULL,
@@ -158,6 +158,11 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
 	FAMILY "primary" ("te""st")
 )`,
+			expect: `CREATE TABLE %s (
+	"te""st" INT8 NOT NULL,
+	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
+	FAMILY "primary" ("te""st")
+)`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
@@ -166,8 +171,8 @@ func TestShowCreateTable(t *testing.T) {
 	index c(a asc, b desc)
 )`,
 			expect: `CREATE TABLE %s (
-	a INT NULL,
-	b INT NULL,
+	a INT8 NULL,
+	b INT8 NULL,
 	INDEX c (a ASC, b DESC),
 	FAMILY "primary" (a, b, rowid)
 )`,
@@ -182,9 +187,9 @@ func TestShowCreateTable(t *testing.T) {
 	k int REFERENCES items (c)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	j INT NULL,
-	k INT NULL,
+	i INT8 NULL,
+	j INT8 NULL,
+	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
 	INDEX t7_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
@@ -200,7 +205,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
 			expect: `CREATE TABLE %s (
-	x INT NULL,
+	x INT8 NULL,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
 	INDEX t8_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)
@@ -215,8 +220,8 @@ func TestShowCreateTable(t *testing.T) {
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
 			expect: `CREATE TABLE %s (
-	a INT NOT NULL,
-	b INT NOT NULL,
+	a INT8 NOT NULL,
+	b INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
 	FAMILY "primary" (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
@@ -228,7 +233,7 @@ func TestShowCreateTable(t *testing.T) {
 	x INT PRIMARY KEY
 ) INTERLEAVE IN PARENT o.foo (x)`,
 			expect: `CREATE TABLE %s (
-	x INT NOT NULL,
+	x INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC),
 	FAMILY "primary" (x)
 ) INTERLEAVE IN PARENT o.public.foo (x)`,

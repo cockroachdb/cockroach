@@ -62,15 +62,15 @@ func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  "parentID" INT,
+  "parentID" INT8,
   name       STRING,
-  id         INT,
+  id         INT8,
   PRIMARY KEY ("parentID", name)
 );`
 
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT PRIMARY KEY,
+  id         INT8 PRIMARY KEY,
   descriptor BYTES
 );`
 
@@ -84,7 +84,7 @@ CREATE TABLE system.users (
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT PRIMARY KEY,
+  id     INT8 PRIMARY KEY,
   config BYTES
 );`
 
@@ -102,9 +102,9 @@ CREATE TABLE system.settings (
 const (
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  "descID"   INT,
-  version    INT,
-  "nodeID"   INT,
+  "descID"   INT8,
+  version    INT8,
+  "nodeID"   INT8,
   expiration TIMESTAMP,
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
@@ -113,8 +113,8 @@ CREATE TABLE system.lease (
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
   "eventType"   STRING     NOT NULL,
-  "targetID"    INT        NOT NULL,
-  "reportingID" INT        NOT NULL,
+  "targetID"    INT8       NOT NULL,
+  "reportingID" INT8       NOT NULL,
   info          STRING,
   "uniqueID"    BYTES      DEFAULT uuid_v4(),
   PRIMARY KEY (timestamp, "uniqueID")
@@ -125,12 +125,12 @@ CREATE TABLE system.eventlog (
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
   timestamp      TIMESTAMP  NOT NULL,
-  "rangeID"      INT        NOT NULL,
-  "storeID"      INT        NOT NULL,
+  "rangeID"      INT8       NOT NULL,
+  "storeID"      INT8       NOT NULL,
   "eventType"    STRING     NOT NULL,
-  "otherRangeID" INT,
+  "otherRangeID" INT8,
   info           STRING,
-  "uniqueID"     INT        DEFAULT unique_rowid(),
+  "uniqueID"     INT8       DEFAULT unique_rowid(),
   PRIMARY KEY (timestamp, "uniqueID")
 );`
 
@@ -143,7 +143,7 @@ CREATE TABLE system.ui (
 
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
-	id                INT       DEFAULT unique_rowid() PRIMARY KEY,
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             INT        NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
+	id             INT8       NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
@@ -178,14 +178,14 @@ CREATE TABLE system.web_sessions (
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
-	"tableID"       INT        NOT NULL,
-	"statisticID"   INT        NOT NULL DEFAULT unique_rowid(),
+	"tableID"       INT8       NOT NULL,
+	"statisticID"   INT8       NOT NULL DEFAULT unique_rowid(),
 	name            STRING,
-	"columnIDs"     INT[]      NOT NULL,
+	"columnIDs"     INT8[]     NOT NULL,
 	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
-	"rowCount"      INT        NOT NULL,
-	"distinctCount" INT        NOT NULL,
-	"nullCount"     INT        NOT NULL,
+	"rowCount"      INT8       NOT NULL,
+	"distinctCount" INT8       NOT NULL,
+	"nullCount"     INT8       NOT NULL,
 	histogram       BYTES,
 	PRIMARY KEY ("tableID", "statisticID"),
 	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
@@ -257,12 +257,17 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
+	colTypeInt8      = ColumnType{SemanticType: ColumnType_INT, Width: 64, VisibleType: ColumnType_BIGINT}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{SemanticType: ColumnType_ARRAY, ArrayContents: &colTypeInt.SemanticType,
-		ArrayDimensions: []int32{-1}}
+	colTypeInt8Array = ColumnType{
+		ArrayContents:   &colTypeInt8.SemanticType,
+		ArrayDimensions: []int32{-1},
+		SemanticType:    ColumnType_ARRAY,
+		VisibleType:     ColumnType_BIGINT,
+		Width:           64,
+	}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1 = []ColumnID{1}
 )
@@ -287,9 +292,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "parentID", ID: 1, Type: colTypeInt},
+			{Name: "parentID", ID: 1, Type: colTypeInt8},
 			{Name: "name", ID: 2, Type: colTypeString},
-			{Name: "id", ID: 3, Type: colTypeInt, Nullable: true},
+			{Name: "id", ID: 3, Type: colTypeInt8, Nullable: true},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -319,7 +324,7 @@ var (
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt},
+			{Name: "id", ID: 1, Type: colTypeInt8},
 			{Name: "descriptor", ID: 2, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
@@ -368,7 +373,7 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt},
+			{Name: "id", ID: 1, Type: colTypeInt8},
 			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
@@ -433,9 +438,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "descID", ID: 1, Type: colTypeInt},
-			{Name: "version", ID: 2, Type: colTypeInt},
-			{Name: "nodeID", ID: 3, Type: colTypeInt},
+			{Name: "descID", ID: 1, Type: colTypeInt8},
+			{Name: "version", ID: 2, Type: colTypeInt8},
+			{Name: "nodeID", ID: 3, Type: colTypeInt8},
 			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
 		},
 		NextColumnID: 5,
@@ -468,8 +473,8 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
 			{Name: "eventType", ID: 2, Type: colTypeString},
-			{Name: "targetID", ID: 3, Type: colTypeInt},
-			{Name: "reportingID", ID: 4, Type: colTypeInt},
+			{Name: "targetID", ID: 3, Type: colTypeInt8},
+			{Name: "reportingID", ID: 4, Type: colTypeInt8},
 			{Name: "info", ID: 5, Type: colTypeString, Nullable: true},
 			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
 		},
@@ -506,12 +511,12 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
-			{Name: "rangeID", ID: 2, Type: colTypeInt},
-			{Name: "storeID", ID: 3, Type: colTypeInt},
+			{Name: "rangeID", ID: 2, Type: colTypeInt8},
+			{Name: "storeID", ID: 3, Type: colTypeInt8},
 			{Name: "eventType", ID: 4, Type: colTypeString},
-			{Name: "otherRangeID", ID: 5, Type: colTypeInt, Nullable: true},
+			{Name: "otherRangeID", ID: 5, Type: colTypeInt8, Nullable: true},
 			{Name: "info", ID: 6, Type: colTypeString, Nullable: true},
-			{Name: "uniqueID", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "uniqueID", ID: 7, Type: colTypeInt8, DefaultExpr: &uniqueRowIDString},
 		},
 		NextColumnID: 8,
 		Families: []ColumnFamilyDescriptor{
@@ -571,7 +576,7 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "id", ID: 1, Type: colTypeInt8, DefaultExpr: &uniqueRowIDString},
 			{Name: "status", ID: 2, Type: colTypeString},
 			{Name: "created", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
 			{Name: "payload", ID: 4, Type: colTypeBytes},
@@ -611,7 +616,7 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "id", ID: 1, Type: colTypeInt8, DefaultExpr: &uniqueRowIDString},
 			{Name: "hashedSecret", ID: 2, Type: colTypeBytes},
 			{Name: "username", ID: 3, Type: colTypeString},
 			{Name: "createdAt", ID: 4, Type: colTypeTimestamp, DefaultExpr: &nowString},
@@ -673,14 +678,14 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "tableID", ID: 1, Type: colTypeInt},
-			{Name: "statisticID", ID: 2, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "tableID", ID: 1, Type: colTypeInt8},
+			{Name: "statisticID", ID: 2, Type: colTypeInt8, DefaultExpr: &uniqueRowIDString},
 			{Name: "name", ID: 3, Type: colTypeString, Nullable: true},
-			{Name: "columnIDs", ID: 4, Type: colTypeIntArray},
+			{Name: "columnIDs", ID: 4, Type: colTypeInt8Array},
 			{Name: "createdAt", ID: 5, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "rowCount", ID: 6, Type: colTypeInt},
-			{Name: "distinctCount", ID: 7, Type: colTypeInt},
-			{Name: "nullCount", ID: 8, Type: colTypeInt},
+			{Name: "rowCount", ID: 6, Type: colTypeInt8},
+			{Name: "distinctCount", ID: 7, Type: colTypeInt8},
+			{Name: "nullCount", ID: 8, Type: colTypeInt8},
 			{Name: "histogram", ID: 9, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 10,

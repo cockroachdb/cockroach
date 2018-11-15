@@ -66,8 +66,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	exp := `CREATE TABLE kv (
-	k INT NOT NULL,
-	v INT NULL,
+	k INT8 NOT NULL,
+	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX foo (v ASC) PARTITION BY RANGE (v) (
 		PARTITION p2 VALUES FROM (1) TO (2)
@@ -130,8 +130,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	sqlDB.Exec(t, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
 
 	exp = `CREATE TABLE kv (
-	k INT NOT NULL,
-	v INT NULL,
+	k INT8 NOT NULL,
+	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX foo (v ASC),
 	FAMILY fam_0_k (k),
