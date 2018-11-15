@@ -334,6 +334,11 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "  return e.grp.bestProps().required\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
+		// Generate the ProvidedPhysical method.
+		fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return &e.grp.bestProps().provided\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
 		// Generate the Cost method.
 		fmt.Fprintf(g.w, "func (e *%s) Cost() Cost {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  return e.grp.bestProps().cost\n")
@@ -435,6 +440,11 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	// Generate the RequiredPhysical method.
 	fmt.Fprintf(g.w, "func (e *%s) RequiredPhysical() *physical.Required {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return e.best.required\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the ProvidedPhysical method.
+	fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return &e.best.provided\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Cost method.

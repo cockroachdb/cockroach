@@ -39,8 +39,8 @@ const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
 
-	// ExprFmtHideMiscProps does not show outer columns, row cardinality, or
-	// side effects in the output.
+	// ExprFmtHideMiscProps does not show outer columns, row cardinality, provided
+	// orderings, or side effects in the output.
 	ExprFmtHideMiscProps ExprFmtFlags = 1 << (iota - 1)
 
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
@@ -303,7 +303,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !required.Ordering.Any() {
-		tp.Childf("ordering: %s", required.Ordering.String())
+		if f.HasFlags(ExprFmtHideMiscProps) {
+			tp.Childf("ordering: %s", required.Ordering.String())
+		} else {
+			// Show the provided ordering as well, unless it's exactly the same.
+			provided := e.ProvidedPhysical().Ordering
+			reqStr := required.Ordering.String()
+			provStr := provided.String()
+			if provStr == reqStr {
+				tp.Childf("ordering: %s", required.Ordering.String())
+			} else {
+				tp.Childf("ordering: %s [provided: %s]", required.Ordering.String(), provided.String())
+			}
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideRuleProps) {

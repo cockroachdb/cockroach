@@ -15,24 +15,14 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-type dummyRelExpr struct {
-	// We embed a nil memo.RelExpr, which causes any methods that are not
-	// specifically overridden to panic.
-	memo.RelExpr
-
-	r props.Relational
-}
-
-var _ memo.RelExpr = &dummyRelExpr{}
-
-func newDummyRelExpr(r props.Relational) memo.RelExpr {
-	return &dummyRelExpr{r: r}
-}
-
-func (d *dummyRelExpr) Relational() *props.Relational {
-	return &d.r
+func sortBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	provided := required.ToOrdering()
+	// The required ordering might not have been simplified (if normalization
+	// rules are off) so we may need to trim.
+	return trimProvided(provided, required, &expr.Relational().FuncDeps)
 }

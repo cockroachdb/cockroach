@@ -214,7 +214,7 @@ project
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized, ~4KB, required=[presentation: y:2,z:5] [ordering: +1,-2])
+memo (optimized, ~5KB, required=[presentation: y:2,z:5] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:5] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)

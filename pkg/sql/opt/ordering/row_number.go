@@ -21,38 +21,40 @@ import (
 )
 
 func rowNumberCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	// By construction, any prefix of the ordering required of the input is also
-	// ordered by the ordinality column. For example, if the required input
-	// ordering is +a,+b, then any of these orderings can be provided:
-	//
-	//   +ord
-	//   +a,+ord
-	//   +a,+b,+ord
-	//
-	// As long as the optimizer is enabled, it will have already reduced the
-	// ordering required of this operator to take into account that the ordinality
-	// column is a key, so there will never be ordering columns after the
-	// ordinality column in that case.
-	r := &expr.(*memo.RowNumberExpr).RowNumberPrivate
-	ordCol := opt.MakeOrderingColumn(r.ColID, false)
-	prefix := len(required.Columns)
-	for i := range required.Columns {
-		if required.MatchesAt(i, ordCol) {
-			if i == 0 {
-				return true
-			}
-			prefix = i
-			break
-		}
-	}
-
+	r := expr.(*memo.RowNumberExpr)
+	prefix := rowNumberOrdPrefix(r, required)
 	if prefix < len(required.Columns) {
 		truncated := required.Copy()
 		truncated.Truncate(prefix)
 		return r.Ordering.Implies(&truncated)
 	}
-
 	return r.Ordering.Implies(required)
+}
+
+// rowNumberOrdPrefix is the length of the longest prefix of required.Columns
+// before the ordinality column (or the entire length if the ordinality column
+// is not in the required ordering).
+//
+// By construction, any prefix of the ordering internally required of the input
+// (i.e. RowNumberPrivate.Ordering) is also ordered by the ordinality column.
+// For example, if the internal ordering is +a,+b, then the ord column numbers
+// rows in the +a,+b order and any of these required orderings can be provided:
+//   +ord
+//   +a,+ord
+//   +a,+b,+ord
+//
+// As long as normalization rules are enabled, they will have already reduced
+// the ordering required of this operator to take into account that the
+// ordinality column is a key, so there will not be ordering columns after the
+// ordinality column in that case.
+func rowNumberOrdPrefix(r *memo.RowNumberExpr, required *physical.OrderingChoice) int {
+	ordCol := opt.MakeOrderingColumn(r.ColID, false /* descending */)
+	for i := range required.Columns {
+		if required.MatchesAt(i, ordCol) {
+			return i
+		}
+	}
+	return len(required.Columns)
 }
 
 func rowNumberBuildChildReqOrdering(
@@ -63,4 +65,28 @@ func rowNumberBuildChildReqOrdering(
 	}
 	// RowNumber always requires its internal ordering.
 	return parent.(*memo.RowNumberExpr).Ordering
+}
+
+func rowNumberBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	r := expr.(*memo.RowNumberExpr)
+	childProvided := r.Input.ProvidedPhysical().Ordering
+	prefix := rowNumberOrdPrefix(r, required)
+	if prefix == len(required.Columns) {
+		// The required ordering doesn't contain the ordinality column, so it only
+		// refers to columns that are in the input.
+		return trimProvided(childProvided, required, &r.Relational().FuncDeps)
+	}
+
+	truncated := required.Copy()
+	truncated.Truncate(prefix)
+	// The input's provided ordering satisfies both <truncated> and the RowNumber
+	// internal ordering; it may need to be trimmed.
+	provided := trimProvided(childProvided, &truncated, &r.Relational().FuncDeps)
+	// Add the ordinality column to the provided ordering so that it satisfies
+	// <required>.
+	provided = append(
+		provided[:len(provided):len(provided)], // force reallocation
+		opt.MakeOrderingColumn(r.ColID, false /* descending */),
+	)
+	return provided
 }

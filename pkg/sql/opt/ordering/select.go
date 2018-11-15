@@ -15,6 +15,7 @@
 package ordering
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -57,4 +58,12 @@ func trimColumnGroups(
 		}
 	}
 	return res
+}
+
+func selectBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	s := expr.(*memo.SelectExpr)
+	rel := s.Relational()
+	// We don't need to remap columns, but we want to remove columns that are now
+	// unnecessary (e.g. because the Select constrains them to be constant).
+	return remapProvided(s.Input.ProvidedPhysical().Ordering, &rel.FuncDeps, rel.OutputCols)
 }

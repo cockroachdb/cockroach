@@ -63,7 +63,7 @@ project
       ├── constraint: /2/3: (/1/NULL - /1]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
-      └── ordering: +3 opt(2)
+      └── ordering: +3 opt(2) [provided: +3]
 
 # d is required for the ordering, so requires a lookup-join.
 opt
@@ -73,7 +73,7 @@ sort
  ├── columns: a:1(int!null)  [hidden: b:2(int!null) c:3(int) d:4(int)]
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
- ├── ordering: +3,+4 opt(2)
+ ├── ordering: +3,+4 opt(2) [provided: +3,+4]
  └── index-join abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
       ├── key: (1)
@@ -131,7 +131,7 @@ project
       ├── constraint: /2/3: [/1 - /1]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
-      └── ordering: +3 opt(2)
+      └── ordering: +3 opt(2) [provided: +3]
 
 # Filter "b", but do not use it in the projection or ORDER BY. Add an additional
 # column to the ordering that triggers lookup-join.

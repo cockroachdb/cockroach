@@ -52,7 +52,21 @@ type RelExpr interface {
 	// RequiredPhysical is the set of required physical properties with respect to
 	// which this expression was optimized. Enforcers may be added to the
 	// expression tree to ensure the physical properties are provided.
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
 	RequiredPhysical() *physical.Required
+
+	// ProvidedPhysical is the set of provided physical properties (which must be
+	// compatible with the set of required physical properties).
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	ProvidedPhysical() *physical.Provided
+
+	// Cost is an estimate of the cost of executing this expression tree. Set
+	// when optimization is complete, only for the expressions in the final tree.
+	Cost() Cost
 
 	// FirstExpr returns the first member expression in the memo group (could be
 	// this expression if it happens to be first in the group). Subsequent members
@@ -63,10 +77,6 @@ type RelExpr interface {
 	// NextExpr returns the next member expression in the memo group, or nil if
 	// there are no further members in the group.
 	NextExpr() RelExpr
-
-	// Cost is an estimate of the cost of executing this expression tree. Before
-	// optimization, this cost will always be 0.
-	Cost() Cost
 
 	// group returns the memo group that contains this expression and any other
 	// logically equivalent expressions. There is one group struct for each memo
