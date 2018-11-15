@@ -173,7 +173,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed:  true,
-		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{referencedSimple.Name: sql.NewMutableCreatedTableDescriptor(*referencedSimple)}),
+		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{referencedSimple.Name: sqlbase.NewMutableCreatedTableDescriptor(*referencedSimple)}),
 	}
 
 	t.Run("simple", func(t *testing.T) {
