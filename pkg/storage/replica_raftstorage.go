@@ -237,10 +237,7 @@ func iterateEntries(
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
 		hlc.Timestamp{},
-		true,  /* consistent */
-		false, /* tombstones */
-		nil,   /* txn */
-		false, /* reverse */
+		engine.MVCCScanOptions{},
 		scanFunc,
 	)
 	return err

@@ -128,7 +128,7 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	keyValues, _, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), true, nil)
+	keyValues, _, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), engine.MVCCScanOptions{})
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
