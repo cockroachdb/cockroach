@@ -267,3 +267,239 @@ func (a *orderedAggregator) Reset() {
 		fn.Reset()
 	}
 }
+
+// hashedAggregator is an operator that performs an aggregation based on
+// specified grouping columns. This operator performs a blocking hash table
+// build at the beginning and then the grouped buckets are then passed as input
+// to an orderedAggregator. The output row ordering of this aggregator is
+// arbitrary.
+type hashedAggregator struct {
+	spec *aggregatorSpec
+
+	isBuilding bool
+
+	ht      *hashTable
+	builder *hashJoinBuilder
+
+	// orderedAgg is the underlying orderedAggregator used by this
+	// hashedAggregator once the bucket-groups of the input has been determined.
+	orderedAgg Operator
+}
+
+func NewHashedAggregator(
+	input Operator, aggFns []int, groupCols []uint32, aggCols [][]uint32, colTypes []types.T,
+) (Operator, error) {
+	// Determine the groupTyps and aggTyps from the colTypes.
+	groupTyps := make([]types.T, len(groupCols))
+	for i, colIdx := range groupCols {
+		groupTyps[i] = colTypes[colIdx]
+	}
+
+	aggTyps := make([][]types.T, len(aggCols))
+	for aggIdx := range aggCols {
+		aggTyps[aggIdx] = make([]types.T, len(aggCols[aggIdx]))
+		for i, colIdx := range aggCols[aggIdx] {
+			aggTyps[aggIdx][i] = colTypes[colIdx]
+		}
+	}
+
+	// Only keep relevant output columns (all the groupCols and aggCols).
+	nCols := uint32(len(colTypes))
+	keepCol := make([]bool, nCols)
+	compressed := make([]uint32, nCols)
+	for _, cols := range aggCols {
+		for _, col := range cols {
+			keepCol[col] = true
+		}
+	}
+
+	for _, col := range groupCols {
+		keepCol[col] = true
+	}
+
+	// Map the corresponding aggCols and groupCols to the new output column
+	// indices.
+	nOutCols := uint32(0)
+	outCols := make([]uint32, 0)
+	for i := range keepCol {
+		if keepCol[i] {
+			outCols = append(outCols, uint32(i))
+			compressed[i] = nOutCols
+			nOutCols++
+		}
+	}
+
+	mappedAggCols := make([][]uint32, len(aggCols))
+	for aggIdx := range aggCols {
+		mappedAggCols[aggIdx] = make([]uint32, len(aggCols[aggIdx]))
+		for i := range mappedAggCols[aggIdx] {
+			mappedAggCols[aggIdx][i] = compressed[aggCols[aggIdx][i]]
+		}
+	}
+
+	mappedGroupCols := make([]uint32, len(groupCols))
+	for i := range groupCols {
+		mappedGroupCols[i] = compressed[groupCols[i]]
+	}
+
+	ht := makeHashTable(
+		hashTableBucketSize,
+		colTypes,
+		groupCols,
+		outCols,
+	)
+
+	builder := makeHashJoinBuilder(
+		ht,
+		input,
+		groupCols,
+		outCols,
+	)
+
+	// op is the underlying batching operator used as input by the orderedAgg to
+	// create the batches of ColBatchSize from built hashTable.
+	op := makeHashedAggregatorBatchOp(ht)
+
+	orderedAgg, err := NewOrderedAggregator(
+		op,
+		mappedGroupCols,
+		groupTyps,
+		aggFns,
+		mappedAggCols,
+		aggTyps,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &hashedAggregator{
+		spec: &aggregatorSpec{
+			input:     input,
+			colTypes:  colTypes,
+			aggCols:   aggCols,
+			groupCols: groupCols,
+		},
+
+		ht:      ht,
+		builder: builder,
+
+		orderedAgg: orderedAgg,
+	}, nil
+}
+
+func (ag *hashedAggregator) Init() {
+	ag.spec.input.Init()
+	ag.orderedAgg.Init()
+
+	ag.isBuilding = true
+}
+
+func (ag *hashedAggregator) Next() ColBatch {
+	if ag.isBuilding {
+		ag.build()
+	}
+
+	return ag.orderedAgg.Next()
+}
+
+func (ag *hashedAggregator) Reset() {
+	ag.isBuilding = true
+	ag.ht.size = 0
+}
+
+func (ag *hashedAggregator) build() {
+	ag.builder.exec()
+	ag.isBuilding = false
+}
+
+var _ Operator = &hashedAggregator{}
+
+type aggregatorSpec struct {
+	input    Operator
+	colTypes []types.T
+
+	aggCols [][]uint32
+
+	groupCols []uint32
+}
+
+// hashedAggregatorBatchOp is a helper operator used by the hashedAggregator as
+// input to its orderedAggregator. Once the building of the hashTable is
+// completed, this batch operator exists to return the next batch of input to
+// the orderedAggregator based on the results of the pre-built hashTable.
+type hashedAggregatorBatchOp struct {
+	ht *hashTable
+
+	batchStart uint64
+
+	// sel is an ordered list of indices to select representing the input rows.
+	// This selection vector is much bigger than ColBatchSize and should be
+	// batched with the hashedAggregatorBatchOp operator.
+	sel []uint64
+
+	batch ColBatch
+}
+
+func makeHashedAggregatorBatchOp(ht *hashTable) Operator {
+	return &hashedAggregatorBatchOp{
+		ht: ht,
+	}
+}
+
+func (op *hashedAggregatorBatchOp) Init() {
+	op.batch = NewMemBatch(op.ht.outTypes)
+}
+
+func (op *hashedAggregatorBatchOp) Next() ColBatch {
+	// The selection vector needs to be populated before any batching can be
+	// done.
+	if op.sel == nil {
+		// After the entire hashTable is built, we want to construct the selection
+		// vector. This vector would be an ordered list of indices indicating the
+		// ordering of the bucket-grouped rows of input. The same linked list is
+		// traversed from each head to form this ordered list.
+		headID := uint64(0)
+		curID := uint64(0)
+
+		// Since next is no longer useful and pre-allocated to the appropriate size,
+		// we can use it as the selection vector. This way we don't have to
+		// reallocate a huge array.
+		op.sel = op.ht.next
+		for i := uint64(0); i < op.ht.size; i++ {
+			for !op.ht.head[headID] || curID == 0 {
+				headID++
+				curID = headID
+			}
+
+			op.sel[i] = curID - 1
+			curID = op.ht.same[curID]
+		}
+	}
+
+	// Create and return the next batch of input to a maximum size of
+	// ColBatchSize. The rows in the new batch is specified by the corresponding
+	// slice in the selection vector.
+	nSelected := uint16(0)
+
+	batchEnd := op.batchStart + uint64(ColBatchSize)
+	if batchEnd > op.ht.size {
+		batchEnd = op.ht.size
+	}
+	nSelected = uint16(batchEnd - op.batchStart)
+
+	// TODO(changangela): redundant work is done by the orderedAggregator to
+	// determine where the distinct keys are.
+	for i, colIdx := range op.ht.outCols {
+		toCol := op.batch.ColVec(i)
+		fromCol := op.ht.vals[colIdx]
+		toCol.CopyWithSelInt64(fromCol, op.sel[op.batchStart:batchEnd], nSelected, op.ht.outTypes[i])
+	}
+
+	op.batchStart = batchEnd
+
+	op.batch.SetLength(nSelected)
+	return op.batch
+}
+
+var _ Operator = &hashedAggregatorBatchOp{}

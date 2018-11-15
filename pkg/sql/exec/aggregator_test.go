@@ -414,3 +414,190 @@ func BenchmarkAggregator(b *testing.B) {
 		})
 	}
 }
+
+func TestHashAggregator(t *testing.T) {
+	// Set up the apd.Decimal values used in tests.
+	floats := []float64{1.3, 1.6, 0.5, 1.2, 3.4}
+	decs := make([]apd.Decimal, len(floats))
+	for i, f := range floats {
+		_, err := decs[i].SetFloat64(f)
+		if err != nil {
+			panic(fmt.Sprintf("%v", err))
+		}
+	}
+
+	tcs := []struct {
+		input      tuples
+		inputTypes []types.T
+
+		groupCols []uint32
+		aggFns    []int
+		aggCols   [][]uint32
+
+		expected tuples
+	}{
+		{
+			// Test carry between output batches.
+			input: tuples{
+				{0, 1},
+				{1, 5},
+				{0, 4},
+				{0, 2},
+				{2, 6},
+				{0, 3},
+				{0, 7},
+			},
+			inputTypes: []types.T{types.Int64, types.Int64},
+
+			aggFns:    []int{SUM},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{1}},
+
+			expected: tuples{
+				{5},
+				{6},
+				{17},
+			},
+		},
+		{
+			// Test a single row input source.
+			input: tuples{
+				{5},
+			},
+			inputTypes: []types.T{types.Int64},
+
+			aggFns:    []int{SUM},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}},
+
+			expected: tuples{
+				{5},
+			},
+		},
+		{
+			// Test bucket collisions.
+			input: tuples{
+				{0, 3},
+				{0, 4},
+				{hashTableBucketSize, 6},
+				{0, 5},
+				{hashTableBucketSize, 7},
+			},
+			inputTypes: []types.T{types.Int64, types.Int64},
+
+			aggFns:    []int{SUM},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{1}},
+
+			expected: tuples{
+				{12},
+				{13},
+			},
+		},
+		{
+			input: tuples{
+				{0, 1, decs[0]},
+				{0, 1, decs[1]},
+				{0, 1, decs[2]},
+				{1, 1, decs[3]},
+			},
+			inputTypes: []types.T{types.Int64, types.Int64, types.Decimal},
+
+			aggFns:    []int{SUM, SUM},
+			groupCols: []uint32{0, 1},
+			aggCols: [][]uint32{
+				{2}, {1},
+			},
+
+			expected: tuples{
+				{decs[4], 3},
+				{decs[3], 1},
+			},
+		},
+		{
+			// Test unused input columns.
+			input: tuples{
+				{0, 1, 2, 3},
+				{0, 1, 4, 5},
+				{1, 1, 3, 7},
+				{1, 2, 4, 9},
+				{0, 1, 6, 11},
+				{1, 2, 6, 13},
+			},
+			inputTypes: []types.T{types.Int64, types.Int64, types.Int64, types.Int64},
+
+			aggFns:    []int{SUM},
+			groupCols: []uint32{0, 1},
+			aggCols:   [][]uint32{{3}},
+
+			expected: tuples{
+				{7},
+				{19},
+				{22},
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		runTests(t, []tuples{tc.input}, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+			ag, err := NewHashedAggregator(sources[0], tc.aggFns, tc.groupCols, tc.aggCols, tc.inputTypes)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			nOutput := len(tc.aggCols)
+			cols := make([]int, nOutput)
+			for i := 0; i < nOutput; i++ {
+				cols[i] = i
+			}
+
+			out := newOpTestOutput(ag, cols, tc.expected)
+
+			if err := out.Verify(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func BenchmarkHashAggregator(b *testing.B) {
+	nCols := 4
+	sourceTypes := make([]types.T, nCols)
+
+	for colIdx := 0; colIdx < nCols; colIdx++ {
+		sourceTypes[colIdx] = types.Int64
+	}
+
+	batch := NewMemBatch(sourceTypes)
+
+	for colIdx := 0; colIdx < nCols; colIdx++ {
+		col := batch.ColVec(colIdx).Int64()
+		for i := 0; i < ColBatchSize; i++ {
+			col[i] = int64(i)
+		}
+	}
+
+	batch.SetLength(ColBatchSize)
+
+	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				source := newFiniteBatchSource(batch, nBatches)
+				agg, err := NewHashedAggregator(source, []int{SUM, SUM}, []uint32{0, 2}, [][]uint32{{1}, {3}}, sourceTypes)
+
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				agg.Init()
+
+				for i := 0; i < nBatches; i++ {
+					agg.Next()
+				}
+			}
+		})
+	}
+}

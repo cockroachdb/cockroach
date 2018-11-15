@@ -104,31 +104,31 @@ func (ht *hashTable) rehash(
 // checkCol determines if the current key column in the groupID buckets
 // matches the specified equality column key. If there is a match, then the key
 // is added to differs. If the bucket has reached the end, the key is rejected.
-func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	{{range .}}
 		case types.{{.ExecType}}:
-			buildKeys := prober.ht.vals[prober.ht.keyCols[keyColIdx]].{{.ExecType}}()
-			probeKeys := prober.keys[keyColIdx].{{.ExecType}}()
+			buildKeys := ht.vals[ht.keyCols[keyColIdx]].{{.ExecType}}()
+			probeKeys := ht.keys[keyColIdx].{{.ExecType}}()
 
 			if sel != nil {
 				for i := uint16(0); i < nToCheck; i++ {
 					// keyID of 0 is reserved to represent the end of the next chain.
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+					if keyID := ht.groupID[ht.toCheck[i]]; keyID != 0 {
 						// the build table key (calculated using keys[keyID - 1] = key) is
 						// compared to the corresponding probe table to determine if a match is
 						// found.
 						{{if eq .ExecType "Bytes"}}
-							if !bytes.Equal(buildKeys[keyID-1], probeKeys[sel[prober.toCheck[i]]]) {
-								prober.differs[prober.toCheck[i]] = true
+							if !bytes.Equal(buildKeys[keyID-1], probeKeys[sel[ht.toCheck[i]]]) {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{else if (eq .ExecType "Decimal")}}
-							if buildKeys[keyID-1].Cmp(&probeKeys[sel[prober.toCheck[i]]]) != 0 {
-								prober.differs[prober.toCheck[i]] = true
+							if buildKeys[keyID-1].Cmp(&probeKeys[sel[ht.toCheck[i]]]) != 0 {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{else}}
-							if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
-								prober.differs[prober.toCheck[i]] = true
+				  if buildKeys[keyID-1] != probeKeys[sel[ht.toCheck[i]]] {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{end}}
 					}
@@ -136,21 +136,21 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 			} else {
 				for i := uint16(0); i < nToCheck; i++ {
 					// keyID of 0 is reserved to represent the end of the next chain.
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+					if keyID := ht.groupID[ht.toCheck[i]]; keyID != 0 {
 						// the build table key (calculated using keys[keyID - 1] = key) is
 						// compared to the corresponding probe table to determine if a match is
 						// found.
 						{{if eq .ExecType "Bytes"}}
-							if !bytes.Equal(buildKeys[keyID-1], probeKeys[prober.toCheck[i]]) {
-								prober.differs[prober.toCheck[i]] = true
+							if !bytes.Equal(buildKeys[keyID-1], probeKeys[ht.toCheck[i]]) {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{else if (eq .ExecType "Decimal")}}
-							if buildKeys[keyID-1].Cmp(&probeKeys[prober.toCheck[i]]) != 0 {
-								prober.differs[prober.toCheck[i]] = true
+							if buildKeys[keyID-1].Cmp(&probeKeys[ht.toCheck[i]]) != 0 {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{else}}
-							if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
-								prober.differs[prober.toCheck[i]] = true
+							if buildKeys[keyID-1] != probeKeys[ht.toCheck[i]] {
+								ht.differs[ht.toCheck[i]] = true
 							}
 						{{end}}
 					}

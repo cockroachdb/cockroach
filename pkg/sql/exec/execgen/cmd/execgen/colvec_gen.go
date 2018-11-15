@@ -107,6 +107,20 @@ func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colT
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 }
+
+func (m *memColumn) Slice(colType types.T, start uint64, end uint64) ColVec {
+  switch colType {
+    {{range .}}
+    case types.{{.ExecType}}:
+			col := m.{{.ExecType}}()
+			return &memColumn{
+				col: col[start: end],
+			}
+		{{end}}
+		default:
+			panic(fmt.Sprintf("unhandled type %d", colType))
+  }
+}
 `
 
 type colVecGen struct {

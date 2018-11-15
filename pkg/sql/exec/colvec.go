@@ -74,6 +74,10 @@ type ColVec interface {
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+
+	// Slice returns a new ColVec representing a slice of the current ColVec from
+	// [start, end).
+	Slice(colType types.T, start uint64, end uint64) ColVec
 }
 
 // Nulls represents a list of potentially nullable values.
