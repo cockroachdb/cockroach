@@ -74,10 +74,13 @@ type ColVec interface {
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
-
 	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
 	// into ColVec. It replaces the contents of this ColVec.
 	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+
+	// Slice returns a new ColVec representing a slice of the current ColVec from
+	// [start, end).
+	Slice(colType types.T, start uint64, end uint64) ColVec
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.

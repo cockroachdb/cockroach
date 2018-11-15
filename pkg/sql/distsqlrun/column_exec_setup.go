@@ -77,13 +77,12 @@ func newColOperator(
 		for _, col := range aggSpec.OrderedGroupCols {
 			orderedCols.Add(int(col))
 		}
-		groupTyps := make([]types.T, len(aggSpec.GroupCols))
-		for i, col := range aggSpec.GroupCols {
+
+		for _, col := range aggSpec.GroupCols {
 			if !orderedCols.Contains(int(col)) {
 				return nil, errors.New("unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
-			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[col])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
@@ -120,7 +119,7 @@ func newColOperator(
 			}
 		}
 		op, err = exec.NewOrderedAggregator(
-			inputs[0], aggSpec.GroupCols, groupTyps, aggFns, aggCols, aggTyps,
+			inputs[0], types.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
 		)
 		if err != nil {
 			return nil, err
