@@ -26,7 +26,7 @@ import (
 
 type createStatsNode struct {
 	tree.CreateStats
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	columns   []sqlbase.ColumnID
 }
 

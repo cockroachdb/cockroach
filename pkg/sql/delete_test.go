@@ -109,13 +109,13 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 			setup(tableNames...)
 			defer drop(tableNames...)
 
-			tablesByID := make(map[sqlbase.ID]*TableDescriptor)
-			pd := sqlbase.GetTableDescriptor(kvDB, "defaultdb", "parent")
+			tablesByID := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+			pd := sqlbase.GetImmutableTableDescriptor(kvDB, "defaultdb", "parent")
 			tablesByID[pd.ID] = pd
 
 			for _, tableName := range tableNames {
 				if tableName != "parent" {
-					cd := sqlbase.GetTableDescriptor(kvDB, "defaultdb", tableName)
+					cd := sqlbase.GetImmutableTableDescriptor(kvDB, "defaultdb", tableName)
 					tablesByID[cd.ID] = cd
 				}
 			}
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				t.Fatal(err)
 			}
 
-			if canDeleteFastInterleaved(*pd, fkTables) != expected {
+			if canDeleteFastInterleaved(pd, fkTables) != expected {
 				t.Fatalf("canDeleteFastInterleaved returned %t, expected %t", !expected, expected)
 			}
 		}

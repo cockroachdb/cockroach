@@ -33,16 +33,16 @@ import (
 
 type testTables struct {
 	nextID       ID
-	tablesByID   map[ID]*sqlbase.TableDescriptor
-	tablesByName map[string]*sqlbase.TableDescriptor
+	tablesByID   map[ID]*sqlbase.ImmutableTableDescriptor
+	tablesByName map[string]*sqlbase.ImmutableTableDescriptor
 }
 
 func (t *testTables) createTestTable(name string) ID {
-	table := &sqlbase.TableDescriptor{
+	table := sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{
 		Name:        name,
 		ID:          t.nextID,
 		NextIndexID: sqlbase.IndexID(1), // This must be 1 to avoid clashing with a primary index.
-	}
+	})
 	t.tablesByID[table.ID] = table
 	t.tablesByName[table.Name] = table
 	t.nextID++
@@ -99,8 +99,8 @@ func (t *testTables) createForeignKeyReference(
 func TestTablesNeededForFKs(t *testing.T) {
 	tables := testTables{
 		nextID:       ID(1),
-		tablesByID:   make(map[ID]*sqlbase.TableDescriptor),
-		tablesByName: make(map[string]*sqlbase.TableDescriptor),
+		tablesByID:   make(map[ID]*sqlbase.ImmutableTableDescriptor),
+		tablesByName: make(map[string]*sqlbase.ImmutableTableDescriptor),
 	}
 
 	// First setup the table we will be testing against.

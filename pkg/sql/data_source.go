@@ -294,7 +294,7 @@ func renameSource(
 
 func (p *planner) getPlanForDesc(
 	ctx context.Context,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	tn *tree.TableName,
 	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
@@ -331,7 +331,7 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	ctx context.Context, tn *tree.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
@@ -411,7 +411,7 @@ func (p *planner) getPlanForRowsFrom(
 }
 
 func (p *planner) getSequenceSource(
-	ctx context.Context, tn tree.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (planDataSource, error) {
 	if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 		return planDataSource{}, err

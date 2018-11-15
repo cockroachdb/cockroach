@@ -50,7 +50,7 @@ var _ autoCommitNode = &upsertNode{}
 func (p *planner) newUpsertNode(
 	ctx context.Context,
 	n *tree.Insert,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	ri row.Inserter,
 	tn, alias *tree.TableName,
 	sourceRows planNode,
@@ -523,7 +523,7 @@ func (uh *upsertHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func (p *planner) newUpsertHelper(
 	ctx context.Context,
 	tn *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
 	updateExprs tree.UpdateExprs,
@@ -736,7 +736,7 @@ func (uh *upsertHelper) shouldUpdate(insertRow tree.Datums, existingRow tree.Dat
 //   or auto-generated assignments for UPSERT.
 // - conflictIdx: the conflicting index, if specified.
 func upsertExprsAndIndex(
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	onConflict tree.OnConflict,
 	insertCols []sqlbase.ColumnDescriptor,
 ) (

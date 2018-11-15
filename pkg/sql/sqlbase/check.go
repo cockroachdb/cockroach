@@ -52,7 +52,7 @@ func (c *CheckHelper) Init(
 	ctx context.Context,
 	analyzeExpr AnalyzeExprFunction,
 	tn *tree.TableName,
-	tableDesc *TableDescriptor,
+	tableDesc *ImmutableTableDescriptor,
 ) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil

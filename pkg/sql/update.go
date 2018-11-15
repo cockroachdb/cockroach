@@ -219,7 +219,7 @@ func (p *planner) Update(
 			requestedColSet.Add(int(col.ID))
 		}
 		for _, ck := range desc.Checks {
-			cols, err := ck.ColumnsUsed(desc)
+			cols, err := ck.ColumnsUsed(desc.TableDesc())
 			if err != nil {
 				return nil, err
 			}

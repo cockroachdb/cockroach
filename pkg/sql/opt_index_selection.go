@@ -288,7 +288,7 @@ func (p *planner) selectIndex(
 }
 
 type indexInfo struct {
-	desc        *sqlbase.TableDescriptor
+	desc        *sqlbase.ImmutableTableDescriptor
 	index       *sqlbase.IndexDescriptor
 	cost        float64
 	covering    bool // Does the index cover the required IndexedVars?
@@ -496,7 +496,7 @@ func (v *indexInfo) makeIndexConstraints(
 }
 
 func unconstrainedSpans(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
+	tableDesc *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
 ) (roachpb.Spans, error) {
 	return spansFromConstraint(tableDesc, index, nil, exec.ColumnOrdinalSet{}, forDelete)
 }
@@ -506,14 +506,14 @@ func unconstrainedSpans(
 // interstices are pieces of the key that need to be inserted after each column
 // (for interleavings).
 func spansFromConstraint(
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	c *constraint.Constraint,
 	needed exec.ColumnOrdinalSet,
 	forDelete bool,
 ) (roachpb.Spans, error) {
 	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
-	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc.TableDesc(), index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
 		sharedPrefixLen := 0
@@ -605,7 +605,7 @@ func encodeConstraintKey(
 // for row deletion.
 func appendSpansFromConstraintSpan(
 	spans roachpb.Spans,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	cs *constraint.Span,
 	interstices [][]byte,
@@ -665,7 +665,7 @@ func appendSpansFromConstraintSpan(
 	// last parent key. If cs.End.Inclusive is true, we also advance the key as
 	// necessary.
 	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
-	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, endInclusive)
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc.TableDesc(), index, s.EndKey, endInclusive)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +673,7 @@ func appendSpansFromConstraintSpan(
 }
 
 func neededColumnFamilyIDs(
-	tableDesc *sqlbase.TableDescriptor, neededCols exec.ColumnOrdinalSet,
+	tableDesc *sqlbase.ImmutableTableDescriptor, neededCols exec.ColumnOrdinalSet,
 ) []sqlbase.FamilyID {
 	colIdxMap := tableDesc.ColumnIdxMap()
 

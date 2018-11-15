@@ -51,7 +51,7 @@ func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 
 // ConvertBatchError returns a user friendly constraint violation error.
 func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, b *client.Batch,
+	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
 ) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
@@ -67,7 +67,7 @@ func ConvertBatchError(
 		// TODO(dan): There's too much internal knowledge of the sql table
 		// encoding here (and this callsite is the only reason
 		// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-		indexID, _, err := sqlbase.DecodeIndexKeyPrefix(tableDesc, key)
+		indexID, _, err := sqlbase.DecodeIndexKeyPrefix(tableDesc.TableDesc(), key)
 		if err != nil {
 			return err
 		}

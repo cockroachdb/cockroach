@@ -25,7 +25,7 @@ import (
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	TableDesc *sqlbase.TableDescriptor
+	TableDesc *sqlbase.ImmutableTableDescriptor
 	// Secondary indexes.
 	Indexes      []sqlbase.IndexDescriptor
 	indexEntries []sqlbase.IndexEntry
@@ -40,7 +40,9 @@ type rowHelper struct {
 	sortedColumnFamilies  map[sqlbase.FamilyID][]sqlbase.ColumnID
 }
 
-func newRowHelper(desc *sqlbase.TableDescriptor, indexes []sqlbase.IndexDescriptor) rowHelper {
+func newRowHelper(
+	desc *sqlbase.ImmutableTableDescriptor, indexes []sqlbase.IndexDescriptor,
+) rowHelper {
 	rh := rowHelper{TableDesc: desc, Indexes: indexes}
 
 	// Pre-compute the encoding directions of the index key values for
@@ -62,11 +64,11 @@ func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
 ) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc,
+		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
 			rh.TableDesc.PrimaryIndex.ID)
 	}
 	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc.TableDesc(), &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,7 +89,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.Indexes))
 	}
 	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.TableDesc, rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
+		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
 	if err != nil {
 		return nil, err
 	}

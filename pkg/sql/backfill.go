@@ -192,7 +192,7 @@ func (sc *SchemaChanger) runBackfill(
 
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, error) {
+) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
@@ -421,7 +421,7 @@ func (sc *SchemaChanger) distBackfill(
 					if err != nil {
 						return err
 					}
-					otherTableDescs = append(otherTableDescs, *table)
+					otherTableDescs = append(otherTableDescs, *table.TableDesc())
 				}
 			}
 			rw := &errOnlyResultWriter{}
@@ -440,7 +440,7 @@ func (sc *SchemaChanger) distBackfill(
 			defer recv.Release()
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, readAsOf,
+				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, spans, otherTableDescs, readAsOf,
 			)
 			if err != nil {
 				return err
@@ -522,6 +522,7 @@ func runSchemaChangesInTxn(
 	// all column mutations.
 	doneColumnBackfill := false
 	for _, m := range tableDesc.Mutations {
+		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
 			switch m.Descriptor_.(type) {
@@ -529,13 +530,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc.TableDesc(), traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, immutDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, txn, tableDesc.TableDesc(), traceKV); err != nil {
+				if err := indexBackfillInTxn(ctx, txn, immutDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -550,13 +551,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc.TableDesc(), traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, immutDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc.TableDesc(), traceKV); err != nil {
+				if err := indexTruncateInTxn(ctx, txn, execCfg, immutDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -581,7 +582,7 @@ func columnBackfillInTxn(
 	txn *client.Txn,
 	tc *TableCollection,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
@@ -589,12 +590,12 @@ func columnBackfillInTxn(
 		return nil
 	}
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.Init(evalCtx, *tableDesc); err != nil {
+	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
 		return err
 	}
 	// otherTableDescs contains any other table descriptors required by the
 	// backfiller processor.
-	var otherTableDescs []sqlbase.TableDescriptor
+	var otherTableDescs []*sqlbase.ImmutableTableDescriptor
 	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*tableDesc,
@@ -609,18 +610,18 @@ func columnBackfillInTxn(
 	// All the FKs here are guaranteed to be created in the same transaction
 	// or else this table would be created in the ADD state.
 	for k := range fkTables {
-		if t := tc.getUncommittedTableByID(k); t == nil || !t.IsNewTable() {
+		t := tc.getUncommittedTableByID(k)
+		if (uncommittedTable{}) == t || !t.IsNewTable() {
 			return errors.Errorf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
-		table := tc.getUncommittedTableByID(k)
-		otherTableDescs = append(otherTableDescs, table.TableDescriptor)
+		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)
 	}
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, *tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize,
+			txn, tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize,
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err
@@ -630,17 +631,17 @@ func columnBackfillInTxn(
 }
 
 func indexBackfillInTxn(
-	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor, traceKV bool,
+	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.ImmutableTableDescriptor, traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(*tableDesc); err != nil {
+	if err := backfiller.Init(tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx,
-			txn, *tableDesc, sp, indexBackfillChunkSize, false /* alsoCommit */, traceKV)
+			txn, tableDesc, sp, indexBackfillChunkSize, false /* alsoCommit */, traceKV)
 		if err != nil {
 			return err
 		}
@@ -652,7 +653,7 @@ func indexTruncateInTxn(
 	ctx context.Context,
 	txn *client.Txn,
 	execCfg *ExecutorConfig,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	alloc := &sqlbase.DatumAlloc{}

@@ -30,7 +30,7 @@ import (
 type planDependencyInfo struct {
 	// desc is a reference to the descriptor for the table being
 	// depended on.
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 	// deps is the list of ways in which the current plan depends on
 	// that table. There can be more than one entries when the same
 	// table is used in different places. The entries can also be

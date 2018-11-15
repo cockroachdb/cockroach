@@ -38,7 +38,7 @@ import (
 //    that refers to a primary index key that cannot be found.
 type indexCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 	asOf      hlc.Timestamp
 
@@ -64,7 +64,7 @@ type indexCheckRun struct {
 
 func newIndexCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {
@@ -291,7 +291,7 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //
 func createIndexCheckQuery(
 	columnNames []string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	indexDesc *sqlbase.IndexDescriptor,
 	asOf hlc.Timestamp,

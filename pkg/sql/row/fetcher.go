@@ -55,7 +55,7 @@ type tableInfo struct {
 	// Used to determine whether a key retrieved belongs to the span we
 	// want to scan.
 	spans            roachpb.Spans
-	desc             *sqlbase.TableDescriptor
+	desc             *sqlbase.ImmutableTableDescriptor
 	index            *sqlbase.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []sqlbase.IndexDescriptor_Direction
@@ -132,7 +132,7 @@ type FetcherTableArgs struct {
 	// This is irrelevant if Fetcher is initialize with only one
 	// table.
 	Spans            roachpb.Spans
-	Desc             *sqlbase.TableDescriptor
+	Desc             *sqlbase.ImmutableTableDescriptor
 	Index            *sqlbase.IndexDescriptor
 	ColIdxMap        map[sqlbase.ColumnID]int
 	IsSecondaryIndex bool
@@ -302,7 +302,7 @@ func (rf *Fetcher) Init(
 		var err error
 		if multipleTables {
 			// We produce references to every signature's reference.
-			equivSignatures, err := sqlbase.TableEquivSignatures(table.desc, table.index)
+			equivSignatures, err := sqlbase.TableEquivSignatures(table.desc.TableDesc(), table.index)
 			if err != nil {
 				return err
 			}
@@ -339,7 +339,7 @@ func (rf *Fetcher) Init(
 			}
 		}
 
-		rf.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
+		rf.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
 		var indexColumnIDs []sqlbase.ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -393,7 +393,7 @@ func (rf *Fetcher) Init(
 		}
 
 		// Prepare our index key vals slice.
-		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc, indexColumnIDs)
+		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -409,7 +409,7 @@ func (rf *Fetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
 			nExtraColumns := len(table.index.ExtraColumnIDs)
 			if cap(table.extraVals) >= nExtraColumns {
 				table.extraVals = table.extraVals[:nExtraColumns]
@@ -636,7 +636,7 @@ func (rf *Fetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err
 	// to go through the equivalence signature checks.
 	if len(rf.tables) == 1 {
 		return sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-			rf.currentTable.desc,
+			rf.currentTable.desc.TableDesc(),
 			rf.currentTable.index,
 			rf.currentTable.keyValTypes,
 			rf.currentTable.keyVals,
@@ -1044,7 +1044,7 @@ func (rf *Fetcher) NextRow(
 		}
 		if rowDone {
 			err := rf.finalizeRow()
-			return rf.rowReadyTable.row, rf.rowReadyTable.desc, rf.rowReadyTable.index, err
+			return rf.rowReadyTable.row, rf.rowReadyTable.desc.TableDesc(), rf.rowReadyTable.index, err
 		}
 	}
 }
@@ -1218,7 +1218,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 		values[i] = table.row[i].Datum
 	}
 
-	indexEntries, err := sqlbase.EncodeSecondaryIndex(table.desc, table.index, table.colIdxMap, values)
+	indexEntries, err := sqlbase.EncodeSecondaryIndex(table.desc.TableDesc(), table.index, table.colIdxMap, values)
 	if err != nil {
 		return err
 	}
