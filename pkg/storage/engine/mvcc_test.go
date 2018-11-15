@@ -335,10 +335,10 @@ func TestMVCCEmptyKey(t *testing.T) {
 	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key{}, hlc.Timestamp{Logical: 1}, value1, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key{}, testKey1, math.MaxInt64, hlc.Timestamp{Logical: 1}, true, nil); err != nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key{}, testKey1, math.MaxInt64, hlc.Timestamp{Logical: 1}, MVCCScanOptions{}); err != nil {
 		t.Errorf("empty key allowed for start key in scan; got %s", err)
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey1, roachpb.Key{}, math.MaxInt64, hlc.Timestamp{Logical: 1}, true, nil); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey1, roachpb.Key{}, math.MaxInt64, hlc.Timestamp{Logical: 1}, MVCCScanOptions{}); err == nil {
 		t.Error("expected empty key error")
 	}
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{}); err == nil {
@@ -751,7 +751,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 			}
-			if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
+			if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn}); err == nil {
 				t.Fatal("wanted an error")
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
@@ -761,7 +761,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 			if _, _, err := mvccGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 7}, true, txn); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err != nil {
+			if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -776,7 +776,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 			if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 99}, value2, nil); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
+			if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn}); err == nil {
 				t.Fatal("wanted an error")
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
@@ -1099,7 +1099,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		if scan.consistent {
 			cStr = "consistent"
 		}
-		kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 1}, scan.consistent, scan.txn)
+		kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
 		wiErr, _ := err.(*roachpb.WriteIntentError)
 		if (err == nil) != (wiErr == nil) {
 			t.Errorf("%s(%d): unexpected error: %s", cStr, i, err)
@@ -1325,7 +1325,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 			case "get":
 				_, _, err = MVCCGet(ctx, batch, key, ts2, true, nil)
 			case "scan":
-				_, _, _, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, math.MaxInt64, ts2, true, nil)
+				_, _, _, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, math.MaxInt64, ts2, MVCCScanOptions{})
 			case "findSplitKey":
 				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 			case "computeStats":
@@ -1377,7 +1377,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1392,7 +1392,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 4}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 4}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1407,7 +1407,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1423,7 +1423,7 @@ func TestMVCCScan(t *testing.T) {
 	if _, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn2); err != nil {
 		t.Fatal(err)
 	}
-	kvs, _, _, err = MVCCScan(context.Background(), engine, keyMin, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, _, _, err = MVCCScan(context.Background(), engine, keyMin, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1455,7 +1455,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1468,7 +1468,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1481,7 +1481,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 
 	// Note: testKey6, though not scanned directly, is important in testing that
 	// the computed resume span does not extend beyond the upper bound of a scan.
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, testKey5, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, testKey5, 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1492,7 +1492,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey5, testKey6.Next(), 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey5, testKey6.Next(), 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1536,7 +1536,7 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key("/a"), roachpb.Key("/b"), math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key("/a"), roachpb.Key("/b"), math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1567,7 +1567,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, txn1)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Txn: txn1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1579,7 +1579,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{}); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -1592,7 +1592,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// A scan with consistent=false should fail in a txn.
-	if _, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, false, txn1); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: true, Txn: txn1}); err == nil {
 		t.Error("expected an error scanning with consistent=false in txn")
 	}
 
@@ -1625,7 +1625,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta},
 		{Span: roachpb.Span{Key: testKey3}, Txn: txn2.TxnMeta},
 	}
-	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 7}, false, nil)
+	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Inconsistent: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1649,7 +1649,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 
 	// Now try a scan at a historical timestamp.
 	expIntents = expIntents[:1]
-	kvs, _, intents, err = MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 3}, false, nil)
+	kvs, _, intents, err = MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 3}, MVCCScanOptions{Inconsistent: true})
 	if !reflect.DeepEqual(intents, expIntents) {
 		t.Fatal(err)
 	}
@@ -1702,7 +1702,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1719,7 +1719,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	kvs = []roachpb.KeyValue{}
 	if _, err = MVCCIterate(
 		context.Background(), engine, keyMin, keyMax, hlc.Timestamp{WallTime: 2},
-		true, true /* tombstones */, nil, false, func(kv roachpb.KeyValue) (bool, error) {
+		MVCCScanOptions{Tombstones: true}, func(kv roachpb.KeyValue) (bool, error) {
 			kvs = append(kvs, kv)
 			return false, nil
 		},
@@ -1758,7 +1758,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1786,7 +1786,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
@@ -1808,7 +1808,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1860,7 +1860,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1889,7 +1889,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1926,7 +1926,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
@@ -1951,7 +1951,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -2048,7 +2048,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	}
 
 	txn.Epoch++
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 3}, true, &txn)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 3}, MVCCScanOptions{Txn: &txn})
 	if e := 2; len(kvs) != e {
 		t.Fatalf("e = %d, got %d", e, len(kvs))
 	}
@@ -2139,7 +2139,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			Value: value6,
 		},
 	}
-	kvs, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2547,8 +2547,8 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCReverseScan(context.Background(), engine,
-		testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2563,8 +2563,8 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine,
-		testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2577,8 +2577,8 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine,
-		testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2591,8 +2591,8 @@ func TestMVCCReverseScan(t *testing.T) {
 
 	// The first key we encounter has multiple versions and we need to read the
 	// latest.
-	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
-		testKey2, testKey3, 1, hlc.Timestamp{WallTime: 4}, true, nil)
+	kvs, _, _, err = MVCCScan(context.Background(), engine, testKey2, testKey3, 1, hlc.Timestamp{WallTime: 4}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2604,8 +2604,8 @@ func TestMVCCReverseScan(t *testing.T) {
 
 	// The first key we encounter is newer than our read timestamp and we need to
 	// back up to the previous key.
-	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
-		testKey4, testKey6, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, _, _, err = MVCCScan(context.Background(), engine, testKey4, testKey6, 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2616,8 +2616,8 @@ func TestMVCCReverseScan(t *testing.T) {
 	}
 
 	// Scan only the first key in the key space.
-	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
-		testKey1, testKey1.Next(), 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, _, _, err = MVCCScan(context.Background(), engine, testKey1, testKey1.Next(), 1, hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2652,7 +2652,7 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	kvs, _, _, err := MVCCReverseScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{Reverse: true})
 	if err != nil {
 		t.Fatal(err)
 	}
