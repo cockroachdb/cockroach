@@ -155,6 +155,20 @@ var ErrDescriptorNotFound = errors.New("descriptor not found")
 // collected mutations list.
 var ErrIndexGCMutationsList = errors.New("index in GC mutations list")
 
+// NewMutableCreatedTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version being the zero table. This
+// is for a table that is created in the transaction.
+func NewMutableCreatedTableDescriptor(tbl TableDescriptor) *MutableTableDescriptor {
+	return &MutableTableDescriptor{TableDescriptor: tbl}
+}
+
+// NewMutableExistingTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version also set to the descriptor.
+// This is for an existing table.
+func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescriptor {
+	return &MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
+}
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
 // ID passed in using an existing txn. Returns an error if the descriptor
 // doesn't exist or if it exists and is not a database.
