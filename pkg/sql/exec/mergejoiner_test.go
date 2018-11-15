@@ -269,6 +269,57 @@ func TestMergeJoiner(t *testing.T) {
 	}
 }
 
+func TestMergeJoinerLongMultiBatch(t *testing.T) {
+	// This test sums and counts random inputs, keeping track of the expected
+	// results to make sure the aggregations are correct.
+	for _, groupSize := range []int{1, 2, ColBatchSize / 4, ColBatchSize / 2} {
+		for _, numInputBatches := range []int{1, 2, 16} {
+			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
+				func(t *testing.T) {
+					nTuples := ColBatchSize * numInputBatches
+					typs := []types.T{types.Int64}
+					cols := []ColVec{newMemColumn(typs[0], nTuples)}
+					groups := cols[0].Int64()
+					for i := range groups {
+						groups[i] = int64(i)
+					}
+
+					leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
+					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
+
+					a := NewMergeJoinOp(
+						leftSource,
+						rightSource,
+						[]uint32{0},
+						[]uint32{0},
+						typs,
+						typs,
+						[]uint32{0},
+						[]uint32{0},
+					)
+
+					a.Init()
+
+					i := 0
+					// Keep track of the last comparison value.
+					lastVal := int64(0)
+					for b := a.Next(); b.Length() != 0; b = a.Next() {
+						outCol := b.ColVec(0).Int64()
+						for j := int64(0); j < int64(b.Length()); j++ {
+							outVal := outCol[j]
+							expVal := lastVal
+							if outVal != expVal {
+								t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
+							}
+							lastVal += 1
+						}
+						i++
+					}
+				})
+		}
+	}
+}
+
 func newBatchOfIntRows(nCols int, batch ColBatch) ColBatch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()

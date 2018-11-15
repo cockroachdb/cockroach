@@ -308,6 +308,20 @@ func (m *memColumn) CopyWithSelAndNilsInt64(
 	}
 }
 
+func (m *memColumn) Slice(colType types.T, start uint64, end uint64) ColVec {
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		col := m._TemplateType()
+		return &memColumn{
+			col: col[start:end],
+		}
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
 func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	if m.NullAt(colIdx) {
 		return "NULL"
