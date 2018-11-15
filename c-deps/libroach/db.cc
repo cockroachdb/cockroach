@@ -738,7 +738,9 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // timestamps present in each sstable in the metadata for that sstable. Used
   // by the time bounded iterator optimization.
   options->table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
-  // TODO(peter): DeleteRangeCollector
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options.table_properties_collector_factories.emplace_back(DBMakeDeleteRangeCollector());
 
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
