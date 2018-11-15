@@ -271,6 +271,12 @@ func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersi
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
+// setupFlow creates a Flow.
+//
+// Args:
+// localState: Specifies if the flow runs entirely on this node and, if it does,
+//   specifies the txn and other attributes.
+//
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
@@ -326,16 +332,19 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
-	txn := localState.Txn
-	if txn := req.DeprecatedTxn; txn != nil {
-		if req.TxnCoordMeta != nil {
-			return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
+	// Figure out what txn the flow needs to run in, if any.
+	// For local flows, the txn comes from localState.Txn. For non-local ones, we
+	// create a txn based on the request's TxnCoordMeta.
+	var txn *client.Txn
+	if !localState.IsLocal {
+		if depTxn := req.DeprecatedTxn; depTxn != nil {
+			if req.TxnCoordMeta != nil {
+				return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
+			}
+			meta := roachpb.MakeTxnCoordMeta(*depTxn)
+			req.TxnCoordMeta = &meta
 		}
-		meta := roachpb.MakeTxnCoordMeta(*txn)
-		req.TxnCoordMeta = &meta
-	}
-	if meta := req.TxnCoordMeta; meta != nil {
-		if !localState.IsLocal {
+		if meta := req.TxnCoordMeta; meta != nil {
 			if meta.Txn.Status != roachpb.PENDING {
 				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
 					meta.Txn)
@@ -344,6 +353,8 @@ func (ds *ServerImpl) setupFlow(
 			// Txn to heartbeat the transaction.
 			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
 		}
+	} else {
+		txn = localState.Txn
 	}
 
 	var evalCtx *tree.EvalContext
@@ -475,13 +486,19 @@ func (ds *ServerImpl) SetupSyncFlow(
 // LocalState carries information that is required to set up a flow with wrapped
 // planNodes.
 type LocalState struct {
+	EvalContext *tree.EvalContext
+
 	// IsLocal is true if the flow is being run locally in the first place.
 	IsLocal bool
+
+	/////////////////////////////////////////////
+	// Fields below are empty if IsLocal == false
+	/////////////////////////////////////////////
+
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
-	LocalProcs  []LocalProcessor
-	EvalContext *tree.EvalContext
-	Txn         *client.Txn
+	LocalProcs []LocalProcessor
+	Txn        *client.Txn
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node.

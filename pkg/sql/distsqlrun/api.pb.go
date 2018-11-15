@@ -143,10 +143,9 @@ func (BytesEncodeFormat) EnumDescriptor() ([]byte, []int) { return fileDescripto
 
 type SetupFlowRequest struct {
 	// TxnCoordMeta is the TxnCoordMeta for the transaction in which the flow
-	// will run. If nil, the flow will not run in a transaction higher-level
-	// transaction (i.e. it is responsible for managing its own transactions,
-	// if any). Most flows expect to run in a txn, but some, like backfills,
-	// don't.
+	// will run. If nil, the flow will not run in a higher-level transaction
+	// (i.e. it is responsible for managing its own transactions, if any). Most
+	// flows expect to run in a txn, but some, like backfills, don't.
 	TxnCoordMeta *cockroach_roachpb1.TxnCoordMeta `protobuf:"bytes,7,opt,name=txn_coord_meta,json=txnCoordMeta" json:"txn_coord_meta,omitempty"`
 	// deprecated_txn used to play the role that TxnCoordMeta now plays. It
 	// can be removed in v2.2.
