@@ -2480,7 +2480,7 @@ type EvalContext struct {
 	Txn *client.Txn
 
 	ReCache *RegexpCache
-	tmpDec  apd.Decimal
+	tmpDec  DDecimal
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -2672,7 +2672,7 @@ func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context
 }
 
-func (ctx *EvalContext) getTmpDec() *apd.Decimal {
+func (ctx *EvalContext) getTmpDec() *DDecimal {
 	return &ctx.tmpDec
 }
 
@@ -2949,7 +2949,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			res = NewDInt(DInt(f))
 		case *DDecimal:
 			d := ctx.getTmpDec()
-			_, err := DecimalCtx.RoundToIntegralValue(d, &v.Decimal)
+			_, err := DecimalCtx.RoundToIntegralValue(&d.Decimal, &v.Decimal)
 			if err != nil {
 				return nil, err
 			}
@@ -3021,8 +3021,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		}
 
 	case *coltypes.TDecimal:
-		var dd DDecimal
 		var err error
+		dd := ctx.getTmpDec()
+		*dd = DDecimal{}
 		unset := false
 		switch v := d.(type) {
 		case *DBool:
@@ -3040,7 +3041,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			if typ.Prec == 0 {
 				return d, nil
 			}
-			dd = *v
+			*dd = *v
 		case *DString:
 			err = dd.SetString(string(*v))
 		case *DCollatedString:
@@ -3069,8 +3070,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return nil, err
 		}
 		if !unset {
-			err = LimitDecimalWidth(&dd.Decimal, typ.Prec, typ.Scale)
-			return &dd, err
+			var limited DDecimal
+			err = LimitDecimalWidth(&dd.Decimal, &limited.Decimal, typ.Prec, typ.Scale)
+			return &limited, err
 		}
 
 	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
@@ -3251,7 +3253,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			dnanos.Exponent += 9
 			// We need HighPrecisionCtx because duration values can contain
 			// upward of 35 decimal digits and DecimalCtx only provides 25.
-			_, err := HighPrecisionCtx.Quantize(d, &dnanos, 0)
+			_, err := HighPrecisionCtx.Quantize(&d.Decimal, &dnanos, 0)
 			if err != nil {
 				return nil, err
 			}

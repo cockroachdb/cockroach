@@ -676,9 +676,11 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			}
 		} else {
 			// Verify that the data width matches the column constraint.
-			if err := sqlbase.CheckValueWidth(col.Type, val, &col.Name); err != nil {
+			newVal, err := sqlbase.LimitValueWidth(col.Type, val, &col.Name)
+			if err != nil {
 				return err
 			}
+			u.run.updateValues[i] = newVal
 		}
 	}
 

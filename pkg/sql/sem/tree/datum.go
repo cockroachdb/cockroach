@@ -914,7 +914,7 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	v := ctx.getTmpDec()
 	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DDecimal:
-		v = &t.Decimal
+		*v = *t
 	case *DInt:
 		v.SetFinite(int64(*t), 0)
 	case *DFloat:
@@ -924,7 +924,7 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return CompareDecimals(&d.Decimal, v)
+	return CompareDecimals(&d.Decimal, &v.Decimal)
 }
 
 // CompareDecimals compares 2 apd.Decimals according to the SQL comparison
