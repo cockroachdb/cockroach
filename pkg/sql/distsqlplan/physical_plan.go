@@ -902,9 +902,7 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 // another for the purpose of UNION. This excludes its VisibleType
 // type alias, which doesn't effect the merging of values.
 func equivalentTypes(c, other *sqlbase.ColumnType) bool {
-	rhs := *other
-	rhs.VisibleType = c.VisibleType
-	return c.Equal(rhs)
+	return c.ToDatumType().Equivalent(other.ToDatumType())
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires
