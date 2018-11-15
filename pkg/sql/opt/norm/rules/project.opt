@@ -29,3 +29,15 @@ $input
     (MergeProjections $projections $innerProjections $passthrough)
     (DifferenceCols $passthrough (ProjectionCols $innerProjections))
 )
+
+# MergeProjectWithValues merges an outer Project operator with an inner Values
+# operator if there are no references to inner synthesized columns. This has the
+# side effect of pruning unused columns of the Values operator.
+[MergeProjectWithValues, Normalize]
+(Project
+    $input:(Values)
+    $projections:* & (CanMergeProjectWithValues $projections $input)
+    $passthrough:*
+)
+=>
+(MergeProjectWithValues $projections $passthrough $input)

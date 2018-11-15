@@ -550,6 +550,67 @@ func (c *CustomFuncs) MergeProjections(
 	return newProjections
 }
 
+// CanMergeProjectWithValues returns true if the synthesized columns from a
+// Project operator can be merged with the columns of a Values operator to form
+// a single combined Values operator. This is only possible when there is a
+// single Values row and when the projections are not dependent on columns from
+// the Values operator.
+func (c *CustomFuncs) CanMergeProjectWithValues(
+	projections memo.ProjectionsExpr, input memo.RelExpr,
+) bool {
+	values := input.(*memo.ValuesExpr)
+	if len(values.Rows) != 1 {
+		return false
+	}
+
+	valuesCols := values.Relational().OutputCols
+	for i := range projections {
+		if projections[i].ScalarProps(c.mem).OuterCols.Intersects(valuesCols) {
+			return false
+		}
+	}
+	return true
+}
+
+// MergeProjectWithValues merges a Project operator with its input Values
+// operator. This is only possible in certain circumstances, which must first be
+// validated by calling CanMergeProjectWithValues (see its header comment).
+// Values columns that are part of the Project passthrough columns are retained
+// in the final Values operator, and Project synthesized columns are added to
+// it. Any unreferenced Values columns are discarded. For example:
+//
+//   SELECT column1, 3 FROM (VALUES (1, 2))
+//   =>
+//   (VALUES (1, 3))
+//
+func (c *CustomFuncs) MergeProjectWithValues(
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, input memo.RelExpr,
+) memo.RelExpr {
+	newExprs := make(memo.ScalarListExpr, 0, len(projections)+passthrough.Len())
+	newTypes := make([]types.T, 0, len(newExprs))
+	newCols := make(opt.ColList, 0, len(newExprs))
+
+	values := input.(*memo.ValuesExpr)
+	tuple := values.Rows[0].(*memo.TupleExpr)
+	for i, colID := range values.Cols {
+		if passthrough.Contains(int(colID)) {
+			newExprs = append(newExprs, tuple.Elems[i])
+			newTypes = append(newTypes, tuple.Elems[i].DataType())
+			newCols = append(newCols, colID)
+		}
+	}
+
+	for i := range projections {
+		item := &projections[i]
+		newExprs = append(newExprs, item.Element)
+		newTypes = append(newTypes, item.Element.DataType())
+		newCols = append(newCols, item.Col)
+	}
+
+	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, types.TTuple{Types: newTypes})}
+	return c.f.ConstructValues(rows, newCols)
+}
+
 // ProjectionCols returns the ids of the columns synthesized by the given
 // Projections operator.
 func (c *CustomFuncs) ProjectionCols(projections memo.ProjectionsExpr) opt.ColSet {
