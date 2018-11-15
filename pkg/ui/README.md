@@ -122,6 +122,23 @@ To run the tests outside of CI:
 $ make test
 ```
 
+## Viewing bundle statistics
+
+The regular build also produces a webpage with a report on the bundle size.
+Build the app, then take a look with:
+
+```shell
+$ make build
+$ open pkg/ui/dist/stats.ccl.html
+```
+
+Or, to view the OSS bundle:
+
+```shell
+$ make buildoss
+$ open pkg/ui/dist/stats.oss.html
+```
+
 ## Managing dependencies
 
 The NPM registry (and the Yarn proxy in front of it) have historically proven
