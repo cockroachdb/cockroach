@@ -81,6 +81,7 @@ func TestChangefeedBasics(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestChangefeedEnvelope(t *testing.T) {
@@ -579,8 +580,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
 			assertPayloads(t, addColumnDef, []string{
-				`add_column_def: [1]->{"a": 1}`,
-				`add_column_def: [2]->{"a": 2}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `add_column_def: [1]->{"a": 1}`,
+				// `add_column_def: [2]->{"a": 2}`,
 				`add_column_def: [1]->{"a": 1, "b": "d"}`,
 				`add_column_def: [2]->{"a": 2, "b": "d"}`,
 			})
@@ -598,8 +600,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
 			assertPayloads(t, addColComp, []string{
-				`add_col_comp: [1]->{"a": 1, "b": 6}`,
-				`add_col_comp: [2]->{"a": 2, "b": 7}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `add_col_comp: [1]->{"a": 1, "b": 6}`,
+				// `add_col_comp: [2]->{"a": 2, "b": 7}`,
 				`add_col_comp: [1]->{"a": 1, "b": 6, "c": 11}`,
 				`add_col_comp: [2]->{"a": 2, "b": 7, "c": 12}`,
 			})
@@ -622,8 +625,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`drop_column: [1]->{"a": 1}`,
 				`drop_column: [2]->{"a": 2}`,
 				`drop_column: [3]->{"a": 3}`,
-				`drop_column: [1]->{"a": 1}`,
-				`drop_column: [2]->{"a": 2}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `drop_column: [1]->{"a": 1}`,
+				// `drop_column: [2]->{"a": 2}`,
 			})
 		})
 
@@ -663,17 +667,20 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`multiple_alters: [1]->{"a": 1}`,
 				`multiple_alters: [2]->{"a": 2}`,
 				// Scan output for DROP
-				`multiple_alters: [1]->{"a": 1}`,
-				`multiple_alters: [2]->{"a": 2}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `multiple_alters: [1]->{"a": 1}`,
+				// `multiple_alters: [2]->{"a": 2}`,
 				// Backfill no-ops for column C
-				`multiple_alters: [1]->{"a": 1}`,
-				`multiple_alters: [2]->{"a": 2}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `multiple_alters: [1]->{"a": 1}`,
+				// `multiple_alters: [2]->{"a": 2}`,
 				// Scan output for column C
 				`multiple_alters: [1]->{"a": 1, "c": "cee"}`,
 				`multiple_alters: [2]->{"a": 2, "c": "cee"}`,
 				// Backfill no-ops for column D (C schema change is complete)
-				`multiple_alters: [1]->{"a": 1, "c": "cee"}`,
-				`multiple_alters: [2]->{"a": 2, "c": "cee"}`,
+				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+				// `multiple_alters: [1]->{"a": 1, "c": "cee"}`,
+				// `multiple_alters: [2]->{"a": 2, "c": "cee"}`,
 				// Scan output for column C
 				`multiple_alters: [1]->{"a": 1, "c": "cee", "d": "dee"}`,
 				`multiple_alters: [2]->{"a": 2, "c": "cee", "d": "dee"}`,
