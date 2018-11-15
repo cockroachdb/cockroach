@@ -652,7 +652,7 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 // CheckValueWidth checks that the width (for strings, byte arrays,
 // and bit strings) and scale (for decimals) of the value fits the
 // specified column type. Used by INSERT and UPDATE.
-func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
+func CheckValueWidth(ctx *tree.EvalContext, typ ColumnType, val tree.Datum, name *string) error {
 	switch typ.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		var sv string
@@ -669,7 +669,7 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {
-			if size, ok := intsize.FromWidth(int(typ.Width)); ok {
+			if size, ok := intsize.FromWidth(int(typ.Width), ctx.GetDefaultIntSize()); ok {
 				if !v.RangeCheck(size) {
 					return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
@@ -706,7 +706,7 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 		if v, ok := val.(*tree.DArray); ok {
 			elementType := *typ.elementColumnType()
 			for i := range v.Array {
-				if err := CheckValueWidth(elementType, v.Array[i], name); err != nil {
+				if err := CheckValueWidth(ctx, elementType, v.Array[i], name); err != nil {
 					return err
 				}
 			}

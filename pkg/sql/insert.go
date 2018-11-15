@@ -662,7 +662,7 @@ func GenerateInsertRow(
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
 		if err := sqlbase.CheckValueWidth(
-			insertCols[i].Type, rowVals[i], &insertCols[i].Name); err != nil {
+			&evalCtx, insertCols[i].Type, rowVals[i], &insertCols[i].Name); err != nil {
 			return nil, err
 		}
 	}

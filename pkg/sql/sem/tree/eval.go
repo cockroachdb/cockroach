@@ -2989,7 +2989,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			res = &v.DInt
 		}
 		if res != nil {
-			if typSize, ok := intsize.FromWidth(typ.Width); ok {
+			if typSize, ok := intsize.FromWidth(typ.Width, ctx.GetDefaultIntSize()); ok {
 				if !res.RangeCheck(typSize) {
 					return nil, errIntOutOfRange
 				}

@@ -52,8 +52,12 @@ func FromString(val string) (_ IntSize, ok bool) {
 	}
 }
 
-// FromWidth is the inverse of IntSize.Width().
-func FromWidth(width int) (_ IntSize, ok bool) {
+// FromWidth is the inverse of IntSize.Width(). The fallback
+// value will be returned if the incoming width is 0.
+func FromWidth(width int, fallback IntSize) (_ IntSize, ok bool) {
+	if width == 0 {
+		return fallback, true
+	}
 	if width == 16 || width == 32 || width == 64 {
 		return IntSize(width), true
 	}
