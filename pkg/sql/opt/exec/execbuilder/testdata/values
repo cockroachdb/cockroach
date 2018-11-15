@@ -4,16 +4,16 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
-render         ·         ·  (a)  ·
- │             render 0  1  ·    ·
- └── emptyrow  ·         ·  ()   ·
+values  ·              ·                (a)  ·
+·       size           1 column, 1 row  ·    ·
+·       row 0, expr 0  1                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
-render         ·         ·  (a)  ·
- │             render 0  3  ·    ·
- └── emptyrow  ·         ·  ()   ·
+values  ·              ·                (a)  ·
+·       size           1 column, 1 row  ·    ·
+·       row 0, expr 0  3                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
