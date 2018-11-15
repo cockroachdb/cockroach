@@ -173,8 +173,8 @@ func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
 	// Lookup table version.
-	objDesc, _, err := p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
-		p.ObjectLookupFlags(ctx, true /*required*/, false /*requireMutable*/))
+	objDesc, _, err := p.PhysicalSchemaAccessor().GetObjectDesc(ctx, p.txn, &roleMembersTableName,
+		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
 	if err != nil {
 		return nil, err
 	}

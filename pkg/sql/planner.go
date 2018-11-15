@@ -392,9 +392,8 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (row.TableLookup, error) {
-	flags := ObjectLookupFlags{
-		CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}, false /*requireMutable*/}
-	table, err := p.Tables().getTableVersionByID(ctx, tableID, flags)
+	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{avoidCached: p.avoidCachedDescriptors}}
+	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {
 			return row.TableLookup{IsAdding: true}, nil

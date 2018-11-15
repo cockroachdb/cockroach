@@ -226,8 +226,8 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 		var dbDesc *DatabaseDescriptor
 		if dbName != "" {
 			var err error
-			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
-				DatabaseLookupFlags{ctx: ctx, txn: p.Txn(), required: true})
+			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, dbName,
+				DatabaseLookupFlags{required: true})
 			if err != nil {
 				return nil, err
 			}
