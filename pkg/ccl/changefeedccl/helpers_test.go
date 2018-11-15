@@ -700,6 +700,18 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 	}
 }
 
+func rangefeedTest(
+	metaTestFn func(func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T),
+	testFn func(*testing.T, *gosql.DB, testfeedFactory),
+) func(*testing.T) {
+	return func(t *testing.T) {
+		metaTestFn(func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+			testFn(t, db, f)
+		})(t)
+	}
+}
+
 func forceTableGC(
 	t testing.TB,
 	tsi serverutils.TestServerInterface,

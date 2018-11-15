@@ -81,6 +81,7 @@ func TestChangefeedBasics(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestChangefeedEnvelope(t *testing.T) {
