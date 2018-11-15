@@ -189,7 +189,7 @@ type dbCacheSubscriber interface {
 // return a nil descriptor and no error if the table does not exist.
 //
 func (tc *TableCollection) getMutableTableDescriptor(
-	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
 ) (*sqlbase.MutableTableDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
@@ -226,7 +226,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
-	obj, db, err := phyAccessor.GetObjectDesc(tn, flags)
+	obj, db, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
 	if obj == nil {
 		return nil, db, err
 	}
@@ -245,7 +245,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 // the validity window of the table descriptor version returned.
 //
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
 ) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
@@ -302,7 +302,7 @@ func (tc *TableCollection) getTableVersion(
 
 	readTableFromStore := func() (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
 		phyAccessor := UncachedPhysicalAccessor{}
-		obj, db, err := phyAccessor.GetObjectDesc(tn, flags)
+		obj, db, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
 		if obj == nil {
 			return nil, db, err
 		}
@@ -325,7 +325,7 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	origTimestamp := flags.txn.OrigTimestamp()
+	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
 		// Read the descriptor from the store in the face of some specific errors
@@ -350,18 +350,18 @@ func (tc *TableCollection) getTableVersion(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil, nil
 }
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, tableID sqlbase.ID, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags ObjectLookupFlags,
 ) (*sqlbase.TableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
 	if flags.avoidCached || testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, flags.txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -392,7 +392,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	origTimestamp := flags.txn.OrigTimestamp()
+	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
@@ -415,7 +415,7 @@ func (tc *TableCollection) getTableVersionByID(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 
