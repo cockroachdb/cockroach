@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -37,52 +37,6 @@ func declareKeysExport(
 ) {
 	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
-}
-
-// RowCounter is a helper that counts how many distinct rows appear in the KVs
-// that is is shown via `Count`.
-type RowCounter struct {
-	prev roachpb.Key
-	roachpb.BulkOpSummary
-}
-
-// Count examines each key passed to it and increments the running count when it
-// sees a key that belongs to a new row.
-func (r *RowCounter) Count(key roachpb.Key) error {
-	// EnsureSafeSplitKey is usually used to avoid splitting a row across ranges,
-	// by returning the row's key prefix.
-	// We reuse it here to count "rows" by counting when it changes.
-	// Non-SQL keys are returned unchanged or may error -- we ignore them, since
-	// non-SQL keys are obviously thus not SQL rows.
-	row, err := keys.EnsureSafeSplitKey(key)
-	if err != nil || len(key) == len(row) {
-		return nil
-	}
-
-	// no change key prefix => no new row.
-	if bytes.Equal(row, r.prev) {
-		return nil
-	}
-	r.prev = append(r.prev[:0], row...)
-
-	rest, tbl, err := keys.DecodeTablePrefix(row)
-	if err != nil {
-		return err
-	}
-
-	if tbl < keys.MaxReservedDescID {
-		r.SystemRecords++
-	} else {
-		if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
-			return err
-		} else if indexID == 1 {
-			r.Rows++
-		} else {
-			r.IndexEntries++
-		}
-	}
-
-	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -158,7 +112,7 @@ func evalExport(
 
 	debugLog := log.V(3)
 
-	var rows RowCounter
+	var rows bulk.RowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
