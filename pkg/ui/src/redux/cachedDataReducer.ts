@@ -20,7 +20,7 @@
 
 import _ from "lodash";
 import { Action, Dispatch } from "redux";
-import { assert } from "chai";
+import assert from "assert";
 import moment from "moment";
 import { hashHistory } from "react-router";
 import { push } from "react-router-redux";
@@ -78,7 +78,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     protected requestTimeout?: moment.Duration,
   ) {
     // check actionNamespace
-    assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
+    assert(!CachedDataReducer.namespaces.hasOwnProperty(actionNamespace), "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;
 
     this.REQUEST = `cockroachui/CachedDataReducer/${actionNamespace}/REQUEST`;
