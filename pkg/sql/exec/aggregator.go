@@ -109,30 +109,29 @@ type orderedAggregator struct {
 var _ Operator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
-// columns. aggCols is a slice where each index represents a new aggregation
-// function. The slice at that index specifies the columns of the input batch
-// that the aggregate function should work on. aggTyps specifies the associated
-// types of these input columns.
+// columns.
 // TODO(asubiotto): Take in distsqlrun.AggregatorSpec_Func. This is currently
 // impossible due to an import cycle so we hack around it by taking in the raw
 // integer specifier.
 func NewOrderedAggregator(
 	input Operator,
-	groupCols []uint32,
-	groupTyps []types.T,
+	colTypes []types.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
+	groupCols []uint32,
 	aggCols [][]uint32,
-	aggTyps [][]types.T,
 ) (Operator, error) {
-	if len(aggFns) != len(aggCols) || len(aggFns) != len(aggTyps) {
+	if len(aggFns) != len(aggCols) {
 		return nil,
 			errors.Errorf(
-				"mismatched aggregation spec lengths: aggFns(%d), aggCols(%d), aggTyps(%d)",
+				"mismatched aggregation lengths: aggFns(%d), aggCols(%d)",
 				len(aggFns),
 				len(aggCols),
-				len(aggTyps),
 			)
 	}
+
+	groupTyps := extractGroupTypes(groupCols, colTypes)
+	aggTyps := extractAggTypes(aggCols, colTypes)
+
 	op, groupCol, err := orderedDistinctColsToOperators(input, groupCols, groupTyps)
 	if err != nil {
 		return nil, err
@@ -159,30 +158,42 @@ func NewOrderedAggregator(
 		}
 	}
 
-	outputTyps := make([]types.T, len(aggCols))
-	aggregateFuncs := make([]aggregateFunc, len(aggCols))
 	*a = orderedAggregator{
 		input: op,
 
-		aggregateFuncs: aggregateFuncs,
-		aggCols:        aggCols,
-		aggTyps:        aggTyps,
-		outputTyps:     outputTyps,
-		groupCol:       groupCol,
+		aggCols:  aggCols,
+		aggTyps:  aggTyps,
+		groupCol: groupCol,
 	}
+
+	a.aggregateFuncs, a.outputTyps, err = makeAggregateFuncs(aggTyps, aggFns)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+func makeAggregateFuncs(
+	aggTyps [][]types.T, aggFns []distsqlpb.AggregatorSpec_Func,
+) ([]aggregateFunc, []types.T, error) {
+	funcs := make([]aggregateFunc, len(aggFns))
+	outTyps := make([]types.T, len(aggFns))
+
 	for i := range aggFns {
 		var err error
 		switch aggFns[i] {
 		case distsqlpb.AggregatorSpec_ANY_NOT_NULL:
-			a.aggregateFuncs[i], err = newAnyNotNullAgg(aggTyps[i][0])
+			funcs[i], err = newAnyNotNullAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_AVG:
-			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
+			funcs[i], err = newAvgAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
-			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_COUNT_ROWS:
-			a.aggregateFuncs[i] = newCountAgg()
+			funcs[i] = newCountAgg()
 		default:
-			return nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
+			return nil, nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
 		}
 
 		// Set the output type of the aggregate.
@@ -190,18 +201,18 @@ func NewOrderedAggregator(
 		case distsqlpb.AggregatorSpec_COUNT_ROWS:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
-			a.outputTyps[i] = types.Int64
+			outTyps[i] = types.Int64
 		default:
 			// Output types are the input types for now.
-			a.outputTyps[i] = a.aggTyps[i][0]
+			outTyps[i] = aggTyps[i][0]
 		}
 
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return a, nil
+	return funcs, outTyps, nil
 }
 
 func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
@@ -278,4 +289,32 @@ func (a *orderedAggregator) Reset() {
 	for _, fn := range a.aggregateFuncs {
 		fn.Reset()
 	}
+}
+
+// extractGroupTypes returns an array representing the type corresponding to
+// each group column. This information is extracted from the group column
+// indices and their corresponding column types.
+func extractGroupTypes(groupCols []uint32, colTypes []types.T) []types.T {
+	groupTyps := make([]types.T, len(groupCols))
+
+	for i, colIdx := range groupCols {
+		groupTyps[i] = colTypes[colIdx]
+	}
+
+	return groupTyps
+}
+
+// extractAggTypes returns a nested array representing the input types
+// corresponding to each aggregation function.
+func extractAggTypes(aggCols [][]uint32, colTypes []types.T) [][]types.T {
+	aggTyps := make([][]types.T, len(aggCols))
+
+	for aggIdx := range aggCols {
+		aggTyps[aggIdx] = make([]types.T, len(aggCols[aggIdx]))
+		for i, colIdx := range aggCols[aggIdx] {
+			aggTyps[aggIdx][i] = colTypes[colIdx]
+		}
+	}
+
+	return aggTyps
 }

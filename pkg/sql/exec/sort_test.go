@@ -187,10 +187,10 @@ func BenchmarkSort(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*ColBatchSize, nCols), func(b *testing.B) {
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*int(ColBatchSize), nCols), func(b *testing.B) {
 				// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+				b.SetBytes(int64(8 * nBatches * int(ColBatchSize) * nCols))
 				typs := make([]types.T, nCols)
 				for i := range typs {
 					typs[i] = types.Int64
@@ -203,7 +203,7 @@ func BenchmarkSort(b *testing.B) {
 					ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 
 					col := batch.ColVec(i).Int64()
-					for j := 0; i < ColBatchSize; i++ {
+					for j := uint16(0); i < int(ColBatchSize); i++ {
 						col[j] = rng.Int63() % int64((j*1024)+1)
 					}
 				}
