@@ -1465,14 +1465,10 @@ func (r *batchIterator) MVCCGet(
 }
 
 func (r *batchIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
+	return r.iter.MVCCScan(start, end, max, timestamp, opts)
 }
 
 func (r *batchIterator) SetUpperBound(key roachpb.Key) {
@@ -2292,13 +2288,9 @@ func (r *rocksDBIterator) MVCCGet(
 }
 
 func (r *rocksDBIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	if !consistent && txn != nil {
+	if opts.Inconsistent && opts.Txn != nil {
 		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(end) == 0 {
@@ -2313,13 +2305,13 @@ func (r *rocksDBIterator) MVCCScan(
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
-		goToCTxn(txn), C.bool(consistent), C.bool(reverse), C.bool(tombstones),
+		goToCTxn(opts.Txn), C.bool(!opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
 		return nil, 0, nil, nil, err
 	}
-	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
 		return nil, 0, nil, nil, err
 	}
 
@@ -2327,7 +2319,7 @@ func (r *rocksDBIterator) MVCCScan(
 	numKVs = int64(state.data.count)
 
 	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
-		if reverse {
+		if opts.Reverse {
 			resumeSpan = &roachpb.Span{Key: start, EndKey: roachpb.Key(resumeKey).Next()}
 		} else {
 			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: end}
@@ -2338,7 +2330,7 @@ func (r *rocksDBIterator) MVCCScan(
 	if err != nil {
 		return nil, 0, nil, nil, err
 	}
-	if consistent && len(intents) > 0 {
+	if !opts.Inconsistent && len(intents) > 0 {
 		// When encountering intents during a consistent scan we still need to
 		// return the resume key.
 		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}

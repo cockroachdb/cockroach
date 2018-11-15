@@ -160,10 +160,6 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 		iter.Close()
 	}
 
-	scan := MVCCScan
-	if reverse {
-		scan = MVCCReverseScan
-	}
 	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
@@ -177,7 +173,9 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := scan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, nil)
+		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, endKey, int64(numRows), ts, MVCCScanOptions{
+			Reverse: reverse,
+		})
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}

@@ -505,8 +505,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	var descs []roachpb.RangeDescriptor
 
 	if _, err := engine.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
-		false /* consistent */, false /* tombstones */, nil, /* txn */
-		false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
+		engine.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
 			var desc roachpb.RangeDescriptor
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 			if err != nil {
@@ -652,8 +651,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 	var hasError bool
 
 	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
-		false /* consistent */, false /* tombstones */, nil, /* txn */
-		false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
+		engine.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
 			if err != nil {
 				return false, err
