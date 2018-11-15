@@ -37,17 +37,12 @@ project
 opt expect=FoldArray
 SELECT ARRAY['foo', 'bar']
 ----
-project
- ├── columns: array:1(string[]!null)
+values
+ ├── columns: array:1(string[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: ARRAY['foo','bar'] [type=string[]]
+ └── (ARRAY['foo','bar'],) [type=tuple{string[]}]
 
 # --------------------------------------------------
 # FoldBinary
@@ -57,274 +52,189 @@ project
 opt expect=FoldBinary
 SELECT 1::INT + 2::DECIMAL
 ----
-project
- ├── columns: "?column?":1(decimal!null)
+values
+ ├── columns: "?column?":1(decimal)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 3 [type=decimal]
+ └── (3,) [type=tuple{decimal}]
 
 # Don't fold: out of range error.
 opt expect-not=FoldBinary
 SELECT 9223372036854775800::INT + 9223372036854775800::INT
 ----
-project
+values
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── 9223372036854775800 + 9223372036854775800 [type=int]
+ └── (9223372036854775800 + 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT 1::INT - 2::INT
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: -1 [type=int]
+ └── (-1,) [type=tuple{int}]
 
 # Don't fold: out of range error.
 opt expect-not=FoldBinary
 SELECT (-9223372036854775800)::INT - 9223372036854775800::INT
 ----
-project
+values
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── -9223372036854775800 - 9223372036854775800 [type=int]
+ └── (-9223372036854775800 - 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT 4::INT * 2::INT
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 8 [type=int]
+ └── (8,) [type=tuple{int}]
 
 # Don't fold: out of range error.
 opt expect-not=FoldBinary
 SELECT 9223372036854775800::INT * 9223372036854775800::INT
 ----
-project
+values
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── 9223372036854775800 * 9223372036854775800 [type=int]
+ └── (9223372036854775800 * 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT 1::FLOAT / 2::FLOAT
 ----
-project
- ├── columns: "?column?":1(float!null)
+values
+ ├── columns: "?column?":1(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 0.5 [type=float]
+ └── (0.5,) [type=tuple{float}]
 
 # Don't fold: divide by zero error.
 opt expect-not=FoldBinary
 SELECT 1::INT / 0::INT
 ----
-project
+values
  ├── columns: "?column?":1(decimal)
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── 1 / 0 [type=decimal, side-effects]
+ └── (1 / 0,) [type=tuple{decimal}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT B'01' # B'11'
 ----
-project
- ├── columns: "?column?":1(varbit!null)
+values
+ ├── columns: "?column?":1(varbit)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: B'10' [type=varbit]
+ └── (B'10',) [type=tuple{varbit}]
 
 # Don't fold: cannot mix bit array sizes error.
 opt expect-not=FoldBinary
 SELECT B'01' # B'11001001010101'
 ----
-project
+values
  ├── columns: "?column?":1(varbit)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── B'01' # B'11001001010101' [type=varbit]
+ └── (B'01' # B'11001001010101',) [type=tuple{varbit}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT B'01' | B'11'
 ----
-project
- ├── columns: "?column?":1(varbit!null)
+values
+ ├── columns: "?column?":1(varbit)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: B'11' [type=varbit]
+ └── (B'11',) [type=tuple{varbit}]
 
 # Don't fold: cannot mix bit array sizes error.
 opt expect-not=FoldBinary
 SELECT B'01' | B'11001001010101'
 ----
-project
+values
  ├── columns: "?column?":1(varbit)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── B'01' | B'11001001010101' [type=varbit]
+ └── (B'01' | B'11001001010101',) [type=tuple{varbit}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMP
 ----
-project
- ├── columns: "?column?":1(interval!null)
+values
+ ├── columns: "?column?":1(interval)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: '-24:00:00' [type=interval]
+ └── ('-24:00:00',) [type=tuple{interval}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMPTZ
 ----
-project
- ├── columns: "?column?":1(interval!null)
+values
+ ├── columns: "?column?":1(interval)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: '-21:00:00' [type=interval]
+ └── ('-21:00:00',) [type=tuple{interval}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT ARRAY['a','b','c'] || 'd'
 ----
-project
- ├── columns: "?column?":1(string[]!null)
+values
+ ├── columns: "?column?":1(string[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: ARRAY['a','b','c','d'] [type=string[]]
+ └── (ARRAY['a','b','c','d'],) [type=tuple{string[]}]
 
 # Fold constant.
 opt expect=FoldBinary
 SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
 ----
-project
- ├── columns: "?column?":1(string[]!null)
+values
+ ├── columns: "?column?":1(string[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: ARRAY['a','b','c','d','e','f'] [type=string[]]
+ └── (ARRAY['a','b','c','d','e','f'],) [type=tuple{string[]}]
 
 # NULL should not be added to the array.
 opt expect=FoldBinary
 SELECT ARRAY[1,2,3] || NULL
 ----
-project
- ├── columns: "?column?":1(int[]!null)
+values
+ ├── columns: "?column?":1(int[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: ARRAY[1,2,3] [type=int[]]
+ └── (ARRAY[1,2,3],) [type=tuple{int[]}]
 
 # --------------------------------------------------
 # FoldUnary
@@ -332,94 +242,66 @@ project
 opt expect=FoldUnary
 SELECT -(1:::int)
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: -1 [type=int]
+ └── (-1,) [type=tuple{int}]
 
 opt expect=FoldUnary
 SELECT -(1:::float)
 ----
-project
- ├── columns: "?column?":1(float!null)
+values
+ ├── columns: "?column?":1(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: -1.0 [type=float]
+ └── (-1.0,) [type=tuple{float}]
 
 # TODO(justin): it would be better if this produced an error in the optimizer
 # rather than falling back to execution to error.
 opt expect-not=FoldUnary format=show-all
 SELECT -((-9223372036854775808)::int)
 ----
-project
+values
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{int}]
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
 
 opt expect=FoldUnary format=show-all
 SELECT -(1:::decimal)
 ----
-project
- ├── columns: "?column?":1(decimal!null)
+values
+ ├── columns: "?column?":1(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{decimal}]
       └── const: -1 [type=decimal]
 
 opt expect=FoldUnary format=show-all
 SELECT -('-1d'::interval);
 ----
-project
- ├── columns: "?column?":1(interval!null)
+values
+ ├── columns: "?column?":1(interval)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{interval}]
       └── const: '1 day' [type=interval]
 
 # TODO(justin): this seems incorrect but it's consistent with the existing
@@ -427,49 +309,34 @@ project
 opt expect=FoldUnary
 SELECT -('-9223372036854775808d'::interval);
 ----
-project
- ├── columns: "?column?":1(interval!null)
+values
+ ├── columns: "?column?":1(interval)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: '-9223372036854775808 days' [type=interval]
+ └── ('-9223372036854775808 days',) [type=tuple{interval}]
 
 # Fold constant.
 opt expect=FoldUnary
 SELECT ~(500::INT)
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: -501 [type=int]
+ └── (-501,) [type=tuple{int}]
 
 # Fold constant.
 opt expect=FoldUnary
 SELECT ~('35.231.178.195'::INET)
 ----
-project
- ├── columns: "?column?":1(inet!null)
+values
+ ├── columns: "?column?":1(inet)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: '220.24.77.60' [type=inet]
+ └── ('220.24.77.60',) [type=tuple{inet}]
 
 # --------------------------------------------------
 # FoldComparison
@@ -479,94 +346,64 @@ project
 opt expect=FoldComparison
 SELECT 1::INT < 2::INT
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # Fold constant.
 opt expect=FoldComparison
 SELECT 2.0::DECIMAL = 2::INT
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # Fold constant.
 opt expect=FoldComparison
 SELECT 100 IS NOT DISTINCT FROM 200
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]
 
 # Fold constant.
 opt expect=FoldComparison
 SELECT 'foo' IN ('a', 'b', 'c')
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]
 
 # Fold constant.
 opt expect=FoldComparison
 SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # Fold constant.
 opt expect=FoldComparison
 SELECT ('a', 'b', 'c') = ('d', 'e', 'f')
 ----
-project
- ├── columns: "?column?":1(bool!null)
+values
+ ├── columns: "?column?":1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]

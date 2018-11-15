@@ -58,37 +58,23 @@ sort
 opt perturb-cost=(0.9)
 SELECT 1
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 1 [type=int]
+ └── (1,) [type=tuple{int}]
 
 opt perturb-cost=(2.5)
 SELECT 1
 ----
-project
- ├── columns: "?column?":1(int!null)
+values
+ ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 1 [type=int]
+ └── (1,) [type=tuple{int}]

@@ -766,11 +766,9 @@ error: arrays of jsonb not allowed
 opt
 SELECT -((-9223372036854775808):::int)
 ----
-project
+values
  ├── columns: "?column?":1(int)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{int}]
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
 
