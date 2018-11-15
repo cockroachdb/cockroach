@@ -143,7 +143,7 @@ func (p *sortOp) Next() ColBatch {
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
-		newEmitted := p.emitted + ColBatchSize
+		newEmitted := p.emitted + uint64(ColBatchSize)
 		if newEmitted > p.spooledTuples {
 			newEmitted = p.spooledTuples
 		}
