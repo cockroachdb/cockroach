@@ -5163,7 +5163,12 @@ func (r *Replica) maybeDropMsgAppResp(ctx context.Context, msg raftpb.Message) b
 	}
 
 	if ticks > r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
-		log.Infof(ctx, "allowing MsgAppResp for uninitialized replica")
+		log.Infof(
+			ctx,
+			"allowing MsgAppResp for uninitialized replica (%d > %d ticks)",
+			ticks,
+			r.store.cfg.RaftPostSplitSuppressSnapshotTicks,
+		)
 		return false
 	}
 
