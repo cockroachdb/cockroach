@@ -15,6 +15,9 @@
 package sql
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -45,7 +48,11 @@ func (l *LogicalSchemaAccessor) IsValidSchema(dbDesc *DatabaseDescriptor, scName
 
 // GetObjectNames implements the DatabaseLister interface.
 func (l *LogicalSchemaAccessor) GetObjectNames(
-	dbDesc *DatabaseDescriptor, scName string, flags DatabaseListFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	dbDesc *DatabaseDescriptor,
+	scName string,
+	flags DatabaseListFlags,
 ) (TableNames, error) {
 	if entry, ok := l.vt.getVirtualSchemaEntry(scName); ok {
 		names := make(TableNames, len(entry.orderedDefNames))
@@ -60,12 +67,12 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectNames(dbDesc, scName, flags)
+	return l.SchemaAccessor.GetObjectNames(ctx, txn, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
-	name *ObjectName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
 ) (ObjectDescriptor, *DatabaseDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
@@ -87,5 +94,5 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectDesc(name, flags)
+	return l.SchemaAccessor.GetObjectDesc(ctx, txn, name, flags)
 }

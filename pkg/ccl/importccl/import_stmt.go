@@ -318,14 +318,12 @@ func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CommonLookupFlags(ctx context.Context, required bool) sql.CommonLookupFlags {
+func (r fkResolver) CommonLookupFlags(required bool) sql.CommonLookupFlags {
 	return sql.CommonLookupFlags{}
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) ObjectLookupFlags(
-	ctx context.Context, required bool, requireMutable bool,
-) sql.ObjectLookupFlags {
+func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) sql.ObjectLookupFlags {
 	return sql.ObjectLookupFlags{}
 }
 

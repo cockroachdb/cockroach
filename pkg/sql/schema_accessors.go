@@ -79,7 +79,7 @@ type SchemaAccessor interface {
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
-	GetDatabaseDesc(dbName string, flags DatabaseLookupFlags) (*DatabaseDescriptor, error)
+	GetDatabaseDesc(ctx context.Context, txn *client.Txn, dbName string, flags DatabaseLookupFlags) (*DatabaseDescriptor, error)
 
 	// IsValidSchema returns true if the given schema name is valid for the given database.
 	IsValidSchema(db *DatabaseDescriptor, scName string) bool
@@ -88,7 +88,7 @@ type SchemaAccessor interface {
 	// database and schema.
 	// TODO(whomever): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
-	GetObjectNames(db *DatabaseDescriptor, scName string, flags DatabaseListFlags) (TableNames, error)
+	GetObjectNames(ctx context.Context, txn *client.Txn, db *DatabaseDescriptor, scName string, flags DatabaseListFlags) (TableNames, error)
 
 	// GetObjectDesc looks up an objcet by name and returns both its
 	// descriptor and that of its parent database. If the object is not
@@ -100,13 +100,11 @@ type SchemaAccessor interface {
 	// It is not guaranteed to be non-nil even if the first return value
 	// is non-nil.  Callers that need a database descriptor can use that
 	// to avoid an extra roundtrip through a DatabaseAccessor.
-	GetObjectDesc(name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, *DatabaseDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, *DatabaseDescriptor, error)
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.
 type CommonLookupFlags struct {
-	ctx context.Context
-	txn *client.Txn
 	// if required is set, lookup will return an error if the item is not found.
 	required bool
 	// if avoidCached is set, lookup will avoid the cache (if any).
