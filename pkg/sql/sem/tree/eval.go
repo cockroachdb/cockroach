@@ -3069,8 +3069,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return nil, err
 		}
 		if !unset {
-			err = LimitDecimalWidth(&dd.Decimal, typ.Prec, typ.Scale)
-			return &dd, err
+			var limited DDecimal
+			err = LimitDecimalWidth(&dd.Decimal, &limited.Decimal, typ.Prec, typ.Scale)
+			return &limited, err
 		}
 
 	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:

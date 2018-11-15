@@ -54,10 +54,13 @@ var (
 	errScaleOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
 )
 
-// LimitDecimalWidth limits d's precision (total number of digits) and scale
-// (number of digits after the decimal point).
-func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
-	if d.Form != apd.Finite || precision <= 0 {
+// LimitDecimalWidth limits in's precision (total number of digits) and scale
+// (number of digits after the decimal point). The resulting decimal is copied
+// to the out parameter. Note that it might not be a deep copy, so in and out
+// may still share underlying memory (i.e. they can't be independently mutated).
+func LimitDecimalWidth(in, out *apd.Decimal, precision, scale int) error {
+	if in.Form != apd.Finite || precision <= 0 {
+		*out = *in
 		return nil
 	}
 	// Use +1 here because it is inverted later.
@@ -79,7 +82,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 	c := DecimalCtx.WithPrecision(uint32(precision))
 	c.Traps = apd.InvalidOperation
 
-	if _, err := c.Quantize(d, d, -int32(scale)); err != nil {
+	if _, err := c.Quantize(out, in, -int32(scale)); err != nil {
 		var lt string
 		switch v := precision - scale; v {
 		case 0:
