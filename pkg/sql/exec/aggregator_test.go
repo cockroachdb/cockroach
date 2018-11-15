@@ -26,23 +26,21 @@ import (
 )
 
 var (
-	defaultGroupCols  = []uint32{0}
-	defaultGroupTypes = []types.T{types.Int64}
-	defaultAggCols    = [][]uint32{{1}}
-	defaultAggTypes   = [][]types.T{{types.Int64}}
-	defaultAggFns     = []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM}
+	defaultGroupCols = []uint32{0}
+	defaultAggCols   = [][]uint32{{1}}
+	defaultAggFns    = []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM}
+	defaultColTyps   = []types.T{types.Int64, types.Int64}
 )
 
 type aggregatorTestCase struct {
 	// groupCols, groupTypes, and aggCols will be set to their default values
 	// before running a test if nil.
-	groupCols  []uint32
-	groupTypes []types.T
-	aggFns     []distsqlpb.AggregatorSpec_Func
-	aggCols    [][]uint32
-	aggTypes   [][]types.T
-	input      tuples
-	expected   tuples
+	groupCols []uint32
+	colTypes  []types.T
+	aggFns    []distsqlpb.AggregatorSpec_Func
+	aggCols   [][]uint32
+	input     tuples
+	expected  tuples
 	// {output}BatchSize if not 0 are passed in to NewOrderedAggregator to
 	// divide input/output batches.
 	batchSize       int
@@ -85,17 +83,14 @@ func (tc *aggregatorTestCase) init() error {
 	if tc.groupCols == nil {
 		tc.groupCols = defaultGroupCols
 	}
-	if tc.groupTypes == nil {
-		tc.groupTypes = defaultGroupTypes
-	}
 	if tc.aggFns == nil {
 		tc.aggFns = defaultAggFns
 	}
 	if tc.aggCols == nil {
 		tc.aggCols = defaultAggCols
 	}
-	if tc.aggTypes == nil {
-		tc.aggTypes = defaultAggTypes
+	if tc.colTypes == nil {
+		tc.colTypes = defaultColTyps
 	}
 	if tc.batchSize == 0 {
 		tc.batchSize = coldata.BatchSize
@@ -219,7 +214,6 @@ func TestAggregatorOneFunc(t *testing.T) {
 			outputBatchSize: 1,
 			name:            "NoGroupingCols",
 			groupCols:       []uint32{},
-			groupTypes:      []types.T{},
 		},
 	}
 
@@ -232,7 +226,11 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input)
 			a, err := NewOrderedAggregator(
-				tupleSource, tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
+				tupleSource,
+				tc.colTypes,
+				tc.aggFns,
+				tc.groupCols,
+				tc.aggCols,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -250,7 +248,11 @@ func TestAggregatorOneFunc(t *testing.T) {
 			t.Run(fmt.Sprintf("Randomized"), func(t *testing.T) {
 				runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 					a, err := NewOrderedAggregator(
-						input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
+						input[0],
+						tc.colTypes,
+						tc.aggFns,
+						tc.groupCols,
+						tc.aggCols,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -272,13 +274,11 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
-			aggTypes: [][]types.T{
-				{types.Int64}, {types.Int64},
-			},
 			input: tuples{
 				{0, 1, 2},
 				{0, 1, 2},
 			},
+			colTypes: []types.T{types.Int64, types.Int64, types.Int64},
 			expected: tuples{
 				{4, 2},
 			},
@@ -289,15 +289,13 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
-			aggTypes: [][]types.T{
-				{types.Decimal}, {types.Int64},
-			},
 			input: tuples{
 				{0, 1, 1.3},
 				{0, 1, 1.6},
 				{0, 1, 0.5},
 				{1, 1, 1.2},
 			},
+			colTypes: []types.T{types.Int64, types.Int64, types.Decimal},
 			expected: tuples{
 				{3.4, 3},
 				{1.2, 1},
@@ -310,9 +308,6 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			aggCols: [][]uint32{
 				{1}, {1},
 			},
-			aggTypes: [][]types.T{
-				{types.Decimal}, {types.Decimal},
-			},
 			input: tuples{
 				{0, 1.1},
 				{0, 1.2},
@@ -320,6 +315,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{1, 6.21},
 				{1, 2.43},
 			},
+			colTypes: []types.T{types.Int64, types.Decimal},
 			expected: tuples{
 				{"1.5333333333333333333", 4.6},
 				{4.32, 8.64},
@@ -336,7 +332,11 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			}
 			runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 				a, err := NewOrderedAggregator(
-					input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
+					input[0],
+					tc.colTypes,
+					tc.aggFns,
+					tc.groupCols,
+					tc.aggCols,
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -360,7 +360,7 @@ func TestAggregatorKitchenSink(t *testing.T) {
 				distsqlpb.AggregatorSpec_SUM,
 			},
 			aggCols:  [][]uint32{{0}, {1}, {}, {2}},
-			aggTypes: [][]types.T{{types.Int64}, {types.Decimal}, {}, {types.Int64}},
+			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
 				{0, 3.1, 2},
 				{0, 1.1, 3},
@@ -387,7 +387,7 @@ func TestAggregatorKitchenSink(t *testing.T) {
 			}
 			runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 				a, err := NewOrderedAggregator(
-					input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
+					input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols,
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -428,11 +428,10 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 					source.resetBatchesToReturn(numInputBatches)
 					a, err := NewOrderedAggregator(
 						source,
-						[]uint32{0},
-						[]types.T{types.Int64},
+						[]types.T{types.Int64, types.Int64},
 						[]distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_COUNT_ROWS, distsqlpb.AggregatorSpec_SUM_INT},
+						[]uint32{0},
 						[][]uint32{{}, {1}},
-						[][]types.T{{}, {types.Int64}},
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -483,9 +482,10 @@ func BenchmarkAggregator(b *testing.B) {
 	} {
 		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
-			for _, groupSize := range []int{1, coldata.BatchSize / 2, coldata.BatchSize} {
+			for _, groupSize := range []int{1, 2, coldata.BatchSize / 2, coldata.BatchSize} {
 				for _, numInputBatches := range []int{1, 2, 64} {
-					batch := coldata.NewMemBatch([]types.T{types.Int64, types.Decimal})
+					colTypes := []types.T{types.Int64, types.Decimal}
+					batch := coldata.NewMemBatch(colTypes)
 					groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
 					curGroup := 0
 					for i := 0; i < coldata.BatchSize; i++ {
@@ -504,11 +504,10 @@ func BenchmarkAggregator(b *testing.B) {
 					}
 					a, err := NewOrderedAggregator(
 						source,
-						[]uint32{0},
-						[]types.T{types.Int64},
+						colTypes,
 						[]distsqlpb.AggregatorSpec_Func{aggFn},
+						[]uint32{0},
 						[][]uint32{[]uint32{1}[:nCols]},
-						[][]types.T{[]types.T{types.Decimal}[:nCols]},
 					)
 					if err != nil {
 						b.Fatal(err)
@@ -530,6 +529,187 @@ func BenchmarkAggregator(b *testing.B) {
 						},
 					)
 				}
+			}
+		})
+	}
+}
+
+func TestHashAggregator(t *testing.T) {
+	tcs := []aggregatorTestCase{
+		{
+			// Test carry between output batches.
+			input: tuples{
+				{0, 1},
+				{1, 5},
+				{0, 4},
+				{0, 2},
+				{2, 6},
+				{0, 3},
+				{0, 7},
+			},
+			colTypes:  []types.T{types.Int64, types.Int64},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{1}},
+
+			expected: tuples{
+				{5},
+				{6},
+				{17},
+			},
+
+			name: "carryBetweenBatches",
+		},
+		{
+			// Test a single row input source.
+			input: tuples{
+				{5},
+			},
+			colTypes:  []types.T{types.Int64},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}},
+
+			expected: tuples{
+				{5},
+			},
+
+			name: "singleRowInput",
+		},
+		{
+			// Test bucket collisions.
+			input: tuples{
+				{0, 3},
+				{0, 4},
+				{hashTableBucketSize, 6},
+				{0, 5},
+				{hashTableBucketSize, 7},
+			},
+			colTypes:  []types.T{types.Int64, types.Int64},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{1}},
+
+			expected: tuples{
+				{12},
+				{13},
+			},
+
+			name: "bucketCollision",
+		},
+		{
+			input: tuples{
+				{0, 1, 1.3},
+				{0, 1, 1.6},
+				{0, 1, 0.5},
+				{1, 1, 1.2},
+			},
+			colTypes:      []types.T{types.Int64, types.Int64, types.Decimal},
+			convToDecimal: true,
+
+			aggFns:    []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
+			groupCols: []uint32{0, 1},
+			aggCols: [][]uint32{
+				{2}, {1},
+			},
+
+			expected: tuples{
+				{3.4, 3},
+				{1.2, 1},
+			},
+
+			name: "decimalSums",
+		},
+		{
+			// Test unused input columns.
+			input: tuples{
+				{0, 1, 2, 3},
+				{0, 1, 4, 5},
+				{1, 1, 3, 7},
+				{1, 2, 4, 9},
+				{0, 1, 6, 11},
+				{1, 2, 6, 13},
+			},
+			colTypes:  []types.T{types.Int64, types.Int64, types.Int64, types.Int64},
+			groupCols: []uint32{0, 1},
+			aggCols:   [][]uint32{{3}},
+
+			expected: tuples{
+				{7},
+				{19},
+				{22},
+			},
+
+			name: "unusedInputCol",
+		},
+	}
+
+	for _, tc := range tcs {
+		if err := tc.init(); err != nil {
+			t.Fatal(err)
+		}
+		runTests(t, []tuples{tc.input}, func(t *testing.T, sources []Operator) {
+			ag, err := NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			nOutput := len(tc.aggCols)
+			cols := make([]int, nOutput)
+			for i := 0; i < nOutput; i++ {
+				cols[i] = i
+			}
+
+			out := newOpTestOutput(ag, cols, tc.expected)
+
+			if err := out.Verify(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func BenchmarkHashAggregator(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	nCols := 2
+	sourceTypes := []types.T{types.Int64, types.Decimal}
+
+	batch := coldata.NewMemBatch(sourceTypes)
+	groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
+	for i := 0; i < coldata.BatchSize; i++ {
+		decimals[i].SetInt64(rng.Int63())
+		groups[i] = int64(i)
+	}
+
+	batch.SetLength(coldata.BatchSize)
+	source := newRepeatableBatchSource(batch)
+
+	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{
+		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+		distsqlpb.AggregatorSpec_AVG,
+		distsqlpb.AggregatorSpec_COUNT_ROWS,
+		distsqlpb.AggregatorSpec_SUM,
+	} {
+		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
+		b.Run(fName, func(b *testing.B) {
+			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
+					b.ResetTimer()
+
+					agg, err := NewHashAggregator(source, sourceTypes, []distsqlpb.AggregatorSpec_Func{aggFn}, []uint32{0}, [][]uint32{{1}})
+					if err != nil {
+						b.Fatal(err)
+					}
+					agg.Init()
+
+					for i := 0; i < b.N; i++ {
+						agg.(*hashAggregator).Reset()
+						source.resetBatchesToReturn(nBatches)
+
+						for b := agg.Next(); b.Length() != 0; b = agg.Next() {
+						}
+					}
+				})
 			}
 		})
 	}
