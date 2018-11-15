@@ -298,18 +298,12 @@ project
 opt expect=(FoldNotTrue,FoldNotFalse)
 SELECT NOT(1=1), NOT(1=2)
 ----
-project
- ├── columns: "?column?":1(bool!null) "?column?":2(bool!null)
+values
+ ├── columns: "?column?":1(bool) "?column?":2(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── false [type=bool]
-      └── true [type=bool]
+ └── (false, true) [type=tuple{bool, bool}]
 
 # --------------------------------------------------
 # NegateComparison
