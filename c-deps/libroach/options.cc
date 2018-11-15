@@ -21,7 +21,7 @@
 #include "encoding.h"
 #include "godefs.h"
 #include "merge.h"
-#include "timebound.h"
+#include "table_props.h"
 
 namespace cockroach {
 
