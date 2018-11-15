@@ -875,7 +875,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ssts, err := rocksdb.getUserProperties()
+	ssts, err := rocksdb.GetUserProperties()
 	if err != nil {
 		t.Fatal(err)
 	}
