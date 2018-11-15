@@ -114,7 +114,9 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
 	txn.Status = roachpb.COMMITTED
 	txn.Timestamp.Forward(ts4)
-	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
+		Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +187,9 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
 	txn.Status = roachpb.COMMITTED
 	txn.Timestamp.Forward(ts4)
-	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
+		Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -254,9 +258,9 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	// push as it would happen for a SNAPSHOT txn)
 	ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
 	txn.Timestamp.Forward(ts4)
-	if err := MVCCResolveWriteIntent(
-		ctx, engine, aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta},
-	); err != nil {
+	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
+		Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -588,7 +592,9 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 		txn.Status = roachpb.ABORTED
 		txn.Timestamp.Forward(ts3)
-		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
+			Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+		}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -709,7 +715,9 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		txn := txn.Clone()
 
 		txn.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
-		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
+			Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+		}); err != nil {
 			t.Fatal(err)
 		}
 
