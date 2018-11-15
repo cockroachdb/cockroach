@@ -1139,9 +1139,9 @@ func (r *RocksDB) GetSortedWALFiles() ([]WALFileInfo, error) {
 	return res, nil
 }
 
-// getUserProperties fetches the user properties stored in each sstable's
+// GetUserProperties fetches the user properties stored in each sstable's
 // metadata.
-func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
+func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
 	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
 	var ssts enginepb.SSTUserPropertiesCollection
 	if err := protoutil.Unmarshal(buf, &ssts); err != nil {

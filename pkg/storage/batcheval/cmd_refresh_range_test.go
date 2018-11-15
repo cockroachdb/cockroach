@@ -17,7 +17,6 @@ package batcheval
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRefreshRangeTimeBoundIterator is a regression test for
@@ -58,109 +58,65 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	ts3 := hlc.Timestamp{WallTime: 3}
 	ts4 := hlc.Timestamp{WallTime: 4}
 
-	// Create an sstable containing an unresolved intent. To reduce the
-	// amount of knowledge of MVCC internals we must embed here, we
-	// write to a temporary engine and extract the RocksDB KV data. The
-	// sstable also contains an unrelated key at a higher timestamp to
-	// widen its bounds.
-	intentSSTContents := func() []byte {
-		db := engine.NewInMem(roachpb.Attributes{}, 10<<20)
-		defer db.Close()
-
-		txn := &roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       k,
-				ID:        uuid.MakeV4(),
-				Epoch:     1,
-				Timestamp: ts1,
-			},
-		}
-		if err := engine.MVCCPut(ctx, db, nil, k, txn.Timestamp, v, txn); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil); err != nil {
-			t.Fatal(err)
-		}
-
-		sstWriter, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatal(err)
-		}
-		it := db.NewIterator(engine.IterOptions{
-			UpperBound: keys.MaxKey,
-		})
-		defer it.Close()
-		it.Seek(engine.MVCCKey{Key: keys.MinKey})
-		for {
-			ok, err := it.Valid()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !ok {
-				break
-			}
-			if err := sstWriter.Add(engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
-				t.Fatal(err)
-			}
-			it.Next()
-		}
-
-		sstContents, err := sstWriter.Finish()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return sstContents
-	}()
-
-	// Create a second sstable containing the resolution of the intent
-	// (committed). This is a rocksdb tombstone and there's no good way
-	// to construct that as we did above, so we do it by hand. The
-	// sstable also has a second write at a different (older) timestamp,
-	// because if it were empty other than the deletion tombstone, it
-	// would not have any timestamp bounds and would be selected for
-	// every read.
-	resolveSSTContents := func() []byte {
-		sstWriter, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := sstWriter.Delete(engine.MakeMVCCMetadataKey(k)); err != nil {
-			t.Fatal(err)
-		}
-		if err := sstWriter.Add(engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
-				Key:       roachpb.Key("unused2"),
-				Timestamp: ts1,
-			},
-			Value: nil,
-		}); err != nil {
-			t.Fatal(err)
-		}
-		sstContents, err := sstWriter.Finish()
-		if err != nil {
-			t.Fatal(err)
-		}
-		return sstContents
-	}()
-
-	// Create a new DB and ingest our two sstables.
 	db := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	defer db.Close()
 
-	for i, contents := range [][]byte{intentSSTContents, resolveSSTContents} {
-		filename := fmt.Sprintf("intent-%d", i)
-		if err := db.WriteFile(filename, contents); err != nil {
-			t.Fatal(err)
-		}
-		if err := db.IngestExternalFiles(ctx, []string{filename}, true); err != nil {
-			t.Fatal(err)
-		}
+	// Create an sstable containing an unresolved intent.
+	txn := &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			Key:       k,
+			ID:        uuid.MakeV4(),
+			Epoch:     1,
+			Timestamp: ts1,
+		},
+	}
+	if err := engine.MVCCPut(ctx, db, nil, k, txn.Timestamp, v, txn); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Compact(); err != nil {
+		t.Fatal(err)
 	}
 
-	// We should now have a committed value at k@ts1. Read it back to make
-	// sure our fake intent resolution did the right thing.
+	// Create a second sstable containing the resolution of the intent
+	// (committed). The sstable also has a second write at a different (older)
+	// timestamp, because if it were empty other than the deletion tombstone, it
+	// would not have any timestamp bounds and would be selected for every read.
+	if err := engine.MVCCResolveWriteIntent(ctx, db, nil, roachpb.Intent{
+		Span:   roachpb.Span{Key: k},
+		Txn:    txn.TxnMeta,
+		Status: roachpb.COMMITTED,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused2"), ts1, v, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Double-check that we've created the SSTs we intended to.
+	userProps, err := db.GetUserProperties()
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Len(t, userProps.Sst, 2)
+	require.Equal(t, userProps.Sst[0].TsMin, &ts1)
+	require.Equal(t, userProps.Sst[0].TsMax, &ts4)
+	require.Equal(t, userProps.Sst[1].TsMin, &ts1)
+	require.Equal(t, userProps.Sst[1].TsMax, &ts1)
+
+	// We should now have a committed value at k@ts1. Read it back to make sure.
+	// This represents real-world use of time-bound iterators where callers must
+	// have previously performed a consistent read at the lower time-bound to
+	// prove that there are no intents present that would be missed by the time-
+	// bound iterator.
 	if val, intents, err := engine.MVCCGet(ctx, db, k, ts1, true, nil); err != nil {
 		t.Fatal(err)
 	} else if len(intents) > 0 {
@@ -178,7 +134,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// not the second and incorrectly report the intent as pending,
 	// resulting in an error from RefreshRange.
 	var resp roachpb.RefreshRangeResponse
-	_, err := RefreshRange(ctx, db, CommandArgs{
+	_, err = RefreshRange(ctx, db, CommandArgs{
 		Args: &roachpb.RefreshRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    k,
