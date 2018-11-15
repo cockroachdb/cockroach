@@ -152,7 +152,9 @@ func getDescriptor(
 	plainKey sqlbase.DescriptorKey,
 	descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
-	gr, err := txn.Get(ctx, plainKey.Key())
+	key := plainKey.Key()
+	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
+	gr, err := txn.Get(ctx, key)
 	if err != nil {
 		return false, err
 	}
@@ -174,6 +176,7 @@ func getDescriptor(
 func getDescriptorByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
 ) error {
+	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	desc := &sqlbase.Descriptor{}
 	if err := txn.GetProto(ctx, descKey, desc); err != nil {
@@ -208,6 +211,7 @@ func getDescriptorByID(
 
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
+	log.Eventf(ctx, "fetching all descriptors")
 	descsKey := sqlbase.MakeAllDescsMetadataKey()
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {
