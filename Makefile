@@ -701,7 +701,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/rowstovec.eg.go \
   pkg/sql/exec/selection_ops.eg.go \
   pkg/sql/exec/colvec.eg.go \
-  pkg/sql/exec/hashjoiner.eg.go
+  pkg/sql/exec/hashjoiner.eg.go \
+  pkg/sql/exec/sorter.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \

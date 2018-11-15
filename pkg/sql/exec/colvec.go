@@ -54,6 +54,9 @@ type ColVec interface {
 	// Col returns the raw, typeless backing storage for this ColVec.
 	Col() interface{}
 
+	// Len returns the length of this ColVec when it is treated as a colType.
+	Len(colType types.T) int
+
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
