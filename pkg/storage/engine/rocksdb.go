@@ -1470,7 +1470,7 @@ func (r *batchIterator) MVCCScan(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
 }
@@ -2297,12 +2297,16 @@ func (r *rocksDBIterator) MVCCScan(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if !consistent && txn != nil {
-		return nil, 0, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(end) == 0 {
-		return nil, 0, nil, emptyKeyError()
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
+		return nil, 0, resumeSpan, nil, nil
 	}
 
 	r.clearState()
@@ -2313,13 +2317,34 @@ func (r *rocksDBIterator) MVCCScan(
 	)
 
 	if err := statusToError(state.status); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
-	kvs = copyFromSliceVector(state.data.bufs, state.data.len)
-	return kvs, int64(state.data.count), cSliceToGoBytes(state.intents), nil
+
+	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
+	numKVs = int64(state.data.count)
+
+	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
+		if reverse {
+			resumeSpan = &roachpb.Span{Key: start, EndKey: roachpb.Key(resumeKey).Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: end}
+		}
+	}
+
+	intents, err = buildScanIntents(cSliceToGoBytes(state.intents))
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+	if consistent && len(intents) > 0 {
+		// When encountering intents during a consistent scan we still need to
+		// return the resume key.
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	return kvData, numKVs, resumeSpan, intents, nil
 }
 
 func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {

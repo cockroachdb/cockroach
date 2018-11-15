@@ -275,17 +275,12 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
                       bool consistent, bool tombstones) {
-  // Get is implemented as a scan where we retrieve a single key. Note
-  // that the semantics of max_keys is that we retrieve one more key
-  // than is specified in order to maintain the existing semantics of
-  // resume span. See storage/engine/mvcc.go:MVCCScan.
-  //
-  // We specify an empty key for the end key which will ensure we
-  // don't retrieve a key different than the start key. This is a bit
-  // of a hack.
+  // Get is implemented as a scan where we retrieve a single key. We specify an
+  // empty key for the end key which will ensure we don't retrieve a key
+  // different than the start key. This is a bit of a hack.
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
-  mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent,
+  mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, txn, consistent,
                              tombstones);
   return scanner.get();
 }
