@@ -243,12 +243,12 @@ Source expression:
    ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
-   ├── ordering: +1 opt(4)
+   ├── ordering: +1 opt(4) [provided: +1]
    ├── scan a@s_idx
    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
    │    ├── key: (1)
    │    ├── fd: (1)-->(2-4)
-   │    └── ordering: +1 opt(4)
+   │    └── ordering: +1 opt(4) [provided: +4,+1]
    └── filters
         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -258,14 +258,14 @@ New expression 1 of 2:
    ├── constraint: /4/1: [/'foo' - /'foo']
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
-   └── ordering: +1 opt(4)
+   └── ordering: +1 opt(4) [provided: +1]
 
 New expression 2 of 2:
   sort
    ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
-   ├── ordering: +1 opt(4)
+   ├── ordering: +1 opt(4) [provided: +1]
    └── index-join a
         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null)
         ├── key: (1)
@@ -380,7 +380,7 @@ TABLE abc
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized, ~2KB, required=[presentation: d:4] [ordering: +5])
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +5])
  ├── G1: (project G2 G3 d)
  │    ├── [presentation: d:4] [ordering: +5]
  │    │    ├── best: (sort G1)

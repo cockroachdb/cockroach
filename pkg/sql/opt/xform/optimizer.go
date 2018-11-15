@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -609,12 +610,12 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // required by each of those references.
 func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
 	var relParent memo.RelExpr
+	var relCost memo.Cost
 	switch t := parent.(type) {
 	case memo.RelExpr:
 		state := o.lookupOptState(t.FirstExpr(), parentProps)
-		relParent = state.best
+		relParent, relCost = state.best, state.cost
 		parent = relParent
-		o.mem.SetBestProps(relParent, parentProps, state.cost)
 
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
@@ -645,6 +646,14 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 			}
 			mutable.SetChild(i, after)
 		}
+	}
+
+	if relParent != nil {
+		var provided physical.Provided
+		// BuildProvided relies on ProvidedPhysical() being set in the children, so
+		// it must run after the recursive calls on the children.
+		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
+		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 
 	return parent
