@@ -40,7 +40,7 @@ add_library(roach
   options.cc
   snapshot.cc
   sst_dump.cc
-  timebound.cc
+  table_props.cc
   utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc

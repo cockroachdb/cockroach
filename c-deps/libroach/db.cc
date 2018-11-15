@@ -35,7 +35,7 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
-#include "timebound.h"
+#include "table_props.h"
 
 using namespace cockroach;
 
@@ -738,6 +738,7 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // timestamps present in each sstable in the metadata for that sstable. Used
   // by the time bounded iterator optimization.
   options->table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
+  // TODO(peter): DeleteRangeCollector
 
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
