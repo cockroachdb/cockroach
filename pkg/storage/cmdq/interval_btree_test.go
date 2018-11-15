@@ -516,6 +516,22 @@ func TestBTreeCmp(t *testing.T) {
 	}
 }
 
+func TestIterStack(t *testing.T) {
+	f := func(i int) iterFrame { return iterFrame{pos: int16(i)} }
+	var is iterStack
+	for i := 1; i <= 2*len(iterStackArr{}); i++ {
+		var j int
+		for j = 0; j < i; j++ {
+			is.push(f(j))
+		}
+		require.Equal(t, j, is.len())
+		for j--; j >= 0; j-- {
+			require.Equal(t, f(j), is.pop())
+		}
+		is.reset()
+	}
+}
+
 //////////////////////////////////////////
 //              Benchmarks              //
 //////////////////////////////////////////
@@ -592,6 +608,14 @@ func BenchmarkBTreeDeleteInsert(b *testing.B) {
 			tr.Set(cmd)
 		}
 	})
+}
+
+func BenchmarkBTreeMakeIter(b *testing.B) {
+	var tr btree
+	for i := 0; i < b.N; i++ {
+		it := tr.MakeIter()
+		it.First()
+	}
 }
 
 func BenchmarkBTreeIterSeekGE(b *testing.B) {
