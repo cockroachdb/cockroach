@@ -77,11 +77,11 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	phyAccessor := p.PhysicalSchemaAccessor()
-	lookupFlags := p.CommonLookupFlags(ctx, true /*required*/)
+	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.avoidCached = true
 	tbNames, err := phyAccessor.GetObjectNames(
-		dbDesc, tree.PublicSchema, DatabaseListFlags{
+		ctx, p.txn, dbDesc, tree.PublicSchema, DatabaseListFlags{
 			CommonLookupFlags: lookupFlags,
 			explicitPrefix:    true,
 		})
@@ -90,7 +90,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	}
 	lookupFlags.required = false
 	for i := range tbNames {
-		objDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
+		objDesc, _, err := phyAccessor.GetObjectDesc(ctx, p.txn, &tbNames[i],
 			ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
 			return err
