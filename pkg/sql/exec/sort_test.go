@@ -249,10 +249,10 @@ func BenchmarkSort(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize, nCols), func(b *testing.B) {
-				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*int(coldata.BatchSize), nCols), func(b *testing.B) {
+				// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
+				b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize) * nCols))
 				typs := make([]types.T, nCols)
 				for i := range typs {
 					typs[i] = types.Int64
