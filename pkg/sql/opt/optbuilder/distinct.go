@@ -99,13 +99,6 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// columns as optional.
 	private.Ordering.FromOrderingWithOptCols(inScope.ordering, distinctOnCols)
 
-	// TODO(radu): the execbuilder doesn't correctly handle orderings with
-	// optional columns that are not constant (#31882). The fix for that is
-	// involved; for now we don't set the grouping columns as optional. The
-	// exploration rule that looks at interesting orderings negates (or at least
-	// alleviates) the impact of restricting the Ordering in this way.
-	private.Ordering.Optional = opt.ColSet{}
-
 	// Set up a new scope for the output of DISTINCT ON. This scope differs from
 	// the input scope in that it doesn't have "extra" ORDER BY columns, e.g.
 	// column e in case 2 example:

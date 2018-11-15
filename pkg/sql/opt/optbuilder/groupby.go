@@ -161,13 +161,6 @@ func (b *Builder) constructGroupBy(
 	// ARRAY_AGG). So we add the grouping columns as optional columns.
 	private.Ordering.FromOrderingWithOptCols(ordering, groupingColSet)
 
-	// TODO(radu): the execbuilder doesn't correctly handle orderings with
-	// optional columns that are not constant (#31882). The fix for that is
-	// involved; for now we don't set the grouping columns as optional. The
-	// exploration rule that looks at interesting orderings negates (or at least
-	// alleviates) the impact of restricting the Ordering in this way.
-	private.Ordering.Optional = opt.ColSet{}
-
 	if groupingColSet.Empty() {
 		return b.factory.ConstructScalarGroupBy(input, aggs, &private)
 	}
