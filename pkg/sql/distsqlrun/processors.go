@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -596,6 +597,29 @@ const (
 	// stateDraining is the state in which the processor is forwarding metadata
 	// from its input and otherwise ignoring all rows. Once the input is
 	// exhausted, the processor will transition to stateTrailingMeta.
+	//
+	// In stateDraining, processors are required to swallow
+	// ReadWithinUncertaintyIntervalErrors received from its sources. We're
+	// already draining, so we don't care about whatever data generated this
+	// uncertainty error. Besides generally seeming like a good idea, doing this
+	// allows us to offer a nice guarantee to SQL clients: a read-only query that
+	// produces at most one row, run as an implicit txn, never produces retriable
+	// errors, regardless of the size of the row being returned (in relation to
+	// the size of the result buffer on the connection). One would naively expect
+	// that to be true: either the error happens before any rows have been
+	// delivered to the client, in which case the auto-retries kick in, or, if a
+	// row has been delivered, then the query is done and so how can there be an
+	// error? What our naive friend is ignoring is that, if it weren't for this
+	// code, it'd be possible for a retriable error to sneak in after the query's
+	// limit has been satisfied but while processors are still draining. Note
+	// that uncertainty errors are not retried automatically by the leaf
+	// TxnCoordSenders (i.e. by refresh txn interceptor).
+	//
+	// Other categories of errors might be safe to ignore too; however we
+	// can't ignore all of them. Generally, we need to ensure that all the
+	// trailing metadata (e.g. TxnCoordMeta's) make it to the gateway for
+	// successful flows. If an error is telling us that some metadata might
+	// have been dropped, we can't ignore that.
 	stateDraining
 
 	// stateTrailingMeta is the state in which the processor is outputting final
@@ -680,6 +704,19 @@ func (pb *ProcessorBase) DrainHelper() *ProducerMetadata {
 			continue
 		}
 		if meta != nil {
+			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
+			// stateDraining.
+			if err := meta.Err; err != nil {
+				// We only look for UnhandledRetryableErrors. Local reads (which would
+				// be transformed by the Root TxnCoordSender into
+				// HandledRetryableErrors) don't have any uncertainty.
+				if ure, ok := err.(*roachpb.UnhandledRetryableError); ok {
+					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
+					if uncertain != nil {
+						continue
+					}
+				}
+			}
 			return meta
 		}
 	}
