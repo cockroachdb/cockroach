@@ -435,7 +435,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return NewMutableExistingTableDescriptor(*table), nil
+	return sqlbase.NewMutableExistingTableDescriptor(*table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {

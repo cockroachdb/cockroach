@@ -583,7 +583,7 @@ func (r *fkSelfResolver) LookupObject(
 		tbName == r.newTableName.Table() {
 		table := r.newTableDesc
 		if requireMutable {
-			return true, NewMutableExistingTableDescriptor(*table), nil
+			return true, sqlbase.NewMutableExistingTableDescriptor(*table), nil
 		}
 		return true, table, nil
 	}

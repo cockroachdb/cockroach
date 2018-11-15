@@ -78,7 +78,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		tableName := name.Table()
 		if t, ok := scEntry.defs[tableName]; ok {
 			if flags.requireMutable {
-				return NewMutableExistingTableDescriptor(*t.desc), nil, nil
+				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil, nil
 			}
 			return t.desc, nil, nil
 		}

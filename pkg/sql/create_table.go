@@ -830,22 +830,6 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-// NewMutableCreatedTableDescriptor returns a MutableTableDescriptor from the
-// given TableDescriptor with the cluster version being the zero table. This
-// is for a table that is created in the transaction.
-func NewMutableCreatedTableDescriptor(tbl sqlbase.TableDescriptor) *sqlbase.MutableTableDescriptor {
-	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl}
-}
-
-// NewMutableExistingTableDescriptor returns a MutableTableDescriptor from the
-// given TableDescriptor with the cluster version also set to the descriptor.
-// This is for an existing table.
-func NewMutableExistingTableDescriptor(
-	tbl sqlbase.TableDescriptor,
-) *sqlbase.MutableTableDescriptor {
-	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
-}
-
 // InitTableDescriptor returns a blank TableDescriptor.
 func InitTableDescriptor(
 	id, parentID sqlbase.ID,
@@ -853,7 +837,7 @@ func InitTableDescriptor(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) sqlbase.MutableTableDescriptor {
-	return *NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
+	return *sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
 		ID:               id,
 		Name:             name,
 		ParentID:         parentID,

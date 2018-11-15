@@ -149,7 +149,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// return a descriptor during draining.
 			if nameMatchesTable(desc, dbDesc.ID, name.Table()) {
 				if flags.requireMutable {
-					return NewMutableExistingTableDescriptor(*desc), dbDesc, nil
+					return sqlbase.NewMutableExistingTableDescriptor(*desc), dbDesc, nil
 				}
 				return desc, dbDesc, nil
 			}
