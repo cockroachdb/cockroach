@@ -84,6 +84,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		[]string{
 			"us-east-2:ami-965e6bf3",
 			"us-west-2:ami-79873901",
+			"eu-west-2:ami-941e04f0",
 		},
 		"AMI images for each region")
 
@@ -106,6 +107,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"us-west-2a:subnet-fc46638b",
 			"us-west-2b:subnet-2910174c",
 			"us-west-2c:subnet-da2a5783",
+			"eu-west-2a:subnet-e98a6c92",
+			"eu-west-2b:subnet-3c754e76",
+			"eu-west-2c:subnet-7733c91e",
 		},
 		"Subnet id for zones in each region")
 
@@ -113,7 +117,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringSliceVar(&o.SecurityGroups, ProviderName+"-sg",
 		[]string{
 			"us-east-2:sg-06a4c809644e32920",
-			"us-west-2:sg-00dfe24958e988576"},
+			"us-west-2:sg-00dfe24958e988576",
+			"eu-west-2:sg-057f3842f5cec0576"},
 		"Security group id in each region")
 
 	// AWS images generally use "ubuntu" or "ec2-user"
