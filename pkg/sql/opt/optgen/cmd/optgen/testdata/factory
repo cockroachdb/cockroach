@@ -87,8 +87,7 @@ func (_f *Factory) ConstructSelect(
 			right := input.Child(1).(memo.RelExpr)
 			on := *input.Child(2).(*memo.FiltersExpr)
 			for i := range filters {
-				_item := &filters[i]
-				item := _item
+				item := &filters[i]
 				leftCols := _f.funcs.OutputCols(left)
 				if _f.funcs.IsBoundBy(item, leftCols) {
 					if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoJoinLeft) {

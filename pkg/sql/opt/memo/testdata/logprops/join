@@ -70,9 +70,10 @@ project
  ├── columns: column1:7(int)
  ├── prune: (7)
  ├── inner-join-apply
- │    ├── columns: x:1(int!null) y:2(int) column1:5(int)
+ │    ├── columns: x:1(int!null) y:2(int) column1:5(int) column1:6(int)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,5)
+ │    ├── fd: (1)-->(2,5,6)
+ │    ├── prune: (6)
  │    ├── interesting orderings: (+1)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int)
@@ -80,24 +81,41 @@ project
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
  │    │    └── interesting orderings: (+1)
- │    ├── max1-row
- │    │    ├── columns: column1:5(int)
+ │    ├── inner-join-apply
+ │    │    ├── columns: column1:5(int) column1:6(int)
  │    │    ├── outer: (1,2)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(5)
- │    │    └── values
- │    │         ├── columns: column1:5(int)
- │    │         ├── outer: (1,2)
- │    │         ├── cardinality: [2 - 2]
- │    │         ├── prune: (5)
- │    │         ├── tuple [type=tuple{int}]
- │    │         │    └── variable: x [type=int]
- │    │         └── tuple [type=tuple{int}]
- │    │              └── variable: y [type=int]
+ │    │    ├── fd: ()-->(5,6)
+ │    │    ├── prune: (6)
+ │    │    ├── max1-row
+ │    │    │    ├── columns: column1:5(int)
+ │    │    │    ├── outer: (1,2)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(5)
+ │    │    │    └── values
+ │    │    │         ├── columns: column1:5(int)
+ │    │    │         ├── outer: (1,2)
+ │    │    │         ├── cardinality: [2 - 2]
+ │    │    │         ├── prune: (5)
+ │    │    │         ├── tuple [type=tuple{int}]
+ │    │    │         │    └── variable: x [type=int]
+ │    │    │         └── tuple [type=tuple{int}]
+ │    │    │              └── variable: y [type=int]
+ │    │    ├── values
+ │    │    │    ├── columns: column1:6(int)
+ │    │    │    ├── outer: (5)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(6)
+ │    │    │    ├── prune: (6)
+ │    │    │    └── tuple [type=tuple{int}]
+ │    │    │         └── variable: column1 [type=int]
+ │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      └── variable: column1 [type=int, outer=(5)]
+      └── variable: column1 [type=int, outer=(6)]
 
 # Inner-join-apply nested in inner-join-apply with outer column references to
 # each parent.

@@ -210,21 +210,12 @@ SELECT
     null::oidvector,
     null::int2vector
 ----
-project
+values
  ├── columns: int:1(int) timestamptz:2(timestamptz) char:3(string) oidvector:4(oid[]) int2vector:5(int[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── null [type=int]
-      ├── null [type=timestamptz]
-      ├── null [type=string]
-      ├── null [type=oid[]]
-      └── null [type=int[]]
+ └── (NULL, NULL, NULL, NULL, NULL) [type=tuple{int, timestamptz, string, oid[], int[]}]
 
 # --------------------------------------------------
 # FoldNullUnary
@@ -569,47 +560,32 @@ select
 opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 1 THEN 'one' END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'one' [type=string]
+ └── ('one',) [type=tuple{string}]
 
 opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN 1 = 1 THEN 'one' END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'one' [type=string]
+ └── ('one',) [type=tuple{string}]
 
 opt expect=SimplifyCaseWhenConstValue
 SELECT CASE false WHEN 0 = 1 THEN 'one' END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'one' [type=string]
+ └── ('one',) [type=tuple{string}]
 
 # Verify that a true condition does not remove non-constant expressions
 # proceeding it.
@@ -649,17 +625,12 @@ project
 opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'three' [type=string]
+ └── ('three',) [type=tuple{string}]
 
 opt expect=SimplifyCaseWhenConstValue
 SELECT
@@ -689,17 +660,12 @@ SELECT
     ELSE 'five'
     END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'three' [type=string]
+ └── ('three',) [type=tuple{string}]
 
 opt expect=SimplifyCaseWhenConstValue
 SELECT
@@ -710,32 +676,22 @@ SELECT
     ELSE 'four'
     END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'four' [type=string]
+ └── ('four',) [type=tuple{string}]
 
 opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
 ----
-project
- ├── columns: case:1(string!null)
+values
+ ├── columns: case:1(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'two' [type=string]
+ └── ('two',) [type=tuple{string}]
 
 # --------------------------------------------------
 # UnifyComparisonTypes
@@ -1117,47 +1073,32 @@ select
 norm expect=FoldCollate
 SELECT 'hello' COLLATE en_u_ks_level1
 ----
-project
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+values
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+ └── ('hello' COLLATE en_u_ks_level1,) [type=tuple{collatedstring{en_u_ks_level1}}]
 
 norm expect=FoldCollate
 SELECT ('hello' COLLATE en_u_ks_level1) COLLATE en_u_ks_level1
 ----
-project
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+values
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+ └── ('hello' COLLATE en_u_ks_level1,) [type=tuple{collatedstring{en_u_ks_level1}}]
 
 norm expect=FoldCollate
 SELECT ('hello' COLLATE en) COLLATE en_u_ks_level1
 ----
-project
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+values
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+ └── ('hello' COLLATE en_u_ks_level1,) [type=tuple{collatedstring{en_u_ks_level1}}]
 
 norm expect-not=FoldCollate
 SELECT s COLLATE en_u_ks_level1 FROM a

@@ -550,6 +550,46 @@ func (c *CustomFuncs) MergeProjections(
 	return newProjections
 }
 
+// MergeProjectWithValues merges a Project operator with its input Values
+// operator. This is only possible in certain circumstances, which are described
+// in the MergeProjectWithValues rule comment.
+//
+// Values columns that are part of the Project passthrough columns are retained
+// in the final Values operator, and Project synthesized columns are added to
+// it. Any unreferenced Values columns are discarded. For example:
+//
+//   SELECT column1, 3 FROM (VALUES (1, 2))
+//   =>
+//   (VALUES (1, 3))
+//
+func (c *CustomFuncs) MergeProjectWithValues(
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, input memo.RelExpr,
+) memo.RelExpr {
+	newExprs := make(memo.ScalarListExpr, 0, len(projections)+passthrough.Len())
+	newTypes := make([]types.T, 0, len(newExprs))
+	newCols := make(opt.ColList, 0, len(newExprs))
+
+	values := input.(*memo.ValuesExpr)
+	tuple := values.Rows[0].(*memo.TupleExpr)
+	for i, colID := range values.Cols {
+		if passthrough.Contains(int(colID)) {
+			newExprs = append(newExprs, tuple.Elems[i])
+			newTypes = append(newTypes, tuple.Elems[i].DataType())
+			newCols = append(newCols, colID)
+		}
+	}
+
+	for i := range projections {
+		item := &projections[i]
+		newExprs = append(newExprs, item.Element)
+		newTypes = append(newTypes, item.Element.DataType())
+		newCols = append(newCols, item.Col)
+	}
+
+	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, types.TTuple{Types: newTypes})}
+	return c.f.ConstructValues(rows, newCols)
+}
+
 // ProjectionCols returns the ids of the columns synthesized by the given
 // Projections operator.
 func (c *CustomFuncs) ProjectionCols(projections memo.ProjectionsExpr) opt.ColSet {
@@ -568,6 +608,19 @@ func (c *CustomFuncs) ProjectionOuterCols(projections memo.ProjectionsExpr) opt.
 		colSet.UnionWith(projections[i].ScalarProps(c.mem).OuterCols)
 	}
 	return colSet
+}
+
+// AreProjectionsCorrelated returns true if any element in the projections
+// references any of the given columns.
+func (c *CustomFuncs) AreProjectionsCorrelated(
+	projections memo.ProjectionsExpr, cols opt.ColSet,
+) bool {
+	for i := range projections {
+		if projections[i].ScalarProps(c.mem).OuterCols.Intersects(cols) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProjectColMapLeft returns a Projections operator that maps the left side

@@ -24,27 +24,27 @@ render     ·      ·
 query TTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-tree           field     description  columns  ordering
-render         ·         ·            (a)      ·
- │             render 0  1            ·        ·
- └── emptyrow  ·         ·            ()       ·
+tree    field          description      columns  ordering
+values  ·              ·                (a)      ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  1                ·        ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-tree           field     description  columns  ordering
-render         ·         ·            (a)      ·
- │             render 0  1            ·        ·
- └── emptyrow  ·         ·            ()       ·
+tree    field          description      columns  ordering
+values  ·              ·                (a)      ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  1                ·        ·
 
 
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT 1 a
 ----
-tree           field     description  columns  ordering
-render         ·         ·            (a int)  ·
- │             render 0  (1)[int]     ·        ·
- └── emptyrow  ·         ·            ()       ·
+tree    field          description      columns  ordering
+values  ·              ·                (a int)  ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  (1)[int]         ·        ·
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -420,9 +420,9 @@ count             ·              ·                 ()                         
 query TTTTT
 EXPLAIN (TYPES) SELECT 42 AS a
 ----
-render         ·         ·          (a int)  ·
- │             render 0  (42)[int]  ·        ·
- └── emptyrow  ·         ·          ()       ·
+values  ·              ·                (a int)  ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  (42)[int]        ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t
@@ -569,36 +569,32 @@ scan  ·       ·                                                               
 query TTTTT
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-render         ·         ·         (a int)  ·
- │             render 0  (1)[int]  ·        ·
- └── emptyrow  ·         ·         ()       ·
+values  ·              ·                (a int)  ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  (1)[int]         ·        ·
 
 # Check array subscripts (#13811)
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-render         ·         ·         (x int)  ·
- │             render 0  (1)[int]  ·        ·
- └── emptyrow  ·         ·         ()       ·
+render       ·              ·                                           (x int)    ·
+ │           render 0       ((x)[int[]][(1)[int]])[int]                 ·          ·
+ └── values  ·              ·                                           (x int[])  ·
+·            size           1 column, 1 row                             ·          ·
+·            row 0, expr 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·          ·
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r
 ----
-project
- ├── columns: r:1(int!null)
+values
+ ├── columns: r:1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.05
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{int}]
       └── const: 1 [type=int]
 
 # Test with an unsupported statement.
