@@ -508,10 +508,21 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 				if completedSpans.Contains(kv.Key) {
 					continue
 				}
-				if sampleAll || keys.IsDescriptorKey(kv.Key) || fn(kv) {
-					row := sqlbase.EncDatumRow{
-						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+
+				rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
+				if rowRequired || fn(kv) {
+					var row sqlbase.EncDatumRow
+					if rowRequired {
+						row = sqlbase.EncDatumRow{
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+						}
+					} else {
+						// Don't send the value for rows returned for sampling
+						row = sqlbase.EncDatumRow{
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+						}
 					}
 
 					cs, err := cp.out.EmitRow(ctx, row)
