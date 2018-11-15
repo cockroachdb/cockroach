@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -83,6 +84,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		return nil, nil
 	}
 
+	log.Eventf(flags.ctx, "fetching list of objects for %q", dbDesc.Name)
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := flags.txn.Scan(flags.ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
