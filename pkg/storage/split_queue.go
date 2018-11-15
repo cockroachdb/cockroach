@@ -223,7 +223,6 @@ func (sq *splitQueue) processAttempt(
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
-		r.splitMu.splitFinder = nil
 		return nil
 	}
 	return nil
