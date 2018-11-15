@@ -23,4 +23,11 @@ namespace cockroach {
 // sstable. Used by the time bounded iterator optimization.
 rocksdb::TablePropertiesCollectorFactory* DBMakeTimeBoundCollector();
 
+// DBMakeDeleteRangeCollector returns a TablePropertiesCollector hook
+// to mark sstables for compaction that contain range deletion
+// tombstones. This ensures that range deletion tombstones are quickly
+// compacted out of existence and the space for deleted data is
+// reclaimed.
+rocksdb::TablePropertiesCollectorFactory* DBMakeDeleteRangeCollector();
+
 }  // namespace cockroach
