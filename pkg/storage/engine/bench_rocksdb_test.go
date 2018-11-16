@@ -107,6 +107,18 @@ func BenchmarkMVCCReverseScan_RocksDB(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCScanTransactionalData_RocksDB(b *testing.B) {
+	ctx := context.Background()
+	runMVCCScan(ctx, b, setupMVCCRocksDB, benchScanOptions{
+		numRows: 10000,
+		benchDataOptions: benchDataOptions{
+			numVersions:   2,
+			valueBytes:    8,
+			transactional: true,
+		},
+	})
+}
+
 func BenchmarkMVCCGet_RocksDB(b *testing.B) {
 	ctx := context.Background()
 	for _, numVersions := range []int{1, 10, 100} {
