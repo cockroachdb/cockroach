@@ -26,7 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -34,14 +35,10 @@ import (
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tempEngine.Close()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
 
-	diskMap := NewRocksDBMap(tempEngine)
+	diskMap := NewRocksDBMap(e)
 	defer diskMap.Close(ctx)
 
 	batchWriter := diskMap.NewBatchWriterCapacity(64)
@@ -130,22 +127,108 @@ func TestRocksDBMap(t *testing.T) {
 	}
 }
 
+func TestRocksDBMapClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	decodeKey := func(v []byte) []byte {
+		var err error
+		v, _, err = encoding.DecodeUvarintAscending(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	getSSTables := func() string {
+		ssts := e.GetSSTables()
+		sort.Slice(ssts, func(i, j int) bool {
+			a, b := ssts[i], ssts[j]
+			if a.Level < b.Level {
+				return true
+			}
+			if a.Level > b.Level {
+				return false
+			}
+			return a.Start.Less(b.Start)
+		})
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "\n")
+		for i := range ssts {
+			fmt.Fprintf(&buf, "%d: %s - %s\n",
+				ssts[i].Level, decodeKey(ssts[i].Start.Key), decodeKey(ssts[i].End.Key))
+		}
+		return buf.String()
+	}
+
+	verifySSTables := func(expected string) {
+		actual := getSSTables()
+		if expected != actual {
+			t.Fatalf("expected%sgot%s", expected, actual)
+		}
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+	}
+
+	diskMap := NewRocksDBMap(e)
+
+	// Put a small amount of data into the disk map.
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	for i := range letters {
+		k := []byte{letters[i]}
+		if err := diskMap.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Force the data to disk.
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force it to a lower-level. This is done so as to avoid the automatic
+	// compactions out of L0 that would normally occur.
+	if err := e.Compact(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify we have a single sstable.
+	verifySSTables(`
+6: a - z
+`)
+
+	// Close the disk map. This should both delete the data, and initiate
+	// compactions for the deleted data.
+	diskMap.Close(ctx)
+
+	// Wait for the data stored in the engine to disappear.
+	testutils.SucceedsSoon(t, func() error {
+		actual := getSSTables()
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+		if actual != "\n" {
+			return fmt.Errorf("%s", actual)
+		}
+		return nil
+	})
+}
+
 // TestRocksDBMapSandbox verifies that multiple instances of a RocksDBMap
 // initialized with the same RocksDB storage engine cannot read or write
 // another instance's data.
 func TestRocksDBMapSandbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tempEngine.Close()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
 
 	diskMaps := make([]*RocksDBMap, 3)
 	for i := 0; i < len(diskMaps); i++ {
-		diskMaps[i] = NewRocksDBMap(tempEngine)
+		diskMaps[i] = NewRocksDBMap(e)
 	}
 
 	// Put [0,10) as a key into each diskMap with the value specifying which
@@ -197,7 +280,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 			diskMaps[j].Close(ctx)
 			numKeysRemaining := 0
 			func() {
-				i := tempEngine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				i := e.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 				defer i.Close()
 				for i.Seek(NilKey); ; i.Next() {
 					if ok, err := i.Valid(); err != nil {
@@ -228,12 +311,8 @@ func TestRocksDBMapSandbox(t *testing.T) {
 func TestRocksDBStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tempEngine.Close()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
 
 	var (
 		v1 = []byte("v1")
@@ -269,7 +348,7 @@ func TestRocksDBStore(t *testing.T) {
 			if tc.allowDuplicates {
 				fn = NewRocksDBMultiMap
 			}
-			diskStore := fn(tempEngine)
+			diskStore := fn(e)
 			defer diskStore.Close(ctx)
 
 			batchWriter := diskStore.NewBatchWriter()
