@@ -9671,11 +9671,9 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 
-	// Drop the RaftMaxSizePerMsg so that even small Raft entries have their
-	// application paginated.
-	// TODO(nvanbenschoten): Switch this to using the new MaxCommitedSizePerReady
-	// configuration once #31511 is addressed.
-	tsc.RaftMaxSizePerMsg = 128
+	// Drop the RaftMaxCommittedSizePerReady so that even small Raft entries
+	// trigger pagination during entry application.
+	tsc.RaftMaxCommittedSizePerReady = 128
 	// Slow down the tick interval dramatically so that Raft groups can't rely
 	// on ticks to trigger Raft ready iterations.
 	tsc.RaftTickInterval = 5 * time.Second
@@ -9722,7 +9720,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		var ba2 roachpb.BatchRequest
 		key := roachpb.Key("a")
-		put := putArgs(key, make([]byte, 2*tsc.RaftMaxSizePerMsg))
+		put := putArgs(key, make([]byte, 2*tsc.RaftMaxCommittedSizePerReady))
 		ba2.Add(&put)
 		ba2.Timestamp = tc.Clock().Now()
 
@@ -9735,7 +9733,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	// Stop blocking Raft application. All of the proposals should quickly
 	// commit and apply, even if their application is paginated due to the
-	// small RaftMaxSizePerMsg.
+	// small RaftMaxCommittedSizePerReady.
 	close(blockRaftApplication)
 	const maxWait = 10 * time.Second
 	select {
