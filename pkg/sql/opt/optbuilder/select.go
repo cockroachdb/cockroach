@@ -17,6 +17,8 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -78,7 +80,7 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds := b.resolveDataSource(tn)
+		ds := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
@@ -110,7 +112,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds := b.resolveDataSourceRef(source)
+		ds := b.resolveDataSourceRef(source, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
