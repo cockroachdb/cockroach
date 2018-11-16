@@ -1242,3 +1242,9 @@ SELECT * FROM [54(3) as t]
 project
  └── scan num_ref_hidden
       └── columns: rowid:3(int!null)
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
+----
+error (0A000): unimplemented: common table expression "cte" with side effects was not used in query

@@ -439,8 +439,6 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	var alias *tree.TableName
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
-		// It's okay to ignore the As columns here, as they're not permitted in
-		// DML aliases where this function is used.
 		if ate.As.Alias != "" {
 			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 		}

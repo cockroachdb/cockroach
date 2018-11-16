@@ -1,0 +1,950 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    e INT AS (a) STORED
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
+TABLE xyz
+ ├── x string not null
+ ├── y int
+ ├── z float
+ └── INDEX primary
+      └── x string not null
+
+exec-ddl
+CREATE TABLE uv (
+    u DECIMAL,
+    v BYTES
+)
+----
+TABLE uv
+ ├── u decimal
+ ├── v bytes
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE mutation (
+    m INT PRIMARY KEY,
+    n INT,
+    "o:mutation" INT DEFAULT(10),
+    "p:mutation" STRING AS ("o:mutation" + n) STORED
+)
+----
+TABLE mutation
+ ├── m int not null
+ ├── n int
+ └── INDEX primary
+      └── m int not null
+
+# Unknown target table.
+build
+INSERT INTO unknown VALUES (1, 2, 3)
+----
+error: no data source matches prefix: "unknown"
+
+# ------------------------------------------------------------------------------
+# Tests without target column names.
+# ------------------------------------------------------------------------------
+
+# Specify values for all non-hidden columns.
+build
+INSERT INTO abcde VALUES (1, 2, 3)
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column1:7(int) column2:8(int) column3:9(int) column11:11(int) column1:7(int) column10:10(int)
+ └── project
+      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── project
+      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── values
+      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    └── tuple [type=tuple{int, int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
+      │    └── projections
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column2 [type=int]
+                │    └── variable: column3 [type=int]
+                └── const: 1 [type=int]
+
+# Don't specify values for null or default columns.
+build
+INSERT INTO abcde VALUES (1)
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column1:7(int) column8:8(unknown) column9:9(int) column8:8(unknown) column1:7(int) column10:10(int)
+ └── project
+      ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) column1:7(int)
+      ├── values
+      │    ├── columns: column1:7(int)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 1 [type=int]
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 10 [type=int]
+           └── function: unique_rowid [type=int]
+
+# Ordered input.
+build
+INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: y:8(int) column10:10(unknown) column11:11(int) column10:10(unknown) y:8(int) column12:12(int)
+ ├── internal-ordering: +8,+9
+ └── sort
+      ├── columns: y:8(int) z:9(float) column10:10(unknown) column11:11(int!null) column12:12(int)
+      ├── ordering: +8,+9
+      └── project
+           ├── columns: column10:10(unknown) column11:11(int!null) column12:12(int) y:8(int) z:9(float)
+           ├── project
+           │    ├── columns: y:8(int) z:9(float)
+           │    └── scan xyz
+           │         └── columns: x:7(string!null) y:8(int) z:9(float)
+           └── projections
+                ├── null [type=unknown]
+                ├── const: 10 [type=int]
+                └── function: unique_rowid [type=int]
+
+# Use placeholders.
+build
+INSERT INTO xyz VALUES ($1, $2, $3)
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: column1:4(string) column2:5(int) column3:6(float)
+ └── values
+      ├── columns: column1:4(string) column2:5(int) column3:6(float)
+      └── tuple [type=tuple{string, int, float}]
+           ├── placeholder: $1 [type=string]
+           ├── placeholder: $2 [type=int]
+           └── placeholder: $3 [type=float]
+
+# Null expressions.
+build
+INSERT INTO abcde VALUES (2, null, null)
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column1:7(int) column2:8(unknown) column3:9(unknown) column11:11(unknown) column1:7(int) column10:10(int)
+ └── project
+      ├── columns: column11:11(unknown) column1:7(int) column2:8(unknown) column3:9(unknown) column10:10(int)
+      ├── project
+      │    ├── columns: column10:10(int) column1:7(int) column2:8(unknown) column3:9(unknown)
+      │    ├── values
+      │    │    ├── columns: column1:7(int) column2:8(unknown) column3:9(unknown)
+      │    │    └── tuple [type=tuple{int, unknown, unknown}]
+      │    │         ├── const: 2 [type=int]
+      │    │         ├── null [type=unknown]
+      │    │         └── null [type=unknown]
+      │    └── projections
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── null [type=unknown]
+
+# Duplicate expressions.
+build
+INSERT INTO abcde SELECT 2, $1 + 1, $1 + 1
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: "?column?":7(int) "?column?":8(int) "?column?":8(int) column10:10(int) "?column?":7(int) column9:9(int)
+ └── project
+      ├── columns: column10:10(int) "?column?":7(int!null) "?column?":8(int) column9:9(int)
+      ├── project
+      │    ├── columns: column9:9(int) "?column?":7(int!null) "?column?":8(int)
+      │    ├── project
+      │    │    ├── columns: "?column?":7(int!null) "?column?":8(int)
+      │    │    ├── values
+      │    │    │    └── tuple [type=tuple]
+      │    │    └── projections
+      │    │         ├── const: 2 [type=int]
+      │    │         └── plus [type=int]
+      │    │              ├── placeholder: $1 [type=int]
+      │    │              └── const: 1 [type=int]
+      │    └── projections
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: ?column? [type=int]
+                │    └── variable: ?column? [type=int]
+                └── const: 1 [type=int]
+
+# Use DEFAULT VALUES.
+build
+INSERT INTO uv DEFAULT VALUES
+----
+insert uv
+ ├── columns: <none>
+ ├── table columns: u:1(decimal) v:2(bytes) rowid:3(int)
+ ├── input columns: column4:4(unknown) column4:4(unknown) column5:5(int)
+ └── project
+      ├── columns: column4:4(unknown) column5:5(int)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           ├── null [type=unknown]
+           └── function: unique_rowid [type=int]
+
+# Use DEFAULT expressions in VALUES expression.
+build
+INSERT INTO abcde ((VALUES (1, DEFAULT, 2), (2, 3, 4), (3, 2, DEFAULT), (4, DEFAULT, DEFAULT)))
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column1:7(int) column2:8(int) column3:9(int) column11:11(int) column1:7(int) column10:10(int)
+ └── project
+      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── project
+      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── values
+      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    ├── tuple [type=tuple{int, int, int}]
+      │    │    │    ├── const: 1 [type=int]
+      │    │    │    ├── null [type=unknown]
+      │    │    │    └── const: 2 [type=int]
+      │    │    ├── tuple [type=tuple{int, int, int}]
+      │    │    │    ├── const: 2 [type=int]
+      │    │    │    ├── const: 3 [type=int]
+      │    │    │    └── const: 4 [type=int]
+      │    │    ├── tuple [type=tuple{int, int, int}]
+      │    │    │    ├── const: 3 [type=int]
+      │    │    │    ├── const: 2 [type=int]
+      │    │    │    └── const: 10 [type=int]
+      │    │    └── tuple [type=tuple{int, int, int}]
+      │    │         ├── const: 4 [type=int]
+      │    │         ├── null [type=unknown]
+      │    │         └── const: 10 [type=int]
+      │    └── projections
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column2 [type=int]
+                │    └── variable: column3 [type=int]
+                └── const: 1 [type=int]
+
+# Use DEFAULT expressions in VALUES expression wrapped by WITH clause (error).
+build
+INSERT INTO abcde WITH a AS (SELECT 1) VALUES (1, DEFAULT, 2)
+----
+error (42601): DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
+
+# Too many values.
+build
+INSERT INTO xyz VALUES ('foo', 2, 3, 4)
+----
+error (42601): INSERT has more expressions than target columns, 4 expressions for 3 targets
+
+# Return values from insert.
+build
+INSERT INTO abcde SELECT 1 RETURNING *
+----
+project
+ ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
+ └── insert abcde
+      ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+      ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+      ├── input columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column8:8(unknown) "?column?":7(int!null) column10:10(int!null)
+      └── project
+           ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) "?column?":7(int!null)
+           ├── project
+           │    ├── columns: "?column?":7(int!null)
+           │    ├── values
+           │    │    └── tuple [type=tuple]
+           │    └── projections
+           │         └── const: 1 [type=int]
+           └── projections
+                ├── null [type=unknown]
+                ├── const: 10 [type=int]
+                └── function: unique_rowid [type=int]
+
+# Return values from aliased table.
+build
+INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
+----
+project
+ ├── columns: "?column?":11(int) "?column?":12(unknown)
+ ├── insert abcde
+ │    ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+ │    ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ │    ├── input columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column8:8(unknown) "?column?":7(int!null) column10:10(int!null)
+ │    └── project
+ │         ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) "?column?":7(int!null)
+ │         ├── project
+ │         │    ├── columns: "?column?":7(int!null)
+ │         │    ├── values
+ │         │    │    └── tuple [type=tuple]
+ │         │    └── projections
+ │         │         └── const: 1 [type=int]
+ │         └── projections
+ │              ├── null [type=unknown]
+ │              ├── const: 10 [type=int]
+ │              └── function: unique_rowid [type=int]
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: ?column? [type=int]
+      │    └── const: 1 [type=int]
+      └── null [type=unknown]
+
+# Use returning INSERT as a FROM expression.
+build
+SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
+----
+project
+ ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
+ └── insert abcde
+      ├── columns: column1:7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+      ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+      ├── input columns: column1:7(int!null) column8:8(unknown) column9:9(int!null) column8:8(unknown) column1:7(int!null) column10:10(int!null)
+      └── project
+           ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) column1:7(int)
+           ├── values
+           │    ├── columns: column1:7(int)
+           │    └── tuple [type=tuple{int}]
+           │         └── const: 1 [type=int]
+           └── projections
+                ├── null [type=unknown]
+                ├── const: 10 [type=int]
+                └── function: unique_rowid [type=int]
+
+# Try to use aggregate function in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING sum(a)
+----
+error: sum(): aggregate functions are not allowed in RETURNING
+
+# Try to use SRF in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 10)
+----
+error: generate_series(): generator functions are not allowed in RETURNING
+
+# Try to use non-returning INSERT as expression.
+build
+SELECT * FROM [INSERT INTO abcde VALUES (1)]
+----
+error (0A000): statement source "INSERT INTO abcde VALUES (1)" does not return any columns
+
+# Use CTE.
+build
+WITH a AS (SELECT y, y+1 FROM xyz) INSERT INTO abcde SELECT * FROM a
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:5(int) b:6(int) c:7(int) d:8(int) e:9(int) rowid:10(int)
+ ├── input columns: y:2(int) "?column?":4(int) column11:11(int) column13:13(int) y:2(int) column12:12(int)
+ └── project
+      ├── columns: column13:13(int) y:2(int) "?column?":4(int) column11:11(int!null) column12:12(int)
+      ├── project
+      │    ├── columns: column11:11(int!null) column12:12(int) y:2(int) "?column?":4(int)
+      │    ├── project
+      │    │    ├── columns: "?column?":4(int) y:2(int)
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:1(string!null) y:2(int) z:3(float)
+      │    │    └── projections
+      │    │         └── plus [type=int]
+      │    │              ├── variable: y [type=int]
+      │    │              └── const: 1 [type=int]
+      │    └── projections
+      │         ├── const: 10 [type=int]
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: ?column? [type=int]
+                │    └── variable: column11 [type=int]
+                └── const: 1 [type=int]
+
+# Use CTE.
+build
+WITH a AS (SELECT y, y+1 FROM xyz), b AS (SELECT y+1, y FROM xyz)
+INSERT INTO abcde TABLE a UNION TABLE b
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:9(int) b:10(int) c:11(int) d:12(int) e:13(int) rowid:14(int)
+ ├── input columns: y:15(int) "?column?":16(int) column17:17(int) column19:19(int) y:15(int) column18:18(int)
+ └── project
+      ├── columns: column19:19(int) y:15(int) "?column?":16(int) column17:17(int!null) column18:18(int)
+      ├── project
+      │    ├── columns: column17:17(int!null) column18:18(int) y:15(int) "?column?":16(int)
+      │    ├── union
+      │    │    ├── columns: y:15(int) "?column?":16(int)
+      │    │    ├── left columns: xyz.y:2(int) "?column?":4(int)
+      │    │    ├── right columns: "?column?":8(int) xyz.y:6(int)
+      │    │    ├── project
+      │    │    │    ├── columns: "?column?":4(int) xyz.y:2(int)
+      │    │    │    ├── scan xyz
+      │    │    │    │    └── columns: xyz.x:1(string!null) xyz.y:2(int) xyz.z:3(float)
+      │    │    │    └── projections
+      │    │    │         └── plus [type=int]
+      │    │    │              ├── variable: xyz.y [type=int]
+      │    │    │              └── const: 1 [type=int]
+      │    │    └── project
+      │    │         ├── columns: "?column?":8(int) xyz.y:6(int)
+      │    │         ├── scan xyz
+      │    │         │    └── columns: xyz.x:5(string!null) xyz.y:6(int) xyz.z:7(float)
+      │    │         └── projections
+      │    │              └── plus [type=int]
+      │    │                   ├── variable: xyz.y [type=int]
+      │    │                   └── const: 1 [type=int]
+      │    └── projections
+      │         ├── const: 10 [type=int]
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: ?column? [type=int]
+                │    └── variable: column17 [type=int]
+                └── const: 1 [type=int]
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [INSERT INTO abcde VALUES (1) RETURNING *]) INSERT INTO abcde VALUES (1)
+----
+error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+
+# Insert CTE that returns no columns.
+build
+WITH cte AS (INSERT INTO abcde VALUES (1)) SELECT * FROM cte
+----
+error (0A000): WITH clause "cte" does not have a RETURNING clause
+
+# Use SRF in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 100)
+----
+error: generate_series(): generator functions are not allowed in RETURNING
+
+# Correlated subquery.
+build
+SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [INSERT INTO abcde VALUES (y, y+1) RETURNING *])
+----
+select
+ ├── columns: x:1(string!null) y:2(int) z:3(float)
+ ├── scan xyz
+ │    └── columns: x:1(string!null) y:2(int) z:3(float)
+ └── filters
+      └── exists [type=bool]
+           └── project
+                ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column14:14(int)
+                └── insert abcde
+                     ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column13:13(int!null) column14:14(int)
+                     ├── table columns: a:4(int) b:5(int) c:6(int) d:7(int) e:8(int) rowid:9(int)
+                     ├── input columns: column1:10(int!null) column2:11(int) column12:12(int!null) column14:14(int) column1:10(int!null) column13:13(int!null)
+                     └── project
+                          ├── columns: column14:14(int) column1:10(int) column2:11(int) column12:12(int!null) column13:13(int)
+                          ├── project
+                          │    ├── columns: column12:12(int!null) column13:13(int) column1:10(int) column2:11(int)
+                          │    ├── values
+                          │    │    ├── columns: column1:10(int) column2:11(int)
+                          │    │    └── tuple [type=tuple{int, int}]
+                          │    │         ├── variable: y [type=int]
+                          │    │         └── plus [type=int]
+                          │    │              ├── variable: y [type=int]
+                          │    │              └── const: 1 [type=int]
+                          │    └── projections
+                          │         ├── const: 10 [type=int]
+                          │         └── function: unique_rowid [type=int]
+                          └── projections
+                               └── plus [type=int]
+                                    ├── plus [type=int]
+                                    │    ├── variable: column2 [type=int]
+                                    │    └── variable: column12 [type=int]
+                                    └── const: 1 [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with target column names.
+# ------------------------------------------------------------------------------
+
+# Specify values for all non-computed columns.
+build
+INSERT INTO abcde (c, b, a) VALUES (1, 2, 3)
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column3:9(int) column2:8(int) column1:7(int) column11:11(int) column3:9(int) column10:10(int)
+ └── project
+      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── project
+      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── values
+      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    └── tuple [type=tuple{int, int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
+      │    └── projections
+      │         └── function: unique_rowid [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column2 [type=int]
+                │    └── variable: column1 [type=int]
+                └── const: 1 [type=int]
+
+# Don't specify values for null or default columns.
+build
+INSERT INTO abcde (a) VALUES (1)
+----
+insert abcde
+ ├── columns: <none>
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column1:7(int) column8:8(unknown) column9:9(int) column8:8(unknown) column1:7(int) column10:10(int)
+ └── project
+      ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) column1:7(int)
+      ├── values
+      │    ├── columns: column1:7(int)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 1 [type=int]
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 10 [type=int]
+           └── function: unique_rowid [type=int]
+
+# Insert value into hidden rowid column.
+build
+INSERT INTO abcde (a, rowid) VALUES (1, 2) RETURNING *
+----
+project
+ ├── columns: a:7(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:7(int!null)
+ └── insert abcde
+      ├── columns: column1:7(int!null) column2:8(int!null) column9:9(unknown) column10:10(int!null)
+      ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+      ├── input columns: column1:7(int!null) column9:9(unknown) column10:10(int!null) column9:9(unknown) column1:7(int!null) column2:8(int!null)
+      └── project
+           ├── columns: column9:9(unknown) column10:10(int!null) column1:7(int) column2:8(int)
+           ├── values
+           │    ├── columns: column1:7(int) column2:8(int)
+           │    └── tuple [type=tuple{int, int}]
+           │         ├── const: 1 [type=int]
+           │         └── const: 2 [type=int]
+           └── projections
+                ├── null [type=unknown]
+                └── const: 10 [type=int]
+
+# Use DEFAULT expressions in VALUES expression.
+build
+INSERT INTO abcde (c, b, a, rowid)
+VALUES (DEFAULT, DEFAULT, 1, DEFAULT), (3, 2, 1, DEFAULT), (DEFAULT, DEFAULT, 2, 100)
+RETURNING *, rowid
+----
+insert abcde
+ ├── columns: a:9(int!null) b:8(int) c:7(int) d:11(int) e:9(int!null) rowid:10(int!null)
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column3:9(int!null) column2:8(int) column1:7(int) column11:11(int) column3:9(int!null) column4:10(int!null)
+ └── project
+      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column4:10(int)
+      ├── values
+      │    ├── columns: column1:7(int) column2:8(int) column3:9(int) column4:10(int)
+      │    ├── tuple [type=tuple{int, int, int, int}]
+      │    │    ├── const: 10 [type=int]
+      │    │    ├── null [type=unknown]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── function: unique_rowid [type=int]
+      │    ├── tuple [type=tuple{int, int, int, int}]
+      │    │    ├── const: 3 [type=int]
+      │    │    ├── const: 2 [type=int]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── function: unique_rowid [type=int]
+      │    └── tuple [type=tuple{int, int, int, int}]
+      │         ├── const: 10 [type=int]
+      │         ├── null [type=unknown]
+      │         ├── const: 2 [type=int]
+      │         └── const: 100 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column2 [type=int]
+                │    └── variable: column1 [type=int]
+                └── const: 1 [type=int]
+
+# Mismatched type.
+build
+INSERT INTO xyz (x) VALUES (10)
+----
+error (42804): value type int doesn't match type STRING of column "x"
+
+# Try to insert into computed column.
+build
+INSERT INTO abcde (a, b, c, d) VALUES (1, 2, 3, 4)
+----
+error (55000): cannot write directly to computed column "d"
+
+# Try to insert DEFAULT expression into computed column.
+build
+INSERT INTO abcde (a, d) VALUES (1, DEFAULT)
+----
+error (55000): cannot write directly to computed column "d"
+
+# Too many values.
+build
+INSERT INTO abcde (a, b) VALUES (1, 2, 3)
+----
+error (42601): INSERT has more expressions than target columns, 3 expressions for 2 targets
+
+# Too few values.
+build
+INSERT INTO abcde (a, b) VALUES (1)
+----
+error (42601): INSERT has more target columns than expressions, 1 expressions for 2 targets
+
+# Duplicate column name.
+build
+INSERT INTO abcde (a, b, a) VALUES (1, 2, 3)
+----
+error: multiple assignments to the same column "a"
+
+# Undefined column name.
+build
+INSERT INTO abcde (a, unk) VALUES (1, 2)
+----
+error (42703): column "unk" does not exist
+
+# Cannot insert null into non-null column.
+build
+INSERT INTO abcde (b, c) VALUES (1, 2)
+----
+error (23502): null value in column "a" violates not-null constraint
+
+# Return values from insert.
+build
+INSERT INTO abcde (b, a) SELECT x::int, y FROM xyz RETURNING *
+----
+project
+ ├── columns: a:8(int!null) b:10(int) c:11(int!null) d:13(int) e:8(int!null)
+ └── insert abcde
+      ├── columns: y:8(int!null) x:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+      ├── input columns: y:8(int!null) x:10(int) column11:11(int!null) column13:13(int) y:8(int!null) column12:12(int!null)
+      └── project
+           ├── columns: column13:13(int) y:8(int) x:10(int) column11:11(int!null) column12:12(int)
+           ├── project
+           │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) x:10(int)
+           │    ├── project
+           │    │    ├── columns: x:10(int) y:8(int)
+           │    │    ├── scan xyz
+           │    │    │    └── columns: xyz.x:7(string!null) y:8(int) z:9(float)
+           │    │    └── projections
+           │    │         └── cast: INT [type=int]
+           │    │              └── variable: xyz.x [type=string]
+           │    └── projections
+           │         ├── const: 10 [type=int]
+           │         └── function: unique_rowid [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: x [type=int]
+                     │    └── variable: column11 [type=int]
+                     └── const: 1 [type=int]
+
+# Return hidden column.
+build
+INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
+----
+insert abcde
+ ├── columns: a:8(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:8(int!null) rowid:7(int!null)
+ ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+ ├── input columns: column2:8(int!null) column9:9(unknown) column10:10(int!null) column9:9(unknown) column2:8(int!null) column1:7(int!null)
+ └── project
+      ├── columns: column9:9(unknown) column10:10(int!null) column1:7(int) column2:8(int)
+      ├── values
+      │    ├── columns: column1:7(int) column2:8(int)
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           ├── null [type=unknown]
+           └── const: 10 [type=int]
+
+# Use returning INSERT as a FROM expression.
+build
+SELECT * FROM [INSERT INTO abcde (a, b) SELECT y+1, y FROM xyz RETURNING *]
+----
+project
+ ├── columns: a:10(int!null) b:8(int) c:11(int!null) d:13(int) e:10(int!null)
+ └── insert abcde
+      ├── columns: y:8(int) "?column?":10(int!null) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int)
+      ├── input columns: "?column?":10(int!null) y:8(int) column11:11(int!null) column13:13(int) "?column?":10(int!null) column12:12(int!null)
+      └── project
+           ├── columns: column13:13(int) y:8(int) "?column?":10(int) column11:11(int!null) column12:12(int)
+           ├── project
+           │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) "?column?":10(int)
+           │    ├── project
+           │    │    ├── columns: "?column?":10(int) y:8(int)
+           │    │    ├── scan xyz
+           │    │    │    └── columns: x:7(string!null) y:8(int) z:9(float)
+           │    │    └── projections
+           │    │         └── plus [type=int]
+           │    │              ├── variable: y [type=int]
+           │    │              └── const: 1 [type=int]
+           │    └── projections
+           │         ├── const: 10 [type=int]
+           │         └── function: unique_rowid [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: y [type=int]
+                     │    └── variable: column11 [type=int]
+                     └── const: 1 [type=int]
+
+# ------------------------------------------------------------------------------
+# Propagate desired INSERT types.
+# ------------------------------------------------------------------------------
+
+# Propagate types to VALUES.
+build
+INSERT INTO xyz VALUES ($1, $2 + 1, $3 + 1)
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: column1:4(string) column2:5(int) column3:6(float)
+ └── values
+      ├── columns: column1:4(string) column2:5(int) column3:6(float)
+      └── tuple [type=tuple{string, int, float}]
+           ├── placeholder: $1 [type=string]
+           ├── plus [type=int]
+           │    ├── placeholder: $2 [type=int]
+           │    └── const: 1 [type=int]
+           └── plus [type=float]
+                ├── placeholder: $3 [type=float]
+                └── const: 1.0 [type=float]
+
+# Propagate types to VALUES (named columns).
+build
+INSERT INTO xyz (z, y, x) VALUES ($1 + 1, $2 + 1, $3)
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: column3:6(string) column2:5(int) column1:4(float)
+ └── values
+      ├── columns: column1:4(float) column2:5(int) column3:6(string)
+      └── tuple [type=tuple{float, int, string}]
+           ├── plus [type=float]
+           │    ├── placeholder: $1 [type=float]
+           │    └── const: 1.0 [type=float]
+           ├── plus [type=int]
+           │    ├── placeholder: $2 [type=int]
+           │    └── const: 1 [type=int]
+           └── placeholder: $3 [type=string]
+
+# Propagate types to projection list.
+build
+INSERT INTO xyz ((SELECT $1, $2 + 1, $3 + 1))
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+ └── project
+      ├── columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           ├── placeholder: $1 [type=string]
+           ├── plus [type=int]
+           │    ├── placeholder: $2 [type=int]
+           │    └── const: 1 [type=int]
+           └── plus [type=float]
+                ├── placeholder: $3 [type=float]
+                └── const: 1.0 [type=float]
+
+# Propagate types to projection list (named columns).
+build
+INSERT INTO xyz (x, y, z) SELECT $1, $2 + 1, $3 + 1
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+ └── project
+      ├── columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           ├── placeholder: $1 [type=string]
+           ├── plus [type=int]
+           │    ├── placeholder: $2 [type=int]
+           │    └── const: 1 [type=int]
+           └── plus [type=float]
+                ├── placeholder: $3 [type=float]
+                └── const: 1.0 [type=float]
+
+# Propagate types to UNION.
+build
+INSERT INTO xyz (SELECT $1, $2 + 1, $3 + 1) UNION ALL (SELECT $1, $2 + 1, $3 + 1)
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: "?column?":10(string) "?column?":11(int) "?column?":12(float)
+ └── union-all
+      ├── columns: "?column?":10(string) "?column?":11(int) "?column?":12(float)
+      ├── left columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+      ├── right columns: "?column?":7(string) "?column?":8(int) "?column?":9(float)
+      ├── project
+      │    ├── columns: "?column?":4(string) "?column?":5(int) "?column?":6(float)
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── projections
+      │         ├── placeholder: $1 [type=string]
+      │         ├── plus [type=int]
+      │         │    ├── placeholder: $2 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── plus [type=float]
+      │              ├── placeholder: $3 [type=float]
+      │              └── const: 1.0 [type=float]
+      └── project
+           ├── columns: "?column?":7(string) "?column?":8(int) "?column?":9(float)
+           ├── values
+           │    └── tuple [type=tuple]
+           └── projections
+                ├── placeholder: $1 [type=string]
+                ├── plus [type=int]
+                │    ├── placeholder: $2 [type=int]
+                │    └── const: 1 [type=int]
+                └── plus [type=float]
+                     ├── placeholder: $3 [type=float]
+                     └── const: 1.0 [type=float]
+
+# Propagate types to UNION (named columns).
+build
+INSERT INTO xyz (x, z, y) SELECT $1, $2 + 1, $3 + 1 UNION ALL SELECT $1, $2 + 1, $3 + 1
+----
+insert xyz
+ ├── columns: <none>
+ ├── table columns: x:1(string) y:2(int) z:3(float)
+ ├── input columns: "?column?":10(string) "?column?":12(int) "?column?":11(float)
+ └── union-all
+      ├── columns: "?column?":10(string) "?column?":11(float) "?column?":12(int)
+      ├── left columns: "?column?":4(string) "?column?":5(float) "?column?":6(int)
+      ├── right columns: "?column?":7(string) "?column?":8(float) "?column?":9(int)
+      ├── project
+      │    ├── columns: "?column?":4(string) "?column?":5(float) "?column?":6(int)
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── projections
+      │         ├── placeholder: $1 [type=string]
+      │         ├── plus [type=float]
+      │         │    ├── placeholder: $2 [type=float]
+      │         │    └── const: 1.0 [type=float]
+      │         └── plus [type=int]
+      │              ├── placeholder: $3 [type=int]
+      │              └── const: 1 [type=int]
+      └── project
+           ├── columns: "?column?":7(string) "?column?":8(float) "?column?":9(int)
+           ├── values
+           │    └── tuple [type=tuple]
+           └── projections
+                ├── placeholder: $1 [type=string]
+                ├── plus [type=float]
+                │    ├── placeholder: $2 [type=float]
+                │    └── const: 1.0 [type=float]
+                └── plus [type=int]
+                     ├── placeholder: $3 [type=int]
+                     └── const: 1 [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with mutations.
+# ------------------------------------------------------------------------------
+
+# Test mutation columns with default and computed values.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2)
+----
+insert mutation
+ ├── columns: <none>
+ ├── table columns: m:1(int) n:2(int) "o:mutation":3(int) "p:mutation":4(string)
+ ├── input columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int)
+ └── project
+      ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) column1:5(int) column2:6(int)
+      │    ├── values
+      │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── projections
+      │         └── const: 10 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── variable: column7 [type=int]
+                └── variable: column2 [type=int]
+
+# Use RETURNING clause and ensure that mutation columns aren't projected.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
+----
+insert mutation
+ ├── columns: m:5(int!null) n:6(int)
+ ├── table columns: m:1(int) n:2(int) "o:mutation":3(int) "p:mutation":4(string)
+ ├── input columns: column1:5(int!null) column2:6(int) column7:7(int) column8:8(int)
+ └── project
+      ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) column1:5(int) column2:6(int)
+      │    ├── values
+      │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── projections
+      │         └── const: 10 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── variable: column7 [type=int]
+                └── variable: column2 [type=int]
+
+# Try to reference mutation column in RETURNING clause.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING "o:mutation"
+----
+error (42703): column "o:mutation" does not exist
+
+# Try to insert into mutation column.
+build
+INSERT INTO mutation (m, n, "o:mutation") VALUES (1, 2, 3)
+----
+error (42703): column "o:mutation" does not exist

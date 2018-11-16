@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist 5node-dist-opt
+# LogicTest: 5node-dist
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT 1 WHERE EXISTS (SELECT 1)]

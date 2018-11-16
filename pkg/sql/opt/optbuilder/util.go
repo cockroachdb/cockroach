@@ -420,7 +420,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 // raises an error. It also adds the data source as a dependency to the
 // metadata, so that the privileges can be re-checked on reuse of the memo.
 func (b *Builder) checkPrivilege(ds opt.DataSource, priv privilege.Kind) {
-	if !b.skipSelectPrivilegeChecks {
+	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
 		err := ds.CheckPrivilege(b.ctx, priv)
 		if err != nil {
 			panic(builderError{err})

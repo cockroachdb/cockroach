@@ -945,6 +945,65 @@ func (b *logicalPropsBuilder) buildProjectSetProps(
 	}
 }
 
+func (b *logicalPropsBuilder) buildInsertProps(ins *InsertExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, ins, &rel.Shared)
+
+	// If no columns are output by the operator, then all other properties retain
+	// default values.
+	if !ins.NeedResults {
+		return
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(ins.Table)
+	inputProps := ins.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// Only non-mutation columns are output columns.
+	for i, col := range ins.InputCols {
+		// Column is mutation column if its ordinal is >= count of regular columns
+		// in the table.
+		if i < tab.ColumnCount() {
+			rel.OutputCols.Add(int(col))
+
+			// Also add to NotNullCols here, in order to avoid another loop below.
+			if !tab.Column(i).IsNullable() {
+				rel.NotNullCols.Add(int(col))
+			}
+		}
+	}
+
+	// Not Null Columns
+	// ----------------
+	// Start with set of not null columns computed above. Add any not null columns
+	// from input that are also output columns.
+	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
+	rel.NotNullCols.IntersectionWith(rel.OutputCols)
+
+	// Outer Columns
+	// -------------
+	// Outer columns were already derived by buildSharedProps.
+
+	// Functional Dependencies
+	// -----------------------
+	// Start with copy of FuncDepSet from input, then possibly simplify by calling
+	// ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Inherit cardinality from input.
+	rel.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildInsert(ins, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(b.mem, item.Condition, &scalar.Shared)
 
@@ -1022,6 +1081,10 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			// Impure functions can return different value on each call.
 			shared.CanHaveSideEffects = true
 		}
+
+	case *InsertExpr:
+		shared.CanHaveSideEffects = true
+		shared.CanMutate = true
 	}
 
 	// Recursively build the shared properties.
@@ -1045,6 +1108,9 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			}
 			if cached.CanHaveSideEffects {
 				shared.CanHaveSideEffects = true
+			}
+			if cached.CanMutate {
+				shared.CanMutate = true
 			}
 			if cached.HasSubquery {
 				shared.HasSubquery = true
