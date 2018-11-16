@@ -52,7 +52,7 @@ func (c *CustomFuncs) CanSimplifyGroupingOrdering(
 func (c *CustomFuncs) SimplifyGroupingOrdering(
 	in memo.RelExpr, private *memo.GroupingPrivate,
 ) *memo.GroupingPrivate {
-	// Copy GroupByDef to stack and replace Ordering field.
+	// Copy GroupingPrivate to stack and replace Ordering field.
 	copy := *private
 	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
 	return &copy
@@ -73,7 +73,7 @@ func (c *CustomFuncs) CanSimplifyRowNumberOrdering(
 func (c *CustomFuncs) SimplifyRowNumberOrdering(
 	in memo.RelExpr, private *memo.RowNumberPrivate,
 ) *memo.RowNumberPrivate {
-	// Copy RowNumberDef to stack and replace Ordering field.
+	// Copy RowNumberPrivate to stack and replace Ordering field.
 	copy := *private
 	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
 	return &copy
@@ -94,12 +94,31 @@ func (c *CustomFuncs) CanSimplifyExplainOrdering(
 func (c *CustomFuncs) SimplifyExplainOrdering(
 	in memo.RelExpr, private *memo.ExplainPrivate,
 ) *memo.ExplainPrivate {
-	// Copy ExplainOpDef and its physical properties to stack and replace Ordering
-	// field in the copied properties.
+	// Copy ExplainPrivate and its physical properties to stack and replace
+	// Ordering field in the copied properties.
 	copy := *private
 	copyProps := *private.Props
 	copyProps.Ordering = c.simplifyOrdering(in, private.Props.Ordering)
 	copy.Props = &copyProps
+	return &copy
+}
+
+// CanSimplifyInsertOrdering returns true if the ordering required by the
+// Insert operator can be made less restrictive, so that the input operator has
+// more ordering choices.
+func (c *CustomFuncs) CanSimplifyInsertOrdering(in memo.RelExpr, private *memo.InsertPrivate) bool {
+	return c.canSimplifyOrdering(in, private.Ordering)
+}
+
+// SimplifyInsertOrdering makes the ordering required by the Insert operator
+// less restrictive by removing optional columns, adding equivalent columns, and
+// removing redundant columns.
+func (c *CustomFuncs) SimplifyInsertOrdering(
+	in memo.RelExpr, private *memo.InsertPrivate,
+) *memo.InsertPrivate {
+	// Copy InsertPrivate to stack and replace Ordering field.
+	copy := *private
+	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
 	return &copy
 }
 
