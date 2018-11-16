@@ -751,6 +751,7 @@ if not hidedownloads:
 
     print("""### Docker image
 
+{% include copy-clipboard.html %}
 ~~~shell
 docker pull cockroachdb/cockroach:""" + current_version + """
 ~~~
