@@ -417,7 +417,12 @@ type Replica struct {
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
 
-		// The most recently updated time for each follower of this range.
+		// The most recently updated time for each follower of this range. This is updated
+		// every time a Raft message is received from a peer.
+		// Note that superficially it seems that similar information is contained in the
+		// Progress of a RaftStatus, which has a RecentActive field. However, that field
+		// is always true unless CheckQuorum is active, which at the time of writing in
+		// CockroachDB is not the case.
 		lastUpdateTimes map[roachpb.ReplicaID]time.Time
 
 		// The last seen replica descriptors from incoming Raft messages. These are
