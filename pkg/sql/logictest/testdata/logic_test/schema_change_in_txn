@@ -542,3 +542,9 @@ SELECT * FROM customers
 b  5  4
 x  5  4
 z  5  4
+
+query TT
+SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
+----
+succeeded                                                             ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;
+ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED
