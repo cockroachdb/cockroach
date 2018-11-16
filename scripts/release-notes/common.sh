@@ -91,7 +91,7 @@ function test_end() {
     fi
 
     # Check the generated release notes.
-    (cd $t && $PYTHON $relnotescript --hide-header --hide-downloads-section --from initial --until master) >$t.notes.txt
+    (cd $t && $PYTHON $relnotescript --hide-header --hide-downloads-section --from initial --until master "$@") >$t.notes.txt
     if test -z "$rewrite"; then
         diff -u $t.notes.txt $t.notes.ref.txt
     else
