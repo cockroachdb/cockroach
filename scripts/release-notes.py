@@ -224,6 +224,8 @@ parser.add_option("--exclude-from", dest="exclude_from_commit",
                   help="exclude history starting after COMMIT. Note: COMMIT itself is excluded.", metavar="COMMIT")
 parser.add_option("--exclude-until", dest="exclude_until_commit",
                   help="exclude history ending at COMMIT", metavar="COMMIT")
+parser.add_option("--one-line", dest="one_line", action="store_true", default=False,
+                  help="unwrap release notes on a single line")
 
 (options, args) = parser.parse_args()
 
@@ -237,6 +239,12 @@ hideheader = options.hide_header
 
 repo = Repo('.')
 heads = repo.heads
+
+def reformat_note(note_lines):
+    sep = '\n'
+    if options.one_line:
+        sep = ' '
+    return sep.join(note_lines).strip()
 
 # Check that pull_ref_prefix is valid
 testrefname = "%s/1" % pull_ref_prefix
@@ -356,7 +364,7 @@ def extract_release_notes(commit):
         # We have a release note boundary. If we were collecting a
         # note already, complete it.
         if innote:
-            notes.append((cat, '\n'.join(curnote).strip()))
+            notes.append((cat, reformat_note(curnote)))
             curnote = []
             innote = False
 
@@ -389,7 +397,7 @@ def extract_release_notes(commit):
             cat = cat_misspells[cat]
 
     if innote:
-        notes.append((cat, '\n'.join(curnote).strip()))
+        notes.append((cat, reformat_note(curnote)))
 
     return foundnote, notes
 
