@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -637,26 +638,32 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 	return res
 }
 
-// CheckValueWidth checks that the width (for strings, byte arrays,
-// and bit strings) and scale (for decimals) of the value fits the
-// specified column type. Used by INSERT and UPDATE.
-func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
+// LimitValueWidth checks that the width (for strings, byte arrays, and bit
+// strings) and scale (for decimals) of the value fits the specified column
+// type. In case of decimals, it can truncate fractional digits in the input
+// value in order to fit the target column. If the input value fits the target
+// column, it is returned unchanged. If the input value can be truncated to fit,
+// then a truncated copy is returned. Otherwise, an error is returned. This
+// method is used by INSERT and UPDATE.
+func LimitValueWidth(
+	typ ColumnType, inVal tree.Datum, name *string,
+) (outVal tree.Datum, err error) {
 	switch typ.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		var sv string
-		if v, ok := tree.AsDString(val); ok {
+		if v, ok := tree.AsDString(inVal); ok {
 			sv = string(v)
-		} else if v, ok := val.(*tree.DCollatedString); ok {
+		} else if v, ok := inVal.(*tree.DCollatedString); ok {
 			sv = v.Contents
 		}
 
 		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
-			return pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
+			return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 				"value too long for type %s (column %q)",
 				typ.SQLString(), tree.ErrNameString(name))
 		}
 	case ColumnType_INT:
-		if v, ok := tree.AsDInt(val); ok {
+		if v, ok := tree.AsDInt(inVal); ok {
 			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width - 1)
@@ -664,54 +671,85 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
+					return nil, pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
 						typ.VisibleType, tree.ErrNameString(name))
 				}
 			}
 		}
 	case ColumnType_BIT:
-		if v, ok := tree.AsDBitArray(val); ok {
+		if v, ok := tree.AsDBitArray(inVal); ok {
 			if typ.Width > 0 {
 				bitLen := v.BitLen()
 				switch typ.VisibleType {
 				case ColumnType_VARBIT:
 					if bitLen > uint(typ.Width) {
-						return pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
+						return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 							"bit string length %d too large for type %s", bitLen, typ.SQLString())
 					}
 				default:
 					if bitLen != uint(typ.Width) {
-						return pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
+						return nil, pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
 							"bit string length %d does not match type %s", bitLen, typ.SQLString())
 					}
 				}
 			}
 		}
 	case ColumnType_DECIMAL:
-		if v, ok := val.(*tree.DDecimal); ok {
-			if err := tree.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)",
+		if inDec, ok := inVal.(*tree.DDecimal); ok {
+			if inDec.Form != apd.Finite || typ.Precision == 0 {
+				// Non-finite form or unlimited target precision, so no need to limit.
+				break
+			}
+			if int64(typ.Precision) >= inDec.NumDigits() && typ.Width == inDec.Exponent {
+				// Precision and scale of target column are sufficient.
+				break
+			}
+
+			var outDec tree.DDecimal
+			outDec.Set(&inDec.Decimal)
+			err := tree.LimitDecimalWidth(&outDec.Decimal, int(typ.Precision), int(typ.Width))
+			if err != nil {
+				return nil, errors.Wrapf(err, "type %s (column %q)",
 					typ.SQLString(), tree.ErrNameString(name))
 			}
+			return &outDec, nil
 		}
 	case ColumnType_ARRAY:
-		if v, ok := val.(*tree.DArray); ok {
+		if inArr, ok := inVal.(*tree.DArray); ok {
+			var outArr *tree.DArray
 			elementType := *typ.elementColumnType()
-			for i := range v.Array {
-				if err := CheckValueWidth(elementType, v.Array[i], name); err != nil {
-					return err
+			for i, inElem := range inArr.Array {
+				outElem, err := LimitValueWidth(elementType, inElem, name)
+				if err != nil {
+					return nil, err
 				}
+				if outElem != inElem {
+					if outArr == nil {
+						outArr = &tree.DArray{
+							ParamTyp: inArr.ParamTyp,
+							Array:    make(tree.Datums, len(inArr.Array)),
+							HasNulls: inArr.HasNulls,
+						}
+						copy(outArr.Array, inArr.Array[:i])
+					}
+				}
+				if outArr != nil {
+					outArr.Array[i] = inElem
+				}
+			}
+			if outArr != nil {
+				return outArr, nil
 			}
 		}
 	}
-	return nil
+	return inVal, nil
 }
 
 // elementColumnType works on a ColumnType with semantic type ARRAY
 // and retrieves the ColumnType of the elements of the array.
 //
-// This is used by CheckValueWidth() and SQLType().
+// This is used by LimitValueWidth() and SQLType().
 //
 // TODO(knz): make this return a bool and avoid a heap allocation.
 func (c *ColumnType) elementColumnType() *ColumnType {
