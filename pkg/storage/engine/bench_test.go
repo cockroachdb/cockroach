@@ -41,6 +41,12 @@ const overhead = 48 // Per key/value overhead (empirically determined)
 
 type engineMaker func(testing.TB, string) Engine
 
+type benchDataOptions struct {
+	numVersions int
+	numKeys     int
+	valueBytes  int
+}
+
 // setupMVCCData writes up to numVersions values at each of numKeys
 // keys. The number of versions written for each key is chosen
 // randomly according to a uniform distribution. Each successive
@@ -56,10 +62,8 @@ type engineMaker func(testing.TB, string) Engine
 // numbers of versions. The database is persisted between runs and stored in
 // the current directory as "mvcc_scan_<versions>_<keys>_<valueBytes>" (which
 // is also returned).
-func setupMVCCData(
-	emk engineMaker, numVersions, numKeys, valueBytes int, b *testing.B,
-) (Engine, string) {
-	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", numVersions, numKeys, valueBytes)
+func setupMVCCData(b *testing.B, emk engineMaker, opts benchDataOptions) (Engine, string) {
+	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", opts.numVersions, opts.numKeys, opts.valueBytes)
 
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
@@ -80,11 +84,11 @@ func setupMVCCData(
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
 
-	keys := make([]roachpb.Key, numKeys)
+	keys := make([]roachpb.Key, opts.numKeys)
 	var order []int
-	for i := 0; i < numKeys; i++ {
+	for i := 0; i < opts.numKeys; i++ {
 		keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
-		keyVersions := rng.Intn(numVersions) + 1
+		keyVersions := rng.Intn(opts.numVersions) + 1
 		for j := 0; j < keyVersions; j++ {
 			order = append(order, i)
 		}
@@ -96,7 +100,7 @@ func setupMVCCData(
 		order[i], order[j] = order[j], order[i]
 	}
 
-	counts := make([]int, numKeys)
+	counts := make([]int, opts.numKeys)
 	batch := eng.NewBatch()
 	for i, idx := range order {
 		// Output the keys in ~20 batches. If we used a single batch to output all
@@ -120,7 +124,7 @@ func setupMVCCData(
 		key := keys[idx]
 		ts := hlc.Timestamp{WallTime: int64(counts[idx]+1) * 5}
 		counts[idx]++
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
+		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 		value.InitChecksum(key)
 		if err := MVCCPut(context.Background(), batch, nil, key, ts, value, nil); err != nil {
 			b.Fatal(err)
@@ -137,18 +141,27 @@ func setupMVCCData(
 	return eng, loc
 }
 
+type benchScanOptions struct {
+	benchDataOptions
+	numRows int
+	reverse bool
+}
+
 // runMVCCScan first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCScans in increments of numRows
 // keys over all of the data in the Engine instance, restarting at
 // the beginning of the keyspace, as many times as necessary.
-func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse bool, b *testing.B) {
+func runMVCCScan(b *testing.B, emk engineMaker, opts benchScanOptions) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
 	// datasets all fit in cache and the cache is pre-warmed.
-	const numKeys = 100000
+	if opts.numKeys != 0 {
+		b.Fatal("test error: cannot call runMVCCScan with non-zero numKeys")
+	}
+	opts.numKeys = 100000
 
-	eng, _ := setupMVCCData(emk, numVersions, numKeys, valueSize, b)
+	eng, _ := setupMVCCData(b, emk, opts.benchDataOptions)
 	defer eng.Close()
 
 	{
@@ -160,27 +173,27 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 		iter.Close()
 	}
 
-	b.SetBytes(int64(numRows * valueSize))
+	b.SetBytes(int64(opts.numRows * opts.valueBytes))
 	b.ResetTimer()
 
 	startKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	endKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	for i := 0; i < b.N; i++ {
 		// Choose a random key to start scan.
-		keyIdx := rand.Int31n(int32(numKeys - numRows))
+		keyIdx := rand.Int31n(int32(opts.numKeys - opts.numRows))
 		startKey := roachpb.Key(encoding.EncodeUvarintAscending(startKeyBuf[:4], uint64(keyIdx)))
-		endKey := roachpb.Key(encoding.EncodeUvarintAscending(endKeyBuf[:4], uint64(keyIdx+int32(numRows)-1)))
+		endKey := roachpb.Key(encoding.EncodeUvarintAscending(endKeyBuf[:4], uint64(keyIdx+int32(opts.numRows)-1)))
 		endKey = endKey.Next()
-		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
+		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, endKey, int64(numRows), ts, MVCCScanOptions{
-			Reverse: reverse,
+		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, endKey, int64(opts.numRows), ts, MVCCScanOptions{
+			Reverse: opts.reverse,
 		})
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
-		if len(kvs) != numRows {
-			b.Fatalf("failed to scan: %d != %d", len(kvs), numRows)
+		if len(kvs) != opts.numRows {
+			b.Fatalf("failed to scan: %d != %d", len(kvs), opts.numRows)
 		}
 	}
 
@@ -189,25 +202,28 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
-func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
+func runMVCCGet(b *testing.B, emk engineMaker, opts benchDataOptions) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
 	// datasets all fit in cache and the cache is pre-warmed.
-	const numKeys = 100000
+	if opts.numKeys != 0 {
+		b.Fatal("test error: cannot call runMVCCGet with non-zero numKeys")
+	}
+	opts.numKeys = 100000
 
-	eng, _ := setupMVCCData(emk, numVersions, numKeys, valueSize, b)
+	eng, _ := setupMVCCData(b, emk, opts)
 	defer eng.Close()
 
-	b.SetBytes(int64(valueSize))
+	b.SetBytes(int64(opts.valueBytes))
 	b.ResetTimer()
 
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	for i := 0; i < b.N; i++ {
 		// Choose a random key to retrieve.
-		keyIdx := rand.Int31n(int32(numKeys))
+		keyIdx := rand.Int31n(int32(opts.numKeys))
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
-		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
+		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
 		if v, _, err := MVCCGet(context.Background(), eng, key, ts, true, nil); err != nil {
 			b.Fatalf("failed get: %s", err)
@@ -215,7 +231,7 @@ func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
 		} else if valueBytes, err := v.GetBytes(); err != nil {
 			b.Fatal(err)
-		} else if len(valueBytes) != valueSize {
+		} else if len(valueBytes) != opts.valueBytes {
 			b.Fatalf("unexpected value size: %d", len(valueBytes))
 		}
 	}
@@ -223,7 +239,7 @@ func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCPut(emk engineMaker, valueSize int, b *testing.B) {
+func runMVCCPut(b *testing.B, emk engineMaker, valueSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -245,7 +261,7 @@ func runMVCCPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCBlindPut(emk engineMaker, valueSize int, b *testing.B) {
+func runMVCCBlindPut(b *testing.B, emk engineMaker, valueSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -267,7 +283,7 @@ func runMVCCBlindPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *testing.B) {
+func runMVCCConditionalPut(b *testing.B, emk engineMaker, valueSize int, createFirst bool) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -301,7 +317,7 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 	b.StopTimer()
 }
 
-func runMVCCBlindConditionalPut(emk engineMaker, valueSize int, b *testing.B) {
+func runMVCCBlindConditionalPut(b *testing.B, emk engineMaker, valueSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -323,7 +339,7 @@ func runMVCCBlindConditionalPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCInitPut(emk engineMaker, valueSize int, b *testing.B) {
+func runMVCCInitPut(b *testing.B, emk engineMaker, valueSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -345,7 +361,7 @@ func runMVCCInitPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCBlindInitPut(emk engineMaker, valueSize int, b *testing.B) {
+func runMVCCBlindInitPut(b *testing.B, emk engineMaker, valueSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -367,7 +383,7 @@ func runMVCCBlindInitPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
+func runMVCCBatchPut(b *testing.B, emk engineMaker, valueSize, batchSize int) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -407,7 +423,7 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 // Benchmark batch time series merge operations. This benchmark does not
 // perform any reads and is only used to measure the cost of the periodic time
 // series updates.
-func runMVCCBatchTimeSeries(emk engineMaker, batchSize int, b *testing.B) {
+func runMVCCBatchTimeSeries(b *testing.B, emk engineMaker, batchSize int) {
 	// Precompute keys so we don't waste time formatting them at each iteration.
 	numKeys := batchSize
 	keys := make([]roachpb.Key, numKeys)
@@ -455,7 +471,7 @@ func runMVCCBatchTimeSeries(emk engineMaker, batchSize int, b *testing.B) {
 }
 
 // runMVCCMerge merges value into numKeys separate keys.
-func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing.B) {
+func runMVCCMerge(b *testing.B, emk engineMaker, value *roachpb.Value, numKeys int) {
 	eng := emk(b, fmt.Sprintf("merge_%d", numKeys))
 	defer eng.Close()
 
@@ -507,7 +523,7 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 	if err := value.SetProto(ts); err != nil {
 		b.Fatal(err)
 	}
-	runMVCCMerge(setupMVCCInMemRocksDB, &value, 1024, b)
+	runMVCCMerge(b, setupMVCCInMemRocksDB, &value, 1024)
 }
 
 func copyDir(from, to string) error {
@@ -536,11 +552,15 @@ func copyDir(from, to string) error {
 	})
 }
 
-func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
+func runMVCCDeleteRange(b *testing.B, emk engineMaker, valueBytes int) {
 	// 512 KB ranges so the benchmark doesn't take forever
 	const rangeBytes = 512 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, dir := setupMVCCData(emk, 1, numKeys, valueBytes, b)
+	eng, dir := setupMVCCData(b, emk, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
 	eng.Close()
 
 	b.SetBytes(rangeBytes)
@@ -580,10 +600,14 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 }
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
-func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
+func runMVCCComputeStats(b *testing.B, emk engineMaker, valueBytes int) {
 	const rangeBytes = 64 * 1024 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(emk, 1, numKeys, valueBytes, b)
+	eng, _ := setupMVCCData(b, emk, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
@@ -605,10 +629,14 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 }
 
 // runMVCCCFindSplitKey benchmarks MVCCFindSplitKey on a 64MB range of data.
-func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
+func runMVCCFindSplitKey(b *testing.B, emk engineMaker, valueBytes int) {
 	const rangeBytes = 64 * 1024 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(emk, 1, numKeys, valueBytes, b)
+	eng, _ := setupMVCCData(b, emk, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
@@ -627,7 +655,7 @@ func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
 }
 
 func runBatchApplyBatchRepr(
-	emk engineMaker, writeOnly bool, valueSize, batchSize int, b *testing.B,
+	b *testing.B, emk engineMaker, writeOnly bool, valueSize, batchSize int,
 ) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
@@ -698,7 +726,11 @@ func runBenchmarkClearRange(
 	const rangeBytes = 64 << 20
 	const valueBytes = 92
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(setupMVCCRocksDB, 1, numKeys, valueBytes, b)
+	eng, _ := setupMVCCData(b, setupMVCCRocksDB, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
