@@ -21,7 +21,7 @@
 #include "encoding.h"
 #include "godefs.h"
 #include "merge.h"
-#include "timebound.h"
+#include "table_props.h"
 
 namespace cockroach {
 
@@ -151,6 +151,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the TablePropertiesCollector hook to store the min and max MVCC
   // timestamps present in each sstable in the metadata for that sstable.
   options.table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
+
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options.table_properties_collector_factories.emplace_back(DBMakeDeleteRangeCollector());
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files.
