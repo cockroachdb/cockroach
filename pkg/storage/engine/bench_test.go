@@ -580,6 +580,35 @@ func runMVCCDeleteRange(b *testing.B, emk engineMaker, valueBytes int) {
 	}
 }
 
+func runClearRange(b *testing.B, clearRange func(e Engine, b Batch, start, end MVCCKey) error) {
+	const rangeBytes = 64 << 20
+	const valueBytes = 92
+	numKeys := rangeBytes / (overhead + valueBytes)
+	eng, _ := setupMVCCData(b, setupMVCCRocksDB, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
+	defer eng.Close()
+
+	b.SetBytes(rangeBytes)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		batch := eng.NewWriteOnlyBatch()
+		if err := clearRange(eng, batch, NilKey, MVCCKeyMax); err != nil {
+			b.Fatal(err)
+		}
+		// NB: We don't actually commit the batch here as we don't want to delete
+		// the data. Doing so would require repopulating on every iteration of the
+		// loop which was ok when ClearRange was slow but now causes the benchmark
+		// to take an exceptionally long time since ClearRange is very fast.
+		batch.Close()
+	}
+
+	b.StopTimer()
+}
+
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
 func runMVCCComputeStats(b *testing.B, emk engineMaker, valueBytes int) {
 	const rangeBytes = 64 * 1024 * 1024
@@ -672,37 +701,6 @@ func runBatchApplyBatchRepr(
 		if err := batch.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			b.Fatal(err)
 		}
-		batch.Close()
-	}
-
-	b.StopTimer()
-}
-
-func runBenchmarkClearRange(
-	b *testing.B, clearRange func(e Engine, b Batch, start, end MVCCKey) error,
-) {
-	const rangeBytes = 64 << 20
-	const valueBytes = 92
-	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(b, setupMVCCRocksDB, benchDataOptions{
-		numVersions: 1,
-		numKeys:     numKeys,
-		valueBytes:  valueBytes,
-	})
-	defer eng.Close()
-
-	b.SetBytes(rangeBytes)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		batch := eng.NewWriteOnlyBatch()
-		if err := clearRange(eng, batch, NilKey, MVCCKeyMax); err != nil {
-			b.Fatal(err)
-		}
-		// NB: We don't actually commit the batch here as we don't want to delete
-		// the data. Doing so would require repopulating on every iteration of the
-		// loop which was ok when ClearRange was slow but now causes the benchmark
-		// to take an exceptionally long time since ClearRange is very fast.
 		batch.Close()
 	}
 
