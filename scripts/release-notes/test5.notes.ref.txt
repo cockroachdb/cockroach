@@ -1,4 +1,4 @@
-### Bug Fixes
+### Bug fixes
 
 - Feature A [#1][#1] [076393957][076393957]
 
@@ -8,7 +8,7 @@
 
 - [#2][#2] [8156afc96][8156afc96] PR title in need of release note (test5)
 
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
