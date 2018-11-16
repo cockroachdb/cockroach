@@ -222,6 +222,17 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.input = v.visit(n.input)
 		v.visitConcrete(n.table)
 
+	case *zigzagJoinNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "type", joinTypeStr(n.joinType))
+			for _, side := range n.sides {
+				v.observer.attr(name, "table", fmt.Sprintf("%s@%s", side.scan.desc.Name, side.scan.index.Name))
+			}
+		}
+		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
+			v.expr(name, "pred", -1, n.onCond)
+		}
+
 	case *joinNode:
 		if v.observer.attr != nil {
 			jType := joinTypeStr(n.joinType)
@@ -673,6 +684,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&joinNode{}):                 "join",
 	reflect.TypeOf(&limitNode{}):                "limit",
 	reflect.TypeOf(&lookupJoinNode{}):           "lookup-join",
+	reflect.TypeOf(&zigzagJoinNode{}):           "zigzag-join",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&projectSetNode{}):           "project set",
 	reflect.TypeOf(&relocateNode{}):             "relocate",
