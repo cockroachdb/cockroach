@@ -29,9 +29,11 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope *scope) {
-	leftScope := b.buildSelect(clause.Left, inScope)
-	rightScope := b.buildSelect(clause.Right, inScope)
+func (b *Builder) buildUnion(
+	clause *tree.UnionClause, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
+	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
+	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
 
 	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()

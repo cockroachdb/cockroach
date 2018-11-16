@@ -160,6 +160,16 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
 
+	case *InsertExpr:
+		if len(t.InputCols) != len(t.TableCols) {
+			panic(fmt.Sprintf("input column count does not match table column count"))
+		}
+
+		tab := m.Metadata().Table(t.Table)
+		if len(t.TableCols) != tab.ColumnCount()+tab.MutationColumnCount() {
+			panic(fmt.Sprintf("values not provided for all table columns"))
+		}
+
 	default:
 		if !opt.IsListOp(e) {
 			for i := 0; i < e.ChildCount(); i++ {
