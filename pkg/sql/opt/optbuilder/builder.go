@@ -180,14 +180,17 @@ func unimplementedf(format string, a ...interface{}) builderError {
 func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
-	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, inScope)
-
-	case *tree.Select:
-		return b.buildSelect(stmt, inScope)
-
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
+
+	case *tree.Insert:
+		return b.buildInsert(stmt, inScope)
+
+	case *tree.ParenSelect:
+		return b.buildSelect(stmt.Select, nil /* desiredTypes */, inScope)
+
+	case *tree.Select:
+		return b.buildSelect(stmt, nil /* desiredTypes */, inScope)
 
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)

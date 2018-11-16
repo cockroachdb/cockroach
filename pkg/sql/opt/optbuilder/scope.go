@@ -576,9 +576,6 @@ func (s *scope) FindSourceProvidingColumn(
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			// TODO(rytaft): Do not return a match if this column is being
-			// backfilled, or the column expression being resolved is not from
-			// a selector column expression from an UPDATE/DELETE.
 			if col.name == colName {
 				if col.table.TableName == "" && !col.hidden {
 					if candidateFromAnonSource != nil {

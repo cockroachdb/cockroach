@@ -44,6 +44,8 @@ const (
 	nonKeyCol
 )
 
+var uniqueRowIDString = "unique_rowid()"
+
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
@@ -61,7 +63,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.IsVirtual = true
 	}
 
-	// Add the columns.
+	// Add columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
@@ -87,7 +89,12 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	// If there is no primary index, add the hidden rowid column.
 	if len(tab.Indexes) == 0 && !tab.IsVirtual {
-		rowid := &Column{Name: "rowid", Type: types.Int, Hidden: true}
+		rowid := &Column{
+			Name:        "rowid",
+			Type:        types.Int,
+			Hidden:      true,
+			DefaultExpr: &uniqueRowIDString,
+		}
 		tab.Columns = append(tab.Columns, rowid)
 		tab.addPrimaryColumnIndex(rowid.Name)
 	}
@@ -119,6 +126,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// number derived from how CRDB internally stores tables. The first user table
 	// is 53. This magic number is used to have tests look consistent.
 	tab.tableID = sqlbase.ID(len(tc.dataSources) + 53)
+
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
 
@@ -225,7 +233,23 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
 	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
-	tt.Columns = append(tt.Columns, col)
+
+	if def.DefaultExpr.Expr != nil {
+		s := tree.Serialize(def.DefaultExpr.Expr)
+		col.DefaultExpr = &s
+	}
+
+	if def.Computed.Expr != nil {
+		s := tree.Serialize(def.Computed.Expr)
+		col.ComputedExpr = &s
+	}
+
+	// Add mutation columns to the Mutations list.
+	if col.IsMutation() {
+		tt.Mutations = append(tt.Mutations, col)
+	} else {
+		tt.Columns = append(tt.Columns, col)
+	}
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {

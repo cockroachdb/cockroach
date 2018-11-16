@@ -17,8 +17,10 @@ package testcat
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -313,6 +315,7 @@ type Table struct {
 	Stats          TableStats
 	IsVirtual      bool
 	Catalog        opt.Catalog
+	Mutations      []*Column
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -385,6 +388,16 @@ func (tt *Table) StatisticCount() int {
 // Statistic is part of the opt.Table interface.
 func (tt *Table) Statistic(i int) opt.TableStatistic {
 	return tt.Stats[i]
+}
+
+// MutationColumnCount is part of the opt.Table interface.
+func (tt *Table) MutationColumnCount() int {
+	return len(tt.Mutations)
+}
+
+// MutationColumn is part of the opt.Table interface.
+func (tt *Table) MutationColumn(i int) opt.Column {
+	return tt.Mutations[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -477,10 +490,12 @@ func (ti *Index) ForeignKey() (opt.ForeignKeyReference, bool) {
 
 // Column implements the opt.Column interface for testing purposes.
 type Column struct {
-	Hidden   bool
-	Nullable bool
-	Name     string
-	Type     types.T
+	Hidden       bool
+	Nullable     bool
+	Name         string
+	Type         types.T
+	DefaultExpr  *string
+	ComputedExpr *string
 }
 
 var _ opt.Column = &Column{}
@@ -500,9 +515,45 @@ func (tc *Column) DatumType() types.T {
 	return tc.Type
 }
 
+// ColTypeStr is part of the opt.Column interface.
+func (tc *Column) ColTypeStr() string {
+	t, err := coltypes.DatumTypeToColumnType(tc.Type)
+	if err != nil {
+		panic(err)
+	}
+	return t.String()
+}
+
 // IsHidden is part of the opt.Column interface.
 func (tc *Column) IsHidden() bool {
 	return tc.Hidden
+}
+
+// HasDefault is part of the opt.Column interface.
+func (tc *Column) HasDefault() bool {
+	return tc.DefaultExpr != nil
+}
+
+// IsComputed is part of the opt.Column interface.
+func (tc *Column) IsComputed() bool {
+	return tc.ComputedExpr != nil
+}
+
+// DefaultExprStr is part of the opt.Column interface.
+func (tc *Column) DefaultExprStr() string {
+	return *tc.DefaultExpr
+}
+
+// ComputedExprStr is part of the opt.Column interface.
+func (tc *Column) ComputedExprStr() string {
+	return *tc.ComputedExpr
+}
+
+// IsMutation is true if the column should be treated as if it were recently
+// added via a schema change, and is still being back-filled. Any INSERT ops
+// must fill in its default value.
+func (tc *Column) IsMutation() bool {
+	return strings.HasSuffix(tc.Name, ":mutation")
 }
 
 // TableStat implements the opt.TableStatistic interface for testing purposes.

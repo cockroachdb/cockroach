@@ -186,3 +186,9 @@ func (f *stubFactory) ConstructExplain(
 func (f *stubFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructInsert(
+	input exec.Node, table opt.Table, rowsNeeded bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

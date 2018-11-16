@@ -2453,14 +2453,34 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
 
+// ColTypeStr is part of the opt.Column interface.
+func (desc *ColumnDescriptor) ColTypeStr() string {
+	return desc.Type.SQLString()
+}
+
 // IsHidden is part of the opt.Column interface.
 func (desc *ColumnDescriptor) IsHidden() bool {
 	return desc.Hidden
 }
 
+// HasDefault is part of the opt.Column interface.
+func (desc *ColumnDescriptor) HasDefault() bool {
+	return desc.DefaultExpr != nil
+}
+
 // IsComputed returns whether the given column is computed.
 func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil
+}
+
+// DefaultExprStr is part of the opt.Column interface.
+func (desc *ColumnDescriptor) DefaultExprStr() string {
+	return *desc.DefaultExpr
+}
+
+// ComputedExprStr is part of the opt.Column interface.
+func (desc *ColumnDescriptor) ComputedExprStr() string {
+	return *desc.ComputeExpr
 }
 
 // CheckCanBeFKRef returns whether the given column is computed.
