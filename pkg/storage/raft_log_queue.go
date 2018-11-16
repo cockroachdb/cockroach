@@ -106,12 +106,9 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	// and end transaction operations. If the estimated raft log size becomes
 	// larger than the replica size, we're better off recovering the replica
 	// using a snapshot.
-	targetSize := r.mu.state.Stats.Total()
+	targetSize := r.store.cfg.RaftLogTruncationThreshold
 	if targetSize > *r.mu.zone.RangeMaxBytes {
 		targetSize = *r.mu.zone.RangeMaxBytes
-	}
-	if targetSize > r.store.cfg.RaftLogTruncationThreshold {
-		targetSize = r.store.cfg.RaftLogTruncationThreshold
 	}
 	raftStatus := r.raftStatusRLocked()
 
