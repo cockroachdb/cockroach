@@ -868,7 +868,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	srfScope := s.push()
 	var outCol *scopeColumn
 	if len(def.ReturnLabels) == 1 {
-		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc.ResolvedType(), typedFunc)
+		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc)
 	}
 	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol, nil)
 	srf := &srf{

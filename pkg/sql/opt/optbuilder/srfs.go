@@ -104,7 +104,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
 		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
-			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
+			outCol = b.addColumn(outScope, label, texpr)
 		}
 		zip[i].Func = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 		zip[i].Cols = make(opt.ColList, len(outScope.cols)-startCols)

@@ -101,7 +101,7 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for i, e := range exprs {
-						b.addColumn(outScope, labels[i], e.ResolvedType(), e)
+						b.addColumn(outScope, labels[i], e)
 					}
 					continue
 				}
@@ -117,7 +117,7 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		label := b.getColName(e)
-		b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
+		b.addColumn(outScope, label, texpr)
 	}
 }
 
