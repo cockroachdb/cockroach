@@ -1079,9 +1079,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		// Third.
 		{"idx_g", 3, sqlbase.DescriptorMutation_DELETE_ONLY},
 		// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
-		// UNIQUE column deletion gets split into two mutation ids.
+		// UNIQUE column deletion gets split into two mutations with the same ID.
 		{"test_v_key", 4, sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY},
-		{"v", 5, sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+		{"v", 4, sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY},
 	}
 
 	if len(tableDesc.Mutations) != len(expected) {
