@@ -304,13 +304,13 @@ func BenchmarkClearRange_RocksDB(b *testing.B) {
 	if testing.Short() {
 		b.Skip("TODO: fix benchmark")
 	}
-	runBenchmarkClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
+	runClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearRange(start, end)
 	})
 }
 
 func BenchmarkClearIterRange_RocksDB(b *testing.B) {
-	runBenchmarkClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
+	runClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start, end)
