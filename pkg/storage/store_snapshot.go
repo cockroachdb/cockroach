@@ -398,25 +398,83 @@ func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	desc := *snapHeader.State.Desc
-	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
-		// We have an initialized replica. Preemptive snapshots can be applied with
-		// no further checks if they do not widen the existing replica. Raft
-		// snapshots can be applied with no further checks even if they widen the
-		// existing replica—we can't reject them at this point—but see the comments
-		// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
-		existingDesc := (*Replica)(v).Desc()
-		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
-			return nil, nil
-		}
 
-		// We have a preemptive snapshot that widens an existing replica. Proceed
-		// by checking the keyspace covered by the snapshot but not the existing
-		// replica.
-		desc.StartKey = existingDesc.EndKey
+	if v, ok := s.mu.replicas.Load(
+		int64(desc.RangeID),
+	); ok {
+		existingRepl := (*Replica)(v)
+		// The raftMu is held which allows us to use the existing replica as a
+		// placeholder when we decide that the snapshot can be applied. As long
+		// as the caller releases the raftMu only after feeding the snapshot
+		// into the replica, this is safe.
+		existingRepl.raftMu.AssertHeld()
+
+		existingRepl.mu.RLock()
+		existingDesc := existingRepl.descRLocked()
+		existingIsInitialized := existingRepl.isInitializedRLocked()
+		existingIsPreemptive := existingRepl.mu.replicaID == 0
+		existingRepl.mu.RUnlock()
+
+		if existingIsInitialized {
+			if !snapHeader.IsPreemptive() {
+				// Regular Raft snapshots can't be refused at this point,
+				// even if they widen the existing replica. See the comments
+				// in Replica.maybeAcquireSnapshotMergeLock for how this is
+				// made safe.
+				//
+				// NB: we expect the replica to know its replicaID at this point
+				// (i.e. !existingIsPreemptive), though perhaps it's possible
+				// that this isn't true if the leader initiates a Raft snapshot
+				// (that would provide a range descriptor with this replica in
+				// it) but this node reboots (temporarily forgetting its
+				// replicaID) before the snapshot arrives.
+				return nil, nil
+			}
+
+			if existingIsPreemptive {
+				// Allow applying a preemptive snapshot on top of another preemptive snapshot.
+				// We only need to acquire a placeholder for the part (if any) of the new
+				// snapshot that extends past the old one. If there's no such overlap, return
+				// early; if there is, "forward" the descriptor's StartKey so that the later
+				// code will only check the overlap.
+				//
+				// NB: morally it would be cleaner to ask for the existing
+				// replica to be GC'ed first, but consider that the preemptive
+				// snapshot was likely left behind by a failed attempt to
+				// up-replicate. This is a relatively common scenario and not
+				// worth discarding and resending another snapshot for. Let the
+				// snapshot through, which means "pretending that it doesn't
+				// intersect the existing replica".
+				if !existingDesc.EndKey.Less(desc.EndKey) {
+					return nil, nil
+				}
+				desc.StartKey = existingDesc.EndKey
+			}
+			// NB: If the existing snapshot is *not* preemptive
+			// (i.e. the above branch wasn't taken), there are
+			// two cases.
+			//
+			// In the happy case, the existing replica is uninitialized and the
+			// overlap check below will return success (with a placeholder).
+			//
+			// If the replica is initialized, the overlap check will hit an
+			// error. This path is hit after a rapid up-down-upreplication to
+			// the same store and will resolve as the replicaGCQueue removes the
+			// existing replica. We are pretty sure that the existing replica is
+			// gc'able, because a preemptive snapshot implies that someone is
+			// trying to add this replica to the group at the moment. (We are
+			// not however, sure enough that this couldn't happen by accident to
+			// GC the replica ourselves - the replica GC queue will perform the
+			// proper check).
+		}
 	}
 
-	// We don't have the range, or we have an uninitialized placeholder, or the
-	// existing range is less wide. Will we be able to create/initialize it?
+	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
+	// snapshot for. Is there a conflicting existing placeholder or an
+	// overlapping range?
+
+	// NB: this check seems redundant since placeholders are also represented in
+	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
 		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
@@ -468,7 +526,7 @@ func (s *Store) canApplySnapshotLocked(
 				msg += "; initiated GC:"
 			}
 		}
-		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
+		return nil, errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
 	}
 
 	placeholder := &ReplicaPlaceholder{
