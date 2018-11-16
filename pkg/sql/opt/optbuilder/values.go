@@ -28,7 +28,9 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (outScope *scope) {
+func (b *Builder) buildValuesClause(
+	values *tree.ValuesClause, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
 	var numCols int
 	if len(values.Rows) > 0 {
 		numCols = len(values.Rows[0])
@@ -51,15 +53,17 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 
 	for _, tuple := range values.Rows {
 		if numCols != len(tuple) {
-			panic(builderError{pgerror.NewErrorf(
-				pgerror.CodeSyntaxError,
-				"VALUES lists must all be the same length, expected %d columns, found %d",
-				numCols, len(tuple))})
+			reportValuesLenError(numCols, len(tuple))
 		}
 
 		elems := make(memo.ScalarListExpr, numCols)
 		for i, expr := range tuple {
-			texpr := inScope.resolveType(expr, types.Any)
+			desired := types.Any
+			if i < len(desiredTypes) {
+				desired = desiredTypes[i]
+			}
+
+			texpr := inScope.resolveType(expr, desired)
 			typ := texpr.ResolvedType()
 			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
@@ -85,4 +89,11 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	colList := colsToColList(outScope.cols)
 	outScope.expr = b.factory.ConstructValues(rows, colList)
 	return outScope
+}
+
+func reportValuesLenError(expected, actual int) {
+	panic(builderError{pgerror.NewErrorf(
+		pgerror.CodeSyntaxError,
+		"VALUES lists must all be the same length, expected %d columns, found %d",
+		expected, actual)})
 }

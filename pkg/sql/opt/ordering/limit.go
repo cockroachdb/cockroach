@@ -23,7 +23,9 @@ import (
 func limitOrOffsetCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	// Limit/Offset require a certain ordering of their input, but can also pass
 	// through a stronger ordering. For example:
+	//
 	//   SELECT * FROM (SELECT x, y FROM t ORDER BY x LIMIT 10) ORDER BY x,y
+	//
 	// In this case the internal ordering is x+, but we can pass through x+,y+
 	// to satisfy both orderings.
 	return required.Intersects(expr.Private().(*physical.OrderingChoice))

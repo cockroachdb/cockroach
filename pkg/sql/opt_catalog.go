@@ -249,6 +249,11 @@ type optTable struct {
 	// wrappers is a cache of index wrappers that's used to satisfy repeated
 	// calls to the SecondaryIndex method for the same index.
 	wrappers map[*sqlbase.IndexDescriptor]*optIndex
+
+	// mutations is a list of the DELETE_AND_WRITE_ONLY mutation column
+	// descriptors. These are present when the table is undergoing an online
+	// schema change where one or more columns are being added or dropped.
+	mutations []*sqlbase.ColumnDescriptor
 }
 
 var _ opt.Table = &optTable{}
@@ -347,6 +352,33 @@ func (ot *optTable) StatisticCount() int {
 // Statistic is part of the opt.Table interface.
 func (ot *optTable) Statistic(i int) opt.TableStatistic {
 	return &ot.stats[i]
+}
+
+// MutationColumnCount is part of the opt.Table interface.
+func (ot *optTable) MutationColumnCount() int {
+	ot.ensureMutations()
+	return len(ot.mutations)
+}
+
+// MutationColumn is part of the opt.Table interface.
+func (ot *optTable) MutationColumn(i int) opt.Column {
+	return ot.mutations[i]
+}
+
+// ensureMutations adds any DELETE_AND_WRITE_ONLY column mutations to the table
+// wrapper's list of mutations, to be returned by the MutationColumn method.
+func (ot *optTable) ensureMutations() {
+	if ot.mutations == nil && len(ot.desc.Mutations) != 0 {
+		ot.mutations = make([]*sqlbase.ColumnDescriptor, 0, len(ot.desc.Mutations))
+		for i := range ot.desc.Mutations {
+			m := &ot.desc.Mutations[i]
+			if m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				if c := m.GetColumn(); c != nil {
+					ot.mutations = append(ot.mutations, c)
+				}
+			}
+		}
+	}
 }
 
 func (ot *optTable) ensureColMap() {

@@ -313,6 +313,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
+	case opt.InsertOp:
+		return sb.colStatInsert(colSet, e.(*InsertExpr))
+
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
 		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps, relProps.NotNullCols)
@@ -1726,6 +1729,29 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		colStat.NullCount = 0
 	}
 	return colStat
+}
+
+// +--------+
+// | Insert |
+// +--------+
+
+func (sb *statisticsBuilder) buildInsert(ins *InsertExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+
+	inputStats := &ins.Input.Relational().Stats
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatInsert(
+	colSet opt.ColSet, ins *InsertExpr,
+) *props.ColumnStatistic {
+	return sb.colStat(colSet, ins.Input)
 }
 
 /////////////////////////////////////////////////

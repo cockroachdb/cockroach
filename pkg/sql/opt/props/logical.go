@@ -154,6 +154,11 @@ type Shared struct {
 	//
 	CanHaveSideEffects bool
 
+	// CanMutate is true if the subtree rooted at this expression contains at
+	// least one operator that modifies schema (like CreateTable) or writes or
+	// deletes rows (like Insert).
+	CanMutate bool
+
 	// HasPlaceholder is true if the subtree rooted at this expression contains
 	// at least one Placeholder operator.
 	HasPlaceholder bool
