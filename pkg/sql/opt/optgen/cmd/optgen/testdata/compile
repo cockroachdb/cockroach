@@ -17,7 +17,7 @@ define Not {
 			Tags=(Tags)
 			Name="Not"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:3:5>)
 			)
 			Src=<test.opt:2:1>
 		)
@@ -64,8 +64,8 @@ define Gt {
 			Tags=(Tags)
 			Name="Gt"
 			Fields=(DefineFields
-				(DefineField Name="left" Type="Expr" Src=<test.opt:2:5>)
-				(DefineField Name="right" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="left" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="right" Type="Expr" Src=<test.opt:3:5>)
 			)
 			Src=<test.opt:1:1>
 		)

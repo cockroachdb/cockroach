@@ -80,7 +80,7 @@ func (g *factoryGen) genConstructFuncs() {
 		// Generate Construct method.
 		format := "// Construct%s constructs an expression for the %s operator.\n"
 		g.w.writeIndent(format, define.Name, define.Name)
-		generateDefineComments(g.w.writer, define, string(define.Name))
+		generateComments(g.w.writer, define.Comments, string(define.Name), string(define.Name))
 
 		g.w.nestIndent("func (_f *Factory) Construct%s(\n", define.Name)
 

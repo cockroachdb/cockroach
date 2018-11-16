@@ -2,9 +2,14 @@
 # Generate code for relational, scalar, enforcer, and private operators.
 #
 optgen exprs test.opt
+
+# Project is a projection operator.
 [Relational]
 define Project {
-    Input       RelExpr
+    # Input is a relational input.
+    Input RelExpr
+
+    # Projections are the projected columns.
     Projections ProjectionsExpr
 
     Passthrough ColSet
@@ -23,7 +28,10 @@ define ProjectionsItem {
 
 [Private]
 define ColPrivate {
-    Col    ColumnID
+    # Col is a column ID.
+    Col ColumnID
+
+    # scalar are props.
     scalar ScalarProps
 }
 
@@ -49,8 +57,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// ProjectExpr is a projection operator.
 type ProjectExpr struct {
-	Input       RelExpr
+	// Input is a relational input.
+	Input RelExpr
+
+	// Projections are the projected columns.
 	Projections ProjectionsExpr
 	Passthrough opt.ColSet
 
@@ -268,7 +280,10 @@ func (e *ProjectionsItem) ScalarProps(mem *Memo) *props.Scalar {
 }
 
 type ColPrivate struct {
-	Col    opt.ColumnID
+	// Col is a column ID.
+	Col opt.ColumnID
+
+	// scalar are props.
 	scalar props.Scalar
 }
 

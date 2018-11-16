@@ -64,7 +64,7 @@ func (g *exprsGen) genExprDef(define *lang.DefineExpr) {
 	opTyp := g.md.typeOf(define)
 
 	// Generate comment for the expression struct.
-	generateDefineComments(g.w, define, opTyp.name)
+	generateComments(g.w, define.Comments, string(define.Name), opTyp.name)
 
 	// Generate the struct and methods.
 	if define.Tags.Contains("List") {
@@ -147,7 +147,15 @@ func (g *exprsGen) genPrivateStruct(define *lang.DefineExpr) {
 	privTyp := g.md.typeOf(define)
 
 	fmt.Fprintf(g.w, "type %s struct {\n", privTyp.name)
-	for _, field := range define.Fields {
+	for i, field := range define.Fields {
+		// Generate comment for the struct field.
+		if len(field.Comments) != 0 {
+			if i != 0 {
+				fmt.Fprintf(g.w, "\n")
+			}
+			generateComments(g.w, field.Comments, string(field.Name), string(field.Name))
+		}
+
 		fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).name)
 	}
 	fmt.Fprintf(g.w, "}\n\n")
@@ -169,7 +177,15 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "type %s struct {\n", opTyp.name)
 
 	// Generate child fields.
-	for _, field := range define.Fields {
+	for i, field := range define.Fields {
+		// Generate comment for the struct field.
+		if len(field.Comments) != 0 {
+			if i != 0 {
+				fmt.Fprintf(g.w, "\n")
+			}
+			generateComments(g.w, field.Comments, string(field.Name), string(field.Name))
+		}
+
 		// If field's name is "_", then use Go embedding syntax.
 		if isEmbeddedField(field) {
 			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).name)

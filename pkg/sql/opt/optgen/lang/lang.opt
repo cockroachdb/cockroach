@@ -80,8 +80,9 @@ define DefineFields {
 }
 
 define DefineField {
-    Name String
-    Type String
+    Comments Comments
+    Name     String
+    Type     String
 }
 
 define Rule {
