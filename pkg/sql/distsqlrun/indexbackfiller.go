@@ -82,11 +82,6 @@ func (ib *indexBackfiller) runChunk(
 	ctx, traceSpan := tracing.ChildSpan(tctx, "chunk")
 	defer tracing.FinishSpan(traceSpan)
 
-	added := make([]sqlbase.IndexDescriptor, len(mutations))
-	for i, m := range mutations {
-		added[i] = *m.GetIndex()
-	}
-
 	var key roachpb.Key
 	transactionalChunk := func(ctx context.Context) error {
 		return ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

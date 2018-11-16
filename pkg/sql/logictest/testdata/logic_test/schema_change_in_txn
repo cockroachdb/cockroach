@@ -499,3 +499,46 @@ INSERT INTO customers (k) VALUES ('b')
 
 statement ok
 COMMIT;
+
+subtest rollback_mutations
+
+statement ok
+INSERT INTO customers (k) VALUES ('z'), ('x')
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE customers ADD i INT DEFAULT 5
+
+statement ok
+CREATE UNIQUE INDEX i_idx ON customers (i)
+
+statement error pq: duplicate key value \(i\)=\(5\) violates unique constraint "i_idx"
+COMMIT
+
+query TTBTTTB
+SHOW COLUMNS FROM customers
+----
+k  CHAR  false  NULL  ·  {"primary"}  false
+
+subtest add_multiple_computed_elements
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE customers ADD i INT DEFAULT 5
+
+statement ok
+ALTER TABLE customers ADD j INT AS (i-1) STORED
+
+statement ok
+COMMIT
+
+query TII rowsort
+SELECT * FROM customers
+----
+b  5  4
+x  5  4
+z  5  4

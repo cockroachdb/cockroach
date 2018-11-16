@@ -110,7 +110,7 @@ func ProcessComputedColumns(
 
 	// TODO(justin): it's unfortunate that this parses and typechecks the
 	// ComputeExprs on every query.
-	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx)
+	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx, false /* addingCols */)
 	return cols, computedCols, computedExprs, err
 }
 
@@ -120,12 +120,16 @@ func ProcessComputedColumns(
 // The length of the result slice matches the length of the input column
 // descriptors. For every column that has no computed expression, a NULL
 // expression is reported.
+// addingCols indicates if the input column descriptors are being added
+// and allows type checking of the compute expressions to reference
+// input columns earlier in the slice.
 func MakeComputedExprs(
 	cols []ColumnDescriptor,
 	tableDesc *TableDescriptor,
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
+	addingCols bool,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have computed expressions. If there
 	// are none, we don't bother with constructing the map as the expressions
@@ -161,21 +165,32 @@ func MakeComputedExprs(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	sourceInfo := NewSourceInfoForSingleTable(
+	sources := []*DataSourceInfo{NewSourceInfoForSingleTable(
 		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
-	)
+	)}
 
 	semaCtx := tree.MakeSemaContext(false)
 	semaCtx.IVarContainer = iv
+
+	addColumnInfo := func(col ColumnDescriptor) {
+		ivarHelper.AppendSlot()
+		iv.cols = append(iv.cols, col)
+		sources = append(sources, NewSourceInfoForSingleTable(
+			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{col}),
+		))
+	}
 
 	compExprIdx := 0
 	for _, col := range cols {
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
+			if addingCols {
+				addColumnInfo(col)
+			}
 			continue
 		}
 		expr, _, _, err := ResolveNames(exprs[compExprIdx],
-			MakeMultiSourceInfo(sourceInfo),
+			MakeMultiSourceInfo(sources...),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, err
@@ -190,6 +205,9 @@ func MakeComputedExprs(
 		}
 		computedExprs = append(computedExprs, typedExpr)
 		compExprIdx++
+		if addingCols {
+			addColumnInfo(col)
+		}
 	}
 	return computedExprs, nil
 }
