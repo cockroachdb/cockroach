@@ -17,6 +17,8 @@ package cmdq
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -443,6 +445,78 @@ func TestBTreeSeekOverlapRandom(t *testing.T) {
 	}
 }
 
+func TestBTreeCloneConcurrentOperations(t *testing.T) {
+	const cloneTestSize = 10000
+	p := perm(cloneTestSize)
+
+	var trees []*btree
+	treeC, treeDone := make(chan *btree), make(chan struct{})
+	go func() {
+		for b := range treeC {
+			trees = append(trees, b)
+		}
+		close(treeDone)
+	}()
+
+	var wg sync.WaitGroup
+	var populate func(tr *btree, start int)
+	populate = func(tr *btree, start int) {
+		t.Logf("Starting new clone at %v", start)
+		treeC <- tr
+		for i := start; i < cloneTestSize; i++ {
+			tr.Set(p[i])
+			if i%(cloneTestSize/5) == 0 {
+				wg.Add(1)
+				c := tr.Clone()
+				go populate(&c, i+1)
+			}
+		}
+		wg.Done()
+	}
+
+	wg.Add(1)
+	var tr btree
+	go populate(&tr, 0)
+	wg.Wait()
+	close(treeC)
+	<-treeDone
+
+	t.Logf("Starting equality checks on %d trees", len(trees))
+	want := rang(0, cloneTestSize-1)
+	for i, tree := range trees {
+		if !reflect.DeepEqual(want, all(tree)) {
+			t.Errorf("tree %v mismatch", i)
+		}
+	}
+
+	t.Log("Removing half of cmds from first half")
+	toRemove := want[cloneTestSize/2:]
+	for i := 0; i < len(trees)/2; i++ {
+		tree := trees[i]
+		wg.Add(1)
+		go func() {
+			for _, cmd := range toRemove {
+				tree.Delete(cmd)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	t.Log("Checking all values again")
+	for i, tree := range trees {
+		var wantpart []*cmd
+		if i < len(trees)/2 {
+			wantpart = want[:cloneTestSize/2]
+		} else {
+			wantpart = want
+		}
+		if got := all(tree); !reflect.DeepEqual(wantpart, got) {
+			t.Errorf("tree %v mismatch, want %v got %v", i, len(want), len(got))
+		}
+	}
+}
+
 func TestBTreeCmp(t *testing.T) {
 	testCases := []struct {
 		spanA, spanB roachpb.Span
@@ -544,6 +618,25 @@ func perm(n int) (out []*cmd) {
 	return out
 }
 
+// rang returns an ordered list of cmds with spans in the range [m, n].
+func rang(m, n int) (out []*cmd) {
+	for i := m; i <= n; i++ {
+		out = append(out, newCmd(spanWithEnd(i, i+1)))
+	}
+	return out
+}
+
+// all extracts all cmds from a tree in order as a slice.
+func all(tr *btree) (out []*cmd) {
+	it := tr.MakeIter()
+	it.First()
+	for it.Valid() {
+		out = append(out, it.Cmd())
+		it.Next()
+	}
+	return out
+}
+
 func forBenchmarkSizes(b *testing.B, f func(b *testing.B, count int)) {
 	for _, count := range []int{16, 128, 1024, 8192, 65536} {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
@@ -608,6 +701,48 @@ func BenchmarkBTreeDeleteInsert(b *testing.B) {
 			tr.Set(cmd)
 		}
 	})
+}
+
+func BenchmarkBTreeDeleteInsertCloneOnce(b *testing.B) {
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		insertP := perm(count)
+		var tr btree
+		for _, cmd := range insertP {
+			tr.Set(cmd)
+		}
+		tr = tr.Clone()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			cmd := insertP[i%count]
+			tr.Delete(cmd)
+			tr.Set(cmd)
+		}
+	})
+}
+
+func BenchmarkBTreeDeleteInsertCloneEachTime(b *testing.B) {
+	for _, reset := range []bool{false, true} {
+		b.Run(fmt.Sprintf("reset=%t", reset), func(b *testing.B) {
+			forBenchmarkSizes(b, func(b *testing.B, count int) {
+				insertP := perm(count)
+				var tr, trReset btree
+				for _, cmd := range insertP {
+					tr.Set(cmd)
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					cmd := insertP[i%count]
+					if reset {
+						trReset.Reset()
+						trReset = tr
+					}
+					tr = tr.Clone()
+					tr.Delete(cmd)
+					tr.Set(cmd)
+				}
+			})
+		})
+	}
 }
 
 func BenchmarkBTreeMakeIter(b *testing.B) {
