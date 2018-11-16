@@ -97,8 +97,8 @@ CREATE SEQUENCE seq
 statement ok
 SET OPTIMIZER = ALWAYS
 
-query error pq: unsupported statement: \*tree\.Insert
-INSERT INTO test (k, v) VALUES (5, 50)
+query error pq: unsupported statement: \*tree\.Delete
+DELETE FROM test WHERE k=5
 
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: aggregates with FILTER are not supported yet

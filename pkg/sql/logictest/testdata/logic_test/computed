@@ -722,7 +722,7 @@ CREATE TABLE error_check (k INT PRIMARY KEY, s STRING, i INT AS (s::INT) STORED)
 statement ok
 INSERT INTO error_check VALUES(1, '1')
 
-statement error computed column i:
+statement error could not parse "foo" as type int: strconv.ParseInt
 INSERT INTO error_check VALUES(2, 'foo')
 
 statement error computed column i:

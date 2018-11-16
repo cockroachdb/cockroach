@@ -367,7 +367,8 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// Start with fast check to see if top-level statement is supported.
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-		*tree.UnionClause, *tree.ValuesClause, *tree.Explain:
+		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
+		*tree.Insert:
 
 	default:
 		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
