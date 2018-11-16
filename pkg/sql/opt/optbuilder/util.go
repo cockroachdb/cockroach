@@ -201,13 +201,11 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 // addColumn adds a column to scope with the given label, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.
-func (b *Builder) addColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr,
-) *scopeColumn {
+func (b *Builder) addColumn(scope *scope, label string, expr tree.TypedExpr) *scopeColumn {
 	name := tree.Name(label)
 	scope.cols = append(scope.cols, scopeColumn{
 		name: name,
-		typ:  typ,
+		typ:  expr.ResolvedType(),
 		expr: expr,
 	})
 	return &scope.cols[len(scope.cols)-1]
