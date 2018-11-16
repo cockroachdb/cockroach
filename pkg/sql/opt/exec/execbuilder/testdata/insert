@@ -298,20 +298,22 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── sort            ·          ·
-           │              order      -v
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
+count                          ·         ·
+ └── insert                    ·         ·
+      │                        into      insert_t(x, v, rowid)
+      └── render               ·         ·
+           │                   render 0  x
+           │                   render 1  v
+           │                   render 2  column7
+           └── sort            ·         ·
+                │              order     -v
+                └── render     ·         ·
+                     │         render 0  unique_rowid()
+                     │         render 1  x
+                     │         render 2  v
+                     └── scan  ·         ·
+·                              table     select_t@primary
+·                              spans     ALL
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -319,72 +321,93 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── limit           ·          ·
-           │              count      1
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
-·                         limit      1
+count                ·         ·
+ └── insert          ·         ·
+      │              into      insert_t(x, v, rowid)
+      └── render     ·         ·
+           │         render 0  x
+           │         render 1  v
+           │         render 2  unique_rowid()
+           └── scan  ·         ·
+·                    table     select_t@primary
+·                    spans     ALL
+·                    limit     1
 
 # Check the grouping of LIMIT and ORDER BY
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-count                  ·      ·
- └── insert            ·      ·
-      │                into   insert_t(x, v, rowid)
-      └── limit        ·      ·
-           │           count  1
-           └── values  ·      ·
-·                      size   2 columns, 2 rows
+count                       ·      ·
+ └── insert                 ·      ·
+      │                     into   insert_t(x, v, rowid)
+      └── render            ·      ·
+           └── limit        ·      ·
+                │           count  1
+                └── values  ·      ·
+·                           size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           │                count     1
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           │                count     1
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           │                count     1
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
+
+# ORDER BY expression that's not inserted into table.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v) RETURNING x+v
+----
+render                              ·         ·                      ("?column?")                            ·
+ │                                  render 0  x + v                  ·                                       ·
+ └── run                            ·         ·                      (x, v, rowid[hidden])                   ·
+      └── insert                    ·         ·                      (x, v, rowid[hidden])                   ·
+           │                        into      insert_t(x, v, rowid)  ·                                       ·
+           └── render               ·         ·                      (length, "?column?", column9)           ·
+                │                   render 0  length                 ·                                       ·
+                │                   render 1  "?column?"             ·                                       ·
+                │                   render 2  column9                ·                                       ·
+                └── sort            ·         ·                      (column9, length, "?column?", column8)  +column8
+                     │              order     +column8               ·                                       ·
+                     └── render     ·         ·                      (column9, length, "?column?", column8)  ·
+                          │         render 0  unique_rowid()         ·                                       ·
+                          │         render 1  length(k)              ·                                       ·
+                          │         render 2  2                      ·                                       ·
+                          │         render 3  k || v                 ·                                       ·
+                          └── scan  ·         ·                      (k, v)                                  ·
+·                                   table     kv@primary             ·                                       ·
+·                                   spans     ALL                    ·                                       ·
