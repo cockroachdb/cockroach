@@ -55,7 +55,8 @@ var (
 )
 
 // LimitDecimalWidth limits d's precision (total number of digits) and scale
-// (number of digits after the decimal point).
+// (number of digits after the decimal point). Note that this any limiting will
+// modify the decimal in-place.
 func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 	if d.Form != apd.Finite || precision <= 0 {
 		return nil
