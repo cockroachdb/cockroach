@@ -18,6 +18,7 @@ package tscache
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
@@ -248,8 +249,10 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 				}
 				d++
 			}
-			panic(log.Safe(fmt.Sprintf("inverted range: key lens = [%d,%d), diff @ index %d",
-				len(from), len(to), d)))
+			msg := fmt.Sprintf("inverted range (issue #32149): key lens = [%d,%d), diff @ index %d",
+				len(from), len(to), d)
+			log.Errorf(context.Background(), "%s, [%s,%s)", msg, from, to)
+			panic(log.Safe(msg))
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {
