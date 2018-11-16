@@ -580,23 +580,39 @@ func runMVCCDeleteRange(b *testing.B, emk engineMaker, valueBytes int) {
 	}
 }
 
-func runClearRange(b *testing.B, clearRange func(e Engine, b Batch, start, end MVCCKey) error) {
+func runClearRange(
+	b *testing.B, emk engineMaker, clearRange func(e Engine, b Batch, start, end MVCCKey) error,
+) {
 	const rangeBytes = 64 << 20
 	const valueBytes = 92
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(b, setupMVCCRocksDB, benchDataOptions{
+	eng, _ := setupMVCCData(b, emk, benchDataOptions{
 		numVersions: 1,
 		numKeys:     numKeys,
 		valueBytes:  valueBytes,
 	})
 	defer eng.Close()
 
+	// It is not currently possible to ClearRange(NilKey, MVCCKeyMax) thanks to a
+	// variety of hacks inside of ClearRange that explode if provided the NilKey.
+	// So instead we start our ClearRange at the first key that actually exists.
+	//
+	// TODO(benesch): when those hacks are removed, don't bother computing the
+	// first key and simply ClearRange(NilKey, MVCCKeyMax).
+	iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+	iter.Seek(NilKey)
+	if ok, err := iter.Valid(); !ok {
+		b.Fatalf("unable to find first key (err: %v)", err)
+	}
+	firstKey := iter.Key()
+
 	b.SetBytes(rangeBytes)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		batch := eng.NewWriteOnlyBatch()
-		if err := clearRange(eng, batch, NilKey, MVCCKeyMax); err != nil {
+		if err := clearRange(eng, batch, firstKey, MVCCKeyMax); err != nil {
 			b.Fatal(err)
 		}
 		// NB: We don't actually commit the batch here as we don't want to delete
