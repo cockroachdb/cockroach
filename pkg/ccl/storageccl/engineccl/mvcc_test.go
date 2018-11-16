@@ -61,6 +61,7 @@ func assertEqualKVs(
 	expected []engine.MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
+		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, IterOptions{
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -185,6 +186,8 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		t.Run("intents2",
 			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
 		t.Run("intents3", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
+		// Intents beneath the start bound must be ignored (#28358).
+		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
 
 		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
@@ -194,7 +197,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
+		t.Run("intents5", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
 	})
 
 	t.Run("iterFn=Next", func(t *testing.T) {
@@ -257,6 +260,8 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		t.Run("intents2",
 			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
 		t.Run("intents3", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		// Intents beneath the start bound must be ignored (#28358).
+		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
 
 		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
@@ -266,7 +271,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		t.Run("intents5", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
 	})
 }
 
