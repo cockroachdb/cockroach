@@ -89,7 +89,7 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	}
 	var txCtx transform.ExprTransformContext
 	computedExprs, err := sqlbase.MakeComputedExprs(cb.added, &desc,
-		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx)
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx, true /* addingCols */)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	b := txn.NewBatch()
 	rowLength := 0
 	iv := &sqlbase.RowIndexedVarContainer{
-		Cols:    tableDesc.Columns,
+		Cols:    append(tableDesc.Columns, cb.added...),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
 	cb.evalCtx.IVarContainer = iv
@@ -231,6 +231,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 			if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
 				return roachpb.Key{}, sqlbase.NewNonNullViolationError(cb.added[j].Name)
+			}
+
+			// Added computed column values should be usable for the next
+			// added columns being backfilled. They have already been type
+			// checked.
+			if j < len(cb.added) {
+				iv.CurSourceRow = append(iv.CurSourceRow, val)
 			}
 			updateValues[j] = val
 		}
@@ -303,7 +310,9 @@ func (ib *IndexBackfiller) Init(desc sqlbase.TableDescriptor) error {
 		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
 		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
-			if column := m.GetColumn(); column != nil {
+			if column := m.GetColumn(); column != nil &&
+				m.Direction == sqlbase.DescriptorMutation_ADD &&
+				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				cols = append(cols, *column)
 			}
 		}
