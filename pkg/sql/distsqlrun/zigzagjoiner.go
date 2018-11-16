@@ -303,8 +303,16 @@ func newZigzagJoiner(
 
 	colOffset := 0
 	for i := 0; i < z.numTables; i++ {
-		if i < len(fixedValues) {
+		if fixedValues != nil && i < len(fixedValues) {
+			// Useful for testing. In cases where we plan a zigzagJoin in
+			// the planner, we specify fixed values as ValuesCoreSpecs in
+			// the spec itself.
 			z.infos[i].fixedValues = fixedValues[i]
+		} else if i < len(spec.FixedValues) {
+			z.infos[i].fixedValues, err = valuesSpecToEncDatum(spec.FixedValues[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 		if err := z.setupInfo(spec, i, colOffset); err != nil {
 			return nil, err
@@ -313,6 +321,18 @@ func newZigzagJoiner(
 	}
 	z.side = 0
 	return z, nil
+}
+
+func valuesSpecToEncDatum(valuesSpec *ValuesCoreSpec) (res []sqlbase.EncDatum, err error) {
+	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
+	for i, colInfo := range valuesSpec.Columns {
+		bytes := valuesSpec.RawBytes[i]
+		res[i], _, err = sqlbase.EncDatumFromBuffer(&colInfo.Type, colInfo.Encoding, bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 // Start is part of the RowSource interface.
@@ -362,6 +382,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	z.side = side
 	info := z.infos[side]
 
+	info.alloc = &sqlbase.DatumAlloc{}
 	info.table = &spec.Tables[side]
 	info.eqColumnIDs = spec.EqColumns[side].Columns
 	indexID := spec.IndexIds[side]
