@@ -589,10 +589,13 @@ func (buf *buffer) someDigits(i, d int) int {
 func formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), cp)
-	_, _ = buf.WriteString(entry.Message)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		_ = buf.WriteByte('\n')
+	msg := entry.Message
+	if n := len(msg); n != 0 && msg[n-1] == '\n' {
+		msg = msg[:n-1]
 	}
+	msg = strings.Replace(msg, "\n", "\n"+buf.String(), -1)
+	_, _ = buf.WriteString(msg)
+	_ = buf.WriteByte('\n')
 	if len(stacks) > 0 {
 		buf.Write(stacks)
 	}
