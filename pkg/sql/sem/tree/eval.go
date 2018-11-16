@@ -3040,7 +3040,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			if typ.Prec == 0 {
 				return d, nil
 			}
-			dd = *v
+			dd.Set(&v.Decimal)
 		case *DString:
 			err = dd.SetString(string(*v))
 		case *DCollatedString:
