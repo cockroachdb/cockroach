@@ -36,41 +36,41 @@ dump d1
 ----
 ----
 CREATE TABLE b (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 );
 
 CREATE TABLE a (
-	i INT NULL,
+	i INT8 NULL,
 	INDEX a_auto_index_fk_i_ref_b (i ASC),
 	FAMILY "primary" (i, rowid)
 );
 
 CREATE TABLE e (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 );
 
 CREATE TABLE g (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 );
 
 CREATE TABLE f (
-	i INT NOT NULL,
-	g INT NULL,
+	i INT8 NOT NULL,
+	g INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	INDEX f_auto_index_fk_g_ref_g (g ASC),
 	FAMILY "primary" (i, g)
 );
 
 CREATE TABLE d (
-	i INT NOT NULL,
-	e INT NULL,
-	f INT NULL,
+	i INT8 NOT NULL,
+	e INT8 NULL,
+	f INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	INDEX d_auto_index_fk_e_ref_e (e ASC),
 	INDEX d_auto_index_fk_f_ref_f (f ASC),
@@ -78,7 +78,7 @@ CREATE TABLE d (
 );
 
 CREATE TABLE c (
-	i INT NULL,
+	i INT8 NULL,
 	INDEX c_auto_index_fk_i_ref_d (i ASC),
 	FAMILY "primary" (i, rowid)
 );
@@ -86,8 +86,8 @@ CREATE TABLE c (
 CREATE SEQUENCE s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 
 CREATE TABLE s_tbl (
-	id INT NOT NULL DEFAULT nextval('s':::STRING),
-	v INT NULL,
+	id INT8 NOT NULL DEFAULT nextval('s':::STRING),
+	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	FAMILY "primary" (id, v)
 );
@@ -142,15 +142,15 @@ noroundtrip
 ----
 ----
 CREATE TABLE e (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 );
 
 CREATE TABLE d (
-	i INT NOT NULL,
-	e INT NULL,
-	f INT NULL,
+	i INT8 NOT NULL,
+	e INT8 NULL,
+	f INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	INDEX d_auto_index_fk_e_ref_e (e ASC),
 	INDEX d_auto_index_fk_f_ref_f (f ASC),

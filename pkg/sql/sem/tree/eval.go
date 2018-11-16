@@ -2611,8 +2611,13 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
-// GetDefaultIntSize implements ParseTimeContext.
+// GetDefaultIntSize implements ParseTimeContext. This method is
+// nil-safe to handle cases where half-baked EvalContexts are created
+// by test frameworks.
 func (ctx *EvalContext) GetDefaultIntSize() intsize.IntSize {
+	if ctx == nil || ctx.SessionData == nil {
+		return intsize.Unknown
+	}
 	return ctx.SessionData.DefaultIntSize
 }
 

@@ -398,7 +398,7 @@ func TestDumpAsOf(t *testing.T) {
 
 	const want1 = `dump d t
 CREATE TABLE t (
-	i INT NULL,
+	i INT8 NULL,
 	FAMILY "primary" (i, rowid)
 );
 
@@ -420,8 +420,8 @@ INSERT INTO t (i) VALUES
 	}
 	const want2 = `dump d t
 CREATE TABLE t (
-	i INT NULL,
-	j INT NULL DEFAULT 2:::INT,
+	i INT8 NULL,
+	j INT8 NULL DEFAULT 2:::INT,
 	FAMILY "primary" (i, rowid, j)
 );
 
