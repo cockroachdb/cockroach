@@ -248,6 +248,9 @@ define LookupJoinPrivate {
 	# join statistics.
 	Cols ColSet
 
+	# lookupProps caches relational properties for the "table" side of the lookup
+	# join, treating it as if it were another relational input. This makes the
+	# lookup join appear more like other join operators.
 	lookupProps RelProps
 }
 
@@ -699,4 +702,3 @@ define ProjectSet {
     Input RelExpr
     Zip   ZipExpr
 }
-
