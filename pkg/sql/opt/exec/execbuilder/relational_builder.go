@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -118,6 +119,8 @@ func (ep *execPlan) sqlOrdering(ordering opt.Ordering) sqlbase.ColumnOrdering {
 func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	var ep execPlan
 	var err error
+
+	// Handle read-only operators which never write data or modify schema.
 	switch t := e.(type) {
 	case *memo.ValuesExpr:
 		ep, err = b.buildValues(t)
@@ -179,11 +182,32 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if opt.IsJoinApplyOp(e) {
 			return execPlan{}, b.decorrelationError()
 		}
-		return execPlan{}, errors.Errorf("unsupported relational op %s", e.Op())
 	}
 	if err != nil {
 		return execPlan{}, err
 	}
+
+	// Handle operators which can write data.
+	if ep.root == nil {
+		// Raise error if in a read-only transaction.
+		if b.evalCtx.TxnReadOnly {
+			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
+		}
+
+		switch t := e.(type) {
+		case *memo.InsertExpr:
+			ep, err = b.buildInsert(t)
+
+		default:
+			panic(fmt.Sprintf("unsupported relational op %s", e.Op()))
+		}
+	}
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Wrap the expression in a render expression if presentation requires it.
 	if p := e.RequiredPhysical(); !p.Presentation.Any() {
 		ep, err = b.applyPresentation(ep, p)
 	}
@@ -934,6 +958,42 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 		return execPlan{}, err
 	}
 
+	return ep, nil
+}
+
+func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
+	// Build the input query and ensure that the input columns that correspond to
+	// the table columns are projected.
+	input, err := b.buildRelational(ins.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	input, err = b.ensureColumns(input, ins.InputCols, nil, ins.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the Insert node.
+	md := b.mem.Metadata()
+	tab := md.Table(ins.Table)
+	tabCols := make([]exec.ColumnOrdinal, len(ins.TableCols))
+	for i, col := range ins.TableCols {
+		tabCols[i] = exec.ColumnOrdinal(md.ColumnOrdinal(col))
+	}
+	node, err := b.factory.ConstructInsert(input.root, tab, tabCols, ins.NeedResults)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// If INSERT returns rows, they contain all non-mutation columns from the
+	// table, in the same order they're defined in the table.
+	ep := execPlan{root: node}
+	if ins.NeedResults {
+		input.outputCols.ForEach(func(key, val int) {
+			ord := md.ColumnOrdinal(ins.TableCols[val])
+			ep.outputCols.Set(key, ord)
+		})
+	}
 	return ep, nil
 }
 
