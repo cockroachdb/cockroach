@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -678,6 +679,63 @@ func runMVCCFindSplitKey(b *testing.B, emk engineMaker, valueBytes int) {
 	}
 
 	b.StopTimer()
+}
+
+type benchGarbageCollectOptions struct {
+	benchDataOptions
+	keyBytes       int
+	deleteVersions int
+}
+
+func runMVCCGarbageCollect(b *testing.B, emk engineMaker, opts benchGarbageCollectOptions) {
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	eng := emk(b, "mvcc_gc")
+	defer eng.Close()
+
+	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
+	val := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
+
+	// We write values at ts+(0,i), set now=ts+(1,0) so that we're ahead of all
+	// the writes. This value doesn't matter in practice, as it's used only for
+	// stats updates.
+	now := ts.Add(1, 0)
+
+	// Write 'numKeys' of the given 'keySize' and 'valSize' to the given engine.
+	// For each key, write 'numVersions' versions, and add a GCRequest_GCKey to
+	// the returned slice that affects the oldest 'deleteVersions' versions. The
+	// first write for each key will be at `ts`, the second one at `ts+(0,1)`,
+	// etc.
+	//
+	// NB: a real invocation of MVCCGarbageCollect typically has most of the keys
+	// in sorted order. Here they will be ordered randomly.
+	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
+		for i := 0; i < opts.numKeys; i++ {
+			key := randutil.RandBytes(rng, opts.keyBytes)
+			if opts.deleteVersions > 0 {
+				gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
+					Timestamp: ts.Add(0, int32(opts.deleteVersions-1)),
+					Key:       key,
+				})
+			}
+			for j := 0; j < opts.numVersions; j++ {
+				if err := MVCCPut(ctx, eng, nil /* ms */, key, ts.Add(0, int32(j)), val, nil); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+		return gcKeys
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		gcKeys := setup()
+		b.StartTimer()
+		if err := MVCCGarbageCollect(ctx, eng, nil /* ms */, gcKeys, now); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func runBatchApplyBatchRepr(
