@@ -207,8 +207,8 @@ func (dc *databaseCache) getDatabaseDesc(
 	if desc == nil {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			a := UncachedPhysicalAccessor{}
-			desc, err = a.GetDatabaseDesc(name,
-				DatabaseLookupFlags{ctx: ctx, txn: txn, required: required})
+			desc, err = a.GetDatabaseDesc(ctx, txn, name,
+				DatabaseLookupFlags{required: required})
 			return err
 		}); err != nil {
 			return nil, err

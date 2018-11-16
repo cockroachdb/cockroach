@@ -17,7 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -201,13 +201,13 @@ func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 // lookupExploreState returns the optState struct associated with the memo
 // group.
 func (e *explorer) lookupExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.lookupOptState(grp, props.MinPhysProps).explore
+	return &e.o.lookupOptState(grp, physical.MinRequired).explore
 }
 
 // ensureExploreState allocates the exploration state in the optState struct
 // associated with the memo group, with respect to the min physical props.
 func (e *explorer) ensureExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.ensureOptState(grp, props.MinPhysProps).explore
+	return &e.o.ensureOptState(grp, physical.MinRequired).explore
 }
 
 // ----------------------------------------------------------------------

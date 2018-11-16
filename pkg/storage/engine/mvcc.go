@@ -41,7 +41,7 @@ const (
 
 var (
 	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
-	// all other keys.`
+	// all other keys.
 	MVCCKeyMax = MakeMVCCMetadataKey(roachpb.KeyMax)
 	// NilKey is the nil MVCCKey.
 	NilKey = MVCCKey{}
@@ -1640,7 +1640,7 @@ func MVCCDeleteRange(
 	// transaction with a newer timestamp, we need to use the max timestamp for
 	// scan.
 	kvs, resumeSpan, _, err := MVCCScan(
-		ctx, engine, key, endKey, max, hlc.MaxTimestamp, true /* consistent */, txn)
+		ctx, engine, key, endKey, max, hlc.MaxTimestamp, MVCCScanOptions{Txn: txn})
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -1670,121 +1670,33 @@ func MVCCDeleteRange(
 	return keys, resumeSpan, int64(len(kvs)), err
 }
 
-// mvccScanInternal scans the key range [key,endKey) up to some maximum number
-// of results. Specify reverse=true to scan in descending instead of ascending
-// order. If iter is not specified, a new iterator is created from engine. It
-// returns the found keys and values in batch format, or a resumeSpan if an
-// exceptional condition occurred. A resumeSpan is only set if err != nil. If
-// err == nil, the caller is responsible for determining the resumeSpan of the
-// scan (based on the last key returned) if kv data is returned.
-func mvccScanInternal(
-	ctx context.Context,
-	iter Iterator,
-	key,
-	endKey roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	tombstones bool,
-	txn *roachpb.Transaction,
-	reverse bool,
-) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
-	if len(endKey) == 0 {
-		return nil, 0, nil, nil, emptyKeyError()
-	}
-
-	kvData, numKvs, intentData, err := iter.MVCCScan(
-		key, endKey, max, timestamp, txn, consistent, reverse, tombstones)
-	if err != nil {
-		return nil, 0, nil, nil, err
-	}
-
-	intents, err := buildScanIntents(intentData)
-	if err != nil {
-		return nil, 0, nil, nil, err
-	}
-	if consistent && len(intents) > 0 {
-		// When encountering intents during a consistent scan we still need to
-		// return the resume key.
-		resumeKey, _, err := buildScanResumeKey(kvData, numKvs, max)
-		if err != nil {
-			return nil, 0, nil, nil, err
-		}
-		return nil, 0, resumeKeyToSpan(key, endKey, resumeKey, reverse), nil, &roachpb.WriteIntentError{Intents: intents}
-	}
-
-	return kvData, numKvs, nil, intents, nil
-}
-
-// mvccScanToBytes scans the key range [key,endKey) up to some maximum number
-// of results. Specify reverse=true to scan in descending instead of ascending
-// order. If iter is not specified, a new iterator is created from engine. It
-// returns the found keys and values in batch format.
-func mvccScanToBytes(
-	ctx context.Context,
-	iter Iterator,
-	key,
-	endKey roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	tombstones bool,
-	txn *roachpb.Transaction,
-	reverse bool,
-) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
-	if max == 0 {
-		return nil, 0, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
-	}
-	kvData, numKvs, resumeSpan, intents, err := mvccScanInternal(
-		ctx, iter, key, endKey, max, timestamp, consistent, tombstones, txn, reverse)
-	if err != nil {
-		return nil, 0, resumeSpan, nil, err
-	}
-	if len(kvData) == 0 || numKvs == 0 {
-		return nil, 0, nil, intents, nil
-	}
-
-	resumeKey, offset, err := buildScanResumeKey(kvData, numKvs, max)
-	if err != nil {
-		return nil, 0, nil, nil, nil
-	}
-	if resumeKey != nil {
-		kvData = kvData[:offset]
-		numKvs = max
-	}
-	return kvData, numKvs, resumeKeyToSpan(key, endKey, resumeKey, reverse), intents, err
-}
-
-// mvccScanToKvs scans the key range [key,endKey) up to some maximum number
-// of results. Specify reverse=true to scan in descending instead of ascending
-// order. If iter is not specified, a new iterator is created from engine. It
-// returns the found keys and values in a slice of roachpb.KeyValue.
+// mvccScanToKvs converts the raw key/value pairs returned by Iterator.MVCCScan
+// into a slice of roachpb.KeyValues.
 func mvccScanToKvs(
 	ctx context.Context,
 	iter Iterator,
-	key,
-	endKey roachpb.Key,
+	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
-	consistent bool,
-	tombstones bool,
-	txn *roachpb.Transaction,
-	reverse bool,
+	opts MVCCScanOptions,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	if max == 0 {
-		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
-	}
-	kvData, numKvs, resumeSpan, intents, err := mvccScanInternal(
-		ctx, iter, key, endKey, max, timestamp, consistent, tombstones, txn, reverse)
+	kvData, numKVs, resumeSpan, intents, err := iter.MVCCScan(key, endKey, max, timestamp, opts)
 	if err != nil {
-		return nil, resumeSpan, nil, err
+		return nil, nil, nil, err
 	}
-	if len(kvData) == 0 || numKvs == 0 {
-		return nil, nil, intents, nil
+	kvs := make([]roachpb.KeyValue, numKVs)
+	var k MVCCKey
+	var rawBytes []byte
+	for i := range kvs {
+		k, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		kvs[i].Key = k.Key
+		kvs[i].Value.RawBytes = rawBytes
+		kvs[i].Value.Timestamp = k.Timestamp
 	}
-
-	kvs, resumeKey, err := buildScanResults(kvData, numKvs, max)
-	return kvs, resumeKeyToSpan(key, endKey, resumeKey, reverse), intents, err
+	return kvs, resumeSpan, intents, err
 }
 
 func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
@@ -1820,161 +1732,71 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-// resumeKeyToSpan creates a resumeSpan suitable for returning in a ScanResponse
-// out of a resumeKey (the last key in a batch that exceeded a limit).
-func resumeKeyToSpan(key, endKey, resumeKey roachpb.Key, reverse bool) (resumeSpan *roachpb.Span) {
-	if resumeKey != nil {
-		// NB: we copy the resume key here to ensure that it doesn't point to the
-		// same shared buffer as the main results. Higher levels of the code may
-		// cache the resume key and we don't want them pinning excessive amounts of
-		// memory.
-		if reverse {
-			resumeKey = resumeKey[:len(resumeKey):len(resumeKey)]
-			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
-		} else {
-			resumeKey = append(roachpb.Key(nil), resumeKey...)
-			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
-		}
-	}
-	return resumeSpan
+// MVCCScanOptions bundles options for the MVCCScan family of functions.
+type MVCCScanOptions struct {
+	// TODO(benesch): The max parameter should be moved into this struct. Its
+	// semantics make that tricky, though, as the zero value for this struct
+	// naturally represents an unbounded scan, but a max of zero currently means
+	// to return no results.
+
+	// See the documentation for MVCCScan for information on these parameters.
+	Inconsistent bool
+	Tombstones   bool
+	Reverse      bool
+	Txn          *roachpb.Transaction
 }
 
-func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, int, error) {
-	kvLen := len(kvData)
-	if kvLen == 0 {
-		return nil, 0, nil
-	}
-	if numKvs <= max {
-		return nil, 0, nil
-	}
-	var err error
-	for i := int64(0); i < max; i++ {
-		kvData, err = mvccScanSkipKeyValue(kvData)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	offset := kvLen - len(kvData)
-	key, _, _, err := MVCCScanDecodeKeyValue(kvData)
-	if err != nil {
-		return nil, 0, err
-	}
-	return key.Key, offset, nil
-}
-
-func buildScanResults(
-	kvData []byte, numKvs int64, max int64,
-) ([]roachpb.KeyValue, roachpb.Key, error) {
-	// Iterator.MVCCScan will return up to max+1 results. The extra result is
-	// returned so that we can generate the resumeKey in the same manner as the
-	// old Go version of MVCCScan.
-	//
-	// TODO(peter): We should change the resumeKey to be Key.Next() of the last
-	// key returned.
-	n := numKvs
-	if n > max {
-		n = max
-	}
-	kvs := make([]roachpb.KeyValue, n)
-
-	var key MVCCKey
-	var rawBytes []byte
-	var err error
-	for i := range kvs {
-		key, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
-		if err != nil {
-			return nil, nil, err
-		}
-		kvs[i].Key = key.Key
-		kvs[i].Value.RawBytes = rawBytes
-		kvs[i].Value.Timestamp = key.Timestamp
-	}
-
-	var resumeKey roachpb.Key
-	if numKvs > max {
-		key, _, _, err = MVCCScanDecodeKeyValue(kvData)
-		if err != nil {
-			return nil, nil, err
-		}
-		resumeKey = key.Key
-	}
-
-	return kvs, resumeKey, nil
-}
-
-// MVCCScan scans the key range [key,endKey) key up to some maximum number of
-// results in ascending order. If it hits max, it returns a span to be used in
-// the next call to this function. Use MaxInt64 for not limit. If the limit is
-// not hit, the returned span will be nil. Otherwise, it will be the sub-span of
-// [key,endKey) that has not been scanned.
+// MVCCScan scans the key range [key, endKey) in the provided engine up to some
+// maximum number of results in ascending order. If it hits max, it returns a
+// "resume span" to be used in the next call to this function. If the limit is
+// not hit, the resume span will be nil. Otherwise, it will be the sub-span of
+// [key, endKey) that has not been scanned.
+//
+// For an unbounded scan, specify a max of MaxInt64. A max of zero means to
+// return no keys at all, which is probably not what you intend.
+//
+// TODO(benesch): Evaluate whether our behavior when max is zero still makes
+// sense. See #8084 for historical context.
+//
+// Only keys that with a timestamp less than or equal to the supplied timestamp
+// will be included in the scan results. If a transaction is provided and the
+// scan encounters a value with a timestamp between the supplied timestamp and
+// the transaction's max timestamp, an uncertainty error will be returned.
+//
+// When scanning inconsistently, any encountered intents will be placed in the
+// dedicated result parameter. By contrast, when scanning consistently, any
+// encountered intents will cause the scan to return a WriteIntentError with the
+// intents embedded within, and the intents result parameter will be nil. In
+// this case a resume span will be returned; this is the only case in which a
+// resume span is returned alongside a non-nil error.
+//
+// Note that transactional scans must be consistent. Put another way, only
+// non-transactional scans may be inconsistent.
 func MVCCScan(
 	ctx context.Context,
 	engine Reader,
-	key,
-	endKey roachpb.Key,
+	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
+	opts MVCCScanOptions,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
-	return mvccScanToKvs(ctx, iter, key, endKey, max, timestamp,
-		consistent, false /* tombstones */, txn, false /* reverse */)
+	return mvccScanToKvs(ctx, iter, key, endKey, max, timestamp, opts)
 }
 
 // MVCCScanToBytes is like MVCCScan, but it returns the results in a byte array.
 func MVCCScanToBytes(
 	ctx context.Context,
 	engine Reader,
-	key,
-	endKey roachpb.Key,
+	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
+	opts MVCCScanOptions,
 ) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
-	return mvccScanToBytes(ctx, iter, key, endKey, max, timestamp,
-		consistent, false /* tombstones */, txn, false /* reverse */)
-}
-
-// MVCCReverseScan scans the key range [start,end) key up to some maximum
-// number of results in descending order. If it hits max, it returns a span to
-// be used in the next call to this function.
-func MVCCReverseScan(
-	ctx context.Context,
-	engine Reader,
-	key,
-	endKey roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
-	defer iter.Close()
-	return mvccScanToKvs(ctx, iter, key, endKey, max, timestamp,
-		consistent, false /* tombstones */, txn, true /* reverse */)
-}
-
-// MVCCReverseScanToBytes is like MVCCReverseScan, but it returns the results
-// in a byte array.
-func MVCCReverseScanToBytes(
-	ctx context.Context,
-	engine Reader,
-	key,
-	endKey roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
-	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
-	defer iter.Close()
-	return mvccScanToBytes(ctx, iter, key, endKey, max, timestamp,
-		consistent, false /* tombstones */, txn, true /* reverse */)
+	return iter.MVCCScan(key, endKey, max, timestamp, opts)
 }
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
@@ -1986,38 +1808,19 @@ func MVCCIterate(
 	engine Reader,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
-	consistent bool,
-	tombstones bool,
-	txn *roachpb.Transaction,
-	reverse bool,
+	opts MVCCScanOptions,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
-	return MVCCIterateUsingIter(ctx, iter, key, endKey, timestamp, consistent,
-		tombstones, txn, reverse, f)
-}
 
-// MVCCIterateUsingIter iterates over the key range [start,end) using the
-// supplied iterator. See comments for MVCCIterate.
-func MVCCIterateUsingIter(
-	ctx context.Context,
-	iter Iterator,
-	startKey, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	tombstones bool,
-	txn *roachpb.Transaction,
-	reverse bool,
-	f func(roachpb.KeyValue) (bool, error),
-) ([]roachpb.Intent, error) {
 	var intents []roachpb.Intent
 	var wiErr error
 
 	for {
 		const maxKeysPerScan = 1000
 		kvs, resume, newIntents, err := mvccScanToKvs(
-			ctx, iter, startKey, endKey, maxKeysPerScan, timestamp, consistent, tombstones, txn, reverse)
+			ctx, iter, key, endKey, maxKeysPerScan, timestamp, opts)
 		if err != nil {
 			switch tErr := err.(type) {
 			case *roachpb.WriteIntentError:
@@ -2058,10 +1861,10 @@ func MVCCIterateUsingIter(
 		if resume == nil {
 			break
 		}
-		if reverse {
+		if opts.Reverse {
 			endKey = resume.EndKey
 		} else {
-			startKey = resume.Key
+			key = resume.Key
 		}
 	}
 

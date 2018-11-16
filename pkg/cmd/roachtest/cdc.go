@@ -19,6 +19,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -27,6 +28,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
@@ -46,9 +49,11 @@ type cdcTestArgs struct {
 	workloadDuration   string
 	initialScan        bool
 	kafkaChaos         bool
+	crdbChaos          bool
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
+	targetTxnPerSecond       float64
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
@@ -75,12 +80,20 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	m := newMonitor(ctx, c, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
 
+	workloadStart := timeutil.Now()
 	if args.workloadType == tpccWorkloadType {
 		t.Status("installing TPCC")
 		tpcc := tpccWorkload{
 			sqlNodes:           crdbNodes,
 			workloadNodes:      workloadNode,
 			tpccWarehouseCount: args.tpccWarehouseCount,
+			// TODO(dan): Applying tolerateErrors to all tests is unfortunate, but we're
+			// seeing all sorts of "error in newOrder: missing stock row" from tpcc. I'm
+			// debugging it, but in the meantime, we need to be getting data from these
+			// roachtest runs. In ideal usage, this should only be enabled for tests
+			// with CRDB chaos enabled.
+			/* tolerateErrors */
+			tolerateErrors: true,
 		}
 		tpcc.install(ctx, c)
 
@@ -112,7 +125,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	}
 	defer changefeedLogger.close()
 	verifier := makeLatencyVerifier(
-		args.targetInitialScanLatency, args.targetSteadyLatency, changefeedLogger)
+		args.targetInitialScanLatency,
+		args.targetSteadyLatency,
+		changefeedLogger,
+		args.crdbChaos,
+	)
 	defer verifier.maybeLogLatencyHist()
 
 	m.Go(func(ctx context.Context) error {
@@ -146,9 +163,28 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			return kafka.chaosLoop(ctx, period, downTime, workloadCompleteCh)
 		})
 	}
+
+	if args.crdbChaos {
+		chaosDuration, err := time.ParseDuration(args.workloadDuration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ch := Chaos{
+			Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
+			Target:  crdbNodes.randNode,
+			Stopper: time.After(chaosDuration),
+		}
+		m.Go(ch.Runner(c, m))
+	}
 	m.Wait()
 
 	verifier.assertValid(t)
+	workloadEnd := timeutil.Now()
+	if args.targetTxnPerSecond > 0.0 {
+		verifyTxnPerSecond(
+			ctx, c, t, crdbNodes.randNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
+		)
+	}
 }
 
 func runCDCBank(ctx context.Context, t *test, c *cluster) {
@@ -271,6 +307,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		return nil
 	})
 	m.Wait()
+
 }
 
 func registerCDC(r *registry) {
@@ -325,9 +362,24 @@ func registerCDC(r *registry) {
 			})
 		},
 	})
-	// TODO(mrtracy): This workload was designed with a certain tx/s load in mind,
-	// but the load level is not currently being requested or enforced. Add the
-	// necessary code to reach this level (575 tx/s).
+	r.Add(testSpec{
+		Name:       "cdc/w=100/init=false/crdbChaos=true",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              false,
+				kafkaChaos:               false,
+				crdbChaos:                true,
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      10 * time.Minute,
+			})
+		},
+	})
 	r.Add(testSpec{
 		Name:       "cdc/ledger/nodes=3/init=true",
 		MinVersion: "2.1.0",
@@ -342,8 +394,9 @@ func registerCDC(r *registry) {
 				workloadDuration:         "30m",
 				initialScan:              true,
 				kafkaChaos:               false,
-				targetInitialScanLatency: 30 * time.Minute,
+				targetInitialScanLatency: 10 * time.Minute,
 				targetSteadyLatency:      time.Minute,
+				targetTxnPerSecond:       575,
 			})
 		},
 	})
@@ -465,6 +518,7 @@ type tpccWorkload struct {
 	workloadNodes      nodeListOption
 	sqlNodes           nodeListOption
 	tpccWarehouseCount int
+	tolerateErrors     bool
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
@@ -476,13 +530,13 @@ func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c *cluster, workloadDuration string) {
-	// TODO(dan): The --tolerate-errors here is unfortunate, but we're seeing
-	// all sorts of "error in newOrder: missing stock row" from tpcc. I'm
-	// debugging it, but in the meantime, we need to be getting data from these
-	// roachtest runs.
+	tolerateErrors := ""
+	if tw.tolerateErrors {
+		tolerateErrors = "--tolerate-errors"
+	}
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s --tolerate-errors`,
-		tw.tpccWarehouseCount, tw.sqlNodes, workloadDuration,
+		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
+		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
 	))
 }
 
@@ -510,6 +564,7 @@ type latencyVerifier struct {
 	statementTime            time.Time
 	targetSteadyLatency      time.Duration
 	targetInitialScanLatency time.Duration
+	tolerateErrors           bool
 	logger                   *logger
 
 	initialScanLatency   time.Duration
@@ -520,7 +575,10 @@ type latencyVerifier struct {
 }
 
 func makeLatencyVerifier(
-	targetInitialScanLatency time.Duration, targetSteadyLatency time.Duration, l *logger,
+	targetInitialScanLatency time.Duration,
+	targetSteadyLatency time.Duration,
+	l *logger,
+	tolerateErrors bool,
 ) *latencyVerifier {
 	const sigFigs, minLatency, maxLatency = 1, 100 * time.Microsecond, 100 * time.Second
 	hist := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
@@ -529,6 +587,7 @@ func makeLatencyVerifier(
 		targetSteadyLatency:      targetSteadyLatency,
 		logger:                   l,
 		latencyHist:              hist,
+		tolerateErrors:           tolerateErrors,
 	}
 }
 
@@ -580,9 +639,14 @@ func (lv *latencyVerifier) pollLatency(
 
 		info, err := getChangefeedInfo(db, jobID)
 		if err != nil {
+			if lv.tolerateErrors {
+				lv.logger.Printf("error getting changefeed info: %s", err)
+				continue
+			}
 			return err
 		}
 		if info.status != `running` {
+			lv.logger.Printf("unexpected status: %s, error: %s", info.status, info.errMsg)
 			return errors.Errorf(`unexpected status: %s`, info.status)
 		}
 		lv.noteHighwater(info.highwaterTime)
@@ -639,6 +703,7 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (
 
 type changefeedInfo struct {
 	status        string
+	errMsg        string
 	statementTime time.Time
 	highwaterTime time.Time
 }
@@ -667,6 +732,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (changefeedInfo, error) {
 	}
 	return changefeedInfo{
 		status:        status,
+		errMsg:        payload.Error,
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
 	}, nil
@@ -738,4 +804,75 @@ func (c *topicConsumer) Close() {
 		}
 	}
 	_ = c.Consumer.Close()
+}
+
+func verifyTxnPerSecond(
+	ctx context.Context,
+	c *cluster,
+	t *test,
+	adminNode nodeListOption,
+	start, end time.Time,
+	txnTarget, maxPercentTimeUnderTarget float64,
+) {
+	// Query needed information over the timespan of the query.
+	adminURLs := c.ExternalAdminUIAddr(ctx, adminNode)
+	url := "http://" + adminURLs[0] + "/ts/query"
+	request := tspb.TimeSeriesQueryRequest{
+		StartNanos: start.UnixNano(),
+		EndNanos:   end.UnixNano(),
+		// Ask for one minute intervals. We can't just ask for the whole hour
+		// because the time series query system does not support downsampling
+		// offsets.
+		SampleNanos: (1 * time.Minute).Nanoseconds(),
+		Queries: []tspb.Query{
+			{
+				Name:             "cr.node.sql.txn.commit.count",
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+			// Query *without* the derivative applied so we can get a total count of
+			// txns over the time period.
+			{
+				Name:             "cr.node.sql.txn.commit.count",
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+			},
+		},
+	}
+	var response tspb.TimeSeriesQueryResponse
+	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+		t.Fatal(err)
+	}
+
+	// Drop the first two minutes of datapoints as a "ramp-up" period.
+	perMinute := response.Results[0].Datapoints[2:]
+	cumulative := response.Results[1].Datapoints[2:]
+
+	// Check average txns per second over the entire test was above the target.
+	totalTxns := cumulative[len(cumulative)-1].Value - cumulative[0].Value
+	avgTxnPerSec := totalTxns / float64(end.Sub(start)/time.Second)
+
+	if avgTxnPerSec < txnTarget {
+		t.Fatalf("average txns per second %f was under target %f", avgTxnPerSec, txnTarget)
+	} else {
+		t.l.Printf("average txns per second: %f", avgTxnPerSec)
+	}
+
+	// Verify that less than 5% of individual one minute periods were underneath
+	// the target.
+	minutesBelowTarget := 0.0
+	for _, dp := range perMinute {
+		if dp.Value < txnTarget {
+			minutesBelowTarget++
+		}
+	}
+	if perc := minutesBelowTarget / float64(len(perMinute)); perc > maxPercentTimeUnderTarget {
+		t.Fatalf(
+			"spent %f%% of time below target of %f txn/s, wanted no more than %f%%",
+			perc*100, txnTarget, maxPercentTimeUnderTarget*100,
+		)
+	} else {
+		t.l.Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
+	}
 }

@@ -318,18 +318,18 @@ func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CommonLookupFlags(ctx context.Context, required bool) sql.CommonLookupFlags {
+func (r fkResolver) CommonLookupFlags(required bool) sql.CommonLookupFlags {
 	return sql.CommonLookupFlags{}
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) ObjectLookupFlags(ctx context.Context, required bool) sql.ObjectLookupFlags {
+func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) sql.ObjectLookupFlags {
 	return sql.ObjectLookupFlags{}
 }
 
 // Implements the tree.TableNameExistingResolver interface.
 func (r fkResolver) LookupObject(
-	ctx context.Context, dbName, scName, obName string,
+	ctx context.Context, requireMutable bool, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	if scName != "" {
 		obName = strings.TrimPrefix(obName, scName+".")

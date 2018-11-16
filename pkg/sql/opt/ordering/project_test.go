@@ -19,18 +19,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestProject(t *testing.T) {
-	var inProps props.Relational
-	inProps.OutputCols = util.MakeFastIntSet(1, 2, 3, 4)
-	fd := &inProps.FuncDeps
-	fd.AddEquivalency(2, 3)
-	fd.AddConstants(util.MakeFastIntSet(4))
+	var fds props.FuncDepSet
+	fds.AddEquivalency(2, 3)
+	fds.AddConstants(util.MakeFastIntSet(4))
 
 	project := &memo.ProjectExpr{
-		Input: newDummyRelExpr(inProps),
+		Input: &testexpr.Instance{
+			Rel: &props.Relational{
+				OutputCols: util.MakeFastIntSet(1, 2, 3, 4),
+				FuncDeps:   fds,
+			},
+		},
 	}
 
 	type testCase struct {
@@ -64,7 +69,7 @@ func TestProject(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		req := props.ParseOrderingChoice(tc.req)
+		req := physical.ParseOrderingChoice(tc.req)
 		res := "no"
 		if projectCanProvideOrdering(project, &req) {
 			res = projectBuildChildReqOrdering(project, &req, 0).String()

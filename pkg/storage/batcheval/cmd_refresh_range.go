@@ -42,39 +42,21 @@ func RefreshRange(
 		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
 	}
 
-	// Use a time-bounded iterator to avoid unnecessarily iterating over
-	// older data.
-	iter := batch.NewIterator(engine.IterOptions{
-		MinTimestampHint: h.Txn.OrigTimestamp,
-		MaxTimestampHint: h.Txn.Timestamp,
-		UpperBound:       args.EndKey,
-	})
-	defer iter.Close()
-	// Iterate over values until we discover any value written at or
-	// after the original timestamp, but before or at the current
-	// timestamp. Note that we do not iterate using the txn and the
-	// iteration is done with consistent=false. This reads only
-	// committed values and returns all intents, including those from
-	// the txn itself. Note that we include tombstones, which must be
-	// considered as updates on refresh.
+	// Iterate over values until we discover any value written at or after the
+	// original timestamp, but before or at the current timestamp. Note that we
+	// iterate inconsistently without using the txn. This reads only committed
+	// values and returns all intents, including those from the txn itself. Note
+	// that we include tombstones, which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
-	intents, err := engine.MVCCIterateUsingIter(
-		ctx,
-		iter,
-		args.Key,
-		args.EndKey,
-		h.Txn.Timestamp,
-		false, /* consistent */
-		true,  /* tombstones */
-		nil,   /* txn */
-		false, /* reverse */
-		func(kv roachpb.KeyValue) (bool, error) {
-			if ts := kv.Value.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
-				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
-			}
-			return false, nil
-		},
-	)
+	intents, err := engine.MVCCIterate(ctx, batch, args.Key, args.EndKey, h.Txn.Timestamp, engine.MVCCScanOptions{
+		Inconsistent: true,
+		Tombstones:   true,
+	}, func(kv roachpb.KeyValue) (bool, error) {
+		if ts := kv.Value.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
+			return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
+		}
+		return false, nil
+	})
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -86,33 +68,6 @@ func RefreshRange(
 		if i.Txn.ID == h.Txn.ID {
 			continue
 		}
-
-		if i.Span.EndKey != nil {
-			return result.Result{}, errors.Errorf("unexpected range intent from MVCC storage")
-		}
-
-		// HACK(bdarnell): Time-bound iterators can return intents that
-		// shouldn't be there
-		// (https://github.com/cockroachdb/cockroach/issues/28358), and
-		// this can result in stalled traffic when it occurs in this
-		// method (https://github.com/cockroachdb/cockroach/issues/31823).
-		// When we get an intent, check with a regular iterator to ensure
-		// that it's really there.
-		_, realIntents, err := engine.MVCCGetWithTombstone(
-			ctx,
-			batch,
-			i.Span.Key,
-			h.Txn.Timestamp,
-			false, /* consistent */
-			nil,   /* txn */
-		)
-		if err != nil {
-			return result.Result{}, err
-		}
-		if len(realIntents) == 0 {
-			continue
-		}
-
 		// Return an error if an intent was written to the span.
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
 			i.Span.Key, i.Txn.Timestamp)

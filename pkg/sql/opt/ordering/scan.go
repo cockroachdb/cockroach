@@ -17,10 +17,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 	ok, _ := ScanPrivateCanProvide(
 		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
@@ -33,7 +33,7 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
+func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
 		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
@@ -49,7 +49,7 @@ func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
 func ScanPrivateCanProvide(
-	md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
+	md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
 ) (ok bool, reverse bool) {
 	// Scan naturally orders according to scanned index's key columns. A scan can
 	// be executed either as a forward or as a reverse scan (unless it has a row
@@ -110,9 +110,42 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
+func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	scan := expr.(*memo.ScanExpr)
+	md := scan.Memo().Metadata()
+	index := md.Table(scan.Table).Index(scan.Index)
+	fds := &scan.Relational().FuncDeps
+
+	// We need to know the direction of the scan.
+	reverse := ScanIsReverse(scan, required)
+
+	// We generate the longest ordering that this scan can provide, then we trim
+	// it. This is the longest prefix of index columns that are output by the scan
+	// (ignoring constant columns, in the case of constrained scans).
+	constCols := fds.ComputeClosure(opt.ColSet{})
+	numCols := index.KeyColumnCount()
+	provided := make(opt.Ordering, 0, numCols)
+	for i := 0; i < numCols; i++ {
+		indexCol := index.Column(i)
+		colID := scan.Table.ColumnID(indexCol.Ordinal)
+		if !scan.Cols.Contains(int(colID)) {
+			// Column not in output; we are done.
+			break
+		}
+		if constCols.Contains(int(colID)) {
+			// Column constrained to a constant, ignore.
+			continue
+		}
+		direction := (indexCol.Descending != reverse) // != is bool XOR
+		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
+	}
+
+	return trimProvided(provided, required, fds)
+}
+
 func init() {
 	memo.ScanIsReverseFn = func(
-		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
+		md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {

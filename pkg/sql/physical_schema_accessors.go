@@ -16,10 +16,13 @@ package sql
 
 import (
 	"bytes"
+	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -46,10 +49,10 @@ var _ SchemaAccessor = UncachedPhysicalAccessor{}
 
 // GetDatabaseDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetDatabaseDesc(
-	name string, flags DatabaseLookupFlags,
+	ctx context.Context, txn *client.Txn, name string, flags DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
 	desc = &sqlbase.DatabaseDescriptor{}
-	found, err := getDescriptor(flags.ctx, flags.txn, databaseKey{name}, desc)
+	found, err := getDescriptor(ctx, txn, databaseKey{name}, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +76,11 @@ func (a UncachedPhysicalAccessor) IsValidSchema(dbDesc *DatabaseDescriptor, scNa
 
 // GetObjectNames implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectNames(
-	dbDesc *DatabaseDescriptor, scName string, flags DatabaseListFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	dbDesc *DatabaseDescriptor,
+	scName string,
+	flags DatabaseListFlags,
 ) (TableNames, error) {
 	if ok := a.IsValidSchema(dbDesc, scName); !ok {
 		if flags.required {
@@ -83,8 +90,9 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		return nil, nil
 	}
 
+	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.Name)
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
-	sr, err := flags.txn.Scan(flags.ctx, prefix, prefix.PrefixEnd(), 0)
+	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +114,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
-	name *ObjectName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
 ) (ObjectDescriptor, *DatabaseDescriptor, error) {
 	// At this point, only the public schema is recognized.
 	if name.Schema() != tree.PublicSchema {
@@ -117,7 +125,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the database.
-	dbDesc, err := a.GetDatabaseDesc(name.Catalog(), flags.CommonLookupFlags)
+	dbDesc, err := a.GetDatabaseDesc(ctx, txn, name.Catalog(), flags.CommonLookupFlags)
 	if dbDesc == nil || err != nil {
 		// dbDesc can be nil if the object is not required and the
 		// database was not found.
@@ -126,7 +134,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 
 	// Look up the table using the discovered database descriptor.
 	desc := &sqlbase.TableDescriptor{}
-	found, err := getDescriptor(flags.ctx, flags.txn,
+	found, err := getDescriptor(ctx, txn,
 		tableKey{parentID: dbDesc.ID, name: name.Table()}, desc)
 	if err != nil {
 		return nil, nil, err
@@ -140,6 +148,9 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// descriptor during the drain phase for the name. Do not
 			// return a descriptor during draining.
 			if nameMatchesTable(desc, dbDesc.ID, name.Table()) {
+				if flags.requireMutable {
+					return NewMutableExistingTableDescriptor(*desc), dbDesc, nil
+				}
 				return desc, dbDesc, nil
 			}
 		}
@@ -161,7 +172,7 @@ var _ SchemaAccessor = &CachedPhysicalAccessor{}
 
 // GetDatabaseDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetDatabaseDesc(
-	name string, flags DatabaseLookupFlags,
+	ctx context.Context, txn *client.Txn, name string, flags DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
 	if !(flags.avoidCached || isSystemDB || testDisableTableLeases) {
@@ -173,7 +184,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 		if dbID != 0 {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
-			desc, err := a.tc.databaseCache.getDatabaseDescByID(flags.ctx, flags.txn, dbID)
+			desc, err := a.tc.databaseCache.getDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
 			}
@@ -182,17 +193,30 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.databaseCache.getDatabaseDesc(flags.ctx,
+		return a.tc.databaseCache.getDatabaseDesc(ctx,
 			a.tc.leaseMgr.execCfg.DB.Txn, name, flags.required)
 	}
 
 	// We avoided the cache. Go lower.
-	return a.SchemaAccessor.GetDatabaseDesc(name, flags)
+	return a.SchemaAccessor.GetDatabaseDesc(ctx, txn, name, flags)
 }
 
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
-	name *ObjectName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
 ) (ObjectDescriptor, *DatabaseDescriptor, error) {
-	return a.tc.getTableVersion(flags.ctx, name, flags)
+	if flags.requireMutable {
+		table, db, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
+		if table == nil {
+			// return nil interface.
+			return nil, db, err
+		}
+		return table, db, err
+	}
+	table, db, err := a.tc.getTableVersion(ctx, txn, name, flags)
+	if table == nil {
+		// return nil interface.
+		return nil, db, err
+	}
+	return table, db, err
 }

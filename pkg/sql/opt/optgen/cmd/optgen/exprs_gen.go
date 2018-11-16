@@ -44,6 +44,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
@@ -328,9 +329,14 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "  return e.next\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
-		// Generate the Physical method.
-		fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
+		// Generate the RequiredPhysical method.
+		fmt.Fprintf(g.w, "func (e *%s) RequiredPhysical() *physical.Required {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  return e.grp.bestProps().required\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the ProvidedPhysical method.
+		fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return &e.grp.bestProps().provided\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
 		// Generate the Cost method.
@@ -431,9 +437,14 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "  return nil\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
-	// Generate the Physical method.
-	fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
+	// Generate the RequiredPhysical method.
+	fmt.Fprintf(g.w, "func (e *%s) RequiredPhysical() *physical.Required {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return e.best.required\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the ProvidedPhysical method.
+	fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return &e.best.provided\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Cost method.

@@ -1635,6 +1635,10 @@ func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
 
+func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
+	m.data.ForceSavepointRestart = val
+}
+
 func (m *sessionDataMutator) SetLookupJoinEnabled(val bool) {
 	m.data.LookupJoinEnabled = val
 }

@@ -1,4 +1,4 @@
-FROM debian:8.9
+FROM debian:8.11
 
 # Install root CAs so we can make SSL connections to phone home and
 # do backups to GCE/AWS/Azure.

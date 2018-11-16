@@ -990,3 +990,63 @@ func TestStatusAPIStatements(t *testing.T) {
 			expectedStatements, statementsInResponse, pretty.Sprint(resp))
 	}
 }
+
+func TestListSessionsSecurity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := s.(*TestServer)
+	defer ts.Stopper().Stop(context.TODO())
+
+	// HTTP requests respect the authenticated username from the HTTP session.
+	testCases := []struct {
+		endpoint    string
+		expectedErr string
+	}{
+		{"local_sessions", ""},
+		{"sessions", ""},
+		{fmt.Sprintf("local_sessions?username=%s", authenticatedUserName), ""},
+		{fmt.Sprintf("sessions?username=%s", authenticatedUserName), ""},
+		{"local_sessions?username=root", "does not have permission to view sessions from user"},
+		{"sessions?username=root", "does not have permission to view sessions from user"},
+	}
+	for _, tc := range testCases {
+		var response serverpb.ListSessionsResponse
+		err := getStatusJSONProto(ts, tc.endpoint, &response)
+		if tc.expectedErr == "" {
+			if err != nil || len(response.Errors) > 0 {
+				t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
+					tc.endpoint, err, response.Errors)
+			}
+		} else {
+			if !testutils.IsError(err, tc.expectedErr) &&
+				!strings.Contains(response.Errors[0].Message, tc.expectedErr) {
+				t.Errorf("did not get expected error %q when listing sessions from %s: %v",
+					tc.expectedErr, tc.endpoint, err)
+			}
+		}
+	}
+
+	// gRPC requests behave as root and thus are always allowed.
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+	ctx := context.Background()
+	for _, user := range []string{"", authenticatedUserName, "root"} {
+		request := &serverpb.ListSessionsRequest{Username: user}
+		if resp, err := client.ListLocalSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
+			t.Errorf("unexpected failure listing local sessions for %q; error: %v; response errors: %v",
+				user, err, resp.Errors)
+		}
+		if resp, err := client.ListSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
+			t.Errorf("unexpected failure listing sessions for %q; error: %v; response errors: %v",
+				user, err, resp.Errors)
+		}
+	}
+}

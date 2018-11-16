@@ -676,3 +676,7 @@ func (t *llrbTree) Clear() {
 	t.Root = nil
 	t.Count = 0
 }
+
+func (t *llrbTree) Clone() Tree {
+	panic("unimplemented")
+}

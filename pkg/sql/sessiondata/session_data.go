@@ -87,6 +87,12 @@ type SessionData struct {
 	// See discussion on the IntSize type.
 	// XXX link to cleanup issue
 	DefaultIntSize intsize.IntSize
+	// ForceSavepointRestart overrides the default SAVEPOINT behavior
+	// for compatibility with certain ORMs. When this flag is set,
+	// the savepoint name will no longer be compared against the magic
+	// identifier `cockroach_restart` in order use a restartable
+	// transaction.
+	ForceSavepointRestart bool
 }
 
 // DataConversionConfig contains the parameters that influence

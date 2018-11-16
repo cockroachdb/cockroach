@@ -786,7 +786,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
-		true, false, nil, false, func(roachpb.KeyValue) (bool, error) {
+		engine.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
 		}); err != nil {

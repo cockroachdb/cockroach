@@ -102,15 +102,24 @@ var (
 	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 4<<20 /* 4 MB */)
 
-	// defaultRaftMaxSizePerMsg specifies the maximum number of Raft log entries
-	// that a leader will send to followers in a single MsgApp.
+	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
+	// log entries that a leader will send to followers in a single MsgApp.
 	defaultRaftMaxSizePerMsg = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16<<10 /* 16 KB */)
+
+	// defaultRaftMaxSizeCommittedSizePerReady specifies the maximum aggregate
+	// byte size of the committed log entries which a node will receive in a
+	// single Ready.
+	defaultRaftMaxCommittedSizePerReady = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_COMMITTED_SIZE_PER_READY", 64<<20 /* 64 MB */)
 
 	// defaultRaftMaxSizePerMsg specifies how many "inflight" messages a leader
 	// will send to a follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
+
+	defaultRaftPostSplitSuppressSnapshotTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_POST_SPLIT_SUPPRESS_SNAPSHOT_TICKS", 20)
 )
 
 type lazyHTTPClient struct {
@@ -464,9 +473,13 @@ type RaftConfig struct {
 	// committed but continue to be proposed.
 	RaftMaxUncommittedEntriesSize uint64
 
-	// RaftMaxSizePerMsg controls how many Raft log entries the leader will send to
-	// followers in a single MsgApp.
+	// RaftMaxSizePerMsg controls the maximum aggregate byte size of Raft log
+	// entries the leader will send to followers in a single MsgApp.
 	RaftMaxSizePerMsg uint64
+
+	// RaftMaxCommittedSizePerReady controls the maximum aggregate byte size of
+	// committed Raft log entries a replica will receive in a single Ready.
+	RaftMaxCommittedSizePerReady uint64
 
 	// RaftMaxInflightMsgs controls how many "inflight" messages Raft will send
 	// to a follower without hearing a response. The total number of Raft log
@@ -476,6 +489,8 @@ type RaftConfig struct {
 	// translates to ~1024 commands that might be executed in the handling of a
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
+
+	RaftPostSplitSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -507,8 +522,15 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftMaxSizePerMsg == 0 {
 		cfg.RaftMaxSizePerMsg = uint64(defaultRaftMaxSizePerMsg)
 	}
+	if cfg.RaftMaxCommittedSizePerReady == 0 {
+		cfg.RaftMaxCommittedSizePerReady = uint64(defaultRaftMaxCommittedSizePerReady)
+	}
 	if cfg.RaftMaxInflightMsgs == 0 {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
+	}
+
+	if cfg.RaftPostSplitSuppressSnapshotTicks == 0 {
+		cfg.RaftPostSplitSuppressSnapshotTicks = defaultRaftPostSplitSuppressSnapshotTicks
 	}
 }
 

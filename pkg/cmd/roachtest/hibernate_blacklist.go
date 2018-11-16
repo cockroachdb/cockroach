@@ -570,7 +570,6 @@ var hibernateBlackList2_1 = blacklist{
 	"org.hibernate.test.jpa.lock.RepeatableReadTest.testStaleNonVersionedInstanceFoundOnLock":                                                                                        "31671",
 	"org.hibernate.test.jpa.lock.RepeatableReadTest.testStaleVersionedInstanceFoundOnLock":                                                                                           "6583",
 	"org.hibernate.test.legacy.ABCProxyTest.testSubclassing":                                                                                                                         "6583",
-	"org.hibernate.test.legacy.FooBarTest.testCollectionsInSelect":                                                                                                                   "31777",
 	"org.hibernate.test.legacy.FooBarTest.testOnCascadeDelete":                                                                                                                       "unknown",
 	"org.hibernate.test.legacy.FooBarTest.testQuery":                                                                                                                                 "unknown",
 	"org.hibernate.test.legacy.FooBarTest.testVersioning":                                                                                                                            "6583",

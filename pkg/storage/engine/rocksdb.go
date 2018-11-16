@@ -1139,9 +1139,9 @@ func (r *RocksDB) GetSortedWALFiles() ([]WALFileInfo, error) {
 	return res, nil
 }
 
-// getUserProperties fetches the user properties stored in each sstable's
+// GetUserProperties fetches the user properties stored in each sstable's
 // metadata.
-func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
+func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
 	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
 	var ssts enginepb.SSTUserPropertiesCollection
 	if err := protoutil.Unmarshal(buf, &ssts); err != nil {
@@ -1465,14 +1465,10 @@ func (r *batchIterator) MVCCGet(
 }
 
 func (r *batchIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
+	return r.iter.MVCCScan(start, end, max, timestamp, opts)
 }
 
 func (r *batchIterator) SetUpperBound(key roachpb.Key) {
@@ -2292,34 +2288,55 @@ func (r *rocksDBIterator) MVCCGet(
 }
 
 func (r *rocksDBIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
-	if !consistent && txn != nil {
-		return nil, 0, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(end) == 0 {
-		return nil, 0, nil, emptyKeyError()
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
+		return nil, 0, resumeSpan, nil, nil
 	}
 
 	r.clearState()
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
-		goToCTxn(txn), C.bool(consistent), C.bool(reverse), C.bool(tombstones),
+		goToCTxn(opts.Txn), C.bool(!opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
-	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
-		return nil, 0, nil, err
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
+		return nil, 0, nil, nil, err
 	}
-	kvs = copyFromSliceVector(state.data.bufs, state.data.len)
-	return kvs, int64(state.data.count), cSliceToGoBytes(state.intents), nil
+
+	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
+	numKVs = int64(state.data.count)
+
+	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
+		if opts.Reverse {
+			resumeSpan = &roachpb.Span{Key: start, EndKey: roachpb.Key(resumeKey).Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: end}
+		}
+	}
+
+	intents, err = buildScanIntents(cSliceToGoBytes(state.intents))
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		// When encountering intents during a consistent scan we still need to
+		// return the resume key.
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	return kvData, numKVs, resumeSpan, intents, nil
 }
 
 func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {
@@ -2768,6 +2785,16 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	}
 	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+}
+
+// Delete puts a deletion tombstone into the sstable being built. See
+// the Add method for more.
+func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Delete on a closed writer")
+	}
+	fw.DataSize += int64(len(k.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
 }
 
 // Finish finalizes the writer and returns the constructed file's contents. At

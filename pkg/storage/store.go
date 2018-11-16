@@ -171,6 +171,7 @@ func newRaftConfig(
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
 		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
 		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
 		Storage:                   strg,
@@ -1177,8 +1178,8 @@ func IterateRangeDescriptors(
 		return fn(desc)
 	}
 
-	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp, false /* consistent */, false, /* tombstones */
-		nil /* txn */, false /* reverse */, kvToDesc)
+	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp,
+		engine.MVCCScanOptions{Inconsistent: true}, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
 	return err
@@ -4467,6 +4468,11 @@ func (s *Store) setConsistencyQueueActive(active bool) {
 }
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
+}
+
+// GetTxnWaitKnobs is part of txnwait.StoreInterface.
+func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
+	return s.TestingKnobs().TxnWait
 }
 
 func init() {

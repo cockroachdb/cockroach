@@ -111,15 +111,16 @@ type Iterator interface {
 	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, tombstones bool,
 	) (*roachpb.Value, []roachpb.Intent, error)
-	// MVCCScan scans the underlying engine from start to end keys and returns
-	// key/value pairs which have a timestamp less than or equal to the supplied
-	// timestamp, up to a max rows. The key/value pairs are returned as a buffer
-	// of varint-prefixed slices, alternating from key to value, numKvs pairs.
-	// Specify true for tombstones to return deleted values (the value portion
-	// will be empty).
-	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
-		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
-	) (kvs []byte, numKvs int64, intents []byte, err error)
+	// MVCCScan is the internal implementation of the family of package-level
+	// MVCCScan functions. The notable difference is that key/value pairs are
+	// returned raw, as a buffer of varint-prefixed slices, alternating from key
+	// to value, where numKVs specifies the number of pairs in the buffer.
+	//
+	// There is little reason to use this function directly. Use the package-level
+	// MVCCScan, or one of its variants, instead.
+	MVCCScan(
+		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
 	// SetUpperBound installs a new upper bound for this iterator.
 	SetUpperBound(roachpb.Key)
 

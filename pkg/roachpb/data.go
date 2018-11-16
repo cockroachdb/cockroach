@@ -733,7 +733,7 @@ func MakeTransaction(
 	now hlc.Timestamp,
 	maxOffsetNs int64,
 ) Transaction {
-	u := uuid.MakeV4()
+	u := uuid.FastMakeV4()
 	var maxTS hlc.Timestamp
 	if maxOffsetNs == timeutil.ClocklessMaxOffset {
 		// For clockless reads, use the largest possible maxTS. This means we'll

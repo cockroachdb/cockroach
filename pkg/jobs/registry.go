@@ -330,6 +330,14 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	if !liveness.IsLive(r.lenientNow(), r.clock.MaxOffset()) {
 		r.cancelAll(ctx)
 		r.mu.epoch = liveness.Epoch
+		return
+	}
+
+	// Finally, we cancel all jobs if the stopper is quiescing.
+	select {
+	case <-r.stopper.ShouldQuiesce():
+		r.cancelAll(ctx)
+	default:
 	}
 }
 

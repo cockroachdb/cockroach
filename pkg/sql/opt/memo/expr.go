@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -48,10 +49,24 @@ type RelExpr interface {
 	// characteristics of this expression's behavior and results.
 	Relational() *props.Relational
 
-	// Physical is the set of physical properties with respect to which this
-	// expression was optimized. Enforcers may be added to the expression tree
-	// to ensure the physical properties are provided.
-	Physical() *props.Physical
+	// RequiredPhysical is the set of required physical properties with respect to
+	// which this expression was optimized. Enforcers may be added to the
+	// expression tree to ensure the physical properties are provided.
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	RequiredPhysical() *physical.Required
+
+	// ProvidedPhysical is the set of provided physical properties (which must be
+	// compatible with the set of required physical properties).
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	ProvidedPhysical() *physical.Provided
+
+	// Cost is an estimate of the cost of executing this expression tree. Set
+	// when optimization is complete, only for the expressions in the final tree.
+	Cost() Cost
 
 	// FirstExpr returns the first member expression in the memo group (could be
 	// this expression if it happens to be first in the group). Subsequent members
@@ -62,10 +77,6 @@ type RelExpr interface {
 	// NextExpr returns the next member expression in the memo group, or nil if
 	// there are no further members in the group.
 	NextExpr() RelExpr
-
-	// Cost is an estimate of the cost of executing this expression tree. Before
-	// optimization, this cost will always be 0.
-	Cost() Cost
 
 	// group returns the memo group that contains this expression and any other
 	// logically equivalent expressions. There is one group struct for each memo
@@ -182,6 +193,27 @@ func (n AggregationsExpr) OutputCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		colSet.Add(int(n[i].Col))
+	}
+	return colSet
+}
+
+// OuterCols returns the set of outer columns needed by any of the zip
+// expressions.
+func (n ZipExpr) OuterCols(mem *Memo) opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
+	}
+	return colSet
+}
+
+// OutputCols returns the set of columns constructed by the Zip expression.
+func (n ZipExpr) OutputCols() opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		for _, col := range n[i].Cols {
+			colSet.Add(int(col))
+		}
 	}
 	return colSet
 }

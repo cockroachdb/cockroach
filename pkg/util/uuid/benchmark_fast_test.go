@@ -12,27 +12,22 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package ordering
+package uuid_test
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-type dummyRelExpr struct {
-	// We embed a nil memo.RelExpr, which causes any methods that are not
-	// specifically overridden to panic.
-	memo.RelExpr
-
-	r props.Relational
+func BenchmarkFastMakeV4(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		uuid.FastMakeV4()
+	}
 }
 
-var _ memo.RelExpr = &dummyRelExpr{}
-
-func newDummyRelExpr(r props.Relational) memo.RelExpr {
-	return &dummyRelExpr{r: r}
-}
-
-func (d *dummyRelExpr) Relational() *props.Relational {
-	return &d.r
+func BenchmarkMakeV4(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		uuid.MakeV4()
+	}
 }

@@ -792,7 +792,7 @@ DROP TABLE num
 # ANY, ALL tests.
 # ------------------------------------------------------------------------------
 statement ok
-CREATE TABLE abc (a INT, b INT, C INT)
+CREATE TABLE abc (a INT, b INT, c INT)
 
 statement ok
 INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
@@ -1062,3 +1062,17 @@ render          ·         ·                    (a, x)     ·
 ·               table     abcd@primary         ·          ·
 ·               spans     ALL                  ·          ·
 ·               limit     10                   ·          ·
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, INDEX(x,y,z))
+
+# Verify the scan is configured with the correct ordering +x,+y,+z (#31882).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyz LIMIT 10) WHERE y = 1 ORDER BY x, y, z
+----
+filter     ·       ·                  (x, y, z)  +x,+z
+ │         filter  y = 1              ·          ·
+ └── scan  ·       ·                  (x, y, z)  +x,+y,+z
+·          table   xyz@xyz_x_y_z_idx  ·          ·
+·          spans   ALL                ·          ·
+·          limit   10                 ·          ·
