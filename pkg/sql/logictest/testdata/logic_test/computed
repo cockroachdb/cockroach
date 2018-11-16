@@ -673,10 +673,6 @@ SELECT * FROM x ORDER BY a
 3 6 7
 6 12 10
 
-# Verify error if a default and computed column are added at the same time.
-statement error column "d" does not exist
-ALTER TABLE x ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + a) STORED
-
 # Verify a bad statement fails.
 statement error could not parse "a" as type int
 ALTER TABLE x ADD COLUMN d INT AS (a + 'a') STORED
