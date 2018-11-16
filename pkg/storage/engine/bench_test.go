@@ -17,12 +17,10 @@ package engine
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -508,32 +507,6 @@ func runMVCCMerge(b *testing.B, emk engineMaker, value *roachpb.Value, numKeys i
 	b.StopTimer()
 }
 
-func copyDir(from, to string) error {
-	return filepath.Walk(from, func(srcPath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		destPath := strings.Replace(srcPath, from, to, 1)
-		if info.IsDir() {
-			return os.MkdirAll(destPath, info.Mode())
-		}
-		src, err := os.Open(srcPath)
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-		dest, err := os.Create(destPath)
-		if err != nil {
-			return err
-		}
-		defer dest.Close()
-		if _, err := io.Copy(dest, src); err != nil {
-			return err
-		}
-		return dest.Sync()
-	})
-}
-
 func runMVCCDeleteRange(b *testing.B, emk engineMaker, valueBytes int) {
 	// 512 KB ranges so the benchmark doesn't take forever
 	const rangeBytes = 512 * 1024
@@ -555,7 +528,7 @@ func runMVCCDeleteRange(b *testing.B, emk engineMaker, valueBytes int) {
 		if err := os.RemoveAll(locDirty); err != nil {
 			b.Fatal(err)
 		}
-		if err := copyDir(dir, locDirty); err != nil {
+		if err := fileutil.CopyDir(dir, locDirty); err != nil {
 			b.Fatal(err)
 		}
 		func() {
