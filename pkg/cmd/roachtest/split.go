@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math"
 	"strings"
@@ -132,7 +133,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 		defer db.Close()
 
 		t.Status("disable load based splitting")
-		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+		if err := disableLoadBasedSplitting(ctx, db); err != nil {
 			return err
 		}
 
@@ -244,6 +245,13 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
+		// We don't want load based splitting from splitting the range before
+		// it's ready to be split.
+		t.Status("disable load based splitting")
+		if err := disableLoadBasedSplitting(ctx, db); err != nil {
+			return err
+		}
+
 		t.Status("increasing range_max_bytes")
 		setRangeMaxBytes := func(maxBytes int) {
 			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
@@ -300,4 +308,16 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		})
 	})
 	m.Wait()
+}
+
+func disableLoadBasedSplitting(ctx context.Context, db *gosql.DB) error {
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+	if err != nil {
+		// If the cluster setting doesn't exist, the cluster version is < 2.2.0 and
+		// so Load based Splitting doesn't apply anyway and the error should be ignored.
+		if !strings.Contains(err.Error(), "unknown cluster setting") {
+			return err
+		}
+	}
+	return nil
 }
