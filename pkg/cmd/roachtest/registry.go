@@ -54,6 +54,7 @@ func registerTests(r *registry) {
 	registerScaleData(r)
 	registerSchemaChangeKV(r)
 	registerSchemaChangeTPCC(r)
+	registerSQLsmith(r)
 	registerSyncTest(r)
 	registerTPCC(r)
 	registerLoadSplits(r)
