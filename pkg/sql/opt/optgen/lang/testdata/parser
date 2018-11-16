@@ -8,7 +8,11 @@ parse
 # And another information-packed line about it as well.
 #
 define Lt {
+    # This is a field comment.
+    #
     Left  Expr
+
+    # And another field comment.
     Right Expr
 }
 ----
@@ -19,8 +23,18 @@ define Lt {
 			Tags=(Tags)
 			Name="Lt"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:7:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:8:5>)
+				(DefineField
+					Comments=(Comments # This is a field comment. #)
+					Name="Left"
+					Type="Expr"
+					Src=<test.opt:9:5>
+				)
+				(DefineField
+					Comments=(Comments # And another field comment.)
+					Name="Right"
+					Type="Expr"
+					Src=<test.opt:12:5>
+				)
 			)
 			Src=<test.opt:6:1>
 		)
@@ -45,7 +59,7 @@ define Not {
 			Tags=(Tags Tag1 Tag2)
 			Name="Not"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:4:5>)
 			)
 			Src=<test.opt:2:1>
 		)

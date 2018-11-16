@@ -4,7 +4,10 @@
 compile
 # Join comment.
 define Join {
+    # Left comment.
     Left  Expr
+
+    # Right comment.
     Right Expr
 }
 
@@ -19,8 +22,18 @@ define Join {
 			Tags=(Tags)
 			Name="Join"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:3:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField
+					Comments=(Comments # Left comment.)
+					Name="Left"
+					Type="Expr"
+					Src=<test.opt:4:5>
+				)
+				(DefineField
+					Comments=(Comments # Right comment.)
+					Name="Right"
+					Type="Expr"
+					Src=<test.opt:7:5>
+				)
 			)
 			Src=<test.opt:2:1>
 		)
@@ -33,22 +46,22 @@ define Join {
 			Match=(Func
 				Name=Join
 				Args=(Slice
-					(Bind Label="left" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:9:7>)
-					(Bind Label="right" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:9:15>)
+					(Bind Label="left" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:12:7>)
+					(Bind Label="right" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:12:15>)
 				)
 				Typ=Join
-				Src=<test.opt:9:1>
+				Src=<test.opt:12:1>
 			)
 			Replace=(Func
 				Name=Join
 				Args=(Slice
-					(Ref Label="right" Typ=Expr Src=<test.opt:9:34>)
-					(Ref Label="left" Typ=Expr Src=<test.opt:9:41>)
+					(Ref Label="right" Typ=Expr Src=<test.opt:12:34>)
+					(Ref Label="left" Typ=Expr Src=<test.opt:12:41>)
 				)
 				Typ=Join
-				Src=<test.opt:9:28>
+				Src=<test.opt:12:28>
 			)
-			Src=<test.opt:8:1>
+			Src=<test.opt:11:1>
 		)
 	)
 )
@@ -83,8 +96,8 @@ define Project {
 			Tags=(Tags Join)
 			Name="InnerJoin"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:3:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:4:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -93,8 +106,8 @@ define Project {
 			Tags=(Tags Join)
 			Name="LeftJoin"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:8:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:9:5>)
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:8:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:9:5>)
 			)
 			Src=<test.opt:6:1>
 		)
@@ -103,7 +116,7 @@ define Project {
 			Tags=(Tags)
 			Name="Project"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:12:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:12:5>)
 			)
 			Src=<test.opt:11:1>
 		)
@@ -225,7 +238,7 @@ define SubOp2 {}
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -350,7 +363,7 @@ define Op {
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -417,7 +430,7 @@ define Op {
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -505,12 +518,12 @@ define Op {
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input1" Type="Expr" Src=<test.opt:2:5>)
-				(DefineField Name="Input2" Type="Expr" Src=<test.opt:3:5>)
-				(DefineField Name="Input3" Type="Expr" Src=<test.opt:4:5>)
-				(DefineField Name="Input4" Type="Expr" Src=<test.opt:5:5>)
-				(DefineField Name="Input5" Type="Expr" Src=<test.opt:6:5>)
-				(DefineField Name="Input6" Type="Expr" Src=<test.opt:7:5>)
+				(DefineField Comments=(Comments) Name="Input1" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input2" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Input3" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="Input4" Type="Expr" Src=<test.opt:5:5>)
+				(DefineField Comments=(Comments) Name="Input5" Type="Expr" Src=<test.opt:6:5>)
+				(DefineField Comments=(Comments) Name="Input6" Type="Expr" Src=<test.opt:7:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -628,7 +641,7 @@ define Op {
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -750,9 +763,9 @@ define LeftJoin {
 			Tags=(Tags Join)
 			Name="InnerJoin"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:3:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:4:5>)
-				(DefineField Name="On" Type="FiltersExpr" Src=<test.opt:5:5>)
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="On" Type="FiltersExpr" Src=<test.opt:5:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -761,9 +774,9 @@ define LeftJoin {
 			Tags=(Tags Join)
 			Name="LeftJoin"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:10:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:11:5>)
-				(DefineField Name="On" Type="FiltersExpr" Src=<test.opt:12:5>)
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:10:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:11:5>)
+				(DefineField Comments=(Comments) Name="On" Type="FiltersExpr" Src=<test.opt:12:5>)
 			)
 			Src=<test.opt:8:1>
 		)
