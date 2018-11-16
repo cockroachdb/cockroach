@@ -535,9 +535,9 @@ query TT
 SHOW CREATE TABLE ok8
 ----
 ok8  CREATE TABLE ok8 (
-     a INT NOT NULL,
-     b INT NOT NULL,
-     c INT NULL,
+     a INT8 NOT NULL,
+     b INT8 NOT NULL,
+     c INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
      FAMILY "primary" (a, b, c)
 ) PARTITION BY RANGE (a) (
@@ -558,9 +558,9 @@ query TT
 SHOW CREATE TABLE ok9
 ----
 ok9  CREATE TABLE ok9 (
-     a INT NOT NULL,
-     b INT NOT NULL,
-     c INT NULL,
+     a INT8 NOT NULL,
+     b INT8 NOT NULL,
+     c INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
      FAMILY "primary" (a, b, c)
 ) PARTITION BY RANGE (a, b) (
@@ -583,9 +583,9 @@ query TT
 SHOW CREATE TABLE ok10
 ----
 ok10  CREATE TABLE ok10 (
-      a INT NOT NULL,
-      b INT NOT NULL,
-      c INT NULL,
+      a INT8 NOT NULL,
+      b INT8 NOT NULL,
+      c INT8 NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
       FAMILY "primary" (a, b, c)
 ) PARTITION BY RANGE (a, b) (
@@ -613,9 +613,9 @@ query TT
 SHOW CREATE TABLE ok11
 ----
 ok11  CREATE TABLE ok11 (
-      a INT NOT NULL,
-      b INT NOT NULL,
-      c INT NOT NULL,
+      a INT8 NOT NULL,
+      b INT8 NOT NULL,
+      c INT8 NOT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC, c ASC),
       FAMILY "primary" (a, b, c)
 ) PARTITION BY LIST (a) (
@@ -642,9 +642,9 @@ query TT
 SHOW CREATE TABLE ok12
 ----
 ok12  CREATE TABLE ok12 (
-      a INT NOT NULL,
-      b INT NOT NULL,
-      c INT NULL,
+      a INT8 NOT NULL,
+      b INT8 NOT NULL,
+      c INT8 NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
       FAMILY "primary" (a, b, c)
 ) PARTITION BY LIST (a) (
