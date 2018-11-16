@@ -255,6 +255,20 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 	return "InterleaveReaderJoiner", details
 }
 
+// summary implemets the diagramCellType interface.
+func (zj *ZigzagJoinerSpec) summary() (string, []string) {
+	name := "ZigzagJoiner"
+	tables := zj.Tables
+	details := make([]string, 0, len(tables)+1)
+	for i, table := range tables {
+		details = append(details, fmt.Sprintf("Side %d: %s", i, indexDetails(zj.IndexIds[i], &table)[0]))
+	}
+	if !zj.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", zj.OnExpr))
+	}
+	return name, details
+}
+
 // summary implements the diagramCellType interface.
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
