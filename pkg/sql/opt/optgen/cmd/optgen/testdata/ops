@@ -52,7 +52,11 @@ const (
 
 const opNames = "unknowncol-privateprojectprojectionsprojections-itemsort"
 
-var opIndexes = [...]uint32{0, 7, 18, 25, 36, 52, 56}
+var opNameIndexes = [...]uint32{0, 7, 18, 25, 36, 52, 56}
+
+const opSyntaxTags = "UNKNOWNCOL PRIVATEPROJECTPROJECTIONSPROJECTIONS ITEMSORT"
+
+var opSyntaxTagIndexes = [...]uint32{0, 7, 18, 25, 36, 52, 56}
 
 var RelationalOperators = [...]Operator{
 	ProjectOp,
