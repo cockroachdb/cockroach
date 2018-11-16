@@ -338,7 +338,7 @@ func makeKey(i int) MVCCKey {
 	return MakeMVCCMetadataKey(roachpb.Key(strconv.Itoa(i)))
 }
 
-func benchmarkIterOnBatch(b *testing.B, writes int) {
+func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
 	engine := createTestEngine()
 	defer engine.Close()
 
@@ -369,7 +369,7 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 }
 
 func benchmarkIterOnReadWriter(
-	b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
+	ctx context.Context, b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
 ) {
 	engine := createTestEngine()
 	defer engine.Close()
