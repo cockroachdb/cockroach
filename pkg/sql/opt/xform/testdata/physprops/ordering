@@ -1185,3 +1185,28 @@ sort
            │    └── variable: b [type=int]
            └── first-agg [type=int]
                 └── variable: c [type=int]
+
+# --------------------------------------------------
+# Insert operator.
+# --------------------------------------------------
+
+# Verify that the internal ordering is required of the input.
+opt
+INSERT INTO a SELECT a, b::float, c::decimal, 'foo' FROM abc ORDER BY b
+----
+insert a
+ ├── columns: <none>
+ ├── table columns: x:1(int) y:2(float) z:3(decimal) s:4(string)
+ ├── input columns: a:5(int) b:8(float) c:9(decimal) "?column?":10(string)
+ ├── internal-ordering: +8 opt(10)
+ └── sort
+      ├── columns: a:5(int!null) b:8(float) c:9(decimal) "?column?":10(string!null)
+      ├── ordering: +8 opt(10)
+      └── project
+           ├── columns: b:8(float) c:9(decimal) "?column?":10(string!null) a:5(int!null)
+           ├── scan abc
+           │    └── columns: a:5(int!null) abc.b:6(int!null) abc.c:7(int!null)
+           └── projections
+                ├── abc.b::FLOAT8 [type=float]
+                ├── abc.c::DECIMAL [type=decimal]
+                └── const: 'foo' [type=string]
