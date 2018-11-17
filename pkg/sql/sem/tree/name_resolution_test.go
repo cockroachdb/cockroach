@@ -497,7 +497,7 @@ func (fakeResResult) NameResolutionResult() {}
 
 // LookupObject implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupObject(
-	_ context.Context, dbName, scName, tbName string,
+	_ context.Context, requireMutable bool, dbName, scName, tbName string,
 ) (found bool, obMeta tree.NameResolutionResult, err error) {
 	defer func() {
 		f.t.Logf("LookupObject(%s, %s, %s) -> found %v meta %v err %v",
@@ -768,7 +768,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
 					if tc.expected {
-						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, tc.curDb, tc.searchPath)
+						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, false /*requireMutable*/, tc.curDb, tc.searchPath)
 					} else {
 						found, scMeta, err = tpv.ResolveTarget(ctx, fakeResolver, tc.curDb, tc.searchPath)
 					}

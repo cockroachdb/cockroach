@@ -138,7 +138,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		var foundExternalReference bool
 		for id := range refs {
-			if !params.p.Tables().isCreatedTable(id) {
+			if t := params.p.Tables().getUncommittedTableByID(id); t == nil || !t.IsNewTable() {
 				foundExternalReference = true
 				break
 			}
@@ -159,8 +159,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			return err
 		}
 	}
-
-	params.p.Tables().addCreatedTable(id)
 
 	for _, index := range desc.AllNonDropIndexes() {
 		if len(index.Interleave.Ancestors) > 0 {
@@ -808,10 +806,20 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-// NewMutableTableDescriptor returns a MutableTableDescriptor from the
-// given TableDescriptor.
-func NewMutableTableDescriptor(tbl sqlbase.TableDescriptor) *sqlbase.MutableTableDescriptor {
+// NewMutableCreatedTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version being the zero table. This
+// is for a table that is created in the transaction.
+func NewMutableCreatedTableDescriptor(tbl sqlbase.TableDescriptor) *sqlbase.MutableTableDescriptor {
 	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl}
+}
+
+// NewMutableExistingTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version also set to the descriptor.
+// This is for an existing table.
+func NewMutableExistingTableDescriptor(
+	tbl sqlbase.TableDescriptor,
+) *sqlbase.MutableTableDescriptor {
+	return &sqlbase.MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
 }
 
 // InitTableDescriptor returns a blank TableDescriptor.
@@ -821,7 +829,7 @@ func InitTableDescriptor(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) sqlbase.MutableTableDescriptor {
-	return *NewMutableTableDescriptor(sqlbase.TableDescriptor{
+	return *NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
 		ID:               id,
 		Name:             name,
 		ParentID:         parentID,

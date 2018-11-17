@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -48,10 +49,24 @@ type RelExpr interface {
 	// characteristics of this expression's behavior and results.
 	Relational() *props.Relational
 
-	// Physical is the set of physical properties with respect to which this
-	// expression was optimized. Enforcers may be added to the expression tree
-	// to ensure the physical properties are provided.
-	Physical() *props.Physical
+	// RequiredPhysical is the set of required physical properties with respect to
+	// which this expression was optimized. Enforcers may be added to the
+	// expression tree to ensure the physical properties are provided.
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	RequiredPhysical() *physical.Required
+
+	// ProvidedPhysical is the set of provided physical properties (which must be
+	// compatible with the set of required physical properties).
+	//
+	// Set when optimization is complete, only for the expressions in the final
+	// tree.
+	ProvidedPhysical() *physical.Provided
+
+	// Cost is an estimate of the cost of executing this expression tree. Set
+	// when optimization is complete, only for the expressions in the final tree.
+	Cost() Cost
 
 	// FirstExpr returns the first member expression in the memo group (could be
 	// this expression if it happens to be first in the group). Subsequent members
@@ -63,15 +78,15 @@ type RelExpr interface {
 	// there are no further members in the group.
 	NextExpr() RelExpr
 
-	// Cost is an estimate of the cost of executing this expression tree. Before
-	// optimization, this cost will always be 0.
-	Cost() Cost
-
 	// group returns the memo group that contains this expression and any other
 	// logically equivalent expressions. There is one group struct for each memo
 	// group that stores the properties for the group, as well as the pointer to
 	// the first member of the group.
 	group() exprGroup
+
+	// bestProps returns the instance of bestProps associated with this
+	// expression.
+	bestProps() *bestProps
 
 	// setNext sets this expression's next pointer to point to the given
 	// expression. setNext will panic if the next pointer has already been set.
@@ -182,6 +197,27 @@ func (n AggregationsExpr) OutputCols() opt.ColSet {
 	return colSet
 }
 
+// OuterCols returns the set of outer columns needed by any of the zip
+// expressions.
+func (n ZipExpr) OuterCols(mem *Memo) opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
+	}
+	return colSet
+}
+
+// OutputCols returns the set of columns constructed by the Zip expression.
+func (n ZipExpr) OutputCols() opt.ColSet {
+	var colSet opt.ColSet
+	for i := range n {
+		for _, col := range n[i].Cols {
+			colSet.Add(int(col))
+		}
+	}
+	return colSet
+}
+
 // TupleOrdinal is an ordinal index into an expression of type Tuple. It is
 // used by the ColumnAccess scalar expression.
 type TupleOrdinal uint32
@@ -241,129 +277,4 @@ type ScanFlags struct {
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
-}
-
-// CanProvideOrdering returns true if the scan operator returns rows that
-// satisfy the given required ordering; it also returns whether the scan needs
-// to be in reverse order to match the required ordering.
-func (s *ScanPrivate) CanProvideOrdering(
-	md *opt.Metadata, required *props.OrderingChoice,
-) (ok bool, reverse bool) {
-	// Scan naturally orders according to scanned index's key columns. A scan can
-	// be executed either as a forward or as a reverse scan (unless it has a row
-	// limit, in which case the direction is fixed).
-	//
-	// The code below follows the structure of OrderingChoice.Implies. We go
-	// through the columns and determine if the ordering matches with either scan
-	// direction.
-
-	// We start off as accepting either a forward or a reverse scan. Until then,
-	// the reverse variable is unset. Once the direction is known, reverseSet is
-	// true and reverse indicates whether we need to do a reverse scan.
-	const (
-		either = 0
-		fwd    = 1
-		rev    = 2
-	)
-	direction := either
-	if s.HardLimit.IsSet() {
-		// When we have a limit, the limit forces a certain scan direction (because
-		// it affects the results, not just their ordering).
-		direction = fwd
-		if s.HardLimit.Reverse() {
-			direction = rev
-		}
-	}
-	index := md.Table(s.Table).Index(s.Index)
-	for left, right := 0, 0; right < len(required.Columns); {
-		if left >= index.KeyColumnCount() {
-			return false, false
-		}
-		indexCol := index.Column(left)
-		indexColID := s.Table.ColumnID(indexCol.Ordinal)
-		if required.Optional.Contains(int(indexColID)) {
-			left++
-			continue
-		}
-		reqCol := &required.Columns[right]
-		if !reqCol.Group.Contains(int(indexColID)) {
-			return false, false
-		}
-		// The directions of the index column and the required column impose either
-		// a forward or a reverse scan.
-		required := fwd
-		if indexCol.Descending != reqCol.Descending {
-			required = rev
-		}
-		if direction == either {
-			direction = required
-		} else if direction != required {
-			// We already determined the direction, and according to it, this column
-			// has the wrong direction.
-			return false, false
-		}
-		left, right = left+1, right+1
-	}
-	// If direction is either, we prefer forward scan.
-	return true, direction == rev
-}
-
-// CanProvideOrdering returns true if the row number operator returns rows that
-// can satisfy the given required ordering.
-func (r *RowNumberPrivate) CanProvideOrdering(required *props.OrderingChoice) bool {
-	// By construction, any prefix of the ordering required of the input is also
-	// ordered by the ordinality column. For example, if the required input
-	// ordering is +a,+b, then any of these orderings can be provided:
-	//
-	//   +ord
-	//   +a,+ord
-	//   +a,+b,+ord
-	//
-	// As long as the optimizer is enabled, it will have already reduced the
-	// ordering required of this operator to take into account that the ordinality
-	// column is a key, so there will never be ordering columns after the
-	// ordinality column in that case.
-	ordCol := opt.MakeOrderingColumn(r.ColID, false)
-	prefix := len(required.Columns)
-	for i := range required.Columns {
-		if required.MatchesAt(i, ordCol) {
-			if i == 0 {
-				return true
-			}
-			prefix = i
-			break
-		}
-	}
-
-	if prefix < len(required.Columns) {
-		truncated := required.Copy()
-		truncated.Truncate(prefix)
-		return r.Ordering.Implies(&truncated)
-	}
-
-	return r.Ordering.Implies(required)
-}
-
-// CanProvideOrdering returns true if the MergeJoin operator returns rows that
-// satisfy the given required ordering.
-func (m *MergeJoinPrivate) CanProvideOrdering(required *props.OrderingChoice) bool {
-	// TODO(radu): in principle, we could pass through an ordering that covers
-	// more than the equality columns. For example, if we have a merge join
-	// with left ordering a+,b+ and right ordering x+,y+ we could guarantee
-	// a+,b+,c+ if we pass that requirement through to the left side. However,
-	// this requires a specific contract on the execution side on which side's
-	// ordering is preserved when multiple rows match on the equality columns.
-	switch m.JoinType {
-	case opt.InnerJoinOp:
-		return m.LeftOrdering.Implies(required) || m.RightOrdering.Implies(required)
-
-	case opt.LeftJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
-		return m.LeftOrdering.Implies(required)
-
-	case opt.RightJoinOp:
-		return m.RightOrdering.Implies(required)
-
-	default:
-		return false
-	}
 }

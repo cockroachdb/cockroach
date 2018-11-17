@@ -694,7 +694,14 @@ PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_p
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
-EXECGEN_TARGETS = pkg/sql/exec/rowstovec.og.go
+EXECGEN_TARGETS = \
+  pkg/sql/exec/sum_agg.eg.go \
+  pkg/sql/exec/distinct.eg.go \
+  pkg/sql/exec/projection_ops.eg.go \
+  pkg/sql/exec/rowstovec.eg.go \
+  pkg/sql/exec/selection_ops.eg.go \
+  pkg/sql/exec/colvec.eg.go \
+  pkg/sql/exec/hashjoiner.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1167,7 +1174,7 @@ ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
-	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
+	$(NODE_RUN) -C pkg/ui $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
@@ -1308,7 +1315,13 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
-pkg/sql/exec/%.og.go: bin/execgen
+pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
+pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
+
+$(EXECGEN_TARGETS): bin/execgen
+	@# Remove generated files with the old suffix to avoid conflicts.
+	@# See https://github.com/cockroachdb/cockroach/pull/32265.
+	@rm -f pkg/sql/exec/*.og.go
 	execgen $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
@@ -1396,6 +1409,7 @@ bins = \
   bin/publish-artifacts \
   bin/optgen \
   bin/returncheck \
+  bin/roachprod \
   bin/roachprod-stress \
   bin/roachtest \
   bin/teamcity-trigger \

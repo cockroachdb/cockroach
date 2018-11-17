@@ -802,7 +802,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── k > 1.0 [type=bool, outer=(1)]
+      └── k > 1.0 [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
 # Ensure the rest of normalization does its work and we move things around appropriately.
 opt expect=UnifyComparisonTypes
@@ -838,7 +838,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── k > 1.1 [type=bool, outer=(1)]
+      └── k > 1.1 [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
 # -0 can generate spans
 opt expect=UnifyComparisonTypes
@@ -863,7 +863,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── k > NaN [type=bool, outer=(1)]
+      └── k > NaN [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
 # IS/IS NOT
 # We do not do the unification here (the rule matches on Const and NULL is its
@@ -930,7 +930,7 @@ project
  ├── columns: k:1(int!null)
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) tz:4(timestamptz)
+      ├── columns: k:1(int!null) tz:4(timestamptz!null)
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan e@secondary
@@ -939,7 +939,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       └── filters
-           └── tz > '2017-11-12 07:35:01+00:00' [type=bool, outer=(4)]
+           └── tz > '2017-11-12 07:35:01+00:00' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
 
 opt expect=UnifyComparisonTypes
 SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
@@ -985,7 +985,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(5)
       └── filters
-           └── d < '2018-07-08 00:00:01+00:00' [type=bool, outer=(5)]
+           └── d < '2018-07-08 00:00:01+00:00' [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
 
 # NULL value.
 opt

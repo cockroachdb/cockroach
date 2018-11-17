@@ -27,9 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -54,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -1689,8 +1688,10 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 
 	// Wait for store2 to hear about the split.
 	testutils.SucceedsSoon(t, func() error {
-		_, err := store2.GetReplica(rhsDesc.RangeID)
-		return err
+		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+			return errors.New("store2 has not yet processed split")
+		}
+		return nil
 	})
 
 	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
@@ -1772,17 +1773,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Remove and GC the LHS replica on store2. This ensures that the RHS replica
-	// on store2 will never be subsumed, because the merge trigger will never be
-	// applied by the LHS.
+	// Remove the LHS replica from store2.
 	mtc.unreplicateRange(lhsDesc.RangeID, 2)
-	lhsRepl2 := store2.LookupReplica(lhsDesc.StartKey)
-	if err := store2.ManualReplicaGC(lhsRepl2); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
-		t.Fatal("lhs replica not destroyed on store2")
-	}
 
 	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
 	// will force its replica to of the new RHS to become up to date, which
@@ -1920,7 +1912,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 		}
 	}
 
-	// Verify that the abandoned ranges on store2 can only GC'd from left to
+	// Verify that the abandoned ranges on store2 can only be GC'd from left to
 	// right.
 	if err := store2.ManualReplicaGC(repls[2]); err != nil {
 		t.Fatal(err)
@@ -1960,6 +1952,71 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
 		t.Fatal("c replica not destroyed")
 	}
+}
+
+// TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected verifies
+// that the replica GC queue will clean up an abandoned RHS replica whose
+// destroyStatus is destroyReasonMergePending. The RHS replica ends up in this
+// state when its merge watcher goroutine notices that the merge committed, and
+// thus marks it as destroyed with reason destroyReasonMergePending, but the
+// corresponding LHS is rebalanced off the store before it can apply the merge
+// trigger. The replica GC queue would previously refuse to GC the abandoned
+// RHS, as it interpreted destroyReasonMergePending to mean that the RHS replica
+// had already been garbage collected.
+func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make store2 the leaseholder for the RHS.
+	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 2)
+
+	// Start dropping all Raft traffic to the LHS replica on store2 so that it
+	// won't be aware that there is a merge in progress.
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsDesc.RangeID,
+		RaftMessageHandler: store2,
+	})
+
+	// Perform the merge. The LHS replica on store2 whon't hear about this merge
+	// and thus won't subsume its RHS replica. The RHS replica's merge watcher
+	// goroutine will, however, notice the merge and mark the RHS replica as
+	// destroyed with reason destroyReasonMergePending.
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Remove the merged range from store2. Its replicas of both the LHS and RHS
+	// are now eligible for GC.
+	mtc.unreplicateRange(lhsDesc.RangeID, 2)
+
+	// Note that we purposely do not call store.ManualReplicaGC here, as that
+	// calls replicaGCQueue.process directly, bypassing the logic in
+	// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
+	// queuing logic, which has been broken in the past.
+	testutils.SucceedsSoon(t, func() error {
+		if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
+			return errors.New("lhs not destroyed")
+		}
+		if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+			return errors.New("rhs not destroyed")
+		}
+		return nil
+	})
 }
 
 func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {

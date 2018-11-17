@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -51,7 +53,7 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &storagebase.StoreTestingKnobs{
+		Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
 			EvalKnobs: storagebase.BatchEvalTestingKnobs{
 				TestingEvalFilter: filter,
 			},

@@ -65,8 +65,10 @@ SELECT max(y), y, y, x FROM a GROUP BY a.x, a.y
 group-by
  ├── columns: max:3(int) y:2(int) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
+ ├── internal-ordering: +1
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    └── ordering: +1
  └── aggregations
       ├── max [type=int]
       │    └── variable: y [type=int]

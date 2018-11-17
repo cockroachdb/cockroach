@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -41,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -133,7 +134,7 @@ func TestServerStartClock(t *testing.T) {
 	// which would allow the physical clock to catch up to the pushed one.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				MaxOffset: time.Second,
 			},
 		},
@@ -316,7 +317,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storagebase.StoreTestingKnobs{
+			Store: &storage.StoreTestingKnobs{
 				// Prevent the merge queue from immediately discarding our splits.
 				DisableMergeQueue: true,
 			},
@@ -419,7 +420,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			ctx := context.Background()
 			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					Store: &storagebase.StoreTestingKnobs{
+					Store: &storage.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
 						DisableMergeQueue: true,
 					},
@@ -937,9 +938,10 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				htmlTemplate,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
+					1,
 				),
 			)
 			if respString != expected {
@@ -971,17 +973,19 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
+					1,
 				),
 			},
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
+					1,
 				),
 			},
 		}

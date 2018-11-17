@@ -17,10 +17,12 @@ package xform
 import (
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
@@ -37,7 +39,7 @@ type Coster interface {
 	// expression. The optimizer does not expect the cost to correspond to any
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
-	ComputeCost(candidate memo.RelExpr, required *props.Physical) memo.Cost
+	ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -48,6 +50,12 @@ type Coster interface {
 // tree.
 type coster struct {
 	mem *memo.Memo
+
+	// perturbation indicates how much to randomly perturb the cost. It is used
+	// to generate alternative plans for testing. For example, if perturbation is
+	// 0.5, and the estimated cost of an expression is c, the cost returned by
+	// ComputeCost will be in the range [c - 0.5 * c, c + 0.5 * c).
+	perturbation float64
 }
 
 const (
@@ -67,8 +75,9 @@ const (
 )
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(mem *memo.Memo) {
+func (c *coster) Init(mem *memo.Memo, perturbation float64) {
 	c.mem = mem
+	c.perturbation = perturbation
 }
 
 // computeCost calculates the estimated cost of the candidate best expression,
@@ -79,7 +88,7 @@ func (c *coster) Init(mem *memo.Memo) {
 // Note: each custom function to compute the cost of an operator calculates
 // the cost based on Big-O estimated complexity. Most constant factors are
 // ignored for now.
-func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) memo.Cost {
+func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
 	var cost memo.Cost
 	switch candidate.Op() {
 	case opt.SortOp:
@@ -120,7 +129,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 		cost = c.computeSetCost(candidate)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		cost = c.computeGroupingCost(candidate)
+		cost = c.computeGroupingCost(candidate, required)
 
 	case opt.LimitOp:
 		cost = c.computeLimitCost(candidate.(*memo.LimitExpr))
@@ -131,8 +140,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 	case opt.RowNumberOp:
 		cost = c.computeRowNumberCost(candidate.(*memo.RowNumberExpr))
 
-	case opt.ZipOp:
-		cost = c.computeZipCost(candidate.(*memo.ZipExpr))
+	case opt.ProjectSetOp:
+		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -147,26 +156,44 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 		panic(fmt.Sprintf("node %s with MaxCost added to the memo", candidate.Op()))
 	}
 
-	return cost
-}
+	if c.perturbation != 0 {
+		// Don't perturb the cost if we are forcing an index.
+		if cost != hugeCost {
+			// Get a random value in the range [-1.0, 1.0)
+			multiplier := 2*rand.Float64() - 1
 
-func (c *coster) computeSortCost(sort *memo.SortExpr, required *props.Physical) memo.Cost {
-	// Add the CPU cost of emitting the rows.
-	rowCount := sort.Relational().Stats.RowCount
-	cost := memo.Cost(rowCount) * cpuCostFactor
-
-	if rowCount > 1 {
-		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
-		// certain amount of memory is used, distsql switches to a disk-based sort
-		// with a temp RocksDB store.
-		perRowCost := c.rowSortCost(len(required.Ordering.Columns))
-		cost += memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
+			// If perturbation is p, and the estimated cost of an expression is c,
+			// the new cost is in the range [max(0, c - pc), c + pc). For example,
+			// if p=1.5, the new cost is in the range [0, c + 1.5 * c).
+			cost += cost * memo.Cost(c.perturbation*multiplier)
+			// The cost must always be >= 0.
+			if cost < 0 {
+				cost = 0
+			}
+		}
 	}
 
 	return cost
 }
 
-func (c *coster) computeScanCost(scan *memo.ScanExpr, required *props.Physical) memo.Cost {
+func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
+	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
+	// The constant term is necessary for cases where the estimated row count is
+	// very small.
+	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
+	// certain amount of memory is used, distsql switches to a disk-based sort
+	// with a temp RocksDB store.
+	rowCount := sort.Relational().Stats.RowCount
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns))
+	cost := memo.Cost(rowCount) * perRowCost
+	if rowCount > 1 {
+		cost *= (1 + memo.Cost(math.Log2(rowCount)))
+	}
+
+	return cost
+}
+
+func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
 	// Scanning an index with a few columns is faster than scanning an index with
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
@@ -178,7 +205,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *props.Physical) 
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
-	if _, reverse := scan.CanProvideOrdering(c.mem.Metadata(), &required.Ordering); reverse {
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
@@ -297,7 +324,7 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
+func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.Required) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
 
@@ -309,8 +336,20 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
 	groupingColCount := private.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	// TODO(radu): take into account how many grouping columns we have an ordering
-	// on for DistinctOn.
+	if groupingColCount > 0 {
+		// Add a cost that reflects the use of a hash table - unless we are doing a
+		// streaming aggregation where all the grouping columns are ordered; we
+		// interpolate linearly if only part of the grouping columns are ordered.
+		//
+		// The cost is chosen so that it's always less than the cost to sort the
+		// input.
+		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
+		n := ordering.StreamingGroupingCols(private, &required.Ordering).Len()
+		// n = 0:                factor = 1
+		// n = groupingColCount: factor = 0
+		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
+		cost += hashCost
+	}
 
 	return cost
 }
@@ -333,9 +372,9 @@ func (c *coster) computeRowNumberCost(rowNum *memo.RowNumberExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeZipCost(zip *memo.ZipExpr) memo.Cost {
+func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(zip.Relational().Stats.RowCount) * cpuCostFactor
+	cost := memo.Cost(projectSet.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
 }
 

@@ -47,7 +47,9 @@ import (
 //     key as split key, and provide hint to scatter the replicas.
 
 const (
-	durationThreshold          = 10 * time.Second // 10s
+	// RecordDurationThreshold is the minimum duration of time the split finder
+	// will record a range for, before being ready for a split.
+	RecordDurationThreshold    = 10 * time.Second // 10s
 	splitKeySampleSize         = 20               // size of split key sample
 	splitKeyMinCounter         = 100              // min aggregate counters before consideration
 	splitKeyThreshold          = 0.25             // 25% difference between left/right counters
@@ -77,7 +79,7 @@ func New(startTime time.Time) *Finder {
 // Ready checks if the Finder has been initialized with a sufficient
 // sample duration.
 func (f *Finder) Ready(nowTime time.Time) bool {
-	return nowTime.Sub(f.startTime) > durationThreshold
+	return nowTime.Sub(f.startTime) > RecordDurationThreshold
 }
 
 // Record informs the Finder about where the span lies with

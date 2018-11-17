@@ -271,9 +271,13 @@ type SchemaMeta interface {
 }
 
 // TableNameExistingResolver is the helper interface to resolve table
-// names when the object is expected to exist already.
+// names when the object is expected to exist already. The boolean passed
+// is used to specify if a MutableTableDescriptor is to be returned in the
+// result.
 type TableNameExistingResolver interface {
-	LookupObject(ctx context.Context, dbName, scName, obName string) (found bool, objMeta NameResolutionResult, err error)
+	LookupObject(ctx context.Context, requireMutation bool, dbName, scName, obName string) (
+		found bool, objMeta NameResolutionResult, err error,
+	)
 }
 
 // NameResolutionResult is an opaque reference returned by LookupObject().
@@ -285,12 +289,16 @@ type NameResolutionResult interface {
 // ResolveExisting performs name resolution for a table name when
 // the target object is expected to exist already.
 func (t *TableName) ResolveExisting(
-	ctx context.Context, r TableNameExistingResolver, curDb string, searchPath sessiondata.SearchPath,
+	ctx context.Context,
+	r TableNameExistingResolver,
+	requireMutable bool,
+	curDb string,
+	searchPath sessiondata.SearchPath,
 ) (bool, NameResolutionResult, error) {
 	if t.ExplicitSchema {
 		if t.ExplicitCatalog {
 			// Already 3 parts: nothing to search. Delegate to the resolver.
-			return r.LookupObject(ctx, t.Catalog(), t.Schema(), t.Table())
+			return r.LookupObject(ctx, requireMutable, t.Catalog(), t.Schema(), t.Table())
 		}
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
@@ -300,14 +308,14 @@ func (t *TableName) ResolveExisting(
 		// database is not set. For example, `select * from
 		// pg_catalog.pg_tables` is meant to show all tables across all
 		// databases when there is no current database set.
-		if found, objMeta, err := r.LookupObject(ctx, curDb, t.Schema(), t.Table()); found || err != nil {
+		if found, objMeta, err := r.LookupObject(ctx, requireMutable, curDb, t.Schema(), t.Table()); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
 			}
 			return found, objMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
-		if found, objMeta, err := r.LookupObject(ctx, t.Schema(), PublicSchema, t.Table()); found || err != nil {
+		if found, objMeta, err := r.LookupObject(ctx, requireMutable, t.Schema(), PublicSchema, t.Table()); found || err != nil {
 			if err == nil {
 				t.CatalogName = t.SchemaName
 				t.SchemaName = PublicSchemaName
@@ -322,7 +330,7 @@ func (t *TableName) ResolveExisting(
 	// This is a naked table name. Use the search path.
 	iter := searchPath.Iter()
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, objMeta, err := r.LookupObject(ctx, curDb, next, t.Table()); found || err != nil {
+		if found, objMeta, err := r.LookupObject(ctx, requireMutable, curDb, next, t.Table()); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
 				t.SchemaName = Name(next)

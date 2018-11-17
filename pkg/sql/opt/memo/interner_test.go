@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -260,14 +260,14 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashOrderingChoice, eqFn: in.hasher.IsOrderingChoiceEqual, variations: []testVariation{
-			{val1: props.ParseOrderingChoice(""), val2: props.ParseOrderingChoice(""), equal: true},
-			{val1: props.ParseOrderingChoice("+1"), val2: props.ParseOrderingChoice("+1"), equal: true},
-			{val1: props.ParseOrderingChoice("+(1|2)"), val2: props.ParseOrderingChoice("+(2|1)"), equal: true},
-			{val1: props.ParseOrderingChoice("+1 opt(2)"), val2: props.ParseOrderingChoice("+1 opt(2)"), equal: true},
-			{val1: props.ParseOrderingChoice("+1"), val2: props.ParseOrderingChoice("-1"), equal: false},
-			{val1: props.ParseOrderingChoice("+1,+2"), val2: props.ParseOrderingChoice("+1"), equal: false},
-			{val1: props.ParseOrderingChoice("+(1|2)"), val2: props.ParseOrderingChoice("+1"), equal: false},
-			{val1: props.ParseOrderingChoice("+1 opt(2)"), val2: props.ParseOrderingChoice("+1"), equal: false},
+			{val1: physical.ParseOrderingChoice(""), val2: physical.ParseOrderingChoice(""), equal: true},
+			{val1: physical.ParseOrderingChoice("+1"), val2: physical.ParseOrderingChoice("+1"), equal: true},
+			{val1: physical.ParseOrderingChoice("+(1|2)"), val2: physical.ParseOrderingChoice("+(2|1)"), equal: true},
+			{val1: physical.ParseOrderingChoice("+1 opt(2)"), val2: physical.ParseOrderingChoice("+1 opt(2)"), equal: true},
+			{val1: physical.ParseOrderingChoice("+1"), val2: physical.ParseOrderingChoice("-1"), equal: false},
+			{val1: physical.ParseOrderingChoice("+1,+2"), val2: physical.ParseOrderingChoice("+1"), equal: false},
+			{val1: physical.ParseOrderingChoice("+(1|2)"), val2: physical.ParseOrderingChoice("+1"), equal: false},
+			{val1: physical.ParseOrderingChoice("+1 opt(2)"), val2: physical.ParseOrderingChoice("+1"), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashTableID, eqFn: in.hasher.IsTableIDEqual, variations: []testVariation{
@@ -404,33 +404,33 @@ func TestInterner(t *testing.T) {
 func TestInternerPhysProps(t *testing.T) {
 	var in interner
 
-	physProps1 := props.Physical{
-		Presentation: props.Presentation{{Label: "c", ID: 1}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+	physProps1 := physical.Required{
+		Presentation: physical.Presentation{{Label: "c", ID: 1}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
-	physProps2 := props.Physical{
-		Presentation: props.Presentation{{Label: "c", ID: 1}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+	physProps2 := physical.Required{
+		Presentation: physical.Presentation{{Label: "c", ID: 1}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
-	physProps3 := props.Physical{
-		Presentation: props.Presentation{{Label: "d", ID: 1}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+	physProps3 := physical.Required{
+		Presentation: physical.Presentation{{Label: "d", ID: 1}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
-	physProps4 := props.Physical{
-		Presentation: props.Presentation{{Label: "d", ID: 2}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+	physProps4 := physical.Required{
+		Presentation: physical.Presentation{{Label: "d", ID: 2}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
-	physProps5 := props.Physical{
-		Presentation: props.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+	physProps5 := physical.Required{
+		Presentation: physical.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
-	physProps6 := props.Physical{
-		Presentation: props.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
-		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)"),
+	physProps6 := physical.Required{
+		Presentation: physical.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
+		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)"),
 	}
 
 	testCases := []struct {
-		phys    *props.Physical
+		phys    *physical.Required
 		inCache bool
 	}{
 		{phys: &physProps1, inCache: false},
@@ -442,7 +442,7 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps6, inCache: false},
 	}
 
-	inCache := make(map[*props.Physical]bool)
+	inCache := make(map[*physical.Required]bool)
 
 	for _, tc := range testCases[:1] {
 		interned := in.InternPhysicalProps(tc.phys)

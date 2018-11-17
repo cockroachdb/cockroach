@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -38,8 +39,8 @@ const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
 
-	// ExprFmtHideMiscProps does not show outer columns, row cardinality, or
-	// side effects in the output.
+	// ExprFmtHideMiscProps does not show outer columns, row cardinality, provided
+	// orderings, or side effects in the output.
 	ExprFmtHideMiscProps ExprFmtFlags = 1 << (iota - 1)
 
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
@@ -139,10 +140,10 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	relational := e.Relational()
-	physical := e.Physical()
-	if physical == nil {
-		// Physical can be nil before optimization has taken place.
-		physical = props.MinPhysProps
+	required := e.RequiredPhysical()
+	if required == nil {
+		// required can be nil before optimization has taken place.
+		required = physical.MinRequired
 	}
 
 	// Special cases for merge-join and lookup-join: we want the type of the join
@@ -154,12 +155,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *LookupJoinExpr:
 		fmt.Fprintf(f.Buffer, "%v (lookup", t.JoinType)
-		formatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
-		formatPrivate(f, e.Private(), physical)
+		FormatPrivate(f, e.Private(), required)
 
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
@@ -167,45 +168,37 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	tp = tp.Child(f.Buffer.String())
 
-	// If a particular column presentation is required of the expression, then
-	// print columns using that information.
-	if !physical.Presentation.Any() {
-		f.formatPresentation(e, tp, physical.Presentation)
-	} else {
-		// Special handling to improve the columns display for certain ops.
-		switch t := e.(type) {
-		case *ProjectExpr:
-			// We want the synthesized column IDs to map 1-to-1 to the projections,
-			// and the pass-through columns at the end.
+	var colList opt.ColList
+	// Special handling to improve the columns display for certain ops.
+	switch t := e.(type) {
+	case *ProjectExpr:
+		// We want the synthesized column IDs to map 1-to-1 to the projections,
+		// and the pass-through columns at the end.
 
-			// Get the list of columns from the ProjectionsOp, which has the natural
-			// order.
-			var colList opt.ColList
-			for i := range t.Projections {
-				colList = append(colList, t.Projections[i].Col)
-			}
-
-			// Add pass-through columns.
-			t.Passthrough.ForEach(func(i int) {
-				colList = append(colList, opt.ColumnID(i))
-			})
-
-			f.formatColList(e, tp, "columns:", colList)
-
-		case *ValuesExpr:
-			f.formatColList(e, tp, "columns:", t.Cols)
-
-		case *UnionExpr, *IntersectExpr, *ExceptExpr,
-			*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
-			private := e.Private().(*SetPrivate)
-			f.formatColList(e, tp, "columns:", private.OutCols)
-
-		default:
-			// Fall back to writing output columns in column id order, with
-			// best guess label.
-			f.formatColSet(e, tp, "columns:", e.Relational().OutputCols)
+		// Get the list of columns from the ProjectionsOp, which has the natural
+		// order.
+		for i := range t.Projections {
+			colList = append(colList, t.Projections[i].Col)
 		}
+
+		// Add pass-through columns.
+		t.Passthrough.ForEach(func(i int) {
+			colList = append(colList, opt.ColumnID(i))
+		})
+
+	case *ValuesExpr:
+		colList = t.Cols
+
+	case *UnionExpr, *IntersectExpr, *ExceptExpr,
+		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
+		colList = e.Private().(*SetPrivate).OutCols
+
+	default:
+		// Fall back to writing output columns in column id order.
+		colList = opt.ColSetToList(e.Relational().OutputCols)
 	}
+
+	f.formatColumns(e, tp, colList, required.Presentation)
 
 	switch t := e.(type) {
 	// Special-case handling for GroupBy private; print grouping columns
@@ -213,7 +206,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !private.GroupingCols.Empty() {
-			f.formatColSet(e, tp, "grouping columns:", private.GroupingCols)
+			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
 		}
 		if !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
@@ -309,8 +302,20 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 	}
 
-	if !physical.Ordering.Any() {
-		tp.Childf("ordering: %s", physical.Ordering.String())
+	if !required.Ordering.Any() {
+		if f.HasFlags(ExprFmtHideMiscProps) {
+			tp.Childf("ordering: %s", required.Ordering.String())
+		} else {
+			// Show the provided ordering as well, unless it's exactly the same.
+			provided := e.ProvidedPhysical().Ordering
+			reqStr := required.Ordering.String()
+			provStr := provided.String()
+			if provStr == reqStr {
+				tp.Childf("ordering: %s", required.Ordering.String())
+			} else {
+				tp.Childf("ordering: %s [provided: %s]", required.Ordering.String(), provided.String())
+			}
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideRuleProps) {
@@ -352,7 +357,7 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.Buffer.Reset()
 		propsExpr := scalar
 		switch scalar.Op() {
-		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp:
+		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp, opt.ZipItemOp:
 			// Use properties from the item, but otherwise omit it from output.
 			scalar = scalar.Child(0).(opt.ScalarExpr)
 		}
@@ -452,36 +457,39 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	if private != nil {
 		f.Buffer.WriteRune(':')
-		formatPrivate(f, private, &props.Physical{})
+		FormatPrivate(f, private, &physical.Required{})
 	}
 }
 
-func (f *ExprFmtCtx) formatPresentation(
-	nd RelExpr, tp treeprinter.Node, presentation props.Presentation,
+func (f *ExprFmtCtx) formatColumns(
+	nd RelExpr, tp treeprinter.Node, cols opt.ColList, presentation physical.Presentation,
 ) {
-	relational := nd.Relational()
+	if presentation.Any() {
+		f.formatColList(nd, tp, "columns:", cols)
+		return
+	}
+
+	// When a particular column presentation is required of the expression, then
+	// print columns using that information. Include information about columns
+	// that are hidden by the presentation separately.
+	hidden := cols.ToSet()
+	notNullCols := nd.Relational().NotNullCols
 	f.Buffer.Reset()
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
-		formatCol(f, col.Label, col.ID, relational.NotNullCols)
+		hidden.Remove(int(col.ID))
+		formatCol(f, col.Label, col.ID, notNullCols)
+	}
+	if !hidden.Empty() {
+		f.Buffer.WriteString("  [hidden:")
+		for _, col := range cols {
+			if hidden.Contains(int(col)) {
+				formatCol(f, "", col, notNullCols)
+			}
+		}
+		f.Buffer.WriteString("]")
 	}
 	tp.Child(f.Buffer.String())
-}
-
-// formatColSet constructs a new treeprinter child containing the specified set
-// of columns formatting using the formatCol method.
-func (f *ExprFmtCtx) formatColSet(
-	nd RelExpr, tp treeprinter.Node, heading string, colSet opt.ColSet,
-) {
-	if !colSet.Empty() {
-		notNullCols := nd.Relational().NotNullCols
-		f.Buffer.Reset()
-		f.Buffer.WriteString(heading)
-		colSet.ForEach(func(i int) {
-			formatCol(f, "", opt.ColumnID(i), notNullCols)
-		})
-		tp.Child(f.Buffer.String())
-	}
 }
 
 // formatColList constructs a new treeprinter child containing the specified
@@ -536,7 +544,13 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 	f.Buffer.WriteByte(')')
 }
 
-func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical) {
+// ScanIsReverseFn is a callback that is used to figure out if a scan needs to
+// happen in reverse (the code lives in the ordering package, and depending on
+// that directly would be a dependency loop).
+var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *physical.OrderingChoice) bool
+
+// FormatPrivate outputs a description of the private to f.Buffer.
+func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Required) {
 	if private == nil {
 		return
 	}
@@ -557,7 +571,7 @@ func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
 		}
-		if _, reverse := t.CanProvideOrdering(f.Memo.Metadata(), &physProps.Ordering); reverse {
+		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
 
@@ -594,7 +608,7 @@ func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 	case *FunctionPrivate:
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
-	case *props.OrderingChoice:
+	case *physical.OrderingChoice:
 		if !t.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t)
 		}

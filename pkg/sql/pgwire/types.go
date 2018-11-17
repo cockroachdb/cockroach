@@ -193,9 +193,18 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
+		words, lastBitsUsed := v.EncodingParts()
+		// Encode the length of the output bytes. It is computed here so we don't
+		// have to keep a buffer.
+		// 4: the int32 of the bitLen.
+		// 8*(len(words)-1): number of 8-byte words except the last one since it's
+		//   partial.
+		// (lastBitsUsed+7)/8: number of bytes that will be written in the last
+		//   partial word. The /8 rounds down, such that the +7 will cause 1-or-more
+		//   bits to use a byte, but 0 will not.
+		b.putInt32(4 + int32(8*(len(words)-1)) + int32((lastBitsUsed+7)/8))
 		bitLen := v.BitLen()
 		b.putInt32(int32(bitLen))
-		words, lastBitsUsed := v.EncodingParts()
 		var byteBuf [8]byte
 		for i := 0; i < len(words)-1; i++ {
 			w := words[i]

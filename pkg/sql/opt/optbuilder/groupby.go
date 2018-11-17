@@ -155,11 +155,12 @@ func (b *Builder) constructGroupBy(
 	}
 
 	private := memo.GroupingPrivate{GroupingCols: groupingColSet}
-	private.Ordering.FromOrderingWithOptCols(ordering, groupingColSet)
 
 	// The ordering of the GROUP BY is inherited from the input. This ordering is
 	// only useful for intra-group ordering (for order-sensitive aggregations like
 	// ARRAY_AGG). So we add the grouping columns as optional columns.
+	private.Ordering.FromOrderingWithOptCols(ordering, groupingColSet)
+
 	if groupingColSet.Empty() {
 		return b.factory.ConstructScalarGroupBy(input, aggs, &private)
 	}

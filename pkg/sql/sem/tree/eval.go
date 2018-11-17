@@ -2401,6 +2401,10 @@ type EvalContextTestingKnobs struct {
 	// DisableOptimizerRuleProbability is the probability that any given
 	// transformation rule in the optimizer is disabled.
 	DisableOptimizerRuleProbability float64
+	// OptimizerCostPerturbation is used to randomly perturb the estimated
+	// cost of each expression in the query tree for the purpose of creating
+	// alternate query plans in the optimizer.
+	OptimizerCostPerturbation float64
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
@@ -2604,6 +2608,15 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	// field appears as fractional part.
 	res.Decimal.Exponent = -10
 	return &res
+}
+
+// GetRelativeParseTime implements ParseTimeContext.
+func (ctx *EvalContext) GetRelativeParseTime() time.Time {
+	ret := ctx.TxnTimestamp
+	if ret.IsZero() {
+		ret = timeutil.Now()
+	}
+	return ret.In(ctx.GetLocation())
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
@@ -3027,7 +3040,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			if typ.Prec == 0 {
 				return d, nil
 			}
-			dd = *v
+			dd.Set(&v.Decimal)
 		case *DString:
 			err = dd.SetString(string(*v))
 		case *DCollatedString:
@@ -3153,9 +3166,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TDate:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDDate(string(*d), ctx.GetLocation())
+			return ParseDDate(ctx, string(*d))
 		case *DCollatedString:
-			return ParseDDate(d.Contents, ctx.GetLocation())
+			return ParseDDate(ctx, d.Contents)
 		case *DDate:
 			return d, nil
 		case *DInt:
@@ -3169,9 +3182,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TTime:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTime(string(*d))
+			return ParseDTime(ctx, string(*d))
 		case *DCollatedString:
-			return ParseDTime(d.Contents)
+			return ParseDTime(ctx, d.Contents)
 		case *DTime:
 			return d, nil
 		case *DTimestamp:
@@ -3205,9 +3218,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
+			return ParseDTimestampTZ(ctx, string(*d), time.Microsecond)
 		case *DCollatedString:
-			return ParseDTimestampTZ(d.Contents, ctx.GetLocation(), time.Microsecond)
+			return ParseDTimestampTZ(ctx, d.Contents, time.Microsecond)
 		case *DDate:
 			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
 		case *DTimestamp:

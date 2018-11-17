@@ -85,7 +85,6 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 		ranges = rows
 	}
 	b := bankMeta.New().(*bank)
-	b.seed = timeutil.Now().UnixNano()
 	b.rows = rows
 	b.payloadBytes = payloadBytes
 	b.ranges = ranges

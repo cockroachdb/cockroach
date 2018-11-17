@@ -35,7 +35,7 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
-#include "timebound.h"
+#include "table_props.h"
 
 using namespace cockroach;
 
@@ -411,6 +411,16 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   return kSuccess;
 }
 
+DBStatus DBDisableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->SetOptions({{"disable_auto_compactions", "true"}});
+  return ToDBStatus(status);
+}
+
+DBStatus DBEnableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->EnableAutoCompaction({db->rep->DefaultColumnFamily()});
+  return ToDBStatus(status);
+}
+
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));
@@ -612,6 +622,7 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   return DBIterGetState(iter);
 }
 
+void DBIterSetLowerBound(DBIterator* iter, DBKey key) { iter->SetLowerBound(key); }
 void DBIterSetUpperBound(DBIterator* iter, DBKey key) { iter->SetUpperBound(key); }
 
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
@@ -727,6 +738,9 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // timestamps present in each sstable in the metadata for that sstable. Used
   // by the time bounded iterator optimization.
   options->table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options->table_properties_collector_factories.emplace_back(DBMakeDeleteRangeCollector());
 
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -745,6 +759,14 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
   rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
+  rocksdb::Status status = fw->rep.Delete(EncodeKey(key));
   if (!status.ok()) {
     return ToDBStatus(status);
   }

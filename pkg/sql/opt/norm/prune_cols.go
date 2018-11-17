@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -254,7 +255,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column.
 		inputPruneCols := DerivePruneCols(e.Child(0).(memo.RelExpr))
-		ordering := e.Private().(*props.OrderingChoice).ColSet()
+		ordering := e.Private().(*physical.OrderingChoice).ColSet()
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ordering)
 
 	case opt.RowNumberOp:
@@ -272,6 +273,16 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// Any pruneable columns should have already been pruned at the time the
 		// IndexJoin is constructed. Additionally, there is not currently a
 		// PruneCols rule for these operators.
+
+	case opt.ProjectSetOp:
+		// Any pruneable input columns can potentially be pruned, as long as
+		// they're not used in the Zip.
+		// TODO(rytaft): It may be possible to prune Zip columns, but we need to
+		// make sure that we still get the correct number of rows in the output.
+		projectSet := e.(*memo.ProjectSetExpr)
+		relProps.Rule.PruneCols = DerivePruneCols(projectSet.Input).Copy()
+		usedCols := projectSet.Zip.OuterCols(e.Memo())
+		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the

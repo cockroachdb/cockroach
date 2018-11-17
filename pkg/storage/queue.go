@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -62,6 +63,7 @@ type processCallback func(error)
 // processing state.
 type replicaItem struct {
 	value roachpb.RangeID
+	seq   int // enforce FIFO order for equal priorities
 
 	// fields used when a replicaItem is enqueued in a priority queue.
 	priority float64
@@ -87,34 +89,45 @@ func (i *replicaItem) registerCallback(cb processCallback) {
 }
 
 // A priorityQueue implements heap.Interface and holds replicaItems.
-type priorityQueue []*replicaItem
+type priorityQueue struct {
+	seqGen int
+	sl     []*replicaItem
+}
 
-func (pq priorityQueue) Len() int { return len(pq) }
+func (pq priorityQueue) Len() int { return len(pq.sl) }
 
 func (pq priorityQueue) Less(i, j int) bool {
+	a, b := pq.sl[i], pq.sl[j]
+	if a.priority == b.priority {
+		// When priorities are equal, we want the lower sequence number to show
+		// up first (FIFO).
+		return a.seq < b.seq
+	}
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].priority > pq[j].priority
+	return a.priority > b.priority
 }
 
 func (pq priorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index, pq[j].index = i, j
+	pq.sl[i], pq.sl[j] = pq.sl[j], pq.sl[i]
+	pq.sl[i].index, pq.sl[j].index = i, j
 }
 
 func (pq *priorityQueue) Push(x interface{}) {
-	n := len(*pq)
+	n := len(pq.sl)
 	item := x.(*replicaItem)
 	item.index = n
-	*pq = append(*pq, item)
+	pq.seqGen++
+	item.seq = pq.seqGen
+	pq.sl = append(pq.sl, item)
 }
 
 func (pq *priorityQueue) Pop() interface{} {
-	old := *pq
+	old := pq.sl
 	n := len(old)
 	item := old[n-1]
 	item.index = -1 // for safety
 	old[n-1] = nil  // for gc
-	*pq = old[0 : n-1]
+	pq.sl = old[0 : n-1]
 	return item
 }
 
@@ -524,7 +537,7 @@ func (bq *baseQueue) addInternalLocked(
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.removeLocked(bq.mu.priorityQ[pqLen-1])
+		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
 	}
 	// Signal the processLoop that a replica has been added.
 	select {
@@ -714,7 +727,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	}
 
 	if reason, err := repl.IsDestroyed(); err != nil {
-		if !bq.queueConfig.processDestroyedReplicas || reason != destroyReasonRemovalPending {
+		if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
 			if log.V(3) {
 				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
 			}
@@ -754,6 +767,33 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	return nil
 }
 
+type benignError struct {
+	error
+}
+
+var _ causer.Causer = &benignError{}
+
+func (be *benignError) Cause() error {
+	return be.error
+}
+
+func isBenign(err error) bool {
+	return causer.Visit(err, func(err error) bool {
+		_, ok := err.(*benignError)
+		return ok
+	})
+}
+
+func isPurgatoryError(err error) (purgatoryError, bool) {
+	var purgErr purgatoryError
+	ok := causer.Visit(err, func(err error) bool {
+		var ok bool
+		purgErr, ok = err.(purgatoryError)
+		return ok
+	})
+	return purgErr, ok
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
@@ -775,20 +815,27 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Handle failures.
 	if err != nil {
-		// Increment failures metric to capture all error.
+		benign := isBenign(err)
+
+		// Increment failures metric.
+		//
+		// TODO(tschottdorf): once we start asserting zero failures in tests
+		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
 
 		// Determine whether a failure is a purgatory error. If it is, add
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := errors.Cause(err).(purgatoryError); ok {
+		if purgErr, ok := isPurgatoryError(err); ok {
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			return
 		}
 
-		// If not a purgatory error, log.
-		log.Error(ctx, err)
+		// If not a benign or purgatory error, log.
+		if !benign {
+			log.Error(ctx, err)
+		}
 	}
 
 	// Maybe add replica back into queue, if requested.

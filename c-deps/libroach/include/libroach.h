@@ -53,6 +53,7 @@ typedef struct {
 
 typedef struct {
   bool prefix;
+  DBKey lower_bound;
   DBKey upper_bound;
   bool with_stats;
   DBTimestamp min_timestamp_hint;
@@ -129,6 +130,12 @@ DBStatus DBCompact(DBEngine* db);
 // Note that if start is empty, it indicates the start of the database.
 // If end is empty, it indicates the end of the database.
 DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bottommost);
+
+// Disable/enable automatic compactions. Automatic compactions are
+// enabled by default. Disabling is provided for testing purposes so
+// that automatic compactions do not interfere with test expectations.
+DBStatus DBDisableAutoCompaction(DBEngine *db);
+DBStatus DBEnableAutoCompaction(DBEngine *db);
 
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
@@ -243,6 +250,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 
+// DBIterSetLowerBound updates this iterator's lower bound.
+void DBIterSetLowerBound(DBIterator* iter, DBKey key);
+
 // DBIterSetUpperBound updates this iterator's upper bound.
 void DBIterSetUpperBound(DBIterator* iter, DBKey key);
 
@@ -310,6 +320,7 @@ typedef struct {
   DBChunkedBuffer data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
+  DBSlice resume_key;
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
@@ -407,6 +418,9 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 // configured during writer creation). `Open` must have been called. `Close`
 // cannot have been called.
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
+
+// Adds a deletion tombstone to the sstable being built. See DBSstFileWriterAdd for more.
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.

@@ -37,7 +37,9 @@ experimental_force_lookup_join     off
 experimental_force_split_at        off
 experimental_force_zigzag_join     off
 experimental_serial_normalization  rowid
+experimental_vectorize             off
 extra_float_digits                 0
+force_savepoint_restart            off
 integer_datetimes                  on
 intervalstyle                      postgres
 max_index_keys                     32

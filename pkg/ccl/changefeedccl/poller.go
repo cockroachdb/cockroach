@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -514,7 +513,7 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.T
 	}
 
 	var scratch bufalloc.ByteAllocator
-	it, err := engineccl.NewMemSSTIterator(sst, false /* verify */)
+	it, err := engine.NewMemSSTIterator(sst, false /* verify */)
 	if err != nil {
 		return err
 	}

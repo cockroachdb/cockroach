@@ -52,7 +52,7 @@ func New(rangeID roachpb.RangeID) *AbortSpan {
 func fillUUID(b byte) uuid.UUID {
 	var ret uuid.UUID
 	for i := range ret.GetBytes() {
-		ret.UUID[i] = b
+		ret[i] = b
 	}
 	return ret
 }
@@ -109,8 +109,7 @@ func (sc *AbortSpan) Get(
 func (sc *AbortSpan) Iterate(
 	ctx context.Context, e engine.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
 ) error {
-	_, err := engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
-		true /* consistent */, false /* tombstones */, nil /* txn */, false, /* reverse */
+	_, err := engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{}, engine.MVCCScanOptions{},
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {

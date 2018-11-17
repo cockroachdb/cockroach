@@ -193,8 +193,7 @@ func (sc *SchemaChanger) runBackfill(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
-	flags := ObjectLookupFlags{CommonLookupFlags{txn: txn}}
-	tableDesc, err := tc.getTableVersionByID(ctx, sc.tableID, flags)
+	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -417,9 +416,8 @@ func (sc *SchemaChanger) distBackfill(
 					return err
 				}
 
-				flags := ObjectLookupFlags{CommonLookupFlags{txn: txn}}
 				for k := range fkTables {
-					table, err := tc.getTableVersionByID(ctx, k, flags)
+					table, err := tc.getTableVersionByID(ctx, txn, k, ObjectLookupFlags{})
 					if err != nil {
 						return err
 					}
@@ -611,7 +609,7 @@ func columnBackfillInTxn(
 	// All the FKs here are guaranteed to be created in the same transaction
 	// or else this table would be created in the ADD state.
 	for k := range fkTables {
-		if !tc.isCreatedTable(k) {
+		if t := tc.getUncommittedTableByID(k); t == nil || !t.IsNewTable() {
 			return errors.Errorf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}

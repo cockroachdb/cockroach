@@ -58,7 +58,7 @@ build
 SELECT DISTINCT ON (z, x, y) x FROM xyz
 ----
 distinct-on
- ├── columns: x:1(int)
+ ├── columns: x:1(int)  [hidden: y:2(int) z:3(int)]
  ├── grouping columns: x:1(int) y:2(int) z:3(int)
  └── project
       ├── columns: x:1(int) y:2(int) z:3(int)
@@ -78,7 +78,7 @@ build
 SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
 distinct-on
- ├── columns: a:1(string!null)
+ ├── columns: a:1(string!null)  [hidden: b:2(string!null) c:3(string!null)]
  ├── grouping columns: a:1(string!null) b:2(string!null) c:3(string!null)
  └── scan abc
       └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
@@ -86,12 +86,13 @@ distinct-on
 build
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
-sort
- ├── columns: b:2(string!null)
+distinct-on
+ ├── columns: b:2(string!null)  [hidden: a:1(string!null) c:3(string!null)]
+ ├── grouping columns: a:1(string!null) b:2(string!null) c:3(string!null)
  ├── ordering: +2
- └── distinct-on
+ └── sort
       ├── columns: a:1(string!null) b:2(string!null) c:3(string!null)
-      ├── grouping columns: a:1(string!null) b:2(string!null) c:3(string!null)
+      ├── ordering: +2
       └── scan abc
            └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
 
@@ -113,7 +114,7 @@ build
 SELECT DISTINCT ON (y, x) x FROM xyz
 ----
 distinct-on
- ├── columns: x:1(int)
+ ├── columns: x:1(int)  [hidden: y:2(int)]
  ├── grouping columns: x:1(int) y:2(int)
  └── project
       ├── columns: x:1(int) y:2(int)
@@ -149,7 +150,7 @@ build
 SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
 distinct-on
- ├── columns: a:1(string!null) b:2(string)
+ ├── columns: a:1(string!null) b:2(string)  [hidden: c:3(string!null)]
  ├── grouping columns: a:1(string!null) c:3(string!null)
  ├── scan abc
  │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
@@ -190,19 +191,20 @@ sort
 build
 SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
-sort
+distinct-on
  ├── columns: y:2(int) z:3(int) x:1(int)
+ ├── grouping columns: x:1(int) z:3(int)
  ├── ordering: +3
- └── distinct-on
-      ├── columns: x:1(int) y:2(int) z:3(int)
-      ├── grouping columns: x:1(int) z:3(int)
-      ├── project
-      │    ├── columns: x:1(int) y:2(int) z:3(int)
-      │    └── scan xyz
-      │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: y [type=int]
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int)
+ │    ├── ordering: +3
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: y [type=int]
 
 build
 SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
@@ -233,7 +235,7 @@ build
 SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
 distinct-on
- ├── columns: max:6(int)
+ ├── columns: max:6(int)  [hidden: max:7(int)]
  ├── grouping columns: max:7(int)
  ├── scalar-group-by
  │    ├── columns: max:6(int) max:7(int)
@@ -254,7 +256,7 @@ build
 SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
 distinct-on
- ├── columns: max:4(string)
+ ├── columns: max:4(string)  [hidden: min:5(string) max:6(string) min:7(string)]
  ├── grouping columns: min:5(string) max:6(string) min:7(string)
  ├── scalar-group-by
  │    ├── columns: max:4(string) min:5(string) max:6(string) min:7(string)
@@ -281,7 +283,7 @@ build
 SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 distinct-on
- ├── columns: min:6(int)
+ ├── columns: min:6(int)  [hidden: y:2(int)]
  ├── grouping columns: y:2(int)
  ├── group-by
  │    ├── columns: y:2(int) min:6(int)
@@ -414,7 +416,7 @@ build
 SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
 sort
- ├── columns: x:1(int) y:2(int) z:3(int)
+ ├── columns: x:1(int) y:2(int) z:3(int)  [hidden: pk1:4(int!null) pk2:5(int!null)]
  ├── ordering: +1,+2
  └── distinct-on
       ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
@@ -428,16 +430,55 @@ sort
 build
 SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
-sort
- ├── columns: pk1:4(int)
+distinct-on
+ ├── columns: pk1:4(int)  [hidden: x:1(int) y:2(int) z:3(int)]
+ ├── grouping columns: x:1(int) y:2(int) z:3(int)
  ├── ordering: +1
- └── distinct-on
-      ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int)
-      ├── grouping columns: x:1(int) y:2(int) z:3(int)
-      ├── project
-      │    ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
-      │    └── scan xyz
-      │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
-      └── aggregations
-           └── first-agg [type=int]
-                └── variable: pk1 [type=int]
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: pk1 [type=int]
+
+# Verify we accept either ordering direction for the ON columns.
+build
+SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x DESC
+----
+distinct-on
+ ├── columns: x:1(int) y:2(int) z:3(int)
+ ├── grouping columns: x:1(int) y:2(int)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: z [type=int]
+
+build
+SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x ASC, y DESC, z
+----
+distinct-on
+ ├── columns: x:1(int) y:2(int) z:3(int)
+ ├── grouping columns: x:1(int) y:2(int)
+ ├── internal-ordering: +3 opt(1,2)
+ ├── ordering: +1,-2
+ ├── sort
+ │    ├── columns: x:1(int) y:2(int) z:3(int)
+ │    ├── ordering: +1,-2,+3
+ │    └── project
+ │         ├── columns: x:1(int) y:2(int) z:3(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: z [type=int]

@@ -18,6 +18,7 @@ package tscache
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
@@ -28,7 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -239,8 +240,19 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 
 		switch {
 		case cmp > 0:
-			// Starting key is after ending key. This shouldn't happen.
-			panic(interval.ErrInvertedRange)
+			// Starting key is after ending key. This shouldn't happen. Determine
+			// the index where the keys diverged and panic.
+			d := 0
+			for d < len(from) && d < len(to) {
+				if from[d] != to[d] {
+					break
+				}
+				d++
+			}
+			msg := fmt.Sprintf("inverted range (issue #32149): key lens = [%d,%d), diff @ index %d",
+				len(from), len(to), d)
+			log.Errorf(context.Background(), "%s, [%s,%s)", msg, from, to)
+			panic(log.Safe(msg))
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {

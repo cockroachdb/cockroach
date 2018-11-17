@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -162,12 +163,20 @@ func registerKVQuiescenceDead(r *registry) {
 }
 
 func registerKVSplits(r *registry) {
-	for _, quiesce := range []bool{true, false} {
-		quiesce := quiesce // for use in closure below
+	for _, item := range []struct {
+		quiesce bool
+		splits  int
+		timeout time.Duration
+	}{
+		{true, 500000, 2 * time.Hour},
+		{false, 100000, 2 * time.Hour},
+	} {
+		item := item // for use in closure below
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", quiesce),
-			Nodes:  nodes(4),
-			Stable: false, // DO NOT COPY to new tests
+			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
+			Timeout: item.timeout,
+			Nodes:   nodes(4),
+			Stable:  false, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				nodes := c.nodes - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -175,7 +184,7 @@ func registerKVSplits(r *registry) {
 				c.Start(ctx, t, c.Range(1, nodes),
 					startArgs(
 						"--env=COCKROACH_MEMPROF_INTERVAL=1m",
-						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!quiesce),
+						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
 						"--args=--cache=256MiB",
 					))
 
@@ -183,7 +192,7 @@ func registerKVSplits(r *registry) {
 				m := newMonitor(ctx, c, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
 					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-					splits := " --splits=" + ifLocal("2000", "500000")
+					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
 						"./workload run kv --init --max-ops=1"+
 							concurrency+splits+

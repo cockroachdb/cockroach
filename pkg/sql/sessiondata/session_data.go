@@ -80,6 +80,14 @@ type SessionData struct {
 	// DurationAdditionMode enables math compatibility options to be enabled.
 	// TODO(bob): Remove this once the 2.2 release branch is cut.
 	DurationAdditionMode duration.AdditionMode
+	// Vectorize enables automatic planning of vectorized operators.
+	Vectorize bool
+	// ForceSavepointRestart overrides the default SAVEPOINT behavior
+	// for compatibility with certain ORMs. When this flag is set,
+	// the savepoint name will no longer be compared against the magic
+	// identifier `cockroach_restart` in order use a restartable
+	// transaction.
+	ForceSavepointRestart bool
 }
 
 // DataConversionConfig contains the parameters that influence

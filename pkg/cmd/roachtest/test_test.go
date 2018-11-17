@@ -382,6 +382,15 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:       "a",
+				MinVersion: "v2.1.0-foo",
+				Run:        dummyRun,
+			},
+			regexp.QuoteMeta(`invalid version 2.1.0-foo, cannot specify a prerelease (-xxx)`),
+			nil,
+		},
+		{
+			testSpec{
+				Name:       "a",
 				MinVersion: "foo",
 				Run:        dummyRun,
 			},
@@ -406,7 +415,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			r := newRegistry()
 			err := r.prepareSpec(&c.spec, 0)
 			if !testutils.IsError(err, c.expectedErr) {
-				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
+				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
 			if c.expectedErr == "" {
 				tests := listTests(&c.spec)

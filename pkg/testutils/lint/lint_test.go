@@ -752,7 +752,7 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
-		ignore := `\.(pb(\.gw)?)|(\.og)\.go|/testdata/`
+		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
@@ -1076,7 +1076,7 @@ func TestLint(t *testing.T) {
 			}),
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
-			stream.GrepNot(`\.og\.go:[0-9]+: declaration of ".*" shadows`),
+			stream.GrepNot(`\.[eo]g\.go:[0-9]+: declaration of ".*" shadows`),
 			stream.GrepNot(`^#`), // comment line
 			// Upstream compiler error. See: https://github.com/golang/go/issues/23701
 			stream.GrepNot(`pkg/sql/pgwire/pgwire_test\.go.*internal compiler error`),

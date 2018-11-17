@@ -310,8 +310,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet, e.(*RowNumberExpr))
 
-	case opt.ZipOp:
-		return sb.colStatZip(colSet, e.(*ZipExpr))
+	case opt.ProjectSetOp:
+		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
@@ -454,22 +454,18 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	if scan.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
-		applied := sb.applyConstraint(scan.Constraint, scan, relProps)
+		numUnappliedConjuncts := sb.applyIndexConstraint(scan.Constraint, scan, relProps)
 
 		var cols opt.ColSet
-		for i := 0; i < scan.Constraint.Columns.Count(); i++ {
+		for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 			cols.Add(int(scan.Constraint.Columns.Get(i).ID()))
 		}
 
 		// Calculate row count and selectivity
 		// -----------------------------------
 		inputRowCount := s.RowCount
-		if applied {
-			s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, scan, s))
-		} else {
-			numUnappliedConjuncts := sb.numConjunctsInConstraint(scan.Constraint)
-			s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-		}
+		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, scan, s))
+		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 		// Set null counts to 0 for non-nullable columns
 		// -------------------------------------------------
@@ -1598,11 +1594,13 @@ func (sb *statisticsBuilder) colStatRowNumber(
 	return colStat
 }
 
-// +-----+
-// | Zip |
-// +-----+
+// +-------------+
+// | Project Set |
+// +-------------+
 
-func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildProjectSet(
+	projectSet *ProjectSetExpr, relProps *props.Relational,
+) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
@@ -1611,15 +1609,12 @@ func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) 
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
-	for _, child := range zip.Funcs {
-		if fn, ok := child.(*FunctionExpr); ok {
+	for i := range projectSet.Zip {
+		if fn, ok := projectSet.Zip[i].Func.(*FunctionExpr); ok {
 			if fn.Overload.Generator != nil {
-				// Use a small row count; this allows use of lookup join in cases like
-				// using json_array_elements with a small constant array.
-				//
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = 10
+				s.RowCount = unknownGeneratorRowCount
 				break
 			}
 		}
@@ -1628,24 +1623,106 @@ func (sb *statisticsBuilder) buildZip(zip *ZipExpr, relProps *props.Relational) 
 		s.RowCount = 1
 	}
 
+	// Multiply by the input row count to get the total.
+	inputStats := &projectSet.Input.Relational().Stats
+	s.RowCount *= inputStats.RowCount
+
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, zip *ZipExpr) *props.ColumnStatistic {
-	s := &zip.Relational().Stats
+func (sb *statisticsBuilder) colStatProjectSet(
+	colSet opt.ColSet, projectSet *ProjectSetExpr,
+) *props.ColumnStatistic {
+	s := &projectSet.Relational().Stats
+	if s.RowCount == 0 {
+		// Short cut if cardinality is 0.
+		colStat, _ := s.ColStats.Add(colSet)
+		return colStat
+	}
+
+	inputProps := projectSet.Input.Relational()
+	inputStats := inputProps.Stats
+	inputCols := inputProps.OutputCols
 
 	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	colStat.NullCount = 0
 
-	// TODO(rytaft): We may want to determine which generator function the
-	// columns in colSet correspond to, and estimate the distinct count based on
-	// the type of generator function and its parameters.
-	if s.RowCount == 1 {
-		colStat.DistinctCount = 1
-	} else {
-		colStat.DistinctCount = s.RowCount * unknownDistinctCountRatio
+	// Some of the requested columns may be from the input.
+	reqInputCols := colSet.Intersection(inputCols)
+	if !reqInputCols.Empty() {
+		inputColStat := sb.colStatFromChild(reqInputCols, projectSet, 0 /* childIdx */)
+		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount * (s.RowCount / inputStats.RowCount)
 	}
-	colStat.NullCount = s.RowCount * unknownNullCountRatio
-	if colSet.SubsetOf(zip.Relational().NotNullCols) {
+
+	// Other requested columns may be from the output columns of the zip.
+	zipCols := projectSet.Zip.OutputCols()
+	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
+	if !reqZipCols.Empty() {
+		// Calculate the the distinct count and null count for the zip columns
+		// after the cross join has been applied.
+		zipColsDistinctCount := float64(1)
+		zipColsNullCount := float64(0)
+		for i := range projectSet.Zip {
+			item := &projectSet.Zip[i]
+			if item.Cols.ToSet().Intersects(reqZipCols) {
+				if fn, ok := item.Func.(*FunctionExpr); ok && fn.Overload.Generator != nil {
+					// The columns(s) contain a generator function.
+					// TODO(rytaft): We may want to determine which generator function the
+					// requested columns correspond to, and estimate the distinct count and
+					// null count based on the type of generator function and its parameters.
+					zipColsDistinctCount *= unknownGeneratorRowCount * unknownGeneratorDistinctCountRatio
+					zipColsNullCount += (s.RowCount - zipColsNullCount) * unknownNullCountRatio
+				} else {
+					// The columns(s) contain a scalar function or expression.
+					// These columns can contain many null values if the zip also
+					// contains a generator function. For example:
+					//
+					//    SELECT * FROM ROWS FROM (generate_series(0, 3), upper('abc'));
+					//
+					// Produces:
+					//
+					//     generate_series | upper
+					//    -----------------+-------
+					//                   0 | ABC
+					//                   1 | NULL
+					//                   2 | NULL
+					//                   3 | NULL
+					//
+					// After the cross product with the input, the total number of nulls
+					// for the column(s) equals (output row count - input row count).
+					// (Also subtract the expected chance of collisions with nulls
+					// already collected.)
+					zipColsNullCount += (s.RowCount - inputStats.RowCount) * (1 - zipColsNullCount/s.RowCount)
+				}
+
+				if item.ScalarProps(projectSet.Memo()).OuterCols.Intersects(inputProps.OutputCols) {
+					// The column(s) are correlated with the input, so they may have a
+					// distinct value for each distinct row of the input.
+					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
+				}
+			}
+		}
+
+		// Multiply the distinct counts in case colStat.DistinctCount is
+		// already populated with a statistic from the subset of columns
+		// provided by the input. Multiplying the counts gives a worst-case
+		// estimate of the joint distinct count.
+		colStat.DistinctCount *= zipColsDistinctCount
+
+		// Assuming null columns are completely independent, calculate
+		// the expected value of having nulls in either column set.
+		f1 := zipColsNullCount / s.RowCount
+		f2 := colStat.NullCount / s.RowCount
+		colStat.NullCount = s.RowCount * (f1 + f2 - f1*f2)
+	}
+
+	// The distinct count and null count should be no larger than the row count.
+	colStat.DistinctCount = min(s.RowCount, colStat.DistinctCount)
+	colStat.NullCount = min(s.RowCount, colStat.NullCount)
+
+	if colSet.SubsetOf(projectSet.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
 	return colStat
@@ -1791,6 +1868,14 @@ const (
 	// This is the ratio of null column values to number of rows for nullable
 	// columns, which is used in the absence of any real statistics.
 	unknownNullCountRatio = 0.01
+
+	// Use a small row count for generator functions; this allows use of lookup
+	// join in cases like using json_array_elements with a small constant array.
+	unknownGeneratorRowCount = 10
+
+	// Since the generator row count is so small, we need a larger distinct count
+	// ratio for generator functions.
+	unknownGeneratorDistinctCountRatio = 0.7
 )
 
 // applyFilter uses constraints to update the distinct counts for the
@@ -1846,18 +1931,26 @@ func (sb *statisticsBuilder) applyFilter(
 	return numUnappliedConjuncts, constrainedCols
 }
 
-func (sb *statisticsBuilder) applyConstraint(
+func (sb *statisticsBuilder) applyIndexConstraint(
 	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
-) (applied bool) {
+) (numUnappliedConjuncts float64) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
 	// If a contradiction, then optimizations must not be enabled (say for
 	// testing), or else this would have been reduced.
 	if c.IsUnconstrained() || c.IsContradiction() {
-		return false /* applied */
+		return 0 /* numUnappliedConjuncts */
 	}
 
-	return sb.updateDistinctCountsFromConstraint(c, e, relProps)
+	applied := sb.updateDistinctCountsFromConstraint(c, e, relProps)
+	for i, n := applied, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+		// Unlike the constraints found in Select and Join filters, an index
+		// constraint may represent multiple conjuncts. Therefore, we need to
+		// calculate the number of unapplied conjuncts for each constrained column.
+		numUnappliedConjuncts += sb.numConjunctsInConstraint(c, i)
+	}
+
+	return numUnappliedConjuncts
 }
 
 func (sb *statisticsBuilder) applyConstraintSet(
@@ -1874,13 +1967,13 @@ func (sb *statisticsBuilder) applyConstraintSet(
 	numUnappliedConjuncts = 0
 	for i := 0; i < cs.Length(); i++ {
 		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), e, relProps)
-		if !applied {
+		if applied == 0 {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
 			// represent the selectivity of the constraint set.
 			// We return an estimate of the number of unapplied conjuncts to the
 			// caller function to be used for selectivity calculation.
-			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i))
+			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i), 0 /* nth */)
 		}
 	}
 
@@ -1923,10 +2016,10 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
 // column in a constraint that can be determined to have a finite number of
-// possible values. It returns a boolean indicating if the constraint was
-// applied (i.e., the distinct count for at least one column could be inferred
-// from the constraint). If the same column appears in multiple constraints,
-// the distinct count is the minimum for that column across all constraints.
+// possible values. It returns the number of columns for which the distinct
+// count could be inferred from the constraint. If the same column appears
+// in multiple constraints, the distinct count is the minimum for that column
+// across all constraints.
 //
 // For example, consider the following constraint set:
 //
@@ -1952,7 +2045,7 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(
 // discrepancy must be resolved by the calling function.
 func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
-) (applied bool) {
+) (applied int) {
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
 	prefix := c.Prefix(sb.evalCtx)
@@ -2024,7 +2117,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 
 		colID := c.Columns.Get(col).ID()
 		sb.ensureColStat(util.MakeFastIntSet(int(colID)), distinctCount, e, relProps)
-		applied = true
+		applied = col + 1
 	}
 
 	return applied
@@ -2072,8 +2165,8 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 }
 
 // selectivityFromDistinctCounts calculates the selectivity of a filter by
-// taking the product of selectivities of each constrained column. In the general case,
-// this can be represented by the formula:
+// taking the product of selectivities of each constrained column. In the
+// general case, this can be represented by the formula:
 //
 //                  ┬-┬ ⎛ new distinct(i) ⎞
 //   selectivity =  │ │ ⎜ --------------- ⎟
@@ -2313,9 +2406,9 @@ func isEqualityWithTwoVars(cond opt.ScalarExpr) bool {
 }
 
 // numConjunctsInConstraint returns a rough estimate of the number of conjuncts
-// used to build the given constraint.
+// used to build the given constraint for the column at position nth.
 func (sb *statisticsBuilder) numConjunctsInConstraint(
-	c *constraint.Constraint,
+	c *constraint.Constraint, nth int,
 ) (numConjuncts float64) {
 	if c.Spans.Count() == 0 {
 		return 0 /* numConjuncts */
@@ -2325,25 +2418,20 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 	for i := 0; i < c.Spans.Count(); i++ {
 		span := c.Spans.Get(i)
 		numSpanConjuncts := float64(0)
-		// The first start and end keys in each span are the only ones that matter
-		// for determining selectivity when we have no knowledge of the data
-		// distribution. Technically, /a/b: [/5 - ] is more selective than
-		// /a/b: [/4/5 - ], which is more selective than /a/b: [/4 - ]. But we
-		// treat them all the same, with selectivity=1/3.
-		if span.StartKey().Length() > 0 {
+		if span.StartKey().Length() > nth {
 			// Cases of NULL in a constraint should be ignored. For example,
 			// without knowledge of the data distribution, /a: (/NULL - /10] should
 			// have the same estimated selectivity as /a: [/10 - ]. Selectivity
 			// of NULL constraints is handled in selectivityFromNullCounts.
-			if c.Columns.Get(0).Descending() ||
-				span.StartKey().Value(0) != tree.DNull {
+			if c.Columns.Get(nth).Descending() ||
+				span.StartKey().Value(nth) != tree.DNull {
 				numSpanConjuncts++
 			}
 		}
-		if span.EndKey().Length() > 0 {
+		if span.EndKey().Length() > nth {
 			// Ignore cases of NULL in constraints. (see above comment).
-			if !c.Columns.Get(0).Descending() ||
-				span.EndKey().Value(0) != tree.DNull {
+			if !c.Columns.Get(nth).Descending() ||
+				span.EndKey().Value(nth) != tree.DNull {
 				numSpanConjuncts++
 			}
 		}

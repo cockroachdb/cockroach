@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -170,12 +171,18 @@ func (r *Replica) AdminSplit(
 		}
 
 		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
-		switch errors.Cause(lastErr).(type) {
-		case *roachpb.ConditionFailedError:
-		case *roachpb.AmbiguousResultError:
-		default:
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
+		// the command with the updated descriptor.
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
 			return reply, roachpb.NewError(lastErr)
 		}
 	}
@@ -375,7 +382,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			err = errors.Wrap(err, msg)
+			// NB: we have to wrap the existing error here as consumers of this
+			// code look at the root cause to sniff out the changed descriptor.
+			err = &benignError{errors.Wrap(err, msg)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -647,6 +656,7 @@ func waitForReplicasInit(
 }
 
 type snapshotError struct {
+	// NB: don't implement Cause() on this type without also updating IsSnapshotError.
 	cause error
 }
 
@@ -657,8 +667,10 @@ func (s *snapshotError) Error() string {
 // IsSnapshotError returns true iff the error indicates a preemptive
 // snapshot failed.
 func IsSnapshotError(err error) bool {
-	_, ok := err.(*snapshotError)
-	return ok
+	return causer.Visit(err, func(err error) bool {
+		_, ok := errors.Cause(err).(*snapshotError)
+		return ok
+	})
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
@@ -787,15 +799,6 @@ func (r *Replica) changeReplicas(
 			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
 
-		// Prohibit premature raft log truncation. We set the pending index to 1
-		// here until we determine what it is below. This removes a small window of
-		// opportunity for the raft log to get truncated after the snapshot is
-		// generated.
-		if err := r.setPendingSnapshotIndex(1); err != nil {
-			return err
-		}
-		defer r.clearPendingSnapshotIndex()
-
 		// Send a pre-emptive snapshot. Note that the replica to which this
 		// snapshot is addressed has not yet had its replica ID initialized; this
 		// is intentional, and serves to avoid the following race with the replica
@@ -913,7 +916,7 @@ func (r *Replica) changeReplicas(
 	}); err != nil {
 		log.Event(ctx, err.Error())
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			return errors.Wrapf(err, "change replicas of r%d failed: %s", rangeID, msg)
+			err = &benignError{errors.New(msg)}
 		}
 		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
@@ -946,15 +949,11 @@ func (r *Replica) sendSnapshot(
 		return errors.Wrapf(err, "%s: change replicas failed", r)
 	}
 
-	if snapType == snapTypePreemptive {
-		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
-			return err
-		}
-	}
-
 	status := r.RaftStatus()
 	if status == nil {
-		return errors.New("raft status not initialized")
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.New("raft status not initialized")}
 	}
 
 	req := SnapshotRequest_Header{
@@ -1044,7 +1043,7 @@ func updateRangeDescriptor(
 	var newValue interface{}
 	if newDesc != nil {
 		if err := newDesc.Validate(); err != nil {
-			return err
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
 		}
 		newBytes, err := protoutil.Marshal(newDesc)
 		if err != nil {
@@ -1072,6 +1071,12 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
+
+	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
+	// since we'll mutate it in the loop below.
+	rangeDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), rangeDesc.Replicas...)
+	startKey := rangeDesc.StartKey.AsRawKey()
+
 	// Step 1: Compute which replicas are to be added and which are to be removed.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the
@@ -1128,7 +1133,7 @@ func (s *Store) AdminRelocateRange(
 
 	transferLease := func() {
 		if err := s.DB().AdminTransferLease(
-			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+			ctx, startKey, targets[0].StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %s", err)
 		}
@@ -1146,10 +1151,6 @@ func (s *Store) AdminRelocateRange(
 	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
-	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
-	// since we'll mutate it in the loop below.
-	desc := rangeDesc
-	desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 	rangeInfo := RangeInfo{Desc: &rangeDesc}
 
 	// Step 2: Repeatedly add a replica then remove a replica until we reach the
@@ -1204,7 +1205,7 @@ func (s *Store) AdminRelocateRange(
 				StoreID: targetStore.StoreID,
 			}
 			if err := s.DB().AdminChangeReplicas(
-				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
+				ctx, startKey, roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
 			); err != nil {
 				returnErr := errors.Wrapf(err, "while adding target %v", target)
 				if !canRetry(err) {
@@ -1242,7 +1243,7 @@ func (s *Store) AdminRelocateRange(
 			// the leaseholder now, so we can always transfer the lease there.
 			transferLease()
 			if err := s.DB().AdminChangeReplicas(
-				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
+				ctx, startKey, roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
 			); err != nil {
 				log.Warningf(ctx, "while removing target %v: %s", target, err)
 				if !canRetry(err) {

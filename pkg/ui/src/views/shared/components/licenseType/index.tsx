@@ -14,19 +14,13 @@
 
 import React from "react";
 
-import "./licenseType.styl";
+import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 
 /**
  * LicenseType is an indicator showing the current build license.
  */
 export default class LicenseType extends React.Component<{}, {}> {
   render() {
-    return (
-      <h3>
-        <span className="license-type__label">License type:</span>
-        {" "}
-        <span className="license-type__license">OSS</span>
-      </h3>
-    );
+    return <DebugAnnotation label="License type" value="OSS" />;
   }
 }

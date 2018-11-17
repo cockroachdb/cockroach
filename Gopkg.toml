@@ -67,20 +67,6 @@ ignored = [
   source = "https://github.com/cockroachdb/vitess"
   branch = "no-flag-names-parens"
 
-# The master version of go.uuid has an incompatible interface and (as
-# of 2018-06-06) a serious bug. Don't upgrade without making sure
-# that bug is fixed.
-# https://github.com/cockroachdb/cockroach/issues/26332
-[[constraint]]
-  name = "github.com/satori/go.uuid"
-  version = "v1.2.0"
-
-# Use master until 0562badec5489e409f1b18596e3f77a309420a84 is in a
-# tagged release.
-[[constraint]]
-  name = "github.com/Azure/azure-storage-blob-go"
-  branch = "master"
-
 # We want https://github.com/go-yaml/yaml/pull/381
 [[constraint]]
   name = "gopkg.in/yaml.v2"
@@ -127,3 +113,7 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"

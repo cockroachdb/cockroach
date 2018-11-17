@@ -346,10 +346,19 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// The raft log index of a pending preemptive snapshot. Used to prohibit
-		// raft log truncation while a preemptive snapshot is in flight. A value of
-		// 0 indicates that there is no pending snapshot.
-		pendingSnapshotIndex uint64
+		// A map of raft log index of pending preemptive snapshots to deadlines.
+		// Used to prohibit raft log truncations that would leave a gap between
+		// the snapshot and the new first index. The map entry has a zero
+		// deadline while the snapshot is being sent and turns nonzero when the
+		// snapshot has completed, preventing truncation for a grace period
+		// (since there is a race between the snapshot completing and its being
+		// reflected in the raft status used to make truncation decisions).
+		//
+		// NB: If we kept only one value, we could end up in situations in which
+		// we're either giving some snapshots no grace period, or keep an
+		// already finished snapshot "pending" for extended periods of time
+		// (preventing log truncation).
+		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
 		// raftLogSize is the approximate size in bytes of the persisted raft log.
 		// On server restart, this value is assumed to be zero to avoid costly scans
 		// of the raft log. This will be correct when all log entries predating this
@@ -1255,6 +1264,10 @@ func (r *Replica) IsFirstRange() bool {
 func (r *Replica) IsDestroyed() (DestroyReason, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.isDestroyedRLocked()
+}
+
+func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
@@ -2922,6 +2935,12 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		return nil
 	}
 	r.mu.mergeComplete = mergeCompleteCh
+	// The RHS of a merge is not permitted to quiesce while a mergeComplete
+	// channel is installed. (If the RHS is quiescent when the merge commits, any
+	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
+	// range in case it managed to quiesce between when the Subsume request
+	// arrived and now, which is rare but entirely legal.
+	r.unquiesceLocked()
 	r.mu.Unlock()
 
 	taskCtx := r.AnnotateCtx(context.Background())
@@ -3189,8 +3208,10 @@ func (r *Replica) executeWriteBatch(
 		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
 		switch retry {
 		case proposalIllegalLeaseIndex:
+			log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 			continue // retry
 		case proposalAmbiguousShouldBeReevaluated:
+			log.VEventf(ctx, 2, "retry: proposalAmbiguousShouldBeReevaluated")
 			ambiguousResult = true
 			continue // retry
 		case proposalRangeNoLongerExists, proposalErrorReproposing:
@@ -4529,6 +4550,8 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
 func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
+	ctx := r.AnnotateCtx(context.TODO())
+
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -4551,9 +4574,11 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(livenessMap) {
+	if r.maybeQuiesceLocked(ctx, livenessMap) {
 		return false, nil
 	}
+
+	r.maybeTransferRaftLeadershipLocked(ctx)
 
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
@@ -4631,8 +4656,7 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(livenessMap IsLiveMap) bool {
-	ctx := r.AnnotateCtx(context.TODO())
+func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap IsLiveMap) bool {
 	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals), livenessMap)
 	if !ok {
 		return false
@@ -4646,29 +4670,52 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
-	maybeTransferRaftLeader(ctx context.Context, status *raft.Status, ts hlc.Timestamp)
+	mergeInProgressRLocked() bool
+	isDestroyedRLocked() (DestroyReason, error)
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
-// TODO(tschottdorf): there's also maybeTransferRaftLeadership. Only one should exist.
-func (r *Replica) maybeTransferRaftLeader(
-	ctx context.Context, status *raft.Status, now hlc.Timestamp,
-) {
-	l := *r.mu.state.Lease
-	if !r.isLeaseValidRLocked(l, now) {
-		return
-	}
+func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
+	r.mu.Lock()
+	r.maybeTransferRaftLeadershipLocked(ctx)
+	r.mu.Unlock()
+}
+
+// maybeTransferRaftLeadershipLocked attempts to transfer the leadership away
+// from this node to the leaseholder, if this node is the current raft leader
+// but not the leaseholder. We don't attempt to transfer leadership if the
+// leaseholder is behind on applying the log.
+//
+// We like it when leases and raft leadership are collocated because that
+// facilitates quick command application (requests generally need to make it to
+// both the lease holder and the raft leader before being applied by other
+// replicas).
+func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
-		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
-		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
-		r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+	lease := *r.mu.state.Lease
+	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(lease, r.Clock().Now()) {
+		return
 	}
+	raftStatus := r.raftStatusRLocked()
+	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+		return
+	}
+	lhReplicaID := uint64(lease.Replica.ReplicaID)
+	lhProgress, ok := raftStatus.Progress[lhReplicaID]
+	if (ok && lhProgress.Match >= raftStatus.Commit) || r.mu.draining {
+		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
+		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
+		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
+	}
+}
+
+func (r *Replica) mergeInProgressRLocked() bool {
+	return r.mu.mergeComplete != nil
 }
 
 // shouldReplicaQuiesce determines if a replica should be quiesced. All of the
@@ -4684,6 +4731,18 @@ func shouldReplicaQuiesce(
 	if numProposals != 0 {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d pending commands", numProposals)
+		}
+		return nil, false
+	}
+	if q.mergeInProgressRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: merge in progress")
+		}
+		return nil, false
+	}
+	if _, err := q.isDestroyedRLocked(); err != nil {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: replica destroyed")
 		}
 		return nil, false
 	}
@@ -4713,12 +4772,6 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
-		// Try to correct leader-not-leaseholder condition, if encountered,
-		// assuming the leaseholder is caught up to the commit index.
-		//
-		// TODO(peter): It is surprising that a method named shouldReplicaQuiesce
-		// might initiate transfer of the Raft leadership.
-		q.maybeTransferRaftLeader(ctx, status, now)
 		return nil, false
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
@@ -5078,6 +5131,10 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 				lastAppResp = message
 				drop = true
 			}
+
+			if r.maybeDropMsgAppResp(ctx, message) {
+				drop = true
+			}
 		}
 		if !drop {
 			r.sendRaftMessage(ctx, message)
@@ -5086,6 +5143,63 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 	if lastAppResp.Index > 0 {
 		r.sendRaftMessage(ctx, lastAppResp)
 	}
+}
+
+// maybeDropMsgAppResp returns true if the outgoing Raft message should be
+// dropped. It does so if sending the message would likely result in an errant
+// Raft snapshot after a split.
+func (r *Replica) maybeDropMsgAppResp(ctx context.Context, msg raftpb.Message) bool {
+	if !msg.Reject {
+		return false
+	}
+
+	r.mu.RLock()
+	ticks := r.mu.ticks
+	initialized := r.isInitializedRLocked()
+	r.mu.RUnlock()
+
+	if initialized {
+		return false
+	}
+
+	if ticks > r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
+		log.Infof(ctx, "allowing MsgAppResp for uninitialized replica")
+		return false
+	}
+
+	if msg.RejectHint != 0 {
+		log.Fatalf(ctx, "received reject hint %d from supposedly uninitialized replica", msg.RejectHint)
+	}
+
+	// This replica has a blank state, i.e. its last index is zero (because we
+	// start our Raft log at index 10). In particular, it's not a preemptive
+	// snapshot. This happens in two cases:
+	//
+	// 1. a rebalance operation is adding a new replica of the range to this
+	// node. We always send a preemptive snapshot before attempting to do so, so
+	// we wouldn't enter this branch as the replica would be initialized. We
+	// would however enter this branch if the preemptive snapshot got GC'ed
+	// before the actual replica change came through.
+	//
+	// 2. a split executed that created this replica as its right hand side, but
+	// this node's pre-split replica hasn't executed the split trigger (yet).
+	// The expectation is that it will do so momentarily, however if we don't
+	// drop this rejection, the Raft leader will try to catch us up via a
+	// snapshot. In 99.9% of cases this is a wasted effort since the pre-split
+	// replica already contains the data this replica will hold. The remaining
+	// 0.01% constitute the case in which our local replica of the pre-split
+	// range requires a snapshot which catches it up "past" the split trigger,
+	// in which case the trigger will never be executed (the snapshot instead
+	// wipes out the data the split trigger would've tried to put into this
+	// range). A similar scenario occurs if there's a rebalance operation that
+	// rapidly removes the pre-split replica, so that it never catches up (nor
+	// via log nor via snapshot); in that case too, the Raft snapshot is
+	// required to materialize the split's right hand side replica (i.e. this
+	// one). We're delaying the snapshot for a short amount of time only, so
+	// this seems tolerable.
+	log.VEventf(ctx, 2, "dropping rejection from index %d to index %d", msg.Index, msg.RejectHint)
+
+	return true
 }
 
 // sendRaftMessage sends a Raft message.
@@ -5577,7 +5691,15 @@ func (r *Replica) processRaftCommand(
 			}
 			response.Intents = proposal.Local.DetachIntents()
 			response.EndTxns = proposal.Local.DetachEndTxns(response.Err != nil)
-			lResult = proposal.Local
+			if pErr == nil {
+				lResult = proposal.Local
+			}
+		}
+		if pErr != nil && lResult != nil {
+			log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
+		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEvent(ctx, 2, lResult.String())
 		}
 
 		// Handle the Result, executing any side effects of the last
@@ -6172,7 +6294,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 // serializable and the commit timestamp has been forwarded, or (3) the
 // transaction exceeded its deadline, or (4) the testing knobs disallow optional
 // one phase commits and the BatchRequest does not require one phase commit.
-func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *storagebase.StoreTestingKnobs) bool {
+func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -6819,14 +6941,14 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated.",
-	false,
+	true,
 )
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting.",
-	200, // 200 req/s
+	250, // 250 req/s
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
@@ -6900,26 +7022,67 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
-func (r *Replica) setPendingSnapshotIndex(index uint64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// We allow the pendingSnapshotIndex to change from 0 to 1 and then from 1 to
-	// a value greater than 1. Any other change indicates 2 current preemptive
-	// snapshots on the same replica which is disallowed.
-	if (index == 1 && r.mu.pendingSnapshotIndex != 0) ||
-		(index > 1 && r.mu.pendingSnapshotIndex != 1) {
-		return errors.Errorf(
-			"%s: can't set pending snapshot index to %d; pending snapshot already present: %d",
-			r, index, r.mu.pendingSnapshotIndex)
-	}
-	r.mu.pendingSnapshotIndex = index
-	return nil
+type snapTruncationInfo struct {
+	index    uint64
+	deadline time.Time
 }
 
-func (r *Replica) clearPendingSnapshotIndex() {
+func (r *Replica) addSnapshotLogTruncationConstraintLocked(
+	ctx context.Context, snapUUID uuid.UUID, index uint64,
+) {
+	if r.mu.snapshotLogTruncationConstraints == nil {
+		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
+	}
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if ok {
+		// Uh-oh, there's either a programming error (resulting in the same snapshot
+		// fed into this method twice) or a UUID collision. We discard the update
+		// (which is benign) but log it loudly. If the index is the same, it's
+		// likely the former, otherwise the latter.
+		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, index)
+		return
+	}
+
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{index: index}
+}
+
+func (r *Replica) completeSnapshotLogTruncationConstraint(
+	ctx context.Context, snapUUID uuid.UUID, now time.Time,
+) {
+	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
+
 	r.mu.Lock()
-	r.mu.pendingSnapshotIndex = 0
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if !ok {
+		// UUID collision while adding the snapshot in originally. Nothing
+		// else to do.
+		return
+	}
+
+	item.deadline = deadline
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
+}
+
+func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
+	now time.Time,
+) (minSnapIndex uint64) {
+	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
+		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
+			// The snapshot has finished and its grace period has passed.
+			// Ignore it when making truncation decisions.
+			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+			continue
+		}
+		if minSnapIndex == 0 || minSnapIndex > item.index {
+			minSnapIndex = item.index
+		}
+	}
+	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
+		// Save a little bit of memory.
+		r.mu.snapshotLogTruncationConstraints = nil
+	}
+	return minSnapIndex
 }
 
 func (r *Replica) startKey() roachpb.RKey {
@@ -7006,8 +7169,8 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 }
 
 func calcReplicaMetrics(
-	ctx context.Context,
-	now hlc.Timestamp,
+	_ context.Context,
+	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
 	zone *config.ZoneConfig,
 	livenessMap IsLiveMap,

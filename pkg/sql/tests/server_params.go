@@ -16,6 +16,7 @@ package tests
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 )
 
@@ -28,7 +29,7 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(CheckEndTransactionTrigger, true)
 	params := base.TestServerArgs{}
-	params.Knobs.Store = &storagebase.StoreTestingKnobs{
+	params.Knobs.Store = &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},

@@ -11,7 +11,6 @@ package workloadccl
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -38,12 +37,14 @@ const fixtureTestGenRows = 10
 type fixtureTestGen struct {
 	flags workload.Flags
 	val   string
+	empty string
 }
 
 func makeTestWorkload() workload.Flagser {
 	g := &fixtureTestGen{}
 	g.flags.FlagSet = pflag.NewFlagSet(`fx`, pflag.ContinueOnError)
 	g.flags.StringVar(&g.val, `val`, `default`, `The value for each row`)
+	g.flags.StringVar(&g.empty, `empty`, ``, `An empty flag`)
 	return g
 }
 
@@ -52,6 +53,10 @@ var fixtureTestMeta = workload.Meta{
 	New: func() workload.Generator {
 		return makeTestWorkload()
 	},
+}
+
+func init() {
+	workload.Register(fixtureTestMeta)
 }
 
 func (fixtureTestGen) Meta() workload.Meta     { return fixtureTestMeta }
@@ -160,10 +165,7 @@ func TestImportFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	ts := httptest.NewServer(workload.CSVMux([]workload.Meta{gen.Meta()}))
-	defer ts.Close()
-
-	require.NoError(t, ImportFixture(ctx, db, ts.URL, gen, `d`))
+	require.NoError(t, ImportFixture(ctx, db, gen, `d`))
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 }

@@ -380,8 +380,10 @@ func (rq *replicateQueue) processOneChange(
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal",
 			desc.Replicas, candidates)
 		if len(candidates) == 0 {
-			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+			// After rapid upreplication, the candidates for removal could still be catching up.
+			// Mark this error as benign so it doesn't create confusion in the logs.
+			return false, &benignError{errors.Errorf("no removable replicas from range that needs a removal: %s",
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))}
 		}
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
 		if err != nil {

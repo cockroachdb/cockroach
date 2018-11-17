@@ -155,9 +155,6 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.MutableTableDescriptor
 
-	// Map of tables created in the transaction.
-	createdTables map[sqlbase.ID]struct{}
-
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
@@ -186,6 +183,56 @@ type dbCacheSubscriber interface {
 	waitForCacheState(cond func(*databaseCache) bool)
 }
 
+// getMutableTableDescriptor returns a mutable table descriptor.
+//
+// If flags.required is false, getMutableTableDescriptor() will gracefully
+// return a nil descriptor and no error if the table does not exist.
+//
+func (tc *TableCollection) getMutableTableDescriptor(
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
+) (*sqlbase.MutableTableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+	if log.V(2) {
+		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
+	}
+
+	if tn.SchemaName != tree.PublicSchemaName {
+		if flags.required {
+			return nil, nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
+		}
+		return nil, nil, nil
+	}
+
+	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
+	if refuseFurtherLookup || err != nil {
+		return nil, nil, err
+	}
+
+	if dbID == 0 {
+		// Resolve the database from the database cache when the transaction
+		// hasn't modified the database.
+		dbID, err = tc.databaseCache.getDatabaseID(ctx,
+			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
+		if err != nil || dbID == 0 {
+			// dbID can still be 0 if required is false and the database is not found.
+			return nil, nil, err
+		}
+	}
+
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
+		return nil, nil, err
+	} else if table != nil {
+		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
+		return table, nil, nil
+	}
+
+	phyAccessor := UncachedPhysicalAccessor{}
+	obj, db, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+	if obj == nil {
+		return nil, db, err
+	}
+	return obj.(*sqlbase.MutableTableDescriptor), db, err
+}
+
 // getTableVersion returns a table descriptor with a version suitable for
 // the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
 // The table must be released by calling tc.releaseTables().
@@ -193,18 +240,13 @@ type dbCacheSubscriber interface {
 // If flags.required is false, getTableVersion() will gracefully
 // return a nil descriptor and no error if the table does not exist.
 //
-// TODO(vivek): #6418 introduced a transaction deadline that is enforced at
-// the KV layer, and was introduced to manager the validity window of a
-// table descriptor. Since we will be checking for the valid use of a table
-// descriptor here, we do not need the extra check at the KV layer. However,
-// for a SNAPSHOT_ISOLATION transaction the commit timestamp of the transaction
-// can change, so we have kept the transaction deadline. It's worth
-// reconsidering if this is really needed.
+// It might also add a transaction deadline to the transaction that is
+// enforced at the KV layer to ensure that the transaction doesn't violate
+// the validity window of the table descriptor version returned.
 //
-// TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
-) (ObjectDescriptor, *sqlbase.DatabaseDescriptor, error) {
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
+) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
@@ -255,13 +297,20 @@ func (tc *TableCollection) getTableVersion(
 		}
 
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
-		return table, nil, nil
+		return table.TableDesc(), nil, nil
+	}
+
+	readTableFromStore := func() (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+		phyAccessor := UncachedPhysicalAccessor{}
+		obj, db, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+		if obj == nil {
+			return nil, db, err
+		}
+		return obj.(*sqlbase.TableDescriptor), db, err
 	}
 
 	if avoidCache {
-		flags.avoidCached = true
-		phyAccessor := UncachedPhysicalAccessor{}
-		return phyAccessor.GetObjectDesc(tn, flags)
+		return readTableFromStore()
 	}
 
 	// First, look to see if we already have the table.
@@ -276,27 +325,14 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	origTimestamp := flags.txn.OrigTimestamp()
+	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
-		// AcquireByName() is unable to function correctly on a timestamp
-		// less than the timestamp of a transaction with a DROP/TRUNCATE on
-		// a table. A TRUNCATE is where the name -> id map for a table changes.
-		// TODO(vivek): There is no strong reason why this problem is limited
-		// to AS OF SYSTEM TIME requests; remove flags.fixedTimestamp.
-		if flags.fixedTimestamp {
-			flags.avoidCached = true
-			phyAccessor := UncachedPhysicalAccessor{}
-			return phyAccessor.GetObjectDesc(tn, flags)
-		}
-		if err == sqlbase.ErrDescriptorNotFound {
-			if flags.required {
-				// Transform the descriptor error into an error that references the
-				// table's name.
-				return nil, nil, sqlbase.NewUndefinedRelationError(tn)
-			}
-			// We didn't find the descriptor but it's also not required. Make no fuss.
-			return nil, nil, nil
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if err == errTableDropped || err == sqlbase.ErrDescriptorNotFound {
+			return readTableFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
@@ -314,18 +350,18 @@ func (tc *TableCollection) getTableVersion(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil, nil
 }
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, tableID sqlbase.ID, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags ObjectLookupFlags,
 ) (*sqlbase.TableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
 	if flags.avoidCached || testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, flags.txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -356,7 +392,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	origTimestamp := flags.txn.OrigTimestamp()
+	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
@@ -379,7 +415,7 @@ func (tc *TableCollection) getTableVersionByID(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 
@@ -398,7 +434,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return NewMutableTableDescriptor(*table), nil
+	return NewMutableExistingTableDescriptor(*table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -417,7 +453,6 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.releaseLeases(ctx)
 	tc.uncommittedTables = nil
-	tc.createdTables = nil
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
 }
@@ -470,19 +505,6 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescript
 	tc.releaseAllDescriptors()
 }
 
-func (tc *TableCollection) addCreatedTable(id sqlbase.ID) {
-	if tc.createdTables == nil {
-		tc.createdTables = make(map[sqlbase.ID]struct{})
-	}
-	tc.createdTables[id] = struct{}{}
-	tc.releaseAllDescriptors()
-}
-
-func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
-	_, ok := tc.createdTables[id]
-	return ok
-}
-
 // returns all the idVersion pairs that have undergone a schema change.
 // Returns nil for no schema changes. The version returned for each
 // schema change is Version - 2, because that's the one that will be
@@ -491,7 +513,7 @@ func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
 func (tc *TableCollection) getTablesWithNewVersion() []IDVersion {
 	var tables []IDVersion
 	for _, table := range tc.uncommittedTables {
-		if !tc.isCreatedTable(table.ID) {
+		if !table.IsNewTable() {
 			tables = append(tables, IDVersion{
 				name: table.Name,
 				id:   table.ID,
@@ -803,7 +825,7 @@ func (p *planner) writeTableDescToBatch(
 		return pgerror.NewAssertionErrorf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
-	if p.Tables().isCreatedTable(tableDesc.ID) {
+	if tableDesc.IsNewTable() {
 		if err := runSchemaChangesInTxn(ctx,
 			p.txn,
 			p.Tables(),

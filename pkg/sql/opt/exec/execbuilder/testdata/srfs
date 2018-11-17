@@ -196,3 +196,11 @@ EXPLAIN (VERBOSE) SELECT
   jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
 FROM
   groups g
+
+# Regression test for #32162.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 0))
+----
+project set    ·         ·  ("if")  ·
+ │             render 0  1  ·       ·
+ └── emptyrow  ·         ·  ()      ·

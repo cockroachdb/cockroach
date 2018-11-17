@@ -300,9 +300,10 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 }
 
 func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
+	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", "--encrypt=false")
 	c.Put(ctx, cockroach, "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
-	c.Start(ctx, t, racks(c.nodes), startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms"))
+	c.Start(ctx, t, racks(c.nodes), args)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -397,7 +398,7 @@ SELECT count(replicas)
 	// Restart the other nodes. These nodes won't be able to talk to node 1 until
 	// node 1 talks to it (they have out of date address info). Node 1 needs
 	// incoming gossip info in order to determine where range 1 is.
-	c.Start(ctx, t, c.Range(2, c.nodes))
+	c.Start(ctx, t, c.Range(2, c.nodes), args)
 
 	// We need to override DB connection creation to use the correct port for
 	// node 1. This is more complicated than it should be and a limitation of the

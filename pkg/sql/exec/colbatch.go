@@ -29,12 +29,16 @@ type ColBatch interface {
 	SetLength(uint16)
 	// ColVec returns the ith ColVec in this batch.
 	ColVec(i int) ColVec
+	// ColVecs returns all of the underlying ColVecs in this batch.
+	ColVecs() []ColVec
 	// Selection, if not nil, returns the selection vector on this batch: a
 	// densely-packed list of the indices in each column that have not been
 	// filtered out by a previous step.
 	Selection() []uint16
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
+	// AppendCol appends a ColVec with the specified type to this batch.
+	AppendCol(types.T)
 }
 
 var _ ColBatch = &memBatch{}
@@ -57,9 +61,9 @@ func NewMemBatch(types []types.T) ColBatch {
 	return b
 }
 
-// newMemBatchWithSize allocates a new in-memory ColBatch with the given column
+// NewMemBatchWithSize allocates a new in-memory ColBatch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func newMemBatchWithSize(types []types.T, size int) ColBatch {
+func NewMemBatchWithSize(types []types.T, size int) ColBatch {
 	b := &memBatch{}
 	b.b = make([]ColVec, len(types))
 
@@ -90,6 +94,10 @@ func (m *memBatch) ColVec(i int) ColVec {
 	return m.b[i]
 }
 
+func (m *memBatch) ColVecs() []ColVec {
+	return m.b
+}
+
 func (m *memBatch) Selection() []uint16 {
 	if !m.useSel {
 		return nil
@@ -103,6 +111,10 @@ func (m *memBatch) SetSelection(b bool) {
 
 func (m *memBatch) SetLength(n uint16) {
 	m.n = n
+}
+
+func (m *memBatch) AppendCol(t types.T) {
+	m.b = append(m.b, newMemColumn(t, ColBatchSize))
 }
 
 // projectingBatch is a ColBatch that applies a simple projection to another,

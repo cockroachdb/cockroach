@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -401,10 +402,10 @@ func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, required physical.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
-	_, reverse := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 
 	newScanPrivate := *scanPrivate
 	newScanPrivate.HardLimit = memo.MakeScanLimit(int64(*limit.(*tree.DInt)), reverse)
@@ -419,7 +420,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 // NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
 //       since that can require IndexJoin operators to be generated.
 func (c *CustomFuncs) CanLimitConstrainedScan(
-	scanPrivate *memo.ScanPrivate, ordering props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
@@ -434,7 +435,7 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 		return false
 	}
 
-	ok, _ := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 	return ok
 }
 
@@ -448,7 +449,10 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 // limited Scan operator is created. For a non-covering index, an IndexJoin is
 // constructed to add missing columns to the limited Scan.
 func (c *CustomFuncs) GenerateLimitedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+	grp memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	limit tree.Datum,
+	required physical.OrderingChoice,
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
@@ -465,7 +469,9 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := newScanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+		ok, reverse := ordering.ScanPrivateCanProvide(
+			c.e.mem.Metadata(), &newScanPrivate, &required,
+		)
 		if !ok {
 			continue
 		}
@@ -514,7 +520,9 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
-	leftEq, rightEq := harvestEqualityColumns(leftProps.OutputCols, rightProps.OutputCols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+		leftProps.OutputCols, rightProps.OutputCols, on,
+	)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -547,26 +555,15 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		}
 
 		if remainingFilters == nil {
-			remainingFilters = c.remainingJoinFilters(
-				on,
-				func(a, b opt.ColumnID) bool {
-					for i := range leftEq {
-						if (a == leftEq[i] && b == rightEq[i]) ||
-							(a == rightEq[i] && b == leftEq[i]) {
-							return true
-						}
-					}
-					return false
-				},
-			)
+			remainingFilters = memo.ExtractRemainingJoinFilters(on, leftEq, rightEq)
 		}
 
 		merge := memo.MergeJoinExpr{Left: left, Right: right, On: remainingFilters}
 		merge.JoinType = originalOp
 		merge.LeftEq = make(opt.Ordering, n)
 		merge.RightEq = make(opt.Ordering, n)
-		merge.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
-		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		merge.LeftOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
+		merge.RightOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
 		for i := 0; i < n; i++ {
 			eqIdx, _ := colToEq.Get(int(o[i].ID()))
 			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
@@ -582,68 +579,6 @@ func (c *CustomFuncs) GenerateMergeJoins(
 
 		c.e.mem.AddMergeJoinToGroup(&merge, grp)
 	}
-}
-
-// harvestEqualityColumns returns a list of pairs of columns (one from the left
-// side, one from the right side) which are constrained to be equal.
-func harvestEqualityColumns(
-	leftCols, rightCols opt.ColSet, on memo.FiltersExpr,
-) (leftEq opt.ColList, rightEq opt.ColList) {
-	for i := range on {
-		condition := on[i].Condition
-		ok, left, right := isJoinEquality(leftCols, rightCols, condition)
-		if !ok {
-			continue
-		}
-		// Don't allow any column to show up twice.
-		// TODO(radu): need to figure out the right thing to do in cases
-		// like: left.a = right.a AND left.a = right.b
-		duplicate := false
-		for i := range leftEq {
-			if leftEq[i] == left || rightEq[i] == right {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			leftEq = append(leftEq, left)
-			rightEq = append(rightEq, right)
-		}
-	}
-	return leftEq, rightEq
-}
-
-func isJoinEquality(
-	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
-) (ok bool, left, right opt.ColumnID) {
-	eq, ok := condition.(*memo.EqExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	lvar, ok := eq.Left.(*memo.VariableExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	rvar, ok := eq.Right.(*memo.VariableExpr)
-	if !ok {
-		return false, 0, 0
-	}
-
-	// Don't allow mixed types (see #22519).
-	if !lvar.DataType().Equivalent(rvar.DataType()) {
-		return false, 0, 0
-	}
-
-	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
-		return true, lvar.Col, rvar.Col
-	}
-	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
-		return true, rvar.Col, lvar.Col
-	}
-
-	return false, 0, 0
 }
 
 // GenerateLookupJoins looks at the possible indexes and creates lookup join
@@ -697,7 +632,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 ) {
 	inputProps := input.Relational()
 
-	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -722,6 +657,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// Find the longest prefix of index key columns that are equality columns.
 		numIndexKeyCols := iter.index.LaxKeyColumnCount()
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
+		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 		for j := 0; j < numIndexKeyCols; j++ {
 			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
 			eqIdx, ok := rightEq.Find(idxCol)
@@ -729,27 +665,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+			rightSideCols = append(rightSideCols, idxCol)
 		}
 
-		lookupJoin.On = c.remainingJoinFilters(
-			on,
-			func(a, b opt.ColumnID) bool {
-				for i, leftCol := range lookupJoin.KeyCols {
-					var otherCol opt.ColumnID
-					if a == leftCol {
-						otherCol = b
-					} else if b == leftCol {
-						otherCol = a
-					} else {
-						continue
-					}
-					if otherCol == scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal) {
-						return true
-					}
-				}
-				return false
-			},
-		)
+		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
@@ -838,14 +757,96 @@ func (c *CustomFuncs) GenerateLookupJoins(
 //
 // ----------------------------------------------------------------------
 
+// IsCanonicalGroupBy returns true if the private is for the canonical version
+// of the grouping operator.
+func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
+	// The canonical version always has all grouping columns as optional in the
+	// internal ordering.
+	return private.Ordering.Any() || private.GroupingCols.SubsetOf(private.Ordering.Optional)
+}
+
+// GenerateStreamingGroupBy generates variants of a GroupBy or DistinctOn
+// expression with more specific orderings on the grouping columns, using the
+// interesting orderings property. See the GenerateStreamingGroupBy rule.
+func (c *CustomFuncs) GenerateStreamingGroupBy(
+	grp memo.RelExpr,
+	op opt.Operator,
+	input memo.RelExpr,
+	aggs memo.AggregationsExpr,
+	private *memo.GroupingPrivate,
+) {
+	orders := DeriveInterestingOrderings(input)
+	intraOrd := private.Ordering
+	for _, o := range orders {
+		// We are looking for a prefix of o that satisfies the intra-group ordering
+		// if we ignore grouping columns.
+		oIdx, intraIdx := 0, 0
+		for ; oIdx < len(o); oIdx++ {
+			oCol := o[oIdx].ID()
+			if private.GroupingCols.Contains(int(oCol)) || intraOrd.Optional.Contains(int(oCol)) {
+				// Grouping or optional column.
+				continue
+			}
+
+			if intraIdx < len(intraOrd.Columns) &&
+				intraOrd.Columns[intraIdx].Group.Contains(int(oCol)) &&
+				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
+				// Column matches the one in the ordering.
+				intraIdx++
+				continue
+			}
+			break
+		}
+		if oIdx == 0 || intraIdx < len(intraOrd.Columns) {
+			// No match.
+			continue
+		}
+		o = o[:oIdx]
+
+		var newOrd physical.OrderingChoice
+		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
+
+		// Simplify the ordering according to the input's FDs. Note that this is not
+		// necessary for correctness because buildChildPhysicalProps would do it
+		// anyway, but doing it here once can make things more efficient (and we may
+		// generate fewer expressions if some of these orderings turn out to be
+		// equivalent).
+		newOrd.Simplify(&input.Relational().FuncDeps)
+
+		switch op {
+		case opt.GroupByOp:
+			newExpr := memo.GroupByExpr{
+				Input:        input,
+				Aggregations: aggs,
+				GroupingPrivate: memo.GroupingPrivate{
+					GroupingCols: private.GroupingCols,
+					Ordering:     newOrd,
+				},
+			}
+			c.e.mem.AddGroupByToGroup(&newExpr, grp)
+
+		case opt.DistinctOnOp:
+			newExpr := memo.DistinctOnExpr{
+				Input:        input,
+				Aggregations: aggs,
+				GroupingPrivate: memo.GroupingPrivate{
+					GroupingCols: private.GroupingCols,
+					Ordering:     newOrd,
+				},
+			}
+			c.e.mem.AddDistinctOnToGroup(&newExpr, grp)
+		}
+	}
+}
+
 // MakeOrderingChoiceFromColumn constructs a new OrderingChoice with
 // one element in the sequence: the columnID in the order defined by
 // (MIN/MAX) operator. This function was originally created to be used
 // with the Replace(Min|Max)WithLimit exploration rules.
 func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	op opt.Operator, col opt.ColumnID,
-) props.OrderingChoice {
-	oc := props.OrderingChoice{}
+) physical.OrderingChoice {
+	oc := physical.OrderingChoice{}
 	switch op {
 	case opt.MinOp:
 		oc.AppendCol(col, false /* descending */)
@@ -944,27 +945,4 @@ func (it *scanIndexIter) indexCols() opt.ColSet {
 // by the Scan operator.
 func (it *scanIndexIter) isCovering() bool {
 	return it.scanPrivate.Cols.SubsetOf(it.indexCols())
-}
-
-// remainingJoinFilter calculates the remaining ON condition after removing
-// equalities that are handled separately (for merge and lookup joins). The
-// given function determines if an equality is redundant.
-// The result is empty if there are no remaining conditions.
-func (c *CustomFuncs) remainingJoinFilters(
-	on memo.FiltersExpr, removeEquality func(a, b opt.ColumnID) bool,
-) memo.FiltersExpr {
-	newFilters := make(memo.FiltersExpr, 0, len(on))
-	for i := range on {
-		if eq, ok := on[i].Condition.(*memo.EqExpr); ok {
-			if leftVar, ok := eq.Left.(*memo.VariableExpr); ok {
-				if rightVar, ok := eq.Right.(*memo.VariableExpr); ok {
-					if removeEquality(leftVar.Col, rightVar.Col) {
-						continue
-					}
-				}
-			}
-		}
-		newFilters = append(newFilters, on[i])
-	}
-	return newFilters
 }

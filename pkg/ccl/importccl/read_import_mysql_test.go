@@ -173,7 +173,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed:  true,
-		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{referencedSimple.Name: sql.NewMutableTableDescriptor(*referencedSimple)}),
+		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{referencedSimple.Name: sql.NewMutableCreatedTableDescriptor(*referencedSimple)}),
 	}
 
 	t.Run("simple", func(t *testing.T) {
@@ -275,7 +275,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	date := func(s string) tree.Datum {
-		d, err := tree.ParseDDate(s, nil)
+		d, err := tree.ParseDDate(nil, s)
 		if err != nil {
 			t.Fatal(err)
 		}

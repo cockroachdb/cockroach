@@ -247,7 +247,9 @@ func (ex *connExecutor) prepare(
 	//   1. Size of the query string and prepared struct.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
 	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
-	size += prepared.Memo.MemoryEstimate()
+	if prepared.Memo != nil {
+		size += prepared.Memo.MemoryEstimate()
+	}
 	if err := prepared.memAcc.Grow(ctx, size); err != nil {
 		return nil, err
 	}
@@ -326,6 +328,9 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 		}
 
+		ptCtx := tree.NewParseTimeContext(ex.sessionData.DurationAdditionMode,
+			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
+
 		for i, arg := range bindCmd.Args {
 			k := strconv.Itoa(i + 1)
 			t := ps.InTypes[i]
@@ -333,7 +338,7 @@ func (ex *connExecutor) execBind(
 				// nil indicates a NULL argument value.
 				qargs[k] = tree.DNull
 			} else {
-				d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], arg)
+				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
 					if _, ok := err.(*pgerror.Error); ok {
 						return retErr(err)

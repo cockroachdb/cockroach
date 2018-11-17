@@ -182,7 +182,10 @@ func (r *RocksDBMap) Clear() error {
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix)
 	}
-	return nil
+	// NB: we manually flush after performing the clear range to ensure that the
+	// range tombstone is pushed to disk which will kick off compactions that
+	// will eventually free up the deleted space.
+	return r.store.Flush()
 }
 
 // Close implements the SortedDiskMap interface.

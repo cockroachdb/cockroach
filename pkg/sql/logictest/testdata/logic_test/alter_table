@@ -689,6 +689,12 @@ INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
 statement ok
 ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
 
+statement error pq: column "a" is not a computed column
+ALTER TABLE decomputed_column ALTER COLUMN a DROP STORED
+
+statement error pq: column "b" is not a computed column
+ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
+
 # Verify that the computation is dropped and that we can mutate the column
 statement ok
 INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)

@@ -623,55 +623,61 @@ func encodeNonsortingDecimalValueWithoutExp(digits []big.Word, buf []byte) []byt
 // of the encoded value is.
 func DecodeNonsortingDecimal(buf []byte, tmp []byte) (apd.Decimal, error) {
 	var dec apd.Decimal
+	err := DecodeIntoNonsortingDecimal(&dec, buf, tmp)
+	return dec, err
+}
 
+// DecodeIntoNonsortingDecimal is like DecodeNonsortingDecimal, but it operates
+// on the passed-in *apd.Decimal instead of producing a new one.
+func DecodeIntoNonsortingDecimal(dec *apd.Decimal, buf []byte, tmp []byte) error {
 	switch buf[0] {
 	case decimalNaN:
 		dec.Form = apd.NaN
-		return dec, nil
+		return nil
 	case decimalNegativeInfinity:
 		dec.Form = apd.Infinite
 		dec.Negative = true
-		return dec, nil
+		return nil
 	case decimalInfinity:
 		dec.Form = apd.Infinite
-		return dec, nil
+		return nil
 	case decimalZero:
-		return dec, nil
+		return nil
 	}
 
 	dec.Form = apd.Finite
 	switch {
 	case buf[0] == decimalNegLarge:
-		if err := decodeNonsortingDecimalValue(&dec, false, buf[1:], tmp); err != nil {
-			return apd.Decimal{}, err
+		if err := decodeNonsortingDecimalValue(dec, false, buf[1:], tmp); err != nil {
+			return err
 		}
 		dec.Negative = true
-		return dec, nil
+		return nil
 	case buf[0] == decimalNegMedium:
-		decodeNonsortingDecimalValueWithoutExp(&dec, buf[1:], tmp)
+		decodeNonsortingDecimalValueWithoutExp(dec, buf[1:], tmp)
 		dec.Negative = true
-		return dec, nil
+		return nil
 	case buf[0] == decimalNegSmall:
-		if err := decodeNonsortingDecimalValue(&dec, true, buf[1:], tmp); err != nil {
-			return apd.Decimal{}, err
+		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {
+			return err
 		}
 		dec.Negative = true
-		return dec, nil
+		return nil
 	case buf[0] == decimalPosSmall:
-		if err := decodeNonsortingDecimalValue(&dec, true, buf[1:], tmp); err != nil {
-			return apd.Decimal{}, err
+		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {
+			return err
 		}
-		return dec, nil
+		return nil
 	case buf[0] == decimalPosMedium:
-		decodeNonsortingDecimalValueWithoutExp(&dec, buf[1:], tmp)
-		return dec, nil
+		decodeNonsortingDecimalValueWithoutExp(dec, buf[1:], tmp)
+		return nil
 	case buf[0] == decimalPosLarge:
-		if err := decodeNonsortingDecimalValue(&dec, false, buf[1:], tmp); err != nil {
-			return apd.Decimal{}, err
+		if err := decodeNonsortingDecimalValue(dec, false, buf[1:], tmp); err != nil {
+			return err
 		}
-		return dec, nil
+		return nil
 	default:
-		return apd.Decimal{}, errors.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+		return errors.Errorf("unknown decimal prefix of the encoded byte slice: %q", buf)
 	}
 }
 

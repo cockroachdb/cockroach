@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -468,7 +467,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		EnableEpochRangeLeases: true,
 	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
-		storeCfg.TestingKnobs = *storeTestingKnobs.(*storagebase.StoreTestingKnobs)
+		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip, st)
@@ -1387,7 +1386,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
 		if s.cfg.TestingKnobs.Store != nil {
-			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storagebase.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
 				bootstrapVersion = *storeKnobs.BootstrapVersion
 			}
 		}
@@ -1599,6 +1598,7 @@ func (s *Server) Start(ctx context.Context) error {
 		ui.Handler(ui.Config{
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         s.cfg.RequireWebSession(),
+			NodeID:               &s.nodeIDContainer,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u

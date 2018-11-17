@@ -15,12 +15,11 @@
 package memo
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -127,7 +126,7 @@ type Memo struct {
 
 	// rootProps are the physical properties required of the root memo expression.
 	// It is set via a call to SetRoot.
-	rootProps *props.Physical
+	rootProps *physical.Required
 
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
@@ -193,13 +192,13 @@ func (m *Memo) RootExpr() opt.Expr {
 
 // RootProps returns the physical properties required of the root memo group,
 // previously set via a call to SetRoot.
-func (m *Memo) RootProps() *props.Physical {
+func (m *Memo) RootProps() *physical.Required {
 	return m.rootProps
 }
 
 // SetRoot stores the root memo expression when it is a relational expression,
 // and also stores the physical properties required of the root group.
-func (m *Memo) SetRoot(e RelExpr, phys *props.Physical) {
+func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	m.rootExpr = e
 	if m.rootProps != phys {
 		m.rootProps = m.InternPhysicalProps(phys)
@@ -286,35 +285,41 @@ func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog o
 // yet been added. If the same props was added previously, then return a pointer
 // to the previously added props. This allows interned physical props to be
 // compared for equality using simple pointer comparison.
-func (m *Memo) InternPhysicalProps(physical *props.Physical) *props.Physical {
+func (m *Memo) InternPhysicalProps(phys *physical.Required) *physical.Required {
 	// Special case physical properties that require nothing of operator.
-	if !physical.Defined() {
-		return props.MinPhysProps
+	if !phys.Defined() {
+		return physical.MinRequired
 	}
-	return m.interner.InternPhysicalProps(physical)
+	return m.interner.InternPhysicalProps(phys)
 }
 
-// SetBestProps updates the physical properties and cost of a relational
-// expression's memo group. It is called by the optimizer once it determines
-// the lowest cost expression in a group.
-func (m *Memo) SetBestProps(e RelExpr, phys *props.Physical, cost Cost) {
-	if e.Physical() != nil {
-		if e.Physical() != phys || e.Cost() != cost {
-			panic(fmt.Sprintf("cannot overwrite %s (%.9g) with %s (%.9g)",
-				e.Physical(), e.Cost(), phys, cost))
+// SetBestProps updates the physical properties, provided ordering, and cost of
+// a relational expression's memo group (see the relevant methods of RelExpr).
+// It is called by the optimizer once it determines the expression in the group
+// that is part of the lowest cost tree (for the overall query).
+func (m *Memo) SetBestProps(
+	e RelExpr, required *physical.Required, provided *physical.Provided, cost Cost,
+) {
+	if e.RequiredPhysical() != nil {
+		if e.RequiredPhysical() != required ||
+			!e.ProvidedPhysical().Equals(provided) ||
+			e.Cost() != cost {
+			panic(fmt.Sprintf(
+				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
+				e.RequiredPhysical(),
+				e.ProvidedPhysical(),
+				e.Cost(),
+				required.String(),
+				provided.String(), // Call String() so provided doesn't escape.
+				cost,
+			))
 		}
 		return
 	}
-
-	// Enforcer expressions keep their own copy of physical properties and cost.
-	switch t := e.(type) {
-	case *SortExpr:
-		t.phys = phys
-		t.cst = cost
-
-	default:
-		e.group().setBestProps(phys, cost)
-	}
+	bp := e.bestProps()
+	bp.required = required
+	bp.provided = *provided
+	bp.cost = cost
 }
 
 // IsOptimized returns true if the memo has been fully optimized.
@@ -322,30 +327,5 @@ func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
-	return ok && rel.Physical() != nil
-}
-
-// --------------------------------------------------------------------
-// String representation.
-// --------------------------------------------------------------------
-
-// FmtFlags controls how the memo output is formatted.
-type FmtFlags int
-
-const (
-	// FmtPretty performs a breadth-first topological sort on the memo groups,
-	// and shows the root group at the top of the memo.
-	FmtPretty FmtFlags = iota
-)
-
-// String returns a human-readable string representation of this memo for
-// testing and debugging.
-func (m *Memo) String() string {
-	return m.FormatString(FmtPretty)
-}
-
-// FormatString returns a string representation of this memo for testing
-// and debugging. The given flags control which properties are shown.
-func (m *Memo) FormatString(flags FmtFlags) string {
-	return m.format(&memoFmtCtx{buf: &bytes.Buffer{}, flags: flags})
+	return ok && rel.RequiredPhysical() != nil
 }

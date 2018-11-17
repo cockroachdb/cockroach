@@ -199,7 +199,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	// AmbiguousResultError. Import should be resilient to this.
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
-	knobs := base.TestingKnobs{Store: &storagebase.StoreTestingKnobs{
+	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {

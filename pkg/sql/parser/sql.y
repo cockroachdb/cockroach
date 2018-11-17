@@ -4934,7 +4934,7 @@ opt_set_data:
 release_stmt:
   RELEASE savepoint_name
   {
-    $$.val = &tree.ReleaseSavepoint{Savepoint: $2}
+    $$.val = &tree.ReleaseSavepoint{Savepoint: tree.Name($2)}
   }
 | RELEASE error // SHOW HELP: RELEASE
 
@@ -4967,7 +4967,7 @@ resume_stmt:
 savepoint_stmt:
   SAVEPOINT name
   {
-    $$.val = &tree.Savepoint{Name: $2}
+    $$.val = &tree.Savepoint{Name: tree.Name($2)}
   }
 | SAVEPOINT error // SHOW HELP: SAVEPOINT
 
@@ -5038,7 +5038,7 @@ rollback_stmt:
   ROLLBACK opt_to_savepoint
   {
     if $2 != "" {
-      $$.val = &tree.RollbackToSavepoint{Savepoint: $2}
+      $$.val = &tree.RollbackToSavepoint{Savepoint: tree.Name($2)}
     } else {
       $$.val = &tree.RollbackTransaction{}
     }
@@ -5113,6 +5113,7 @@ opt_comma:
 transaction_mode:
   transaction_iso_level
   {
+    /* SKIP DOC */
     $$.val = tree.TransactionModes{Isolation: $1.isoLevel()}
   }
 | transaction_user_priority

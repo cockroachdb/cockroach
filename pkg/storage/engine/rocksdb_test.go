@@ -208,12 +208,15 @@ func TestBatchPrefixIter(t *testing.T) {
 	}
 }
 
-func TestIterUpperBound(t *testing.T) {
+func TestIterBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	db := setupMVCCInMemRocksDB(t, "iter_upper_bound")
+	db := setupMVCCInMemRocksDB(t, "iter_bounds")
 	defer db.Close()
 
+	if err := db.Put(mvccKey("0"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Put(mvccKey("a"), []byte("val")); err != nil {
 		t.Fatal(err)
 	}
@@ -234,6 +237,47 @@ func TestIterUpperBound(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := tc.createEngine()
 			defer e.Close()
+
+			if _, ok := e.(*rocksDBBatch); !ok { // batches do not support reverse iteration
+				// Test that a new iterator's lower bound is applied.
+				func() {
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("b")})
+					defer iter.Close()
+					iter.SeekReverse(mvccKey("b"))
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if !ok {
+						t.Fatalf("expected iterator to be valid, but was invalid")
+					}
+					iter.SeekReverse(mvccKey("a"))
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if ok {
+						t.Fatalf("expected iterator to be invalid, but was valid")
+					}
+				}()
+
+				// Test that the cached iterator, if the underlying engine implementation
+				// caches iterators, can take on a new lower bound.
+				func() {
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("a")})
+					defer iter.Close()
+
+					iter.SeekReverse(mvccKey("a"))
+					if ok, err := iter.Valid(); !ok {
+						t.Fatal(err)
+					}
+					if !mvccKey("a").Equal(iter.Key()) {
+						t.Fatalf("expected key a, but got %q", iter.Key())
+					}
+					iter.Prev()
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if ok {
+						t.Fatalf("expected iterator to be invalid, but was valid")
+					}
+				}()
+			}
 
 			// Test that a new iterator's upper bound is applied.
 			func() {
@@ -268,9 +312,7 @@ func TestIterUpperBound(t *testing.T) {
 				}
 			}()
 
-			// If the engine supports writes, test that the upper bound is applied to
-			// newly written keys. This notably tests the logic in BaseDeltaIterator
-			// on batches.
+			// Perform additional tests if the engine supports writes.
 			w, isReadWriter := e.(ReadWriter)
 			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
 				return
@@ -833,7 +875,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ssts, err := rocksdb.getUserProperties()
+	ssts, err := rocksdb.GetUserProperties()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1270,6 +1312,12 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	db := setupMVCCInMemRocksDB(t, "delrange").(InMem)
 	defer db.Close()
 
+	// Disable automatic compactions which interfere with test expectations
+	// below.
+	if err := db.disableAutoCompaction(); err != nil {
+		t.Fatal(err)
+	}
+
 	makeKey := func(prefix string, i int) roachpb.Key {
 		return roachpb.Key(fmt.Sprintf("%s%09d", prefix, i))
 	}
@@ -1389,9 +1437,9 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	// sstable being deleted. Prior to the hack in dbClearRange, all of the
 	// sstables would be compacted resulting in 2 L6 sstables with different
 	// boundaries than the ones below.
-	_ = db.CompactRange(makeKey("c", 1), makeKey("c", numEntries), false)
+	_ = db.CompactRange(makeKey("c", 0), makeKey("c", numEntries), false)
 	verifySSTables(`
-5: "a000000000" - "c000000000"
+5: "a000000000" - "a000000000"
 6: "a000000000" - "a000009999"
 6: "b000000000" - "b000009999"
 `)

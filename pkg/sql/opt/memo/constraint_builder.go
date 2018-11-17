@@ -16,6 +16,8 @@ package memo
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -77,7 +79,10 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 	}
 
 	if opt.IsConstValueOp(val) || CanExtractConstTuple(val) {
-		return cb.buildSingleColumnConstraintConst(col, op, ExtractConstDatum(val))
+		res, tight := cb.buildSingleColumnConstraintConst(col, op, ExtractConstDatum(val))
+		if res != unconstrained {
+			return res, tight
+		}
 	}
 
 	// Try to at least deduce a not-null constraint.
@@ -162,7 +167,36 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 		}
 		return c, true
 
-		// TODO(radu): handle other ops.
+	case opt.LikeOp:
+		if s, ok := tree.AsDString(datum); ok {
+			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
+				if i == 0 {
+					// Mask starts with _ or %.
+					return unconstrained, false
+				}
+				c := cb.makeStringPrefixSpan(col, string(s[:i]))
+				// A mask like ABC% is equivalent to restricting the prefix to ABC.
+				// A mask like ABC%Z requires restricting the prefix, but is a stronger
+				// condition.
+				tight := (i == len(s)-1) && s[i] == '%'
+				return c, tight
+			}
+			// No wildcard characters, this is an equality.
+			return cb.eqSpan(col, &s), true
+		}
+
+	case opt.SimilarToOp:
+		// a SIMILAR TO 'foo_*' -> prefix "foo"
+		if s, ok := tree.AsDString(datum); ok {
+			pattern := tree.SimilarEscape(string(s))
+			if re, err := regexp.Compile(pattern); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				if complete {
+					return cb.eqSpan(col, tree.NewDString(prefix)), true
+				}
+				return cb.makeStringPrefixSpan(col, prefix), false
+			}
+		}
 	}
 	return unconstrained, false
 }
@@ -452,6 +486,33 @@ func (cb *constraintsBuilder) notNullSpan(col opt.ColumnID) *constraint.Set {
 func (cb *constraintsBuilder) eqSpan(col opt.ColumnID, value tree.Datum) *constraint.Set {
 	key := constraint.MakeKey(value)
 	return cb.singleSpan(col, key, includeBoundary, key, includeBoundary)
+}
+
+// makeStringPrefixSpan constraints a string column to strings having the given prefix.
+func (cb *constraintsBuilder) makeStringPrefixSpan(
+	col opt.ColumnID, prefix string,
+) *constraint.Set {
+	startKey, startBoundary := constraint.MakeKey(tree.NewDString(prefix)), includeBoundary
+	endKey, endBoundary := emptyKey, includeBoundary
+
+	i := len(prefix) - 1
+	for ; i >= 0 && prefix[i] == 0xFF; i-- {
+	}
+
+	// If i < 0, we have a prefix like "\xff\xff\xff"; there is no ending value.
+	if i >= 0 {
+		// A few examples:
+		//   prefix      -> endValue
+		//   ABC         -> ABD
+		//   ABC\xff     -> ABD
+		//   ABC\xff\xff -> ABD
+		endVal := []byte(prefix[:i+1])
+		endVal[i]++
+		endDatum := tree.NewDString(string(endVal))
+		endKey = constraint.MakeKey(endDatum)
+		endBoundary = excludeBoundary
+	}
+	return cb.singleSpan(col, startKey, startBoundary, endKey, endBoundary)
 }
 
 // verifyType checks that the type of column matches the given type. We disallow

@@ -15,7 +15,6 @@
 package stateloader
 
 import (
-	"bytes"
 	"context"
 	"math"
 
@@ -499,20 +498,18 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) (uint64, error) {
-	iter := reader.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	prefix := rsl.RaftLogPrefix()
+	iter := reader.NewIterator(engine.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
 	var lastIndex uint64
 	iter.SeekReverse(engine.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.Key()
-		prefix := rsl.RaftLogPrefix()
-		if bytes.HasPrefix(key.Key, prefix) {
-			var err error
-			_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
-			if err != nil {
-				log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
-			}
+		var err error
+		_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
+		if err != nil {
+			log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
 		}
 	}
 

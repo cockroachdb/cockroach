@@ -41,16 +41,24 @@ We've created a simple NodeJS proxy to accomplish this. This server serves all
 requests for web resources (JavaScript, HTML, CSS) out of the code in this
 directory, while proxying all API requests to the specified CockroachDB node.
 
-To use this proxy, run
+To use this proxy, in Cockroach's root directory run:
+```shell
+$ make ui-watch TARGET=<target-cluster-http-uri>
+```
 
+or, in `pkg/ui` run:
 ```shell
 $ make watch TARGET=<target-cluster-http-uri>
 ```
 
 then navigate to `http://localhost:3000` to access the UI.
 
-To proxy to a cluster started up in secure mode, use:
+To proxy to a cluster started up in secure mode, in Cockroach's root directory run:
+```shell
+$ make ui-watch-secure TARGET=<target-cluster-https-uri>
+```
 
+or, in `pkg/ui` run:
 ```shell
 $ make watch-secure TARGET=<target-cluster-https-uri>
 ```
@@ -112,6 +120,23 @@ To run the tests outside of CI:
 
 ```shell
 $ make test
+```
+
+## Viewing bundle statistics
+
+The regular build also produces a webpage with a report on the bundle size.
+Build the app, then take a look with:
+
+```shell
+$ make build
+$ open pkg/ui/dist/stats.ccl.html
+```
+
+Or, to view the OSS bundle:
+
+```shell
+$ make buildoss
+$ open pkg/ui/dist/stats.oss.html
 ```
 
 ## Managing dependencies

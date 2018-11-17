@@ -527,12 +527,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1 opt(2)
+ │    ├── ordering: +1 opt(2) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(2)
+ │    │    └── ordering: +1 opt(2) [provided: +1]
  │    └── filters
  │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
@@ -556,12 +556,12 @@ anti-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1 opt(2)
+ │    ├── ordering: +1 opt(2) [provided: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(2)
+ │    │    └── ordering: +1 opt(2) [provided: +1]
  │    └── filters
  │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
@@ -912,16 +912,19 @@ select
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int) max:6(string)
  │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +(1|2)
  │    ├── key: (1)
  │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,6)
  │    ├── select
  │    │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4), (1)==(2), (2)==(1)
+ │    │    ├── ordering: +(1|2) [provided: +1]
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2,4)
+ │    │    │    ├── fd: (1)-->(2,4)
+ │    │    │    └── ordering: +1
  │    │    └── filters
  │    │         └── i = k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  │    └── aggregations

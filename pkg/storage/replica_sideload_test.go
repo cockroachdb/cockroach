@@ -651,7 +651,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 
 func makeInMemSideloaded(repl *Replica) {
 	repl.raftMu.Lock()
-	repl.raftMu.sideloaded = mustNewInMemSideloadStorage(repl.RangeID, 0, "")
+	repl.raftMu.sideloaded = mustNewInMemSideloadStorage(repl.RangeID, 0, repl.store.engine.GetAuxiliaryDir())
 	repl.raftMu.Unlock()
 }
 

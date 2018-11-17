@@ -16,6 +16,7 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // exprGroup represents a group of relational query plans that are logically
@@ -37,15 +38,30 @@ type exprGroup interface {
 	// relational are the relational properties shared by members of the group.
 	relational() *props.Relational
 
-	// physical are the physical properties with respect to which this group was
-	// optimized. This is nil before optimization is complete.
-	physical() *props.Physical
+	// bestProps returns a per-group instance of bestProps. This is the zero
+	// value until optimization is complete.
+	bestProps() *bestProps
+}
 
-	// cost is the estimated execution cost of the best (i.e. lowest cost)
-	// expression in the group. This is 0 before optimization is complete.
-	cost() Cost
+// bestProps contains the properties of the "best" expression in group. The best
+// expression is the expression which is part of the lowest-cost tree for the
+// overall query. It is well-defined because the lowest-cost tree does not
+// contain multiple expressions from the same group.
+//
+// These are not properties of the group per se but they are stored within each
+// group for efficiency.
+type bestProps struct {
+	// Required properties with respect to which the best expression was
+	// optimized.
+	required *physical.Required
 
-	// setBestProps is called at the end of optimization to update the physical
-	// props and cost of the best expression in the group.
-	setBestProps(physical *props.Physical, cost Cost)
+	// Provided properties, which must be compatible with the required properties.
+	//
+	// We store these properties in-place because the structure is very small; if
+	// that changes we will want to intern them, similar to the required
+	// properties.
+	provided physical.Provided
+
+	// Cost of the best expression.
+	cost Cost
 }

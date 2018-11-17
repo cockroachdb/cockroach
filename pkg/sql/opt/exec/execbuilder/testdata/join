@@ -101,7 +101,8 @@ limit                     ·         ·
  │                        count     1
  └── join                 ·         ·
       │                   type      inner
-      │                   equality  (x, x) = (x, x)
+      │                   equality  (x) = (x)
+      │                   pred      x = x
       ├── join            ·         ·
       │    │              type      inner
       │    │              equality  (x) = (x)
@@ -339,7 +340,8 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 3   ·              equality   (relnamespace) = (oid)
 4   join           ·          ·
 4   ·              type       inner
-4   ·              equality   (attrelid, confrelid) = (oid, oid)
+4   ·              equality   (attrelid) = (oid)
+4   ·              pred       confrelid = oid
 5   join           ·          ·
 5   ·              type       inner
 5   ·              equality   (attnum) = (column167)
@@ -363,7 +365,8 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   ·              equality   (relnamespace) = (oid)
 8   join           ·          ·
 8   ·              type       inner
-8   ·              equality   (attrelid, conrelid) = (oid, oid)
+8   ·              equality   (attrelid) = (oid)
+8   ·              pred       conrelid = oid
 9   join           ·          ·
 9   ·              type       inner
 9   ·              equality   (attnum) = (column166)
@@ -447,15 +450,16 @@ CREATE TABLE pairs (a INT, b INT)
 query TTT
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
-join       ·         ·
- │         type      inner
- │         equality  (b) = (n)
- ├── scan  ·         ·
- │         table     pairs@primary
- │         spans     ALL
- └── scan  ·         ·
-·          table     square@primary
-·          spans     ALL
+join       ·                   ·
+ │         type                inner
+ │         equality            (b) = (n)
+ │         right cols are key  ·
+ ├── scan  ·                   ·
+ │         table               pairs@primary
+ │         spans               ALL
+ └── scan  ·                   ·
+·          table               square@primary
+·          spans               ALL
 
 # The filter expression becomes an ON predicate.
 query TTTTT
@@ -669,33 +673,37 @@ CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-join       ·         ·                      (a, b, c, d, a, b, c, d)  ·
- │         type      inner                  ·                         ·
- │         equality  (a, b, c) = (a, b, c)  ·                         ·
- ├── scan  ·         ·                      (a, b, c, d)              ·
- │         table     pkba@primary           ·                         ·
- │         spans     ALL                    ·                         ·
- └── scan  ·         ·                      (a, b, c, d)              ·
-·          table     pkbc@primary           ·                         ·
-·          spans     ALL                    ·                         ·
+join       ·                   ·                      (a, b, c, d, a, b, c, d)  ·
+ │         type                inner                  ·                         ·
+ │         equality            (a, b, c) = (a, b, c)  ·                         ·
+ │         left cols are key   ·                      ·                         ·
+ │         right cols are key  ·                      ·                         ·
+ ├── scan  ·                   ·                      (a, b, c, d)              ·
+ │         table               pkba@primary           ·                         ·
+ │         spans               ALL                    ·                         ·
+ └── scan  ·                   ·                      (a, b, c, d)              ·
+·          table               pkbc@primary           ·                         ·
+·          spans               ALL                    ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-render          ·         ·                            (a, b, c, d)              ·
- │              render 0  a                            ·                         ·
- │              render 1  b                            ·                         ·
- │              render 2  c                            ·                         ·
- │              render 3  d                            ·                         ·
- └── join       ·         ·                            (a, b, c, d, a, b, c, d)  ·
-      │         type      inner                        ·                         ·
-      │         equality  (a, b, c, d) = (a, b, c, d)  ·                         ·
-      ├── scan  ·         ·                            (a, b, c, d)              ·
-      │         table     pkba@primary                 ·                         ·
-      │         spans     ALL                          ·                         ·
-      └── scan  ·         ·                            (a, b, c, d)              ·
-·               table     pkbad@primary                ·                         ·
-·               spans     ALL                          ·                         ·
+render          ·                   ·                            (a, b, c, d)              ·
+ │              render 0            a                            ·                         ·
+ │              render 1            b                            ·                         ·
+ │              render 2            c                            ·                         ·
+ │              render 3            d                            ·                         ·
+ └── join       ·                   ·                            (a, b, c, d, a, b, c, d)  ·
+      │         type                inner                        ·                         ·
+      │         equality            (a, b, c, d) = (a, b, c, d)  ·                         ·
+      │         left cols are key   ·                            ·                         ·
+      │         right cols are key  ·                            ·                         ·
+      ├── scan  ·                   ·                            (a, b, c, d)              ·
+      │         table               pkba@primary                 ·                         ·
+      │         spans               ALL                          ·                         ·
+      └── scan  ·                   ·                            (a, b, c, d)              ·
+·               table               pkbad@primary                ·                         ·
+·               spans               ALL                          ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
@@ -811,18 +819,20 @@ render          ·         ·               (s, s, s)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
-render          ·         ·                (a, s)        ·
- │              render 0  a                ·             ·
- │              render 1  COALESCE(s, s)   ·             ·
- └── join       ·         ·                (a, s, a, s)  ·
-      │         type      right outer      ·             ·
-      │         equality  (a, s) = (a, s)  ·             ·
-      ├── scan  ·         ·                (a, s)        ·
-      │         table     str1@primary     ·             ·
-      │         spans     ALL              ·             ·
-      └── scan  ·         ·                (a, s)        ·
-·               table     str2@primary     ·             ·
-·               spans     ALL              ·             ·
+render          ·                   ·                (a, s)        ·
+ │              render 0            a                ·             ·
+ │              render 1            COALESCE(s, s)   ·             ·
+ └── join       ·                   ·                (a, s, a, s)  ·
+      │         type                right outer      ·             ·
+      │         equality            (a, s) = (a, s)  ·             ·
+      │         left cols are key   ·                ·             ·
+      │         right cols are key  ·                ·             ·
+      ├── scan  ·                   ·                (a, s)        ·
+      │         table               str1@primary     ·             ·
+      │         spans               ALL              ·             ·
+      └── scan  ·                   ·                (a, s)        ·
+·               table               str2@primary     ·             ·
+·               spans               ALL              ·             ·
 
 
 statement ok

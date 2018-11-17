@@ -127,9 +127,10 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 render          ·            ·            (a, b)     ·
  │              render 0     a            ·          ·
  │              render 1     b            ·          ·
- └── distinct   ·            ·            (a, b, c)  weak-key(a,c)
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
       │         distinct on  a, c         ·          ·
-      └── scan  ·            ·            (a, b, c)  ·
+      │         order key    a            ·          ·
+      └── scan  ·            ·            (a, b, c)  +a
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
 
@@ -140,9 +141,10 @@ render          ·            ·            (b, c, a)  ·
  │              render 0     b            ·          ·
  │              render 1     c            ·          ·
  │              render 2     a            ·          ·
- └── distinct   ·            ·            (a, b, c)  weak-key(a,c)
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
       │         distinct on  a, c         ·          ·
-      └── scan  ·            ·            (a, b, c)  ·
+      │         order key    a            ·          ·
+      └── scan  ·            ·            (a, b, c)  +a
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
 
@@ -154,9 +156,10 @@ render          ·            ·            (b, c, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
-distinct   ·            ·            (pk1, pk2)  weak-key(pk1)
+distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1
  │         distinct on  pk1          ·           ·
- └── scan  ·            ·            (pk1, pk2)  ·
+ │         order key    pk1          ·           ·
+ └── scan  ·            ·            (pk1, pk2)  +pk1
 ·          table        xyz@primary  ·           ·
 ·          spans        ALL          ·           ·
 
@@ -199,10 +202,11 @@ render               ·            ·            (y, z, x)  ·
  │                   render 0     y            ·          ·
  │                   render 1     z            ·          ·
  │                   render 2     x            ·          ·
- └── sort            ·            ·            (x, y, z)  weak-key(x,z); +z
-      │              order        +z           ·          ·
-      └── distinct   ·            ·            (x, y, z)  weak-key(x,z)
-           │         distinct on  x, z         ·          ·
+ └── distinct        ·            ·            (x, y, z)  weak-key(x,z); +z
+      │              distinct on  x, z         ·          ·
+      │              order key    z            ·          ·
+      └── sort       ·            ·            (x, y, z)  +z
+           │         order        +z           ·          ·
            └── scan  ·            ·            (x, y, z)  ·
 ·                    table        xyz@primary  ·          ·
 ·                    spans        ALL          ·          ·
@@ -383,10 +387,11 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
 render               ·            ·            (pk1)           ·
  │                   render 0     pk1          ·               ·
- └── sort            ·            ·            (x, y, z, pk1)  weak-key(x,y,z); +x
-      │              order        +x           ·               ·
-      └── distinct   ·            ·            (x, y, z, pk1)  weak-key(x,y,z)
-           │         distinct on  x, y, z      ·               ·
+ └── distinct        ·            ·            (x, y, z, pk1)  weak-key(x,y,z); +x
+      │              distinct on  x, y, z      ·               ·
+      │              order key    x            ·               ·
+      └── sort       ·            ·            (x, y, z, pk1)  +x
+           │         order        +x           ·               ·
            └── scan  ·            ·            (x, y, z, pk1)  ·
 ·                    table        xyz@primary  ·               ·
 ·                    spans        ALL          ·               ·

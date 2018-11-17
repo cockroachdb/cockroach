@@ -136,7 +136,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := pgwirebase.DecodeOidDatum(oid.T__int8, pgwirebase.FormatText, b[4:])
+	got, err := pgwirebase.DecodeOidDatum(nil, oid.T__int8, pgwirebase.FormatText, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					b := buf.wrapped.Bytes()
 					t.Logf("encoded: %v (%q)", b, b)
 
-					got, err := pgwirebase.DecodeOidDatum(oid.T_bytea, pgwirebase.FormatText, b[4:])
+					got, err := pgwirebase.DecodeOidDatum(nil, oid.T_bytea, pgwirebase.FormatText, b[4:])
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -321,7 +321,7 @@ func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
-	d, err := tree.ParseDDate("2010-09-28", time.UTC)
+	d, err := tree.ParseDDate(nil, "2010-09-28")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
-	tstz, err := tree.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
+	tstz, err := tree.ParseDTimestampTZ(nil, "2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -470,7 +470,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
-		got, err := pgwirebase.DecodeOidDatum(oid.T_numeric, pgwirebase.FormatBinary, bytes)
+		got, err := pgwirebase.DecodeOidDatum(nil, oid.T_numeric, pgwirebase.FormatBinary, bytes)
 		b.StopTimer()
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
