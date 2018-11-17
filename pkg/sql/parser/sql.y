@@ -722,7 +722,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_zone_stmt
 
 %type <str> session_var
-%type <str> comment_text
+%type <*string> comment_text
 
 %type <tree.Statement> transaction_stmt
 %type <tree.Statement> truncate_stmt
@@ -2007,7 +2007,12 @@ cancel_sessions_stmt:
 comment_stmt:
   COMMENT ON TABLE table_name IS comment_text
   {
-    return unimplementedWithIssueDetail(sqllex, 19472, "table")
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.CommentOnTable{Table: name, Comment: $6.strPtr()}
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
@@ -2019,8 +2024,15 @@ comment_stmt:
   }
 
 comment_text:
-  SCONST    { $$ = $1 }
-  | NULL    { $$ = "" }
+  SCONST
+  {
+    $$.val = &$1
+  }
+| NULL
+  {
+    var str *string
+    $$.val = str
+  }
 
 // %Help: CREATE
 // %Category: Group
