@@ -36,6 +36,6 @@ func (node *CommentOnTable) Format(ctx *FmtCtx) {
 	if node.Comment != nil {
 		lex.EncodeSQLStringWithFlags(ctx.Buffer, *node.Comment, ctx.flags.EncodeFlags())
 	} else {
-		ctx.WriteString(" NULL ")
+		ctx.WriteString("NULL")
 	}
 }
