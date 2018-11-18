@@ -620,7 +620,7 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
 		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
 		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
-		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), e))\n")
+		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), interned))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  return interned\n")
 		fmt.Fprintf(g.w, "}\n\n")
