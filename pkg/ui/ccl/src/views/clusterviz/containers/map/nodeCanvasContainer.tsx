@@ -41,6 +41,7 @@ interface NodeCanvasContainerProps {
   livenesses: { [id: string]: Liveness };
   dataExists: boolean;
   dataIsValid: boolean;
+  dataErrors: Error[];
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   refreshLocations: typeof refreshLocations;
@@ -72,6 +73,7 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
     return (
       <Loading
         loading={!this.props.dataExists}
+        error={this.props.dataErrors}
         render={() => (
           <NodeCanvas
             localityTree={currentLocality}
@@ -100,6 +102,13 @@ const selectDataIsValid = createSelector(
   (nodes, locations, liveness) => nodes.valid && locations.valid && liveness.valid,
 );
 
+const dataErrors = createSelector(
+  selectNodeRequestStatus,
+  selectLocationsRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, locations, liveness) => [nodes.lastError, locations.lastError, liveness.lastError],
+);
+
 export default connect(
   (state: AdminUIState, _ownProps: NodeCanvasContainerOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
@@ -109,6 +118,7 @@ export default connect(
     livenesses: livenessByNodeIDSelector(state),
     dataIsValid: selectDataIsValid(state),
     dataExists: selectDataExists(state),
+    dataErrors: dataErrors(state),
   }),
   {
     refreshNodes,
