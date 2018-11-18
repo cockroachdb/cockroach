@@ -869,3 +869,39 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 	mf := makeMemoFormatter(o, flags)
 	return mf.format()
 }
+
+// RecomputeCost recomputes the cost of each expression in the lowest cost
+// tree. It should be used in combination with the perturb-cost OptTester flag
+// in order to update the query plan tree after optimization is complete with
+// the real computed cost, not the perturbed cost.
+func (o *Optimizer) RecomputeCost() {
+	var c coster
+	c.Init(o.mem, 0 /* perturbation */)
+
+	root := o.mem.RootExpr()
+	rootProps := o.mem.RootProps()
+	o.recomputeCostImpl(root, rootProps, &c)
+}
+
+func (o *Optimizer) recomputeCostImpl(
+	parent opt.Expr, parentProps *physical.Required, c Coster,
+) memo.Cost {
+	cost := memo.Cost(0)
+	for i, n := 0, parent.ChildCount(); i < n; i++ {
+		child := parent.Child(i)
+		childProps := physical.MinRequired
+		switch t := child.(type) {
+		case memo.RelExpr:
+			childProps = t.RequiredPhysical()
+		}
+		cost += o.recomputeCostImpl(child, childProps, c)
+	}
+
+	switch t := parent.(type) {
+	case memo.RelExpr:
+		cost += c.ComputeCost(t, parentProps)
+		o.mem.ResetCost(t, cost)
+	}
+
+	return cost
+}

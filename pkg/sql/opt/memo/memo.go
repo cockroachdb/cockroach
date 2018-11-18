@@ -322,6 +322,12 @@ func (m *Memo) SetBestProps(
 	bp.cost = cost
 }
 
+// ResetCost updates the cost of a relational expression's memo group. It
+// should *only* be called by Optimizer.RecomputeCost() for testing purposes.
+func (m *Memo) ResetCost(e RelExpr, cost Cost) {
+	e.bestProps().cost = cost
+}
+
 // IsOptimized returns true if the memo has been fully optimized.
 func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties

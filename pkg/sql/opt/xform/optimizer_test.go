@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -33,6 +34,7 @@ import (
 )
 
 func TestDetachMemo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	catalog := testcat.New()
 	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
 	if err != nil {
@@ -105,6 +107,7 @@ func TestDetachMemo(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
 //   ...
 func TestCoster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(
 		t, "testdata/coster/",
 		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
@@ -116,6 +119,7 @@ func TestCoster(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalProps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
 }
 
@@ -123,6 +127,7 @@ func TestPhysicalProps(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
 //   ...
 func TestRuleProps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -139,6 +144,7 @@ func TestRuleProps(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
 //   ...
 func TestRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(
 		t,
 		"testdata/rules/",
@@ -163,6 +169,7 @@ var externalTestData = flag.String(
 //   make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
 //
 func TestExternal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(
 		t,
 		*externalTestData,
