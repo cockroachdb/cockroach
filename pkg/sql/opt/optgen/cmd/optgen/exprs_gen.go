@@ -564,7 +564,11 @@ func (g *exprsGen) genMemoizeFuncs() {
 			fieldName := g.md.fieldName(field)
 			fmt.Fprintf(g.w, "  %s %s,\n", unTitle(fieldName), fieldTyp.asParam())
 		}
-		fmt.Fprintf(g.w, ") *%s {\n", opTyp.name)
+		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, ") *%s {\n", opTyp.name)
+		} else {
+			fmt.Fprintf(g.w, ") RelExpr {\n")
+		}
 
 		if len(define.Fields) == 0 {
 			fmt.Fprintf(g.w, "  return %sSingleton\n", define.Name)
@@ -615,7 +619,12 @@ func (g *exprsGen) genMemoizeFuncs() {
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
 		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
 		fmt.Fprintf(g.w, "  }\n")
-		fmt.Fprintf(g.w, "  return interned\n")
+		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "  return interned\n")
+		} else {
+			// Return the normalized expression if this is a relational expr.
+			fmt.Fprintf(g.w, "  return interned.FirstExpr()\n")
+		}
 
 		fmt.Fprintf(g.w, "}\n\n")
 	}
@@ -636,7 +645,7 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
 		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
 		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
-		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), e))\n")
+		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), interned))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  return interned\n")
 		fmt.Fprintf(g.w, "}\n\n")
