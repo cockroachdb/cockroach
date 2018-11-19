@@ -252,6 +252,7 @@ func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroSchemaRecord, e
 		colIdxByFieldIdx: make(map[int]int),
 	}
 	for colIdx, col := range tableDesc.Columns {
+		col := col
 		field, err := columnDescToAvroSchema(&col)
 		if err != nil {
 			return nil, err
