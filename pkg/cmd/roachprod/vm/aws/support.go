@@ -128,6 +128,19 @@ func splitMap(data []string) (map[string]string, error) {
 	return ret, nil
 }
 
+// orderedKeyList returns just the ordered keys of a list of 'key:value' pairs.
+func orderedKeyList(data []string) ([]string, error) {
+	ret := make([]string, 0, len(data))
+	for _, part := range data {
+		parts := strings.Split(part, ":")
+		if len(parts) != 2 {
+			return nil, errors.Errorf("Could not split: %s", part)
+		}
+		ret = append(ret, parts[0])
+	}
+	return ret, nil
+}
+
 // regionMap collates VM instances by their region.
 func regionMap(vms vm.List) (map[string]vm.List, error) {
 	// Fan out the work by region
