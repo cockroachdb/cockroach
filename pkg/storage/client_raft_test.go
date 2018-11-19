@@ -2909,7 +2909,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		if len(replicas) == int(*zone.NumReplicas) {
 			return nil
 		}
-		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
+		return errors.Errorf("expected %d replicas; have %+v", *zone.NumReplicas, replicas)
 	})
 
 	// Stop a store which will be rebalanced away from. We can't use the very first
