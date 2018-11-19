@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -98,6 +99,11 @@ type FlowCtx struct {
 	// This is not supposed to be used as a general engine.Engine and thus
 	// one should sparingly use the set of features offered by it.
 	TempStorage diskmap.Factory
+
+	// BulkAdder is used by backfill/bulk-ingestion processors to ingest large
+	// amounts of data in bulk as SSTs.
+	BullkAdder storagebase.BulkAdderFactory
+
 	// diskMonitor is used to monitor temporary storage disk usage.
 	diskMonitor *mon.BytesMonitor
 
