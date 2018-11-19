@@ -348,7 +348,9 @@ func (p *Provider) Name() string {
 // allRegions returns the regions that have been configured with
 // AMI and SecurityGroup instances.
 func (p *Provider) allRegions() ([]string, error) {
-	amiMap, err := splitMap(p.opts.AMI)
+	// We're using an ordered list instead of a map here to guarantee
+	// the same ordering between calls.
+	regionList, err := orderedKeyList(p.opts.AMI)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +361,7 @@ func (p *Provider) allRegions() ([]string, error) {
 	}
 
 	var keys []string
-	for region := range amiMap {
+	for _, region := range regionList {
 		if _, ok := securityMap[region]; ok {
 			keys = append(keys, region)
 		} else {
