@@ -2583,6 +2583,13 @@ func (r *Replica) applyTimestampCache(
 						txn := ba.Txn.Clone()
 						bumped = txn.Timestamp.Forward(nextTS) || bumped
 						ba.Txn = &txn
+						// Update the batch timestamp, and not just the batch's
+						// transaction's timestamp, so that the request will leave intents,
+						// if any, at the forwarded timestamp. This maintains the invariant
+						// that nothing will ever be written beneath a prior read/write, not
+						// even an intent that will never be committed. Time-bound iterators
+						// rely on this guarantee.
+						ba.Timestamp = txn.Timestamp
 					}
 				}
 			} else {
@@ -2601,6 +2608,11 @@ func (r *Replica) applyTimestampCache(
 						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
 						txn.WriteTooOld = true
 						ba.Txn = &txn
+						// Update the batch timestamp, and not just the batch's
+						// transaction's timestamp, so that the request will leave intents,
+						// if any, at the forwarded timestamp. See the analogous comment in the
+						// read tscache path for rationale.
+						ba.Timestamp = txn.Timestamp
 					}
 				}
 			} else {

@@ -37,14 +37,24 @@ message TxnMeta {
   // Incremented on txn retry.
   uint32 epoch = 4;
   // The proposed timestamp for the transaction. This starts as the
-  // current wall time on the txn coordinator. This is the timestamp
-  // at which all of the transaction's writes are performed: even if
-  // intents have been laid down at different timestamps, the process
-  // of resolving them (e.g. when the txn commits) will bump them to
-  // this timestamp. SERIALIZABLE transactions only commit when
-  // timestamp == orig_timestamp. SNAPSHOT transactions can commit
-  // even when they've performed their reads (at orig_timestamp) at a
-  // different timestamp than their writes (at timestamp).
+  // current wall time on the txn coordinator, and is forwarded by the
+  // timestamp cache if the txn attempts to write "beneath" another txn.
+  //
+  // Reads and writes within the txn are performed using the most up-
+  // to-date value of this timestamp that is available. For example,
+  // suppose a txn starts at some timestamp, writes a key/value, and
+  // gets pushed forward while doing so. As soon as the txn coordinator
+  // learns of the updated timestamp, it will begin performing reads
+  // and writes at the updated timestamp. The coordinator may, however,
+  // continue issuing reads at the original timestamp before it learns
+  // about the forwarded timestamp.
+  //
+  // Importantly, intents are laid down at this timestamp. The process
+  // of resolving the intents when the txn commits will bump any intents
+  // written at an older timestamp to the final commit timestamp. A
+  // similar process occurs with reads, where any reads that occured at
+  // older timestamps will need to be refreshed at the final commit
+  // timestamp in order for the transactin to commit.
   util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
   int32 priority = 6;
   // A one-indexed sequence number which is increased on each request

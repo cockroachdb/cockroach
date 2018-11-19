@@ -2618,6 +2618,66 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 }
 
+func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	tsOld := tc.Clock().Now()
+	tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0)
+
+	// Read at tNew to populate the read timestamp cache.
+	// DeleteRange at tNew to populate the write timestamp cache.
+	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnNew.OrigTimestamp = tsNew
+	txnNew.Timestamp = tsNew
+	keyGet := roachpb.Key("get")
+	keyDeleteRange := roachpb.Key("delete-range")
+	gArgs := &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keyGet},
+	}
+	drArgs := &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keyDeleteRange, EndKey: keyDeleteRange.Next()},
+	}
+	assignSeqNumsForReqs(txnNew, gArgs, drArgs)
+	var ba roachpb.BatchRequest
+	ba.Header.Txn = txnNew
+	ba.Add(gArgs, drArgs)
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Write under the timestamp cache within the transaction, and verify that
+	// the intents are written above the timestamp cache.
+	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnOld.OrigTimestamp = tsOld
+	txnOld.Timestamp = tsOld
+	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
+		t.Run(string(key), func(t *testing.T) {
+			pArgs := putArgs(key, []byte("foo"))
+			assignSeqNumsForReqs(txnOld, &pArgs)
+			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			var keyMeta enginepb.MVCCMetadata
+			ok, _, _, err := tc.engine.GetProto(engine.MakeMVCCMetadataKey(key), &keyMeta)
+			if err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				t.Fatalf("metadata missing for key %q", key)
+			}
+			if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
+				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
+					key, tsNext, keyMeta.Timestamp)
+			}
+		})
+	}
+}
+
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
