@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package bulk
+package bulk_test
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -107,7 +108,7 @@ func runTestImport(t *testing.T, batchSize int64) {
 			}
 
 			ts := hlc.Timestamp{WallTime: 100}
-			b, err := MakeFixedTimestampSSTBatcher(ctx, kvDB, batchSize, ts)
+			b, err := bulk.MakeFixedTimestampSSTBatcher(ctx, kvDB, batchSize, ts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,14 +127,12 @@ func runTestImport(t *testing.T, batchSize int64) {
 					if err := b.Add(ctx, k, v.RawBytes); err != nil {
 						t.Fatal(err)
 					}
-					t.Logf("batch: %d", b.sstWriter.DataSize)
 					expected = append(expected, client.KeyValue{Key: k, Value: &v})
 				}
 			}
 			if err := b.Flush(ctx); err != nil {
 				t.Fatal(err)
 			}
-			t.Logf("flushed batch: %d", b.sstWriter.DataSize)
 
 			added := b.GetSummary()
 			t.Logf("Wrote %d total", added.DataSize)

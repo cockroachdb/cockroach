@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -518,6 +519,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterID:      &s.rpcContext.ClusterID,
 
 		TempStorage: tempEngine,
+		BulkAdder:   bulk.MakeFixedTimestampSSTBatcher,
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,

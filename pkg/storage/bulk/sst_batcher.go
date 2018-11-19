@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -36,7 +38,7 @@ type FixedTimestampSSTBatcher struct {
 // MakeFixedTimestampSSTBatcher makes a ready-to-use SSTBatcher
 func MakeFixedTimestampSSTBatcher(
 	ctx context.Context, db *client.DB, flushBytes int64, timestamp hlc.Timestamp,
-) (*FixedTimestampSSTBatcher, error) {
+) (storagebase.BulkAdder, error) {
 	b := &FixedTimestampSSTBatcher{timestamp, SSTBatcher{db: db, maxSize: flushBytes}}
 	err := b.reset()
 	return b, err
