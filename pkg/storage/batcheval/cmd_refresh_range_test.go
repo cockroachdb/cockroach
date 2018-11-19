@@ -69,8 +69,9 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 			Epoch:     1,
 			Timestamp: ts1,
 		},
+		OrigTimestamp: ts1,
 	}
-	if err := engine.MVCCPut(ctx, db, nil, k, txn.Timestamp, v, txn); err != nil {
+	if err := engine.MVCCPut(ctx, db, nil, k, txn.OrigTimestamp, v, txn); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil); err != nil {

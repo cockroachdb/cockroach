@@ -262,42 +262,11 @@ message Transaction {
   // transaction will retry unless we manage to "refresh the reads" - see
   // refreshed_timestamp.
   //
-  // This timestamp is the one at which all transactions will read, unless
-  // refreshed_timestamp is set. It is also, surprisingly, the timestamp at
-  // which transactions will provisionally _write_ (i.e. intents are written at
-  // this orig_timestamp and, after commit, when the intents are resolved,
-  // their timestamps are bumped to the to the commit timestamp), if
-  // refreshed_timestamp isn't set.
-  // This is ultimately because of correctness concerns around SNAPSHOT
-  // transactions.
+  // This timestamp is the one at which all reads occur, unless
+  // refreshed_timestamp is set.
   //
-  // Intuitively, one could think that the timestamp at which intents should be
-  // written should be the provisional commit timestamp, and while this is
-  // morally true, consider the following scenario, where txn1 is a SNAPSHOT
-  // txn:
-  //
-  // - txn1 at orig_timestamp=5 reads key1: (value) 1.
-  // - txn1 writes elsewhere, has its commit timestamp increased to 20.
-  // - txn2 at orig_timestamp=10 reads key1: 1
-  // - txn2 increases the value by 5: key1: 6 and commits
-  // - txn1 increases the value by 1: key1: 2, attempts commit
-  //
-  // If txn1 uses its orig_timestamp for updating key1 (as it does), it
-  // conflicts with txn2's committed value (which is at timestamp 10, in the
-  // future of 5), and restarts.
-  // Using instead its candidate commit timestamp, it wouldn't see a conflict
-  // and commit, but this is not the expected outcome (the expected outcome is
-  // {key1: 6} (since txn1 is not expected to commit)) and we would be
-  // experiencing the Lost Update Anomaly.
-  //
-  // Note that in practice, before restarting, txn1 would still lay down an
-  // intent (just above the committed value) not with the intent to commit it,
-  // but to avoid being starved by short-lived transactions on that key which
-  // would otherwise not have to go through conflict resolution with txn1.
-  //
-  // Again, keep in mind that, when the transaction commits, all the intents are
-  // bumped to the commit timestamp (otherwise, pushing a transaction wouldn't
-  // achieve anything).
+  // Note that writes do not occur at this timestamp; they instead occur at the
+  // provisional commit timestamp, meta.Timestamp.
   util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
@@ -310,9 +279,10 @@ message Transaction {
   // can commit without necessitating a serializable restart. This
   // value is forwarded to the transaction's current timestamp (meta.timestamp)
   // if the transaction coordinator is able to refresh all refreshable spans
-  // encountered during the course of the txn. If set, this take precedence
-  // over orig_timestamp and is the timestamp at which the transaction both
-  // reads and writes going forward.
+  // encountered during the course of the txn. If set, this takes precedence
+  // over orig_timestamp and is the timestamp at which the transaction reads
+  // going forward.
+  //
   // We need to keep track of both refresh_timestamp and orig_timestamp (instead
   // of simply overwriting the orig_timestamp after refreshes) because the
   // orig_timestamp needs to be used as a lower bound timestamp for the

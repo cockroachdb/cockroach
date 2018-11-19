@@ -118,7 +118,8 @@ func setupMVCCData(
 
 	var txn *roachpb.Transaction
 	if opts.transactional {
-		txn = txn1Commit
+		txnCopy := *txn1Commit
+		txn = &txnCopy
 	}
 
 	writeKey := func(batch Batch, idx int) {
@@ -127,6 +128,10 @@ func setupMVCCData(
 		value.InitChecksum(key)
 		counts[idx]++
 		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
+		if txn != nil {
+			txn.OrigTimestamp = ts
+			txn.Timestamp = ts
+		}
 		if err := MVCCPut(ctx, batch, nil /* ms */, key, ts, value, txn); err != nil {
 			b.Fatal(err)
 		}
