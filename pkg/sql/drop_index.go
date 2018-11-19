@@ -225,7 +225,7 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
-	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, jobDesc)
+	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err
 	}
