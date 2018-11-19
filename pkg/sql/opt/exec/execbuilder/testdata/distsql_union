@@ -84,7 +84,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lc1vnDAQxe_9K6q51tXuGN
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) VALUES (1), (2) UNION VALUES (2), (3)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJysjzFLBDEQhXt_xfIqhcBtVqtUIjbXqFjYSIolGc7gmiyZBIQj_10uKc4VT1i8ct7Mm_e9PXyw9DB-EEO9QkILzDEYYg7xILWDrf2E6gWcn3M6yFrAhEhQeySXJoLCyzhl4k0PAUtpdFP9eNPddZdDZ96yf-cr6CIQcjp-4TTuCKovYnWSPHPSMSD7EC1FsosEXX5huXecnDdpMyxpbuVJArmm6zPxHDzTD5JT3bQA2R21OhxyNPQUg6kxbXysvipY4tS2Qxu2vq4q4Hez_I95-NN8vTD3RZeLrwAAAP__-YjY1Q==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykkTFLBDEQhXt_xTF1YJO9LpWFzTUqtrJFSIYjEDNLZiLCsf9dNinOE09Wr8zM--a9R06QKeCje0MG-woGJgVzIY_MVNZRFxzCB1itIOa5yjqeFHgqCPYEEiUhWEjkXdq9u1SRd3rQoCCguJiaflFAVc40izsiWLOofzqYwWxyGK86nA_XTCVgwfDt4g8ZHiJLzF6G8UIL9wauJdj_peML8kyZcVM3vSbEcMReh6kWj8-FfLPpz6fGtUFAlr4d--OQ26p9wlfY3AKPv8L7C1gv03L3GQAA___qN9W_
 
 subtest Intersect
 

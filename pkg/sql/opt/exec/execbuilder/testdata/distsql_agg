@@ -211,12 +211,12 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslE2rozAUhvfzK4Z3NQOBGr
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT max(t.a), min(t.b), avg(t.c)  FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFL_DAUxO__TxHm1IXANu3lT06tB6WHrSKyCNpDaR-1WJuSl4Cw9LtLmoOusKK3vJlMfpN3wmx6qts3YugnKDQSizUdMRsbpHih6t-hU4lxXrwLciPRGUvQJ7jRTQSNYzt54n0KiZ5cO07xxf_iSiS56F78_Mo7SFyPkyOrRZGJZ5-mOYlca13VD2hWCePdJ4JdOxB0usrf1yiHwdLQOmP36rzKoXxMChUqHKo6KbJwKo83SZHvLqLVX9D3xIuZmc6wlz_VSFA_UNwyG287urOm2zBxvN1ym9ATu-iqOFRztELBr2H1Yzj7Fm7Wfx8BAAD__0YIpH0=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1L9DAUhffvryhn1YHAJO0uq3bzShdTRUQE7SK0l1KIvSUfIgz979JmoSOM6C733DznCTlj5oFa80oe-hkKncDiuCfv2W1RutAM79BSYJqXGLa4E-jZEfQZYQqWoGG5NzZ7MzaSz-RRQmCgYCa7N_-fbCCns6rIXqKUJWWl1rppH9CtAhzDZ7EPZiRotYrfy-txdDSawO6oLsWn-imv1AECp6bNq2I71Y83eVUerqqLv6jvyS88e7rQXmuWaydAw0jpbz1H19Od437XpPF25_ZgIB_SVqWhmdNqe-BXWP0IF9_gbv33EQAA___td6KP
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJykkMFq8zAMgO__UwSdWhA0dst_MAzCTusO69hhl-FDiLU2LLODZcOg5N1H7EOXsG6E3WxJnz5JZ7DO0EP9TgzqBQRohN67hpidH0O5YG8-QJUIre1jGMMaoXGeQJ0htKEjUPBcd5F4UwKCoVC3Xe64K26LlSyaU7RvvAY9ILgYLm041EcCVQ64WCVmqv9_VV0M0TpvyJOZKPRI_lbyzbx3NZ_uXWvJb-R05o5ew6oS6xvfHk_pBQiHGFRRCawkVlusdlc3EUuO9kTcO8s03-jKjTQCmSPls7CLvqFH75qkyd9D4lLAEIeclfmztymVBvwKiwWwnMPyR3g7gctBD_8-AwAA__9uR-9k
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyckUFL_DAQxe__T1Hm9BcCbVJPAaFH14MrXqWH0IzdQsyUTCLC0u8uTQ7rLq7ueuvMvN-8zssePFl8NG_IoF9AQi9gDjQgM4W1VQQb-wG6ETD5OcW13QsYKCDoPcQpOgQNjgbjqnfjEnLV1A0IsBjN5LJ-EUApHmiOZkTQchF_dJC1vMhBnXU4LE6egsWA9nTj75JvfvPe8O6BJo-hVkdqcPga_3fy5i5M4y5_gYBtirrqpOiU6FrR3cK5S9prsnpGnskzXpRRs56BdsQSC1MKAz4FGrJNKbeZyw2LHMtUlWLj8yg_5ldYXgGrU1j9CLdHcLP0y7_PAAAA__870evq
 
 statement ok
 CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
