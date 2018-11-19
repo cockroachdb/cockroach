@@ -31,7 +31,7 @@ spec:
       mountPath: /cockroach-certs
   containers:
   - name: cockroachdb-client
-    image: cockroachdb/cockroach:v2.1.0
+    image: cockroachdb/cockroach:v2.1.1
     imagePullPolicy: IfNotPresent
     volumeMounts:
     - name: client-certs
