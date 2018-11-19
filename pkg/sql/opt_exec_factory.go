@@ -615,24 +615,19 @@ func (ef *execFactory) ConstructLookupJoin(
 }
 
 // Helper function to create a scanNode from just a table / index descriptor
+// and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	indexDesc *sqlbase.IndexDescriptor, tableDesc *sqlbase.ImmutableTableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	cols exec.ColumnOrdinalSet,
 ) (*scanNode, error) {
-	colCount := len(indexDesc.ColumnIDs) + len(indexDesc.ExtraColumnIDs)
-	colCount += len(indexDesc.StoreColumnIDs)
 
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, colCount),
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 
-	err := indexDesc.RunOverAllColumns(func(c sqlbase.ColumnID) error {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.Columns[c].ID))
 	}
 
 	scan := ef.planner.Scan()
@@ -648,13 +643,14 @@ func (ef *execFactory) constructScanForZigzag(
 
 // ConstructZigzagJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructZigzagJoin(
-	joinType sqlbase.JoinType,
 	leftTable opt.Table,
 	leftIndex opt.Index,
 	rightTable opt.Table,
 	rightIndex opt.Index,
 	leftEqCols []exec.ColumnOrdinal,
 	rightEqCols []exec.ColumnOrdinal,
+	leftCols exec.ColumnOrdinalSet,
+	rightCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,
@@ -664,17 +660,16 @@ func (ef *execFactory) ConstructZigzagJoin(
 	rightIndexDesc := rightIndex.(*optIndex).desc
 	rightTabDesc := rightTable.(*optTable).desc
 
-	leftScan, err := ef.constructScanForZigzag(leftIndexDesc, leftTabDesc)
+	leftScan, err := ef.constructScanForZigzag(leftIndexDesc, leftTabDesc, leftCols)
 	if err != nil {
 		return nil, err
 	}
-	rightScan, err := ef.constructScanForZigzag(rightIndexDesc, rightTabDesc)
+	rightScan, err := ef.constructScanForZigzag(rightIndexDesc, rightTabDesc, rightCols)
 	if err != nil {
 		return nil, err
 	}
 
 	n := &zigzagJoinNode{
-		joinType: joinType,
 		props: physicalProps{
 			ordering: sqlbase.ColumnOrdering(reqOrdering),
 		},
