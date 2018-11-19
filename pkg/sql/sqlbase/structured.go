@@ -2037,7 +2037,7 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations.
-func (desc *TableDescriptor) AddColumnMutation(
+func (desc *MutableTableDescriptor) AddColumnMutation(
 	c ColumnDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
@@ -2045,17 +2045,17 @@ func (desc *TableDescriptor) AddColumnMutation(
 }
 
 // AddIndexMutation adds an index mutation to desc.Mutations.
-func (desc *TableDescriptor) AddIndexMutation(
+func (desc *MutableTableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
 ) error {
 
 	switch idx.Type {
 	case IndexDescriptor_FORWARD:
-		if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForIndex(desc.TableDesc(), idx.ColumnNames); err != nil {
 			return err
 		}
 	case IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(desc.TableDesc(), idx.ColumnNames); err != nil {
 			return err
 		}
 	}
@@ -2065,7 +2065,7 @@ func (desc *TableDescriptor) AddIndexMutation(
 	return nil
 }
 
-func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
+func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		m.State = DescriptorMutation_DELETE_ONLY
@@ -2073,17 +2073,12 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	case DescriptorMutation_DROP:
 		m.State = DescriptorMutation_DELETE_AND_WRITE_ONLY
 	}
-	m.MutationID = desc.NextMutationID
+	// For tables created in the same transaction the next mutation ID will
+	// not have been allocated and the added mutation will use an invalid ID.
+	// This is fine because the mutation will be processed immediately.
+	m.MutationID = desc.ClusterVersion.NextMutationID
+	desc.NextMutationID = desc.ClusterVersion.NextMutationID + 1
 	desc.Mutations = append(desc.Mutations, m)
-}
-
-// FinalizeMutation returns the id that has been used by mutations appended
-// with addMutation() since the last time this function was called.
-// Future mutations will use a new ID.
-func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
-	mutationID := desc.NextMutationID
-	desc.NextMutationID++
-	return mutationID, nil
 }
 
 // ColumnNeedsBackfill returns true if adding the given column requires a

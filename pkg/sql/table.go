@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -652,44 +653,75 @@ func (tc *TableCollection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
 }
 
-// createSchemaChangeJob finalizes the current mutations in the table
-// descriptor and creates a schema change job in the system.jobs table.
-// The identifiers of the mutations and newly-created job are written to a new
+// createOrUpdateSchemaChangeJob finalizes the current mutations in the table
+// descriptor. If a schema change job in the system.jobs table has not been
+// created for mutations in the current transaction, one is created. The
+// identifiers of the mutations and newly-created job are written to a new
 // MutationJob in the table descriptor.
 //
 // The job creation is done within the planner's txn. This is important - if the
 // txn ends up rolling back, the job needs to go away.
-func (p *planner) createSchemaChangeJob(
+//
+// If a job for this table has already been created, update the job's details
+// and description.
+func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
-	span := tableDesc.PrimaryIndexSpan()
-	mutationID, err := tableDesc.FinalizeMutation()
-	if err != nil {
-		return sqlbase.InvalidMutationID, err
-	}
+	mutationID := tableDesc.ClusterVersion.NextMutationID
+
+	var job *jobs.Job
 	var spanList []jobspb.ResumeSpanList
-	for i := 0; i < len(tableDesc.Mutations); i++ {
-		if tableDesc.Mutations[i].MutationID == mutationID {
-			spanList = append(spanList,
-				jobspb.ResumeSpanList{
-					ResumeSpans: []roachpb.Span{span},
-				},
-			)
+	if len(tableDesc.MutationJobs) > len(tableDesc.ClusterVersion.MutationJobs) {
+		// Already created a job and appended the job ID to MutationJobs.
+		jobID := tableDesc.MutationJobs[len(tableDesc.MutationJobs)-1].JobID
+		var err error
+		job, err = p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		if err != nil {
+			return sqlbase.InvalidMutationID, err
+		}
+		spanList = job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
+	}
+
+	span := tableDesc.PrimaryIndexSpan()
+	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
+		spanList = append(spanList,
+			jobspb.ResumeSpanList{
+				ResumeSpans: []roachpb.Span{span},
+			},
+		)
+	}
+
+	if job == nil {
+		jobRecord := jobs.Record{
+			Description:   stmt,
+			Username:      p.User(),
+			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+			Progress:      jobspb.SchemaChangeProgress{},
+		}
+		job = p.ExecCfg().JobRegistry.NewJob(jobRecord)
+		if err := job.WithTxn(p.txn).Created(ctx); err != nil {
+			return sqlbase.InvalidMutationID, err
+		}
+		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+			MutationID: mutationID, JobID: *job.ID()})
+	} else {
+		if err := job.WithTxn(p.txn).SetDetails(
+			ctx,
+			jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+		); err != nil {
+			return sqlbase.InvalidMutationID, err
+		}
+		if err := job.WithTxn(p.txn).SetDescription(
+			ctx,
+			func(ctx context.Context, description string) (string, error) {
+				return strings.Join([]string{description, stmt}, ";"), nil
+			},
+		); err != nil {
+			return sqlbase.InvalidMutationID, err
 		}
 	}
-	jobRecord := jobs.Record{
-		Description:   stmt,
-		Username:      p.User(),
-		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-		Progress:      jobspb.SchemaChangeProgress{},
-	}
-	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
-	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-		return sqlbase.InvalidMutationID, err
-	}
-	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-		MutationID: mutationID, JobID: *job.ID()})
+
 	return mutationID, nil
 }
 

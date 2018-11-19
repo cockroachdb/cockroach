@@ -171,10 +171,29 @@ func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn
 	)
 }
 
+// SetDescription updates the description of a created job.
+func (j *Job) SetDescription(ctx context.Context, updateFn DescriptionUpdateFn) error {
+	return j.updateRow(ctx, updateProgressAndDetails,
+		func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
+			prev := payload.Description
+			desc, err := updateFn(ctx, prev)
+			if err != nil {
+				return false, err
+			}
+			payload.Description = desc
+			return prev != desc, nil
+		},
+	)
+}
+
 // RunningStatusFn is a callback that computes a job's running status
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
 type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningStatus, error)
+
+// DescriptionUpdateFn is a callback that computes a job's description
+// given its current one.
+type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
 
 // FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
