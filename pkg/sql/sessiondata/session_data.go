@@ -69,8 +69,8 @@ type SessionData struct {
 	SafeUpdates bool
 	// RemoteAddr is used to generate logging events.
 	RemoteAddr net.Addr
-	// ZigzagJoinEnabled indicates whether the planner should try and plan a
-	// zigzag join. Will emit a warning if a zigzag join can't be planned.
+	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
+	// zigzag join.
 	ZigzagJoinEnabled bool
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.

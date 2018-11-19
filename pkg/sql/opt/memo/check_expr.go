@@ -178,6 +178,11 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			panic("ordering columns cannot include mutation columns")
 		}
 
+	case *ZigzagJoinExpr:
+		if len(t.LeftEqCols) != len(t.RightEqCols) {
+			panic(fmt.Sprintf("zigzag join with mismatching eq columns"))
+		}
+
 	default:
 		if !opt.IsListOp(e) {
 			for i := 0; i < e.ChildCount(); i++ {

@@ -36,9 +36,6 @@ type zigzagJoinNode struct {
 	// zigzag join. Must contain 2 or more zigzagJoinSides.
 	sides []zigzagJoinSide
 
-	// joinType is either INNER or LEFT_OUTER.
-	joinType sqlbase.JoinType
-
 	// columns are the produced columns, namely the columns in all
 	// indexes in 'sides' - in the same order as sides.
 	columns sqlbase.ResultColumns

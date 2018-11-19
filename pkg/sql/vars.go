@@ -309,8 +309,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_force_zigzag_join`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_force_zigzag_join`),
+	`experimental_enable_zigzag_join`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_enable_zigzag_join`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {

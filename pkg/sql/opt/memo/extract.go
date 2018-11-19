@@ -230,3 +230,48 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 	}
 	return newFilters
 }
+
+// ExtractConstColumns returns columns in the filters expression that have been
+// constrained to fixed values.
+func ExtractConstColumns(
+	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext,
+) (fixedCols opt.ColSet) {
+	for i := range on {
+		scalar := on[i]
+		scalarProps := scalar.ScalarProps(mem)
+		if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
+			fixedCols.UnionWith(scalarProps.Constraints.ExtractConstCols(evalCtx))
+		}
+	}
+	return fixedCols
+}
+
+// ExtractValuesFromFilter returns a map of constant columns, to the values
+// they're constrained to.
+func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]tree.Datum {
+	vals := make(map[opt.ColumnID]tree.Datum)
+	for i := range on {
+		ok, col, val := extractConstEquality(on[i].Condition)
+		if !ok || !cols.Contains(col) {
+			continue
+		}
+		vals[opt.ColumnID(col)] = val
+	}
+	return vals
+}
+
+// extractConstEquality extracts a column that's being equated to a constant
+// value if possible.
+func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
+	if eq, ok := condition.(*EqExpr); ok {
+		// Only check the left side - the variable is always on the left side
+		// due to the CommuteVar norm rule.
+		if leftVar, ok := eq.Left.(*VariableExpr); ok {
+			if CanExtractConstDatum(eq.Right) {
+				return true, int(leftVar.Col), ExtractConstDatum(eq.Right)
+			}
+		}
+	}
+
+	return false, 0, nil
+}

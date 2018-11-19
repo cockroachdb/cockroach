@@ -120,13 +120,20 @@ type OptTesterFlags struct {
 // NewOptTester constructs a new instance of the OptTester for the given SQL
 // statement. Metadata used by the SQL query is accessed via the catalog.
 func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
-	return &OptTester{
+	ot := &OptTester{
 		catalog: catalog,
 		sql:     sql,
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(false /* privileged */),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+
+	// Set any OptTester-wide session flags here.
+
+	// Enable zigzag joins for all opt tests. Execbuilder tests exercise
+	// cases where this flag is false.
+	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
+	return ot
 }
 
 // RunCommand implements commands that are used by most tests:
