@@ -510,7 +510,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	}
 
 	var machineType string
-	if opts.UseLocalSSD {
+	if opts.SSDOpts.UseLocalSSD {
 		machineType = p.opts.SSDMachineType
 	} else {
 		machineType = p.opts.MachineType
@@ -553,6 +553,22 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		_ = data.Instances[0].InstanceID // silence unused warning
 	}
 
+	// Create AWS startup script file.
+	extraMountOpts := ""
+	// Dynamic args.
+	if opts.SSDOpts.UseLocalSSD {
+		if opts.SSDOpts.NoExt4Barrier {
+			extraMountOpts = "nobarrier"
+		}
+	}
+	filename, err := writeStartupScript(extraMountOpts)
+	if err != nil {
+		return errors.Wrapf(err, "could not write GCE startup script to temp file")
+	}
+	defer func() {
+		_ = os.Remove(filename)
+	}()
+
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
@@ -564,11 +580,11 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--security-group-ids", sgID,
 		"--subnet-id", subnetID,
 		"--tag-specifications", tagSpecs,
-		"--user-data", awsStartupScript,
+		"--user-data", "file://" + filename,
 	}
 
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
-	if !opts.UseLocalSSD {
+	if !opts.SSDOpts.UseLocalSSD {
 		args = append(args,
 			"--block-device-mapping",
 			// Size is measured in GB.  gp2 type derives guaranteed iops from size.
