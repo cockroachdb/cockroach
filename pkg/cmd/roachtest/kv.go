@@ -54,9 +54,6 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			// Run kv with encryption turned off because of recently found
-			// checksum mismatch when running workload against encrypted
-			// cluster.
 			for _, e := range []bool{false, true} {
 				e := e
 				minVersion := "2.0.0"
