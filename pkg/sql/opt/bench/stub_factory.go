@@ -150,6 +150,8 @@ func (f *stubFactory) ConstructZigzagJoin(
 	rightIndex opt.Index,
 	leftEqCols []exec.ColumnOrdinal,
 	rightEqCols []exec.ColumnOrdinal,
+	leftCols exec.ColumnOrdinalSet,
+	rightCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,

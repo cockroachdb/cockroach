@@ -54,6 +54,19 @@
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate $on)
 
+# GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
+# Scan table) where the prefix column(s) of both indexes is/are fixed to
+# constant values in the filters. See comments in GenerateZigzagJoin and
+# distsqlrun/zigzagjoiner.go for more details on when a zigzag join can be
+# planned.
+[GenerateZigzagJoins, Explore]
+(Select
+    (Scan $scan:*) & (IsCanonicalScan $scan)
+    $filters:*
+)
+=>
+(GenerateZigzagJoins $scan $filters)
+
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for both inner and left join).
