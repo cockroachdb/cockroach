@@ -151,7 +151,7 @@ func (i *MVCCIncrementalIterator) advance() {
 
 		metaTimestamp := hlc.Timestamp(i.meta.Timestamp)
 		if i.meta.Txn != nil {
-			if i.startTime.Less(metaTimestamp) && !i.endTime.Less(metaTimestamp) {
+			if !i.endTime.Less(metaTimestamp) {
 				i.err = &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{{
 						Span:   roachpb.Span{Key: i.iter.Key().Key},
