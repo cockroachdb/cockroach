@@ -195,6 +195,8 @@ type Factory interface {
 		rightIndex opt.Index,
 		leftEqCols []ColumnOrdinal,
 		rightEqCols []ColumnOrdinal,
+		leftCols ColumnOrdinalSet,
+		rightCols ColumnOrdinalSet,
 		onCond tree.TypedExpr,
 		fixedVals []Node,
 		reqOrdering OutputOrdering,

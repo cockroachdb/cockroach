@@ -160,6 +160,11 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
 
+	case *ZigzagJoinExpr:
+		if len(t.LeftEqCols) != len(t.RightEqCols) {
+			panic(fmt.Sprintf("zigzag join with mismatching eq columns"))
+		}
+
 	default:
 		if !opt.IsListOp(e) {
 			for i := 0; i < e.ChildCount(); i++ {
