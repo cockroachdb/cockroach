@@ -190,6 +190,11 @@ func TestAvroSchema(t *testing.T) {
 			schema: `(a INT PRIMARY KEY, b STRING)`,
 			values: `(1, 'a')`,
 		},
+		{
+			name:   `MULTI_WIDTHS`,
+			schema: `(a INT PRIMARY KEY, b DECIMAL (3,2), c DECIMAL (2, 1))`,
+			values: `(1, 1.23, 4.5)`,
+		},
 	}
 	// Generate a test for each column type with a random datum of that type.
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
