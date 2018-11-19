@@ -26,6 +26,8 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -204,6 +206,24 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt64(int64(math.Float64bits(float64(*v))))
 
 	case *tree.DDecimal:
+		if v.Form != apd.Finite {
+			b.putInt32(8)
+			// 0 digits.
+			b.putInt32(0)
+			// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+			b.write([]byte{0xc0, 0, 0, 0})
+
+			if v.Form == apd.Infinite {
+				// TODO(mjibson): #32489
+				// The above encoding is not correct for Infinity, but since that encoding
+				// doesn't exist in postgres, it's unclear what to do. For now use the NaN
+				// encoding and count it to see if anyone even needs this.
+				telemetry.Count("pgwire.#32489.binary_decimal_infinity")
+			}
+
+			return
+		}
+
 		alloc := struct {
 			pgNum pgwirebase.PGNumeric
 

@@ -33,6 +33,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"text/template"
@@ -139,6 +140,7 @@ const outputJSON = `[
 
 var inputs = map[string][]string{
 	"'%s'::decimal": {
+		"NaN",
 		"-000.000",
 		"-0000021234.23246346000000",
 		"-1.2",
@@ -190,6 +192,27 @@ var inputs = map[string][]string{
 		"2.2289971159100284",
 		"3409589268520956934250.234098732045120934701239846",
 		"42",
+	},
+
+	"'%s'::float8": {
+		// The Go binary encoding of NaN differs from Postgres by a 1 at the
+		// end. Go also uses Inf instead of Infinity (used by Postgres) for text
+		// float encodings. These deviations are still correct, and it's not worth
+		// special casing them into the code, so they are commented out here.
+		//"NaN",
+		//"Inf",
+		//"-Inf",
+		"-000.000",
+		"-0000021234.23246346000000",
+		"-1.2",
+		".0",
+		".1",
+		".1234",
+		".12345",
+		fmt.Sprint(math.MaxFloat32),
+		fmt.Sprint(math.SmallestNonzeroFloat32),
+		fmt.Sprint(math.MaxFloat64),
+		fmt.Sprint(math.SmallestNonzeroFloat64),
 	},
 
 	"'%s'::timestamp": {
