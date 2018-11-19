@@ -99,19 +99,21 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
-	// We target the raft log size at the size of the replicated data. When
-	// writing to a replica, it is common for the raft log to become larger than
-	// the replicated data as the raft log contains the overhead of the
-	// BatchRequest which includes the full transaction state as well as begin
-	// and end transaction operations. If the estimated raft log size becomes
-	// larger than the replica size, we're better off recovering the replica
-	// using a snapshot.
-	targetSize := r.mu.state.Stats.Total()
+	// A "cooperative" truncation (i.e. one that does not cut off followers from
+	// the log) takes place whenever there are more than
+	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
+	// RaftLogQueueStaleSize bytes. This is fairly aggressive, so under normal
+	// conditions, the log is very small.
+	//
+	// If followers start falling behind, at some point the logs still need to
+	// be truncated. We do this either when the size of the log exceeds
+	// RaftLogTruncationThreshold (or, in eccentric configurations, the zone's
+	// RangeMaxBytes). This captures the heuristic that at some point, it's more
+	// efficient to catch up via a snapshot than via applying a long tail of log
+	// entries.
+	targetSize := r.store.cfg.RaftLogTruncationThreshold
 	if targetSize > *r.mu.zone.RangeMaxBytes {
 		targetSize = *r.mu.zone.RangeMaxBytes
-	}
-	if targetSize > r.store.cfg.RaftLogTruncationThreshold {
-		targetSize = r.store.cfg.RaftLogTruncationThreshold
 	}
 	raftStatus := r.raftStatusRLocked()
 
