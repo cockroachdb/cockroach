@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -128,5 +129,16 @@ func TestEncodings(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+func TestEncodingErrorCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
+	d, _ := tree.ParseDDecimal("Inf")
+	buf.writeBinaryDatum(context.Background(), d, nil)
+	if count := telemetry.GetFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
+		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
 }
