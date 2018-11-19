@@ -417,7 +417,12 @@ type Replica struct {
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
 
-		// The most recently updated time for each follower of this range.
+		// The most recently updated time for each follower of this range. This is updated
+		// every time a Raft message is received from a peer.
+		// Note that superficially it seems that similar information is contained in the
+		// Progress of a RaftStatus, which has a RecentActive field. However, that field
+		// is always true unless CheckQuorum is active, which at the time of writing in
+		// CockroachDB is not the case.
 		lastUpdateTimes map[roachpb.ReplicaID]time.Time
 
 		// The last seen replica descriptors from incoming Raft messages. These are
@@ -1185,6 +1190,38 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			continue
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
+			// Note that the Match field has different semantics depending on
+			// the State.
+			//
+			// In state ProgressStateReplicate, the Match index is optimistically
+			// updated whenever a message is *sent* (not received). Due to Raft
+			// flow control, only a reasonably small amount of data can be en
+			// route to a given follower at any point in time.
+			//
+			// In state ProgressStateProbe, the Match index equals Next-1, and
+			// it tells us the leader's optimistic best guess for the right log
+			// index (and will try once per heartbeat interval to update its
+			// estimate). In the usual case, the follower responds with a hint
+			// when it rejects the first probe and the leader replicates or
+			// sends a snapshot. In the case in which the follower does not
+			// respond, the leader reduces Match by one each heartbeat interval.
+			// But if the follower does not respond, we've already filtered it
+			// out above. We use the Match index as is, even though the follower
+			// likely isn't there yet because that index won't go up unless the
+			// follower is actually catching up, so it won't cause it to fall
+			// behind arbitrarily.
+			//
+			// Another interesting tidbit about this state is that the Paused
+			// field is usually true as it is used to limit the number of probes
+			// (i.e. appends) sent to this follower to one per heartbeat
+			// interval.
+			//
+			// In state ProgressStateSnapshot, the Match index is the last known
+			// (possibly optimistic, depending on previous state) index before
+			// the snapshot went out. Once the snapshot applies, the follower
+			// will enter ProgressStateReplicate again. So here the Match index
+			// works as advertised too.
+
 			// Only consider followers who are in advance of the quota base
 			// index. This prevents a follower from coming back online and
 			// preventing throughput to the range until it has caught up.
@@ -5163,7 +5200,12 @@ func (r *Replica) maybeDropMsgAppResp(ctx context.Context, msg raftpb.Message) b
 	}
 
 	if ticks > r.store.cfg.RaftPostSplitSuppressSnapshotTicks {
-		log.Infof(ctx, "allowing MsgAppResp for uninitialized replica")
+		log.Infof(
+			ctx,
+			"allowing MsgAppResp for uninitialized replica (%d > %d ticks)",
+			ticks,
+			r.store.cfg.RaftPostSplitSuppressSnapshotTicks,
+		)
 		return false
 	}
 
