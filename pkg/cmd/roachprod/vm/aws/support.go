@@ -115,15 +115,38 @@ func runJSONCommand(args []string, parsed interface{}) error {
 	return nil
 }
 
+// split returns a key and value for 'key:value' pairs.
+func split(data string) (key, value string, err error) {
+	parts := strings.Split(data, ":")
+	if len(parts) != 2 {
+		return "", "", errors.Errorf("Could not split: %s", data)
+	}
+
+	return parts[0], parts[1], nil
+}
+
 // splitMap splits a list of `key:value` pairs into a map.
 func splitMap(data []string) (map[string]string, error) {
 	ret := make(map[string]string, len(data))
 	for _, part := range data {
-		parts := strings.Split(part, ":")
-		if len(parts) != 2 {
-			return nil, errors.Errorf("Could not split Region:AMI: %s", part)
+		key, value, err := split(part)
+		if err != nil {
+			return nil, err
 		}
-		ret[parts[0]] = parts[1]
+		ret[key] = value
+	}
+	return ret, nil
+}
+
+// orderedKeyList returns just the ordered keys of a list of 'key:value' pairs.
+func orderedKeyList(data []string) ([]string, error) {
+	ret := make([]string, 0, len(data))
+	for _, part := range data {
+		key, _, err := split(part)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, key)
 	}
 	return ret, nil
 }
