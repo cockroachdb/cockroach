@@ -1336,8 +1336,12 @@ func main() {
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
-	createCmd.Flags().BoolVar(&createVMOpts.UseLocalSSD,
+	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
 		"local-ssd", true, "Use local SSD")
+	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
+		"local-ssd-no-ext4-barrier", false,
+		`Mount the local SSD with the "-o nobarrier" flag. `+
+			`Ignored if --local-ssd=false is specified.`)
 	createCmd.Flags().IntVarP(&numNodes,
 		"nodes", "n", 4, "Total number of nodes, distributed across all clouds")
 	createCmd.Flags().StringSliceVarP(&createVMOpts.VMProviders,

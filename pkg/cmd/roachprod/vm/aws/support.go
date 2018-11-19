@@ -17,22 +17,34 @@ package aws
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"os/exec"
 	"strings"
+	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/pkg/errors"
 )
 
-// Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block devices, but
-// the actual device numbers vary a bit between the two types.
-// This user-data script will create a filesystem, mount the data volume, and chmod 777.
+// Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block
+// devices, but the actual device numbers vary a bit between the two types.
+// This user-data script will create a filesystem, mount the data volume, and
+// chmod 777.
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nvme-ebs-volumes.html
-const awsStartupScript = `#!/usr/bin/env bash
+//
+// This is a template because the instantiator needs to optionally configure the
+// mounting options. The script cannot take arguments since it is to be invoked
+// by the aws tool which cannot pass args.
+const awsStartupScriptTemplate = `#!/usr/bin/env bash
+# Script for setting up a GCE machine for roachprod use.
+
 set -x
 sudo apt-get update
 sudo apt-get install -qy --no-install-recommends mdadm
+
+mount_opts="discard,defaults"
+{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 disks=()
 mountpoint="/mnt/data1"
@@ -53,18 +65,18 @@ elif [ "${#disks[@]}" -eq "1" ]; then
   mkdir -p ${mountpoint}
   disk=${disks[0]}
   mkfs.ext4 -E nodiscard ${disk}
-  mount -o discard,defaults ${disk} ${mountpoint}
+  mount -o ${mount_opts} ${disk} ${mountpoint}
   chmod 777 ${mountpoint}
-  echo "${disk} ${mountpoint} ext4 discard,defaults 1 1" | tee -a /etc/fstab
+  echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
 else
   echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
   raiddisk="/dev/md0"
   mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
   mkfs.ext4 -E nodiscard ${raiddisk}
-  mount -o discard,defaults ${raiddisk} ${mountpoint}
+  mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}
-  echo "${raiddisk} ${mountpoint} ext4 discard,defaults 1 1" | tee -a /etc/fstab
+  echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
 fi
 
 sudo apt-get install -qy chrony
@@ -79,6 +91,32 @@ sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
 sudo sh -c 'echo "root - nofile 65536\n* - nofile 65536" > /etc/security/limits.d/10-roachprod-nofiles.conf'
 sudo touch /mnt/data1/.roachprod-initialized
 `
+
+// writeStartupScript writes the startup script to a temp file.
+// Returns the path to the file.
+// After use, the caller should delete the temp file.
+//
+// extraMountOpts, if not empty, is appended to the default mount options. It is
+// a comma-separated list of options for the "mount -o" flag.
+func writeStartupScript(extraMountOpts string) (string, error) {
+	type tmplParams struct {
+		ExtraMountOpts string
+	}
+
+	args := tmplParams{ExtraMountOpts: extraMountOpts}
+
+	tmpfile, err := ioutil.TempFile("", "gce-startup-script")
+	if err != nil {
+		return "", err
+	}
+	defer tmpfile.Close()
+
+	t := template.Must(template.New("start").Parse(awsStartupScriptTemplate))
+	if err := t.Execute(tmpfile, args); err != nil {
+		return "", err
+	}
+	return tmpfile.Name(), nil
+}
 
 // runCommand is used to invoke an AWS command for which no output is expected.
 func runCommand(args []string) error {
