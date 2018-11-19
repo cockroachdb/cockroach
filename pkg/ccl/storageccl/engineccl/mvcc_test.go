@@ -161,25 +161,31 @@ func TestMVCCIterateIncremental(t *testing.T) {
 
 		// Exercise intent handling.
 		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey1,
-			ID:        txn1ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn1 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey1,
+				ID:        txn1ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.TxnMeta.Timestamp, txn1Val, &txn1); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey2,
-			ID:        txn2ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn2 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey2,
+				ID:        txn2ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.TxnMeta.Timestamp, txn2Val, &txn2); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents1",
@@ -233,25 +239,31 @@ func TestMVCCIterateIncremental(t *testing.T) {
 
 		// Exercise intent handling.
 		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey1,
-			ID:        txn1ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn1 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey1,
+				ID:        txn1ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.TxnMeta.Timestamp, txn1Val, &txn1); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey2,
-			ID:        txn2ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn2 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey2,
+				ID:        txn2ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.TxnMeta.Timestamp, txn2Val, &txn2); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents1",
@@ -370,6 +382,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			Epoch:     1,
 			Timestamp: hlc.Timestamp{WallTime: 2},
 		},
+		OrigTimestamp: hlc.Timestamp{WallTime: 2},
 	})
 
 	// Create a second DB in which we'll create a specific SSTable structure: the
@@ -473,6 +486,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 				Epoch:     1,
 				Timestamp: ts,
 			},
+			OrigTimestamp: ts,
 		}
 	}
 	intent := func(txn *roachpb.Transaction) roachpb.Intent {
@@ -542,9 +556,9 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	// kA:3 -> vA3
 	// kA:2 -> vA2
 	// kB -> (intent deletion)
-	require.NoError(t, engine.MVCCPut(ctx, db, nil, kA, txnA1.Timestamp, vA1, txnA1))
-	require.NoError(t, engine.MVCCPut(ctx, db, nil, kB, txnB1.Timestamp, vB1, txnB1))
-	require.NoError(t, engine.MVCCPut(ctx, db, nil, kC, txnC1.Timestamp, vC1, txnC1))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kA, txnA1.OrigTimestamp, vA1, txnA1))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kB, txnB1.OrigTimestamp, vB1, txnB1))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kC, txnC1.OrigTimestamp, vC1, txnC1))
 	require.NoError(t, db.Flush())
 	require.NoError(t, db.Compact())
 	require.NoError(t, engine.MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1)))
