@@ -128,6 +128,30 @@ func TestKafkaSink(t *testing.T) {
 	}
 }
 
+func TestKafkaSinkEscaping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	p := asyncProducerMock{
+		inputCh:     make(chan *sarama.ProducerMessage, 1),
+		successesCh: make(chan *sarama.ProducerMessage, 1),
+		errorsCh:    make(chan *sarama.ProducerError, 1),
+	}
+	sink := &kafkaSink{
+		producer: p,
+		topics:   map[string]struct{}{SQLNameToKafkaName(`☃`): {}},
+	}
+	sink.start()
+	defer func() { require.NoError(t, sink.Close()) }()
+	if err := sink.EmitRow(ctx, `☃`, []byte(`k☃`), []byte(`v☃`)); err != nil {
+		t.Fatal(err)
+	}
+	m := <-p.inputCh
+	require.Equal(t, `_u2603_`, m.Topic)
+	require.Equal(t, sarama.ByteEncoder(`k☃`), m.Key)
+	require.Equal(t, sarama.ByteEncoder(`v☃`), m.Value)
+}
+
 func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
