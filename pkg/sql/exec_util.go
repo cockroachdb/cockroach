@@ -1232,14 +1232,14 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 	if err != nil {
 		log.VEventfDepth(ctx, 2, 1, "distributability check error: %v", err)
 	} else {
-		log.VEventfDepth(ctx, 2, 1, "distributable plan: %v", dist)
+		log.VEventfDepth(ctx, 2, 1, "will distribute plan: %v", dist)
 	}
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
 // plan execution starts.
 func (st *SessionTracing) TraceExecStart(ctx context.Context, engine string) {
-	log.VEventfDepth(ctx, 2, 1, "execution starts: %s", engine)
+	log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
 }
 
 // TraceExecConsume creates a context for TraceExecRowsResult below.
