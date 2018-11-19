@@ -19,6 +19,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -140,6 +142,10 @@ type ServerConfig struct {
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
 	TempStorage diskmap.Factory
+
+	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
+	BulkAdder storagebase.BulkAdderFactory
+
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
@@ -453,6 +459,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
+		BullkAdder:     ds.BulkAdder,
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 		traceKV:        req.TraceKV,

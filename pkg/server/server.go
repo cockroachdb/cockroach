@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
+
 	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
@@ -516,6 +518,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterID:      &s.rpcContext.ClusterID,
 
 		TempStorage: tempEngine,
+		BulkAdder:   bulk.MakeFixedTimestampSSTBatcher,
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
