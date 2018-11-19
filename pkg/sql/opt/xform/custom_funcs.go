@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -54,6 +55,13 @@ func (c *CustomFuncs) IsCanonicalScan(scan *memo.ScanPrivate) bool {
 	return scan.Index == opt.PrimaryIndex &&
 		scan.Constraint == nil &&
 		scan.HardLimit == 0
+}
+
+// IsConstrainedScan returns true if the given ScanPrivate is an original
+// unaltered primary index Scan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsConstrainedSecondaryScan(scan *memo.ScanPrivate) bool {
+	return scan.Index != opt.PrimaryIndex &&
+		scan.Constraint != nil
 }
 
 // GenerateIndexScans enumerates all secondary indexes on the given Scan
@@ -747,6 +755,294 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+	}
+}
+
+// Helper function to generate eqCol lists for the zigzag joiner.
+// The zigzag joiner requires that the equality columns immediately follow
+// the fixed columns in the index. Fixed here refers to columns that
+// have been constrained to a constant value.
+//
+// There are two kinds of equality columns that this function takes care of:
+// columns that have the same ColumnID on both sides (i.e. the same column),
+// as well as columns that have been equated in some ON filter (i.e. they are
+// contained in leftEqCols and rightEqCols at the same index).
+//
+// This function iterates through all columns of the indexes in order,
+// skips past the fixed columns, and then generates however many eqCols
+// there are that meet the above criteria.
+//
+// Returns an ordered list of columns ordinals, one list for each index.
+//
+// See the comment in pkg/sql/distsqlrun/zigzag_joiner.go for more details
+// on the role eqCols and fixed cols play in zigzag joins.
+func eqColsForZigzag(
+	tab opt.Table,
+	tabID opt.TableID,
+	leftIndex opt.Index,
+	rightIndex opt.Index,
+	fixedCols opt.ColSet,
+	leftEqCols opt.ColList,
+	rightEqCols opt.ColList,
+) (opt.ColList, opt.ColList) {
+	leftEqPrefix := make(opt.ColList, 0, len(leftEqCols))
+	rightEqPrefix := make(opt.ColList, 0, len(rightEqCols))
+	i, cnt := 0, leftIndex.ColumnCount()
+	j, cnt2 := 0, rightIndex.ColumnCount()
+	for ; i < cnt; i++ {
+		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
+		if !fixedCols.Contains(int(colID)) {
+			break
+		}
+	}
+	for ; j < cnt2; j++ {
+		colID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
+		if !fixedCols.Contains(int(colID)) {
+			break
+		}
+	}
+
+	for i < cnt && j < cnt2 {
+		leftColID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
+		rightColID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
+		i++
+		j++
+
+		if leftColID == rightColID {
+			leftEqPrefix = append(leftEqPrefix, leftColID)
+			rightEqPrefix = append(rightEqPrefix, rightColID)
+			continue
+		}
+		leftIdx, leftOk := leftEqCols.Find(leftColID)
+		rightIdx, rightOk := rightEqCols.Find(rightColID)
+		if leftOk && rightOk && leftIdx == rightIdx {
+			leftEqPrefix = append(leftEqPrefix, leftColID)
+			rightEqPrefix = append(rightEqPrefix, rightColID)
+			continue
+		} else {
+			// We've reached the first non-equal column; the zigzag
+			// joiner does not support non-contiguous/non-prefix equal
+			// columns.
+			break
+		}
+
+	}
+
+	return leftEqPrefix, rightEqPrefix
+}
+
+// GenerateZigzagJoins generates zigzag joins for all index pairs of the
+// Scan table which contain one of the columns fixed to constant values
+// in the FiltersExpr as its prefix.
+//
+// Similar to the lookup join, if the selected index pair does not contain
+// all the columns in the output of the scan, we wrap the zigzag join
+// in another index join on the primary index.
+func (c *CustomFuncs) GenerateZigzagJoins(
+	grp memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
+) {
+
+	fixedCols := memo.ExtractFixedColumns(filters, c.e.mem, c.e.evalCtx)
+
+	if fixedCols.Len() == 0 {
+		return
+	}
+
+	// Iterate through indexes, looking for those prefixed with fixedEq cols.
+	// Efficiently finding pairs (or, in the future when zigzagjoiner supports
+	// n-way zigzag joins, sets) of indexes that make the most efficient zigzag
+	// join is an instance of this NP-hard problem:
+	// https://en.wikipedia.org/wiki/Maximum_coverage_problem
+	//
+	// A formal definition would be: Suppose we have a set of fixed columns F
+	// (defined as fixedCols in the code above), and a set of indexes I. The
+	// "fixed prefix" of every index, in this context, refers to the longest
+	// prefix of each index's columns that is in F. In other words, we stop
+	// adding to the prefix when we come across the first non-fixed column
+	// in an index.
+	//
+	// We want to find at most k = 2 indexes (in the future k could be >= 2)
+	// that cover the maximum number of columns in F. An index is defined
+	// to have covered a column if that column is in the index' fixed prefix.
+	//
+	// TODO(itsbilal): Implement the greedy or weighted version of the
+	// algorithm laid out here:
+	// https://en.wikipedia.org/wiki/Maximum_coverage_problem
+	// For now, just do an n^2 iteration.
+	var iter, iter2 scanIndexIter
+	iter.init(c.e.mem, scanPrivate)
+	for iter.next() {
+		if iter.indexOrdinal == opt.PrimaryIndex {
+			continue
+		}
+		// Short-circuit quickly if the first column in index is not a fixed column.
+		if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal))) {
+			continue
+		}
+
+		iter2.init(c.e.mem, scanPrivate)
+		// Only look at indexes after this one.
+		iter2.indexOrdinal = iter.indexOrdinal
+
+		for iter2.next() {
+			if iter2.indexOrdinal == opt.PrimaryIndex {
+				continue
+			} else if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal))) {
+				continue
+			}
+			// Columns that are in both indexes are, by definition, equal.
+			leftCols := iter.indexCols()
+			rightCols := iter2.indexCols()
+			eqCols := leftCols.Intersection(rightCols)
+			eqCols.DifferenceWith(fixedCols)
+			if eqCols.Len() == 0 {
+				// A simple index join is more efficient in such cases.
+				continue
+			}
+
+			// If there are any equalities across the columns of the two indexes,
+			// push them into the zigzag join spec.
+			leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+				leftCols, rightCols, filters,
+			)
+			leftEqCols, rightEqCols := eqColsForZigzag(
+				iter.tab,
+				scanPrivate.Table,
+				iter.index,
+				iter2.index,
+				fixedCols,
+				leftEq,
+				rightEq,
+			)
+
+			if len(leftEqCols) == 0 || len(rightEqCols) == 0 {
+				// One of the columns is not sorted by any of the equality
+				// columns. A zigzag join cannot be planned.
+				continue
+			}
+
+			// Confirm the primary key columns are in both leftEqCols and rightEqCols.
+			pkIndex := iter.tab.Index(opt.PrimaryIndex)
+			pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
+			pkColsFound := true
+			for i := range pkCols {
+				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+
+				if _, ok := leftEqCols.Find(pkCols[i]); !ok {
+					pkColsFound = false
+					break
+				}
+				if _, ok := rightEqCols.Find(pkCols[i]); !ok {
+					pkColsFound = false
+					break
+				}
+			}
+			if !pkColsFound {
+				continue
+			}
+
+			zigzagJoin := memo.ZigzagJoinExpr{On: filters}
+			zigzagJoin.JoinType = opt.InnerJoinOp
+			zigzagJoin.LeftTable = scanPrivate.Table
+			zigzagJoin.LeftIndex = iter.indexOrdinal
+			zigzagJoin.RightTable = scanPrivate.Table
+			zigzagJoin.RightIndex = iter2.indexOrdinal
+			zigzagJoin.LeftEqCols = leftEqCols
+			zigzagJoin.RightEqCols = rightEqCols
+
+			// Fixed values are represented as tuples consisting of the
+			// fixed segment of that side's index.
+			zigzagJoin.FixedVals = make(memo.ScalarListExpr, 2)
+			leftVals := make(memo.ScalarListExpr, 0, fixedCols.Len())
+			leftTypes := make([]types.T, 0, fixedCols.Len())
+			rightVals := make(memo.ScalarListExpr, 0, fixedCols.Len())
+			rightTypes := make([]types.T, 0, fixedCols.Len())
+
+			zigzagJoin.LeftFixedCols = make(opt.ColList, 0, fixedCols.Len())
+			zigzagJoin.RightFixedCols = make(opt.ColList, 0, fixedCols.Len())
+			fixedValMap := memo.ExtractValuesFromFilter(filters, fixedCols)
+
+			for i, cnt := 0, iter.index.ColumnCount(); i < cnt; i++ {
+				colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
+				val, ok := fixedValMap[int(colID)]
+				if !ok {
+					break
+				}
+				leftVals = append(leftVals, c.e.f.ConstructConstVal(val))
+				leftTypes = append(leftTypes, iter.index.Column(i).Column.DatumType())
+				zigzagJoin.LeftFixedCols = append(zigzagJoin.LeftFixedCols, colID)
+			}
+			for i, cnt := 0, iter2.index.ColumnCount(); i < cnt; i++ {
+				colID := scanPrivate.Table.ColumnID(iter2.index.Column(i).Ordinal)
+				val, ok := fixedValMap[int(colID)]
+				if !ok {
+					break
+				}
+				rightVals = append(rightVals, c.e.f.ConstructConstVal(val))
+				rightTypes = append(rightTypes, iter2.index.Column(i).Column.DatumType())
+				zigzagJoin.RightFixedCols = append(zigzagJoin.RightFixedCols, colID)
+			}
+			zigzagJoin.FixedVals[0] = c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes})
+			zigzagJoin.FixedVals[1] = c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes})
+
+			zigzagJoin.On = memo.ExtractRemainingJoinFilters(
+				filters,
+				zigzagJoin.LeftEqCols,
+				zigzagJoin.RightEqCols,
+			)
+			zigzagCols := leftCols.Copy()
+			zigzagCols.UnionWith(rightCols)
+
+			if scanPrivate.Cols.SubsetOf(zigzagCols) {
+				// Case 1 (zigzagged indexes contain all requested columns).
+				c.e.mem.AddZigzagJoinToGroup(&zigzagJoin, grp)
+				continue
+			}
+
+			// Case 2 (wrap zigzag join in a lookup "index" join).
+			if scanPrivate.Flags.NoIndexJoin {
+				continue
+			}
+
+			var indexJoin memo.LookupJoinExpr
+
+			// onCols are the columns that the ON condition in the zigzag join
+			// can refer to: columns that are in either zigzag index.
+			if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
+				// The ON condition refers only to the columns available in the zigzag
+				// indices.
+				//
+				// For LeftJoin, both joins perform a LeftJoin. A null-extended row
+				// from the lower ZigzagJoin will not have any matches in the top
+				// LookupJoin (it has NULLs on key columns) and will get null-extended
+				// there as well.
+				indexJoin.On = memo.TrueFilter
+			} else {
+				// ON has some conditions that are bound by the columns in the index (at
+				// the very least, the equality conditions we used for KeyCols), and some
+				// conditions that refer to other table columns. We can put the former in the
+				// lower ZigzagJoin and the latter in the index join.
+				conditions := zigzagJoin.On
+				zigzagJoin.On = c.ExtractBoundConditions(conditions, zigzagCols)
+				indexJoin.On = c.ExtractUnboundConditions(conditions, zigzagCols)
+			}
+
+			indexJoin.Input = c.e.f.ConstructZigzagJoin(
+				zigzagJoin.On,
+				&zigzagJoin.ZigzagJoinPrivate,
+			)
+			indexJoin.JoinType = zigzagJoin.JoinType
+			indexJoin.Table = scanPrivate.Table
+			indexJoin.Index = opt.PrimaryIndex
+			indexJoin.KeyCols = pkCols
+			indexJoin.Cols = scanPrivate.Cols.Union(zigzagCols)
+
+			// Create the LookupJoin for the index join in the same group as the
+			// original select.
+			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+		}
 	}
 }
 

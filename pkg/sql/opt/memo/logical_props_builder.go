@@ -442,6 +442,10 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 	b.buildJoinProps(join, rel)
 }
 
+func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *props.Relational) {
+	b.buildJoinProps(join, rel)
+}
+
 func (b *logicalPropsBuilder) buildMergeJoinProps(join *MergeJoinExpr, rel *props.Relational) {
 	panic("no relational properties for merge join expression")
 }
@@ -1204,6 +1208,44 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	return relational
 }
 
+// ensureZigzagJoinInputProps lazily populates the relational properties that
+// apply to the two sides of the join, as if it were a Scan operator.
+func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
+	ensureInputPropsForIndex(
+		join.Memo().Metadata(),
+		join.LeftTable,
+		join.LeftIndex,
+		&join.leftProps,
+		sb,
+	)
+	ensureInputPropsForIndex(
+		join.Memo().Metadata(),
+		join.RightTable,
+		join.RightIndex,
+		&join.rightProps,
+		sb,
+	)
+	// For stats purposes, ensure left and right column sets are disjoint.
+	join.rightProps.OutputCols.DifferenceWith(join.leftProps.OutputCols)
+}
+
+// ensureInputPropsForIndex populates relational properties for the specified
+// table and index at the specified logical properties pointer.
+func ensureInputPropsForIndex(
+	md *opt.Metadata, tabID opt.TableID, indexOrd int, relProps *props.Relational,
+	sb *statisticsBuilder,
+) {
+	if relProps.OutputCols.Empty() {
+		relProps.OutputCols = md.IndexColumns(tabID, indexOrd)
+		relProps.NotNullCols = tableNotNullCols(md, tabID)
+		relProps.NotNullCols.IntersectionWith(relProps.OutputCols)
+		relProps.Cardinality = props.AnyCardinality
+		relProps.FuncDeps.CopyFrom(makeTableFuncDep(md, tabID))
+		relProps.FuncDeps.ProjectCols(relProps.OutputCols)
+		relProps.Stats = *sb.makeTableStatistics(tabID)
+	}
+}
+
 // tableNotNullCols returns the set of not-NULL columns from the given table.
 func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	cs := opt.ColSet{}
@@ -1241,13 +1283,54 @@ type joinPropsHelper struct {
 	filterIsFalse     bool
 }
 
-func (h *joinPropsHelper) init(b *logicalPropsBuilder, join RelExpr) {
-	h.join = join
-	h.leftProps = join.Child(0).(RelExpr).Relational()
+func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinexpr RelExpr) {
+	h.join = joinexpr
 
-	lookupJoin, ok := join.(*LookupJoinExpr)
-	if !ok {
+	switch join := joinexpr.(type) {
+	case *LookupJoinExpr:
+		h.leftProps = joinexpr.Child(0).(RelExpr).Relational()
+		ensureLookupJoinInputProps(join, &b.sb)
+		h.joinType = join.JoinType
+		h.rightProps = &join.lookupProps
+		h.filters = *join.Child(1).(*FiltersExpr)
+		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
+
+		// Apply the lookup join equalities.
+		md := join.Memo().Metadata()
+		index := md.Table(join.Table).Index(join.Index)
+		for i, colID := range join.KeyCols {
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
+			h.filterNotNullCols.Add(int(colID))
+			h.filterNotNullCols.Add(int(indexColID))
+			h.filtersFD.AddEquivalency(colID, indexColID)
+		}
+
+		// Lookup join has implicit equality conditions on KeyCols.
+		h.filterIsTrue = false
+		h.filterIsFalse = h.filters.IsFalse()
+	case *ZigzagJoinExpr:
+		ensureZigzagJoinInputProps(join, &b.sb)
+		h.joinType = join.JoinType
+		h.leftProps = &join.leftProps
+		h.rightProps = &join.rightProps
+		h.filters = *join.Child(0).(*FiltersExpr)
+		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
+
+		// Apply the zigzag join equalities
+		for i := range join.LeftEqCols {
+			leftColID := join.LeftEqCols[i]
+			rightColID := join.RightEqCols[i]
+
+			h.filterNotNullCols.Add(int(leftColID))
+			h.filterNotNullCols.Add(int(rightColID))
+			h.filtersFD.AddEquivalency(leftColID, rightColID)
+		}
+
+	default:
 		h.joinType = join.Op()
+		h.leftProps = joinexpr.Child(0).(RelExpr).Relational()
 		h.rightProps = join.Child(1).(RelExpr).Relational()
 
 		h.filters = *join.Child(2).(*FiltersExpr)
@@ -1255,29 +1338,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, join RelExpr) {
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 		h.filterIsTrue = h.filters.IsTrue()
 		h.filterIsFalse = h.filters.IsFalse()
-		return
 	}
-
-	ensureLookupJoinInputProps(lookupJoin, &b.sb)
-	h.joinType = lookupJoin.JoinType
-	h.rightProps = &lookupJoin.lookupProps
-	h.filters = *join.Child(1).(*FiltersExpr)
-	b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-	h.filterNotNullCols = b.rejectNullCols(h.filters)
-
-	// Apply the lookup join equalities.
-	md := join.Memo().Metadata()
-	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
-	for i, colID := range lookupJoin.KeyCols {
-		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal)
-		h.filterNotNullCols.Add(int(colID))
-		h.filterNotNullCols.Add(int(indexColID))
-		h.filtersFD.AddEquivalency(colID, indexColID)
-	}
-
-	// Lookup join has implicit equality conditions on KeyCols.
-	h.filterIsTrue = false
-	h.filterIsFalse = h.filters.IsFalse()
 }
 
 func (h *joinPropsHelper) outputCols() opt.ColSet {

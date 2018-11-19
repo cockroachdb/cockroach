@@ -289,6 +289,49 @@ define MergeJoinPrivate {
 	RightOrdering OrderingChoice
 }
 
+# ZigzagJoin represents a join that is executed using the zigzag joiner.
+# All fields except for the ON expression are stored in the private;
+# since the zigzag joiner operates directly on indexes and doesn't
+# support arbitrary inputs.
+#
+# TODO(itsbilal): Add support for representing multi-way zigzag joins.
+[Relational]
+define ZigzagJoin {
+	On   FiltersExpr
+
+	_ ZigzagJoinPrivate
+}
+
+[Private]
+define ZigzagJoinPrivate {
+	# JoinType is InnerJoin or LeftJoin.
+	JoinType Operator
+
+	# LeftTable and RightTable identifies the left and right tables for this
+	# join.
+	LeftTable TableID
+	RightTable TableID
+
+	# LeftIndex and RightIndex identifies the index to do lookups in (whether
+	# primary or secondary). It can be passed to the opt.Table.Index(i int)
+	# method in order to fetch the opt.Index metadata.
+	LeftIndex int
+	RightIndex int
+
+	# LeftEqCols and RightEqCols contains lists of columns on the left and
+	# right sides that are being equated. Both lists must be of equal length.
+	LeftEqCols ColList
+	RightEqCols ColList
+
+	# FixedVals, LeftFixedCols and RightFixedCols reference fixed values.
+	FixedVals ScalarListExpr
+	LeftFixedCols ColList
+	RightFixedCols ColList
+
+	leftProps RelProps
+	rightProps RelProps
+}
+
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.
