@@ -22,7 +22,7 @@ CREATE TABLE everything (
   d53   DECIMAL(5,3),
 
   iw    INT4 NOT NULL,
-  iz    INT4,
+  iz    INT8,
   ti    SMALLINT DEFAULT 5:::INT,
   si    SMALLINT,
   mi    INT4,
