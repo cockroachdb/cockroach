@@ -105,7 +105,6 @@ func TestEncodings(t *testing.T) {
 			}
 
 			t.Run("text", func(t *testing.T) {
-				t.Skip()
 				buf.reset()
 				buf.textFormatter.Buffer.Reset()
 				buf.writeTextDatum(ctx, d, conv)
