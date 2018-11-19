@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -229,4 +230,75 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 		newFilters = append(newFilters, on[i])
 	}
 	return newFilters
+}
+
+// ExtractFixedColumns returns columns in filter expression that have been
+// constrained to fixed values.
+func ExtractFixedColumns(
+	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext,
+) (fixedCols opt.ColSet) {
+	for i := range on {
+		if on[i].Op() != opt.FiltersItemOp {
+			continue
+		}
+		scalar := on[i]
+		scalarProps := scalar.ScalarProps(mem)
+		if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
+			fixedCols.UnionWith(getConstrainedCols(scalarProps.Constraints, evalCtx))
+		}
+	}
+	return fixedCols
+}
+
+// getConstrainedCols returns constrained prefixes in the set of constraints
+// passed in.
+func getConstrainedCols(
+	constraints *constraint.Set, evalCtx *tree.EvalContext,
+) (cols opt.ColSet) {
+	for i := 0; i < constraints.Length(); i++ {
+		constraint := constraints.Constraint(i)
+		cols.UnionWith(constraint.ExtractConstCols(evalCtx))
+	}
+	return cols
+}
+
+// ExtractValueFromFilter iterates through filter expr and builds a map of constant
+// cols to values.
+func ExtractValuesFromFilter(
+	on FiltersExpr, cols opt.ColSet,
+) map[int]tree.Datum {
+	vals := make(map[int]tree.Datum)
+	for i := range on {
+		if on[i].Op() != opt.FiltersItemOp {
+			continue
+		}
+
+		ok, col, val := extractFixedEquality(on[i].Condition)
+		if !ok || !cols.Contains(col) {
+			continue
+		}
+		vals[col] = val
+	}
+	return vals
+}
+
+// extractFixedEquality extracts a column that's being equated to a constant
+// value if possible.
+func extractFixedEquality(
+	condition opt.ScalarExpr,
+) (bool, int, tree.Datum) {
+	if eq, ok := condition.(*EqExpr); ok {
+		if leftVar, ok := eq.Left.(*VariableExpr); ok {
+			if CanExtractConstDatum(eq.Right) {
+				return true, int(leftVar.Col), ExtractConstDatum(eq.Right)
+			}
+		}
+		if rightVar, ok := eq.Right.(*VariableExpr); ok {
+			if CanExtractConstDatum(eq.Left) {
+				return true, int(rightVar.Col), ExtractConstDatum(eq.Left)
+			}
+		}
+	}
+
+	return false, 0, nil
 }

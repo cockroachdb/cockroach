@@ -54,6 +54,16 @@
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate $on)
 
+# GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
+# Scan table) which have one of the columns fixed in $on in the prefix.
+[GenerateZigzagJoins, Explore]
+(Select
+    (Scan $scan:*)
+    $filters:*
+)
+=>
+(GenerateZigzagJoins $scan $filters)
+
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for both inner and left join).

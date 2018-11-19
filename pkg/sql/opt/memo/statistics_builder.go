@@ -206,6 +206,7 @@ func (sb *statisticsBuilder) statsFromChild(e RelExpr, childIdx int) *props.Stat
 // Select, or Join. The input to the Scan is the "raw" table.
 func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
 	var lookupJoin *LookupJoinExpr
+	var zigzagJoin *ZigzagJoinExpr
 
 	switch t := e.(type) {
 	case *ScanExpr:
@@ -216,15 +217,26 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 
 	case *LookupJoinExpr:
 		lookupJoin = t
+
+	case *ZigzagJoinExpr:
+		zigzagJoin = t
 	}
 
-	if lookupJoin != nil || opt.IsJoinOp(e) {
-		leftProps := e.Child(0).(RelExpr).Relational()
+	if lookupJoin != nil || zigzagJoin != nil || opt.IsJoinOp(e) {
+		var leftProps *props.Relational
+		if zigzagJoin != nil {
+			ensureZigzagJoinInputProps(zigzagJoin, sb)
+			leftProps = &zigzagJoin.leftProps
+		} else {
+			leftProps = e.Child(0).(RelExpr).Relational()
+		}
 		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoin != nil {
 			ensureLookupJoinInputProps(lookupJoin, sb)
 			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
+		} else if zigzagJoin != nil {
+			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
 		} else {
 			intersectsRight = e.Child(1).(RelExpr).Relational().OutputCols.Intersects(colSet)
 		}
@@ -233,11 +245,17 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 				// TODO(radu): what if both sides have columns in colSet?
 				panic(fmt.Sprintf("colSet %v contains both left and right columns", colSet))
 			}
+			if zigzagJoin != nil {
+				return sb.colStatTable(zigzagJoin.LeftTable, colSet)
+			}
 			return sb.colStatFromChild(colSet, e, 0 /* childIdx */)
 		}
 		if intersectsRight {
 			if lookupJoin != nil {
 				return sb.colStatTable(lookupJoin.Table, colSet)
+			}
+			if zigzagJoin != nil {
+				return sb.colStatTable(zigzagJoin.RightTable, colSet)
 			}
 			return sb.colStatFromChild(colSet, e, 1 /* childIdx */)
 		}
@@ -285,7 +303,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
-		opt.LookupJoinOp:
+		opt.LookupJoinOp, opt.ZigzagJoinOp:
 		return sb.colStatJoin(colSet, e)
 
 	case opt.IndexJoinOp:
@@ -881,6 +899,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 
 	var rightProps *props.Relational
 	var lookupJoin *LookupJoinExpr
+	var zigzagJoin *ZigzagJoinExpr
 
 	joinType := join.Op()
 	if joinType == opt.LookupJoinOp {
@@ -888,6 +907,12 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		joinType = lookupJoin.JoinType
 		ensureLookupJoinInputProps(lookupJoin, sb)
 		rightProps = &lookupJoin.lookupProps
+	} else if joinType == opt.ZigzagJoinOp {
+		zigzagJoin = join.(*ZigzagJoinExpr)
+		joinType = zigzagJoin.JoinType
+		ensureZigzagJoinInputProps(zigzagJoin, sb)
+		leftProps = &zigzagJoin.leftProps
+		rightProps = &zigzagJoin.rightProps
 	} else {
 		rightProps = join.Child(1).(RelExpr).Relational()
 	}
@@ -1095,6 +1120,9 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 func (sb *statisticsBuilder) colStatFromJoinLeft(
 	cols opt.ColSet, join RelExpr,
 ) *props.ColumnStatistic {
+	if join.Op() == opt.ZigzagJoinOp {
+		return sb.colStatTable(join.Private().(*ZigzagJoinPrivate).LeftTable, cols)
+	}
 	return sb.colStatFromChild(cols, join, 0 /* childIdx */)
 }
 
@@ -1103,11 +1131,13 @@ func (sb *statisticsBuilder) colStatFromJoinLeft(
 func (sb *statisticsBuilder) colStatFromJoinRight(
 	cols opt.ColSet, join RelExpr,
 ) *props.ColumnStatistic {
-	if join.Op() != opt.LookupJoinOp {
-		return sb.colStatFromChild(cols, join, 1 /* childIdx */)
+	if join.Op() == opt.ZigzagJoinOp {
+		return sb.colStatTable(join.Private().(*ZigzagJoinPrivate).RightTable, cols)
+	} else if join.Op() == opt.LookupJoinOp {
+		lookupPrivate := join.Private().(*LookupJoinPrivate)
+		return sb.colStatTable(lookupPrivate.Table, cols)
 	}
-	lookupPrivate := join.Private().(*LookupJoinPrivate)
-	return sb.colStatTable(lookupPrivate.Table, cols)
+	return sb.colStatFromChild(cols, join, 1 /* childIdx */)
 }
 
 // +------------+
