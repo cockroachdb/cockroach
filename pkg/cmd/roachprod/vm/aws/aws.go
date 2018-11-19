@@ -18,6 +18,8 @@ package aws
 import (
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -188,36 +190,46 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return err
 	}
 
-	var placements []string
 	regions, err := p.allRegions()
 	if err != nil {
 		return err
 	}
+	if len(regions) < 1 {
+		return errors.Errorf("Please specify a valid region.")
+	}
 
-	for _, region := range regions {
+	// Only use one region if we're not creating a distributed cluster
+	if !opts.GeoDistributed {
+		regions = []string{regions[0]}
+	}
+
+	nodeCount := len(names)
+
+	var g errgroup.Group
+	// We're looping over regions to create all of the nodes in one region
+	// in the same iteration so they're contiguous.
+	node := 0
+	for i, region := range regions {
 		zones, err := p.allZones(region)
 		if err != nil {
 			return err
 		}
-		placements = append(placements, zones...)
+		nodesPerRegion := int(math.Ceil(float64(nodeCount-node) / float64(len(regions)-i)))
+		// We're choosing a random availability zone now which will be consistent
+		// per region.
+		availabilityZone := rand.Int31n(int32(len(zones)))
+		for j := 0; j < nodesPerRegion; j++ {
+			if node >= nodeCount {
+				break
+			}
+			capName := names[node]
+			placement := zones[availabilityZone]
 
-		// Only use one region if we're not creating a distributed cluster
-		if !opts.GeoDistributed {
-			break
+			g.Go(func() error {
+				return p.runInstance(capName, placement, opts)
+			})
+			node++
 		}
-	}
-
-	var g errgroup.Group
-
-	var pIdx int
-	for _, name := range names {
-		// capture loop variable
-		capName := name
-		placement := placements[pIdx]
-		g.Go(func() error {
-			return p.runInstance(capName, placement, opts)
-		})
-		pIdx = (pIdx + 1) % len(placements)
 	}
 
 	return g.Wait()
