@@ -280,7 +280,7 @@ func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interfac
 		t.Fatal(err)
 	}
 
-	s := &sinklessFeed{db: f.db}
+	s := &sinklessFeed{db: f.db, seen: make(map[string]struct{})}
 	now := timeutil.Now()
 	var err error
 	s.rows, err = s.db.Query(create, args...)
@@ -314,6 +314,7 @@ type sinklessFeed struct {
 	db      *gosql.DB
 	rows    *gosql.Rows
 	queryID string
+	seen    map[string]struct{}
 }
 
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
@@ -324,18 +325,30 @@ func (c *sinklessFeed) Next(
 	t.Helper()
 	partition = `sinkless`
 	var noKey, noValue, noResolved []byte
-	if !c.rows.Next() {
-		return ``, ``, nil, nil, nil, false
+	for {
+		if !c.rows.Next() {
+			return ``, ``, nil, nil, nil, false
+		}
+		var maybeTopic gosql.NullString
+		if err := c.rows.Scan(&maybeTopic, &key, &value); err != nil {
+			t.Fatal(err)
+		}
+		if maybeTopic.Valid {
+			// TODO(dan): This skips duplicates, since they're allowed by the
+			// semantics of our changefeeds. Now that we're switching to
+			// RangeFeed, this can actually happen (usually because of splits)
+			// and cause flakes. However, we really should be de-deuping key+ts,
+			// this is too coarse. Fixme.
+			seenKey := maybeTopic.String + partition + string(key) + string(value)
+			if _, ok := c.seen[seenKey]; ok {
+				continue
+			}
+			c.seen[seenKey] = struct{}{}
+			return maybeTopic.String, partition, key, value, noResolved, true
+		}
+		resolvedPayload := value
+		return ``, partition, noKey, noValue, resolvedPayload, true
 	}
-	var maybeTopic gosql.NullString
-	if err := c.rows.Scan(&maybeTopic, &key, &value); err != nil {
-		t.Fatal(err)
-	}
-	if maybeTopic.Valid {
-		return maybeTopic.String, partition, key, value, noResolved, true
-	}
-	resolvedPayload := value
-	return ``, partition, noKey, noValue, resolvedPayload, true
 }
 
 func (c *sinklessFeed) Err() error {
@@ -380,7 +393,10 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	}
 
 	sink.Scheme = sinkSchemeExperimentalSQL
-	c := &tableFeed{db: db, urlCleanup: cleanup, sinkURI: sink.String(), flushCh: f.flushCh}
+	c := &tableFeed{
+		db: db, urlCleanup: cleanup, sinkURI: sink.String(), flushCh: f.flushCh,
+		seen: make(map[string]struct{}),
+	}
 	if _, err := c.db.Exec(
 		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
 	); err != nil {
@@ -419,6 +435,8 @@ type tableFeed struct {
 
 	rows   *gosql.Rows
 	jobErr error
+
+	seen map[string]struct{}
 }
 
 func (c *tableFeed) Partitions() []string {
@@ -456,10 +474,22 @@ func (c *tableFeed) Next(
 			if err := c.rows.Scan(&topic, &partition, &msgID, &key, &value, &payload); err != nil {
 				t.Fatal(err)
 			}
+
 			// Scan turns NULL bytes columns into a 0-length, non-nil byte
 			// array, which is pretty unexpected. Nil them out before returning.
 			// Either key+value or payload will be set, but not both.
 			if len(key) > 0 {
+				// TODO(dan): This skips duplicates, since they're allowed by
+				// the semantics of our changefeeds. Now that we're switching to
+				// RangeFeed, this can actually happen (usually because of
+				// splits) and cause flakes. However, we really should be
+				// de-deuping key+ts, this is too coarse. Fixme.
+				seenKey := topic + partition + string(key) + string(value)
+				if _, ok := c.seen[seenKey]; ok {
+					continue
+				}
+				c.seen[seenKey] = struct{}{}
+
 				payload = nil
 			} else {
 				key, value = nil, nil
@@ -697,6 +727,18 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 		f := makeTable(s, db, flushCh)
 
 		testFn(t, db, f)
+	}
+}
+
+func rangefeedTest(
+	metaTestFn func(func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T),
+	testFn func(*testing.T, *gosql.DB, testfeedFactory),
+) func(*testing.T) {
+	return func(t *testing.T) {
+		metaTestFn(func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+			testFn(t, db, f)
+		})(t)
 	}
 }
 
