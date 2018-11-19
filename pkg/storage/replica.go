@@ -2746,6 +2746,7 @@ func (r *Replica) applyTimestampCache(
 						txn := ba.Txn.Clone()
 						bumped = txn.Timestamp.Forward(nextTS) || bumped
 						ba.Txn = &txn
+						ba.Timestamp = txn.Timestamp
 					}
 				}
 			} else {
@@ -2764,6 +2765,7 @@ func (r *Replica) applyTimestampCache(
 						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
 						txn.WriteTooOld = true
 						ba.Txn = &txn
+						ba.Timestamp = txn.Timestamp
 					}
 				}
 			} else {
