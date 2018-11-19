@@ -134,7 +134,16 @@ template <bool reverse> class mvccScanner {
     }
 
     if (kvs_->Count() == max_keys_ && advanceKey()) {
-      results_.resume_key = ToDBSlice(cur_key_);
+      if (reverse) {
+        // It is possible for cur_key_ to be pointing into mvccScanner.saved_buf_
+        // instead of iter_rep_'s underlying storage if iterating in reverse (see
+        // iterPeekPrev), so copy the key onto the DBIterator struct to ensure it
+        // has a lifetime that outlives the DBScanResults.
+        iter_->rev_resume_key.assign(cur_key_.data(), cur_key_.size());
+        results_.resume_key = ToDBSlice(iter_->rev_resume_key);
+      } else {
+        results_.resume_key = ToDBSlice(cur_key_);
+      }
     }
 
     return fillResults();
@@ -199,7 +208,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (cur_value_.size() == 0) {
-        return setStatus(FmtStatus("zero-length mvcc metadata"));
+      return setStatus(FmtStatus("zero-length mvcc metadata"));
     }
 
     if (!meta_.ParseFromArray(cur_value_.data(), cur_value_.size())) {
