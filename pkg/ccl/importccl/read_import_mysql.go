@@ -555,7 +555,7 @@ func mysqlColToCockroach(
 	case mysqltypes.Int16:
 		def.Type = coltypes.Int2
 	case mysqltypes.Uint16:
-		def.Type = coltypes.Int2
+		def.Type = coltypes.Int4
 	case mysqltypes.Int24:
 		def.Type = coltypes.Int4
 	case mysqltypes.Uint24:
@@ -563,7 +563,7 @@ func mysqlColToCockroach(
 	case mysqltypes.Int32:
 		def.Type = coltypes.Int4
 	case mysqltypes.Uint32:
-		def.Type = coltypes.Int4
+		def.Type = coltypes.Int8
 	case mysqltypes.Int64:
 		def.Type = coltypes.Int8
 	case mysqltypes.Uint64:
