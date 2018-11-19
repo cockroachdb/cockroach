@@ -1303,6 +1303,13 @@ func mvccPutInternal(
 		return err
 	}
 
+	writeTimestamp := timestamp
+	if txn != nil {
+		// A txn writes intents at its provisional commit timestamp. See the
+		// comment on the txn.Timestamp field definition for rationale.
+		writeTimestamp.Forward(txn.Timestamp)
+	}
+
 	// Determine what the logical operation is. Are we writing an intent
 	// or a value directly?
 	logicalOp := MVCCWriteValueOpType
@@ -1375,7 +1382,7 @@ func mvccPutInternal(
 			// overwrite the existing intent; otherwise we must manually
 			// delete the old intent, taking care with MVCC stats.
 			logicalOp = MVCCUpdateIntentOpType
-			if metaTimestamp.Less(timestamp) {
+			if metaTimestamp.Less(writeTimestamp) {
 				{
 					// If the older write intent has a version underneath it, we need to
 					// read its size because its GCBytesAge contribution may change as we
@@ -1396,13 +1403,13 @@ func mvccPutInternal(
 				if err := engine.Clear(versionKey); err != nil {
 					return err
 				}
-			} else if timestamp.Less(metaTimestamp) {
+			} else if writeTimestamp.Less(metaTimestamp) {
 				// This case occurs when we're writing a key twice within a
 				// txn, and our timestamp has been pushed forward because of
 				// a write-too-old error on this key. For this case, we want
 				// to continue writing at the higher timestamp or else the
 				// MVCCMetadata could end up pointing *under* the newer write.
-				timestamp = metaTimestamp
+				writeTimestamp = metaTimestamp
 			}
 			// Since an intent with a smaller sequence number exists for the
 			// same transaction, we must add the previous value and sequence
@@ -1431,8 +1438,8 @@ func mvccPutInternal(
 			// error indicating what the timestamp ended up being. This
 			// timestamp can then be used to increment the txn timestamp and
 			// be returned with the response.
-			actualTimestamp := metaTimestamp.Next()
-			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
+			writeTimestamp = metaTimestamp.Next()
+			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: writeTimestamp}
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
@@ -1445,11 +1452,10 @@ func mvccPutInternal(
 				// the write timestamp to the latest value's timestamp + 1. The
 				// new timestamp is returned to the caller in maybeTooOldErr.
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, actualTimestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, metaKey, value, ok, writeTimestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			}
-			timestamp = actualTimestamp
 		} else {
 			if value, err = maybeGetValue(
 				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
@@ -1472,7 +1478,7 @@ func mvccPutInternal(
 			txnMeta = &txn.TxnMeta
 		}
 		buf.newMeta.Txn = txnMeta
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(timestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(writeTimestamp)
 	}
 	newMeta := &buf.newMeta
 
@@ -1506,7 +1512,7 @@ func mvccPutInternal(
 	// RocksDB's skiplist memtable implementation includes a fast-path for
 	// sequential insertion patterns.
 	versionKey := metaKey
-	versionKey.Timestamp = timestamp
+	versionKey.Timestamp = writeTimestamp
 	if err := engine.Put(versionKey, value); err != nil {
 		return err
 	}
@@ -1520,16 +1526,11 @@ func mvccPutInternal(
 	// Log the logical MVCC operation.
 	logicalOpDetails := MVCCLogicalOpDetails{
 		Key:       key,
-		Timestamp: timestamp,
+		Timestamp: writeTimestamp,
 		Safe:      true,
 	}
 	if txn := buf.newMeta.Txn; txn != nil {
 		logicalOpDetails.Txn = *txn
-		// The intent may be at a lower timestamp than the transaction's
-		// current timestamp, meaning that it will never actually commit
-		// at the timestamp it's written at. In that case, we can forward
-		// the timestamp of the logical operation to the txn's timestamp.
-		logicalOpDetails.Timestamp.Forward(txn.Timestamp)
 	}
 	engine.LogLogicalOp(logicalOp, logicalOpDetails)
 

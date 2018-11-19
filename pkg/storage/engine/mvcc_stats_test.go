@@ -535,8 +535,8 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 	assertEq(t, engine, "after non-transactional delete", aggMS, &expMS)
 
-	// Write an tombstone intent at t=2s (anchored at ts=1s, just for fun).
-	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1}}
+	// Write an tombstone intent at t=2s.
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2}}
 	if err := MVCCDelete(ctx, engine, aggMS, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -673,8 +673,8 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 	assertEq(t, engine, "after non-transactional put", aggMS, &expMS)
 
-	// Write a tombstone intent at t=2s (anchored at ts=1s, just for fun).
-	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1}}
+	// Write a tombstone intent at t=2s.
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2}}
 	if err := MVCCDelete(ctx, engine, aggMS, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}

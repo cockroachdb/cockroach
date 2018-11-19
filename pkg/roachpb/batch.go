@@ -38,9 +38,22 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 			return errors.New("transactional request must not set batch timestamp")
 		}
 
-		// Always use the original timestamp for reads and writes, even
-		// though some intents may be written at higher timestamps in the
-		// event of a WriteTooOldError.
+		// The batch timestamp is the timestamp at which reads are performed. We set
+		// this to the txn's original timestamp, even if the txn's provisional
+		// commit timestamp has been forwarded, so that all reads within a txn
+		// observe the same snapshot of the database.
+		//
+		// In other words, we want to preserve the invariant that reading the same
+		// key multiple times in the same transaction will always return the same
+		// value. If we were to read at the latest provisional commit timestamp,
+		// txn.Timestamp, instead, reading the same key twice in the same txn might
+		// yield different results, e.g., if an intervening write caused the
+		// provisional commit timestamp to be advanced. Such a txn would fail to
+		// commit, as its reads would not successfully be refreshed, but only after
+		// confusing the client with spurious data.
+		//
+		// Note that writes will be performed at the provisional commit timestamp,
+		// txn.Timestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.OrigTimestamp
 		// If a refreshed timestamp is set for the transaction, forward
 		// the batch timestamp to it. The refreshed timestamp indicates a

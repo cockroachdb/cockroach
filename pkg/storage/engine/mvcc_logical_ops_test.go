@@ -41,7 +41,9 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 2}, value2, txn1); err != nil {
+	txn1ts := *txn1
+	txn1ts.Timestamp = hlc.Timestamp{Logical: 2}
+	if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 2}, value2, &txn1ts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,18 +52,18 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 2}, value2, txn1); err != nil {
+	if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 2}, value2, &txn1ts); err != nil {
 		t.Fatal(err)
 	}
 
 	// Update the intents and write another. Use a distinct batch.
 	olDist := ol.Distinct()
-	txn1Seq := *txn1
-	txn1Seq.Sequence++
-	if err := MVCCPut(ctx, olDist, nil, testKey1, hlc.Timestamp{Logical: 3}, value2, &txn1Seq); err != nil {
+	txn1ts.Sequence++
+	txn1ts.Timestamp = hlc.Timestamp{Logical: 3}
+	if err := MVCCPut(ctx, olDist, nil, testKey1, hlc.Timestamp{Logical: 3}, value2, &txn1ts); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, olDist, nil, localKey, hlc.Timestamp{Logical: 3}, value2, &txn1Seq); err != nil {
+	if err := MVCCPut(ctx, olDist, nil, localKey, hlc.Timestamp{Logical: 3}, value2, &txn1ts); err != nil {
 		t.Fatal(err)
 	}
 	// Set the txn timestamp to a larger value than the intent.
@@ -91,7 +93,9 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 
 	// Write another intent, push it, then abort it.
-	if err := MVCCPut(ctx, ol, nil, testKey3, hlc.Timestamp{Logical: 5}, value4, txn2); err != nil {
+	txn2ts := *txn2
+	txn2ts.Timestamp = hlc.Timestamp{Logical: 5}
+	if err := MVCCPut(ctx, ol, nil, testKey3, hlc.Timestamp{Logical: 5}, value4, &txn2ts); err != nil {
 		t.Fatal(err)
 	}
 	txn2Pushed := *txn2
