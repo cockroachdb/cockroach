@@ -324,6 +324,8 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/32433")
+
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
