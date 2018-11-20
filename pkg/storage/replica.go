@@ -450,6 +450,14 @@ type Replica struct {
 		// Progress of a RaftStatus, which has a RecentActive field. However, that field
 		// is always true unless CheckQuorum is active, which at the time of writing in
 		// CockroachDB is not the case.
+		//
+		// TODO(tschottdorf): keeping a map on each replica seems to be
+		// overdoing it. We should map the replicaID to a NodeID and then use
+		// node liveness (or any sensible measure of the peer being around).
+		// The danger in doing so is that a single stuck replica on an otherwise
+		// functioning node could fill up the quota pool. We are already taking
+		// this kind of risk though: a replica that gets stuck on an otherwise
+		// live node will not lose leaseholdership.
 		lastUpdateTimes lastUpdateTimesMap
 
 		// The last seen replica descriptors from incoming Raft messages. These are
@@ -1171,6 +1179,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
+			now := timeutil.Now()
+			for _, desc := range r.mu.state.Desc.Replicas {
+				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+			}
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
@@ -5249,6 +5261,16 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	if msg.Type == raftpb.MsgHeartbeat {
+		if r.mu.replicaID == 0 {
+			log.Fatalf(ctx, "preemptive snapshot attempted to send a heartbeat: %+v", msg)
+		}
+		// For followers, we update lastUpdateTimes when we step a message from
+		// them into the local Raft group. The leader won't hit that path, so we
+		// update it whenever it sends a heartbeat. In effect, this makes sure
+		// it always sees itself as alive.
+		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
+	}
 	r.mu.Unlock()
 
 	if fromErr != nil {

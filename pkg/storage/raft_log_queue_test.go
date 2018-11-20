@@ -217,6 +217,59 @@ func TestComputeTruncateDecision(t *testing.T) {
 	}
 }
 
+// TestComputeTruncateDecisionProgressStatusProbe verifies that when a follower
+// is marked as active and is being probed for its log index, we don't truncate
+// the log out from under it.
+func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	exp := map[bool]map[bool]string{ // (tooLarge, active)
+		false: {
+			true:  "truncate 0 entries to first index 10 (chosen via: probing follower)",
+			false: "truncate 90 entries to first index 100 (chosen via: followers)",
+		},
+		true: {
+			true:  "truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)",
+			false: "truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 2 Raft snapshots",
+		},
+	}
+
+	testutils.RunTrueAndFalse(t, "tooLarge", func(t *testing.T, tooLarge bool) {
+		testutils.RunTrueAndFalse(t, "active", func(t *testing.T, active bool) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			for j, v := range []uint64{500, 400, 300, 200, 100} {
+				pr := raft.Progress{
+					Match:        v,
+					RecentActive: true,
+					State:        raft.ProgressStateReplicate,
+				}
+				if v == 300 {
+					pr.RecentActive = active
+					pr.State = raft.ProgressStateProbe
+				}
+				status.Progress[uint64(j)] = pr
+			}
+
+			input := truncateDecisionInput{
+				RaftStatus: status,
+				MaxLogSize: 1024,
+				FirstIndex: 10,
+				LastIndex:  500,
+			}
+			if tooLarge {
+				input.LogSize += 2 * input.MaxLogSize
+			}
+
+			decision := computeTruncateDecision(input)
+			if s, exp := decision.String(), exp[tooLarge][active]; s != exp {
+				t.Errorf("expected %q, got %q", exp, s)
+			}
+		})
+	})
+}
+
 func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
@@ -236,6 +289,67 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	actualRaftLogSize := ms.SysBytes
 	if actualRaftLogSize != raftLogSize {
 		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
+	}
+}
+
+func TestUpdateRaftStatusActivity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCase struct {
+		prs        []raft.Progress
+		replicas   []roachpb.ReplicaDescriptor
+		lastUpdate lastUpdateTimesMap
+		now        time.Time
+
+		exp []raft.Progress
+	}
+
+	now := timeutil.Now()
+
+	tcs := []testCase{
+		// No data, no crash.
+		{},
+		// No knowledge = no update.
+		{prs: []raft.Progress{{RecentActive: true}}, exp: []raft.Progress{{RecentActive: true}}},
+		{prs: []raft.Progress{{RecentActive: false}}, exp: []raft.Progress{{RecentActive: false}}},
+		// See replica in descriptor but then don't find it in the map. Assumes the follower is not
+		// active.
+		{
+			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}},
+			prs:      []raft.Progress{{RecentActive: true}},
+			exp:      []raft.Progress{{RecentActive: false}},
+		},
+		// Three replicas in descriptor. The first one responded recently, the second didn't,
+		// the third did but it doesn't have a Progress.
+		{
+			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}},
+			prs:      []raft.Progress{{RecentActive: false}, {RecentActive: true}},
+			lastUpdate: map[roachpb.ReplicaID]time.Time{
+				1: now.Add(-1 * MaxQuotaReplicaLivenessDuration / 2),
+				2: now.Add(-1 - MaxQuotaReplicaLivenessDuration),
+				3: now,
+			},
+			now: now,
+
+			exp: []raft.Progress{{RecentActive: true}, {RecentActive: false}},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tcs {
+		t.Run("", func(t *testing.T) {
+			prs := make(map[uint64]raft.Progress)
+			for i, pr := range tc.prs {
+				prs[uint64(i+1)] = pr
+			}
+			expPRs := make(map[uint64]raft.Progress)
+			for i, pr := range tc.exp {
+				expPRs[uint64(i+1)] = pr
+			}
+			updateRaftProgressFromActivity(ctx, prs, tc.replicas, tc.lastUpdate, tc.now)
+			assert.Equal(t, expPRs, prs)
+		})
 	}
 }
 
