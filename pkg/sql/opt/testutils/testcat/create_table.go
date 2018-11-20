@@ -55,9 +55,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: stmt.Table, Catalog: tc}
 
-	// Assume that every table in the "system" catalog is a virtual table. This
-	// is a simplified assumption for testing purposes.
-	if stmt.Table.CatalogName == "system" {
+	// Assume that every table in the "system" or "information_schema" catalog
+	// is a virtual table. This is a simplified assumption for testing purposes.
+	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" {
 		tab.IsVirtual = true
 	}
 
