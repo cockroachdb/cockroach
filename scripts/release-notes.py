@@ -129,7 +129,7 @@ crdb_folk = set([
 
 # Section titles for release notes.
 relnotetitles = {
-    'cli change': "Command line changes",
+    'cli change': "Command-line changes",
     'sql change': "SQL language changes",
     'admin ui change': "Admin UI changes",
     'general change': "General changes",
@@ -722,7 +722,7 @@ previous_version = subprocess.check_output(["git", "describe", "--tags", options
 if not hideheader:
     print("---")
     print("title: What&#39;s New in", current_version)
-    print("toc: false")
+    print("toc: true")
     print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
     print("---")
     print()
@@ -761,7 +761,7 @@ if not hidedownloads:
 
 {% include copy-clipboard.html %}
 ~~~shell
-docker pull cockroachdb/cockroach:""" + current_version + """
+$ docker pull cockroachdb/cockroach:""" + current_version + """
 ~~~
 """)
     print()
