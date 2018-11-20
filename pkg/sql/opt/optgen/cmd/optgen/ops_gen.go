@@ -49,7 +49,7 @@ func (g *opsGen) genOperatorEnum() {
 
 	for _, define := range g.sorted {
 		fmt.Fprintf(g.w, "\n")
-		generateDefineComments(g.w, define, string(define.Name))
+		generateComments(g.w, define.Comments, string(define.Name), string(define.Name))
 		fmt.Fprintf(g.w, "  %sOp\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "\nNumOperators\n")
