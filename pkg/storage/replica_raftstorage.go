@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -105,7 +106,7 @@ func entries(
 	rsl stateloader.StateLoader,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
-	eCache *raftEntryCache,
+	eCache *raftentry.Cache,
 	sideloaded sideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
@@ -119,7 +120,7 @@ func entries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, size, hitIndex, exceededMaxBytes := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+	ents, size, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
@@ -178,7 +179,7 @@ func entries(
 	}
 	// Cache the fetched entries, if we may.
 	if canCache {
-		eCache.addEntries(rangeID, ents)
+		eCache.Add(rangeID, ents)
 	}
 
 	// Did the correct number of results come back? If so, we're all good.
@@ -256,8 +257,8 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 		return r.mu.lastTerm, nil
 	}
 	// Try to retrieve the term for the desired entry from the entry cache.
-	if term, ok := r.store.raftEntryCache.getTerm(r.RangeID, i); ok {
-		return term, nil
+	if e, ok := r.store.raftEntryCache.Get(r.RangeID, i); ok {
+		return e.Term, nil
 	}
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
@@ -275,7 +276,7 @@ func term(
 	rsl stateloader.StateLoader,
 	eng engine.Reader,
 	rangeID roachpb.RangeID,
-	eCache *raftEntryCache,
+	eCache *raftentry.Cache,
 	i uint64,
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
@@ -463,7 +464,7 @@ type OutgoingSnapshot struct {
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.
 	WithSideloaded func(func(sideloadStorage) error) error
-	RaftEntryCache *raftEntryCache
+	RaftEntryCache *raftentry.Cache
 	snapType       string
 	onClose        func()
 }
@@ -502,7 +503,7 @@ func snapshot(
 	snapType string,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
-	eCache *raftEntryCache,
+	eCache *raftentry.Cache,
 	withSideloaded func(func(sideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
