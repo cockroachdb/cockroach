@@ -655,6 +655,18 @@ define FunctionPrivate {
 	Overload   FuncOverload
 }
 
+# Collate is an expression of the form
+#
+#     x COLLATE y
+#
+# Where x is a "string type" (meaning either a normal string or a collated string),
+# and y is a locale. It evaluates to the string collated to the given locale.
+[Scalar]
+define Collate {
+    Input  ScalarExpr
+    Locale string
+}
+
 [Scalar]
 define Coalesce {
     Args ScalarListExpr

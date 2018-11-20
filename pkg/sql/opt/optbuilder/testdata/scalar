@@ -705,7 +705,8 @@ concat [type=jsonb]
 build-scalar allow-unsupported
 'hello' COLLATE en
 ----
-unsupported-expr: 'hello' COLLATE en [type=collatedstring{en}]
+collate [type=collatedstring{en}]
+ └── const: 'hello' [type=string]
 
 build-scalar
 random()
@@ -1055,3 +1056,9 @@ tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, 
       ├── false [type=bool]
       ├── true [type=bool]
       └── false [type=bool]
+
+build-scalar vars=(string)
+@1 COLLATE en
+----
+collate [type=collatedstring{en}]
+ └── variable: @1 [type=string]

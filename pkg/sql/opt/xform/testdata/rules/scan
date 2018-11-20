@@ -512,3 +512,43 @@ memo (optimized, ~5KB, required=[presentation: i:2,k:1])
  ├── G6: (ge G7 G8)
  ├── G7: (variable s)
  └── G8: (const 'foo')
+
+# Collated strings are treated properly.
+exec-ddl
+CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)
+----
+TABLE x
+ ├── s collatedstring{en_u_ks_level1} not null
+ └── INDEX primary
+      └── s collatedstring{en_u_ks_level1} not null
+
+opt
+SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
+ └── key: (1)
+
+opt
+SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Can't generate spans for other collations.
+opt
+SELECT s FROM x WHERE s COLLATE en = 'hello' COLLATE en
+----
+select
+ ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── key: (1)
+ ├── scan x
+ │    ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ │    └── key: (1)
+ └── filters
+      └── s COLLATE en = 'hello' COLLATE en [type=bool, outer=(1)]
