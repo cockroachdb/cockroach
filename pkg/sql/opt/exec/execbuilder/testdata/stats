@@ -20,10 +20,18 @@ CREATE STATISTICS v ON v FROM b
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-scan  ·       ·          (u, v)  ·
-·     table   b@b_v_idx  ·       ·
-·     spans   /1-/2      ·       ·
-·     filter  u = 1      ·       ·
+render            ·          ·                      (u, v)                                      ·
+ │                render 0   u                      ·                                           ·
+ │                render 1   v                      ·                                           ·
+ └── zigzag-join  ·          ·                      (u, rowid[hidden], v, v, rowid[hidden], u)  ·
+      │           type       inner                  ·                                           ·
+      ├── scan    ·          ·                      (u, rowid[hidden], v)                       ·
+      │           table      b@b_u_idx              ·                                           ·
+      │           fixedvals  1 column               ·                                           ·
+      └── scan    ·          ·                      (v, rowid[hidden], u)                       ·
+·                 table      b@b_v_idx              ·                                           ·
+·                 fixedvals  1 column               ·                                           ·
+·                 pred       (@6 = 1) AND (@4 = 1)  ·                                           ·
 
 # Verify that injecting different statistics changes the plan.
 statement ok
@@ -45,10 +53,18 @@ ALTER TABLE b INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-scan  ·       ·          (u, v)  ·
-·     table   b@b_u_idx  ·       ·
-·     spans   /1-/2      ·       ·
-·     filter  v = 1      ·       ·
+render            ·          ·                      (u, v)                                      ·
+ │                render 0   u                      ·                                           ·
+ │                render 1   v                      ·                                           ·
+ └── zigzag-join  ·          ·                      (u, rowid[hidden], v, v, rowid[hidden], u)  ·
+      │           type       inner                  ·                                           ·
+      ├── scan    ·          ·                      (u, rowid[hidden], v)                       ·
+      │           table      b@b_u_idx              ·                                           ·
+      │           fixedvals  1 column               ·                                           ·
+      └── scan    ·          ·                      (v, rowid[hidden], u)                       ·
+·                 table      b@b_v_idx              ·                                           ·
+·                 fixedvals  1 column               ·                                           ·
+·                 pred       (@6 = 1) AND (@4 = 1)  ·                                           ·
 
 # Verify that injecting different statistics with null counts
 # changes the plan.
@@ -73,10 +89,18 @@ ALTER TABLE b INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-scan  ·       ·          (u, v)  ·
-·     table   b@b_u_idx  ·       ·
-·     spans   /1-/2      ·       ·
-·     filter  v = 1      ·       ·
+render            ·          ·                      (u, v)                                      ·
+ │                render 0   u                      ·                                           ·
+ │                render 1   v                      ·                                           ·
+ └── zigzag-join  ·          ·                      (u, rowid[hidden], v, v, rowid[hidden], u)  ·
+      │           type       inner                  ·                                           ·
+      ├── scan    ·          ·                      (u, rowid[hidden], v)                       ·
+      │           table      b@b_u_idx              ·                                           ·
+      │           fixedvals  1 column               ·                                           ·
+      └── scan    ·          ·                      (v, rowid[hidden], u)                       ·
+·                 table      b@b_v_idx              ·                                           ·
+·                 fixedvals  1 column               ·                                           ·
+·                 pred       (@6 = 1) AND (@4 = 1)  ·                                           ·
 
 statement ok
 ALTER TABLE b INJECT STATISTICS '[
@@ -99,7 +123,15 @@ ALTER TABLE b INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-scan  ·       ·          (u, v)  ·
-·     table   b@b_v_idx  ·       ·
-·     spans   /1-/2      ·       ·
-·     filter  u = 1      ·       ·
+render            ·          ·                      (u, v)                                      ·
+ │                render 0   u                      ·                                           ·
+ │                render 1   v                      ·                                           ·
+ └── zigzag-join  ·          ·                      (u, rowid[hidden], v, v, rowid[hidden], u)  ·
+      │           type       inner                  ·                                           ·
+      ├── scan    ·          ·                      (u, rowid[hidden], v)                       ·
+      │           table      b@b_u_idx              ·                                           ·
+      │           fixedvals  1 column               ·                                           ·
+      └── scan    ·          ·                      (v, rowid[hidden], u)                       ·
+·                 table      b@b_v_idx              ·                                           ·
+·                 fixedvals  1 column               ·                                           ·
+·                 pred       (@6 = 1) AND (@4 = 1)  ·                                           ·
