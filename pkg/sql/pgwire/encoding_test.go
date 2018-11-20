@@ -34,20 +34,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-// TestEncodings uses testdata/encodings.json to test expected pgwire encodings
-// and ensure they are identical to what Postgres produces. Regenerate that
-// file by:
-//   Starting a postgres server on :5432 then running:
-//   cd pkg/cmd/generate-binary; go run main.go > ../../sql/pgwire/testdata/encodings.json
-func TestEncodings(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+type encodingTest struct {
+	SQL          string
+	Datum        tree.Datum
+	Text         string
+	TextAsBinary []byte
+	Binary       []byte
+}
 
-	var tests []struct {
-		SQL          string
-		Text         string
-		TextAsBinary []byte
-		Binary       []byte
-	}
+func readEncodingTests(t testing.TB) []*encodingTest {
+	var tests []*encodingTest
 	f, err := os.Open(filepath.Join("testdata", "encodings.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +52,51 @@ func TestEncodings(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
+
+	sema := tree.MakeSemaContext(false)
+	evalCtx := tree.MakeTestingEvalContext(nil)
+
+	for _, tc := range tests {
+		// Convert the SQL expression to a Datum.
+		stmt, err := parser.ParseOne(fmt.Sprintf("SELECT %s", tc.SQL))
+		if err != nil {
+			t.Fatal(err)
+		}
+		selectStmt, ok := stmt.(*tree.Select)
+		if !ok {
+			t.Fatal("not select")
+		}
+		selectClause, ok := selectStmt.Select.(*tree.SelectClause)
+		if !ok {
+			t.Fatal("not select clause")
+		}
+		if len(selectClause.Exprs) != 1 {
+			t.Fatal("expected 1 expr")
+		}
+		expr := selectClause.Exprs[0].Expr
+		te, err := expr.TypeCheck(&sema, types.Any)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := te.Eval(&evalCtx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tc.Datum = d
+	}
+
+	return tests
+}
+
+// TestEncodings uses testdata/encodings.json to test expected pgwire encodings
+// and ensure they are identical to what Postgres produces. Regenerate that
+// file by:
+//   Starting a postgres server on :5432 then running:
+//   cd pkg/cmd/generate-binary; go run main.go > ../../sql/pgwire/testdata/encodings.json
+func TestEncodings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := readEncodingTests(t)
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 
 	verifyLen := func(t *testing.T) []byte {
@@ -73,37 +114,11 @@ func TestEncodings(t *testing.T) {
 		return data
 	}
 
-	sema := tree.MakeSemaContext(false)
-	evalCtx := tree.MakeTestingEvalContext(nil)
 	var conv sessiondata.DataConversionConfig
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.SQL, func(t *testing.T) {
-			// Convert the SQL expression to a Datum.
-			stmt, err := parser.ParseOne(fmt.Sprintf("SELECT %s", tc.SQL))
-			if err != nil {
-				t.Fatal(err)
-			}
-			selectStmt, ok := stmt.(*tree.Select)
-			if !ok {
-				t.Fatal("not select")
-			}
-			selectClause, ok := selectStmt.Select.(*tree.SelectClause)
-			if !ok {
-				t.Fatal("not select clause")
-			}
-			if len(selectClause.Exprs) != 1 {
-				t.Fatal("expected 1 expr")
-			}
-			expr := selectClause.Exprs[0].Expr
-			te, err := expr.TypeCheck(&sema, types.Any)
-			if err != nil {
-				t.Fatal(err)
-			}
-			d, err := te.Eval(&evalCtx)
-			if err != nil {
-				t.Fatal(err)
-			}
+			d := tc.Datum
 
 			t.Run("text", func(t *testing.T) {
 				buf.reset()
@@ -126,6 +141,39 @@ func TestEncodings(t *testing.T) {
 				got := verifyLen(t)
 				if !bytes.Equal(got, tc.Binary) {
 					t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkEncodings(b *testing.B) {
+	tests := readEncodingTests(b)
+	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
+	var conv sessiondata.DataConversionConfig
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		b.Run(tc.SQL, func(b *testing.B) {
+			d := tc.Datum
+
+			b.Run("text", func(b *testing.B) {
+				b.StopTimer()
+				for i := 0; i < b.N; i++ {
+					buf.reset()
+					buf.textFormatter.Buffer.Reset()
+					b.StartTimer()
+					buf.writeTextDatum(ctx, d, conv)
+					b.StopTimer()
+				}
+			})
+			b.Run("binary", func(b *testing.B) {
+				b.StopTimer()
+				for i := 0; i < b.N; i++ {
+					buf.reset()
+					b.StartTimer()
+					buf.writeBinaryDatum(ctx, d, time.UTC)
+					b.StopTimer()
 				}
 			})
 		})
