@@ -809,6 +809,95 @@ index-join lineitem
       └── filters
            └── l_shipdate::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11)]
 
+# These queries should generate zigzag joins in xform rules. The column statistics
+# should be comparable between the norm'd and fully optimized expressions.
+opt colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+inner-join (zigzag lineitem@l_sd lineitem@l_cd)
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null)
+ ├── eq columns: [1 4] = [1 4]
+ ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12)
+ └── filters
+      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+norm colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+select
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null)
+ ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(11,12)=1000, null(11,12)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(11,12)
+ └── filters
+      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+# These queries should also generate zigzag joins in xform rules, like the
+# ones above. These zigzag joins should be nested inside a lookup join on
+# the primary index. Since the zigzag join lies in a new memo group, we will
+# see the zigzag-join-specific stats/logprops build and colStat functions in
+# action. Again, the colstats of the inner zigzag expression should be
+# reasonably close to those of the full normalized select expression.
+opt colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber, l_quantity
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+inner-join (lookup lineitem)
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
+ ├── key columns: [1 4] = [1 4]
+ ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(5)=0.099955012, null(5)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.00951671064, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12), (1,4)-->(5)
+ ├── inner-join (zigzag lineitem@l_sd lineitem@l_cd)
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── eq columns: [1 4] = [1 4]
+ │    ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
+ │    ├── fd: ()-->(11,12)
+ │    └── filters
+ │         ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+ │         └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+ └── filters (true)
+
+norm colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber, l_quantity
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+select
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
+ ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(5)=0.099955012, null(5)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12), (1,4)-->(5)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(11,12)=1000, null(11,12)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(5,11,12)
+ └── filters
+      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
 
 # Bump up null counts.
 exec-ddl
