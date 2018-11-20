@@ -743,6 +743,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
+	empty.MaxWriteTimestamp = hlc.Timestamp{manual.UnixNano(), 1}
 	if err := verifyRangeStats(store.Engine(), repl.RangeID, empty); err != nil {
 		t.Fatal(err)
 	}
@@ -757,6 +758,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ms.MaxWriteTimestamp.Reset()
 	if err := verifyRecomputedStats(snap, repl.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
@@ -943,6 +945,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
+	empty.MaxWriteTimestamp = hlc.Timestamp{manual.UnixNano(), 1}
 	if err := verifyRangeStats(store.Engine(), repl.RangeID, empty); err != nil {
 		t.Fatal(err)
 	}
@@ -965,6 +968,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	msLeft.MaxWriteTimestamp.Reset()
 	replRight := store.LookupReplica(midKey)
 	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {

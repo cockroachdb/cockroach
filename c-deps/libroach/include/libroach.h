@@ -283,6 +283,7 @@ typedef struct {
   int64_t sys_bytes;
   int64_t sys_count;
   int64_t last_update_nanos;
+  DBTimestamp max_write_timestamp;
 } MVCCStatsResult;
 
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);

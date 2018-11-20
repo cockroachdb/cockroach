@@ -203,6 +203,13 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
       stats.val_bytes += value.size();
       stats.val_count++;
     }
+    // Compute max_write_timestamp here.
+    if (meta.has_txn()) {
+      DBTimestamp metaTimestamp = DBTimestamp{wall_time, logical};
+      if (metaTimestamp > stats.max_write_timestamp) {
+        stats.max_write_timestamp = metaTimestamp;
+      }
+    }
   }
 
   stats.last_update_nanos = now_nanos;

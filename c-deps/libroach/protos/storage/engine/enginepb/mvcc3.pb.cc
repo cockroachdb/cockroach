@@ -18,8 +18,8 @@
 
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCAbortIntentOp;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCPersistentStats;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCCommitIntentOp;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCPersistentStats;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCUpdateIntentOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCWriteIntentOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCWriteValueOp;
@@ -112,8 +112,9 @@ static void InitDefaultsMVCCStatsDelta() {
   ::cockroach::storage::engine::enginepb::MVCCStatsDelta::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStatsDelta =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsMVCCStatsDelta}, {}};
+::google::protobuf::internal::SCCInfo<1> scc_info_MVCCStatsDelta =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsMVCCStatsDelta}, {
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsMVCCPersistentStats() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -126,8 +127,9 @@ static void InitDefaultsMVCCPersistentStats() {
   ::cockroach::storage::engine::enginepb::MVCCPersistentStats::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<0> scc_info_MVCCPersistentStats =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsMVCCPersistentStats}, {}};
+::google::protobuf::internal::SCCInfo<1> scc_info_MVCCPersistentStats =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsMVCCPersistentStats}, {
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsRangeAppliedState() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -701,6 +703,14 @@ void TxnMeta::InternalSwap(TxnMeta* other) {
 // ===================================================================
 
 void MVCCStatsDelta::InitAsDefaultInstance() {
+  ::cockroach::storage::engine::enginepb::_MVCCStatsDelta_default_instance_._instance.get_mutable()->max_write_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void MVCCStatsDelta::clear_max_write_timestamp() {
+  if (GetArenaNoVirtual() == NULL && max_write_timestamp_ != NULL) {
+    delete max_write_timestamp_;
+  }
+  max_write_timestamp_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCStatsDelta::kContainsEstimatesFieldNumber;
@@ -717,6 +727,7 @@ const int MVCCStatsDelta::kIntentBytesFieldNumber;
 const int MVCCStatsDelta::kIntentCountFieldNumber;
 const int MVCCStatsDelta::kSysBytesFieldNumber;
 const int MVCCStatsDelta::kSysCountFieldNumber;
+const int MVCCStatsDelta::kMaxWriteTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCStatsDelta::MVCCStatsDelta()
@@ -730,6 +741,11 @@ MVCCStatsDelta::MVCCStatsDelta(const MVCCStatsDelta& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_max_write_timestamp()) {
+    max_write_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.max_write_timestamp_);
+  } else {
+    max_write_timestamp_ = NULL;
+  }
   ::memcpy(&last_update_nanos_, &from.last_update_nanos_,
     static_cast<size_t>(reinterpret_cast<char*>(&contains_estimates_) -
     reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
@@ -737,9 +753,9 @@ MVCCStatsDelta::MVCCStatsDelta(const MVCCStatsDelta& from)
 }
 
 void MVCCStatsDelta::SharedCtor() {
-  ::memset(&last_update_nanos_, 0, static_cast<size_t>(
+  ::memset(&max_write_timestamp_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&contains_estimates_) -
-      reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
+      reinterpret_cast<char*>(&max_write_timestamp_)) + sizeof(contains_estimates_));
 }
 
 MVCCStatsDelta::~MVCCStatsDelta() {
@@ -748,6 +764,7 @@ MVCCStatsDelta::~MVCCStatsDelta() {
 }
 
 void MVCCStatsDelta::SharedDtor() {
+  if (this != internal_default_instance()) delete max_write_timestamp_;
 }
 
 void MVCCStatsDelta::SetCachedSize(int size) const {
@@ -765,6 +782,10 @@ void MVCCStatsDelta::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  if (GetArenaNoVirtual() == NULL && max_write_timestamp_ != NULL) {
+    delete max_write_timestamp_;
+  }
+  max_write_timestamp_ = NULL;
   ::memset(&last_update_nanos_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&contains_estimates_) -
       reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
@@ -982,6 +1003,17 @@ bool MVCCStatsDelta::MergePartialFromCodedStream(
         break;
       }
 
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(122u /* 122 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_max_write_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1077,6 +1109,11 @@ void MVCCStatsDelta::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->contains_estimates(), output);
   }
 
+  if (this->has_max_write_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      15, this->_internal_max_write_timestamp(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCStatsDelta)
@@ -1087,6 +1124,12 @@ size_t MVCCStatsDelta::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_max_write_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *max_write_timestamp_);
+  }
 
   // sfixed64 last_update_nanos = 1;
   if (this->last_update_nanos() != 0) {
@@ -1194,6 +1237,9 @@ void MVCCStatsDelta::MergeFrom(const MVCCStatsDelta& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (from.has_max_write_timestamp()) {
+    mutable_max_write_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_write_timestamp());
+  }
   if (from.last_update_nanos() != 0) {
     set_last_update_nanos(from.last_update_nanos());
   }
@@ -1255,6 +1301,7 @@ void MVCCStatsDelta::Swap(MVCCStatsDelta* other) {
 }
 void MVCCStatsDelta::InternalSwap(MVCCStatsDelta* other) {
   using std::swap;
+  swap(max_write_timestamp_, other->max_write_timestamp_);
   swap(last_update_nanos_, other->last_update_nanos_);
   swap(intent_age_, other->intent_age_);
   swap(gc_bytes_age_, other->gc_bytes_age_);
@@ -1280,6 +1327,14 @@ void MVCCStatsDelta::InternalSwap(MVCCStatsDelta* other) {
 // ===================================================================
 
 void MVCCPersistentStats::InitAsDefaultInstance() {
+  ::cockroach::storage::engine::enginepb::_MVCCPersistentStats_default_instance_._instance.get_mutable()->max_write_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void MVCCPersistentStats::clear_max_write_timestamp() {
+  if (GetArenaNoVirtual() == NULL && max_write_timestamp_ != NULL) {
+    delete max_write_timestamp_;
+  }
+  max_write_timestamp_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCPersistentStats::kContainsEstimatesFieldNumber;
@@ -1296,6 +1351,7 @@ const int MVCCPersistentStats::kIntentBytesFieldNumber;
 const int MVCCPersistentStats::kIntentCountFieldNumber;
 const int MVCCPersistentStats::kSysBytesFieldNumber;
 const int MVCCPersistentStats::kSysCountFieldNumber;
+const int MVCCPersistentStats::kMaxWriteTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCPersistentStats::MVCCPersistentStats()
@@ -1309,6 +1365,11 @@ MVCCPersistentStats::MVCCPersistentStats(const MVCCPersistentStats& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_max_write_timestamp()) {
+    max_write_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.max_write_timestamp_);
+  } else {
+    max_write_timestamp_ = NULL;
+  }
   ::memcpy(&last_update_nanos_, &from.last_update_nanos_,
     static_cast<size_t>(reinterpret_cast<char*>(&contains_estimates_) -
     reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
@@ -1316,9 +1377,9 @@ MVCCPersistentStats::MVCCPersistentStats(const MVCCPersistentStats& from)
 }
 
 void MVCCPersistentStats::SharedCtor() {
-  ::memset(&last_update_nanos_, 0, static_cast<size_t>(
+  ::memset(&max_write_timestamp_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&contains_estimates_) -
-      reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
+      reinterpret_cast<char*>(&max_write_timestamp_)) + sizeof(contains_estimates_));
 }
 
 MVCCPersistentStats::~MVCCPersistentStats() {
@@ -1327,6 +1388,7 @@ MVCCPersistentStats::~MVCCPersistentStats() {
 }
 
 void MVCCPersistentStats::SharedDtor() {
+  if (this != internal_default_instance()) delete max_write_timestamp_;
 }
 
 void MVCCPersistentStats::SetCachedSize(int size) const {
@@ -1344,6 +1406,10 @@ void MVCCPersistentStats::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  if (GetArenaNoVirtual() == NULL && max_write_timestamp_ != NULL) {
+    delete max_write_timestamp_;
+  }
+  max_write_timestamp_ = NULL;
   ::memset(&last_update_nanos_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&contains_estimates_) -
       reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
@@ -1561,6 +1627,17 @@ bool MVCCPersistentStats::MergePartialFromCodedStream(
         break;
       }
 
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(122u /* 122 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_max_write_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1656,6 +1733,11 @@ void MVCCPersistentStats::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->contains_estimates(), output);
   }
 
+  if (this->has_max_write_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      15, this->_internal_max_write_timestamp(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCPersistentStats)
@@ -1666,6 +1748,12 @@ size_t MVCCPersistentStats::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_max_write_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *max_write_timestamp_);
+  }
 
   // sfixed64 last_update_nanos = 1;
   if (this->last_update_nanos() != 0) {
@@ -1773,6 +1861,9 @@ void MVCCPersistentStats::MergeFrom(const MVCCPersistentStats& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (from.has_max_write_timestamp()) {
+    mutable_max_write_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_write_timestamp());
+  }
   if (from.last_update_nanos() != 0) {
     set_last_update_nanos(from.last_update_nanos());
   }
@@ -1834,6 +1925,7 @@ void MVCCPersistentStats::Swap(MVCCPersistentStats* other) {
 }
 void MVCCPersistentStats::InternalSwap(MVCCPersistentStats* other) {
   using std::swap;
+  swap(max_write_timestamp_, other->max_write_timestamp_);
   swap(last_update_nanos_, other->last_update_nanos_);
   swap(intent_age_, other->intent_age_);
   swap(gc_bytes_age_, other->gc_bytes_age_);

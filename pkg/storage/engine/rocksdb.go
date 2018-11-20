@@ -31,7 +31,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 
@@ -2390,6 +2390,10 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 	ms.SysBytes = int64(stats.sys_bytes)
 	ms.SysCount = int64(stats.sys_count)
 	ms.LastUpdateNanos = nowNanos
+	ms.MaxWriteTimestamp = hlc.Timestamp{
+		int64(stats.max_write_timestamp.wall_time),
+		int32(stats.max_write_timestamp.logical),
+	}
 	return ms, nil
 }
 

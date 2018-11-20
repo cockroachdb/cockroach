@@ -22,6 +22,9 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2ep
 namespace protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_LegacyTimestamp;
 }  // namespace protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto
+namespace protobuf_util_2fhlc_2ftimestamp_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2fhlc_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
+}  // namespace protobuf_util_2fhlc_2ftimestamp_2eproto
 namespace cockroach {
 namespace storage {
 namespace engine {
@@ -68,8 +71,9 @@ static void InitDefaultsMVCCStats() {
   ::cockroach::storage::engine::enginepb::MVCCStats::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStats =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsMVCCStats}, {}};
+::google::protobuf::internal::SCCInfo<1> scc_info_MVCCStats =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsMVCCStats}, {
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_MVCCMetadata.base);
@@ -514,6 +518,12 @@ void MVCCMetadata::InternalSwap(MVCCMetadata* other) {
 // ===================================================================
 
 void MVCCStats::InitAsDefaultInstance() {
+  ::cockroach::storage::engine::enginepb::_MVCCStats_default_instance_._instance.get_mutable()->max_write_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void MVCCStats::clear_max_write_timestamp() {
+  if (max_write_timestamp_ != NULL) max_write_timestamp_->Clear();
+  clear_has_max_write_timestamp();
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCStats::kContainsEstimatesFieldNumber;
@@ -530,6 +540,7 @@ const int MVCCStats::kIntentBytesFieldNumber;
 const int MVCCStats::kIntentCountFieldNumber;
 const int MVCCStats::kSysBytesFieldNumber;
 const int MVCCStats::kSysCountFieldNumber;
+const int MVCCStats::kMaxWriteTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCStats::MVCCStats()
@@ -544,6 +555,11 @@ MVCCStats::MVCCStats(const MVCCStats& from)
       _internal_metadata_(NULL),
       _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_max_write_timestamp()) {
+    max_write_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.max_write_timestamp_);
+  } else {
+    max_write_timestamp_ = NULL;
+  }
   ::memcpy(&last_update_nanos_, &from.last_update_nanos_,
     static_cast<size_t>(reinterpret_cast<char*>(&contains_estimates_) -
     reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
@@ -551,9 +567,9 @@ MVCCStats::MVCCStats(const MVCCStats& from)
 }
 
 void MVCCStats::SharedCtor() {
-  ::memset(&last_update_nanos_, 0, static_cast<size_t>(
+  ::memset(&max_write_timestamp_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&contains_estimates_) -
-      reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
+      reinterpret_cast<char*>(&max_write_timestamp_)) + sizeof(contains_estimates_));
 }
 
 MVCCStats::~MVCCStats() {
@@ -562,6 +578,7 @@ MVCCStats::~MVCCStats() {
 }
 
 void MVCCStats::SharedDtor() {
+  if (this != internal_default_instance()) delete max_write_timestamp_;
 }
 
 void MVCCStats::SetCachedSize(int size) const {
@@ -580,15 +597,19 @@ void MVCCStats::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 255u) {
-    ::memset(&last_update_nanos_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&val_bytes_) -
-        reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(val_bytes_));
+  if (cached_has_bits & 0x00000001u) {
+    GOOGLE_DCHECK(max_write_timestamp_ != NULL);
+    max_write_timestamp_->Clear();
   }
-  if (cached_has_bits & 16128u) {
-    ::memset(&val_count_, 0, static_cast<size_t>(
+  if (cached_has_bits & 254u) {
+    ::memset(&last_update_nanos_, 0, static_cast<size_t>(
+        reinterpret_cast<char*>(&key_count_) -
+        reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(key_count_));
+  }
+  if (cached_has_bits & 32512u) {
+    ::memset(&val_bytes_, 0, static_cast<size_t>(
         reinterpret_cast<char*>(&contains_estimates_) -
-        reinterpret_cast<char*>(&val_count_)) + sizeof(contains_estimates_));
+        reinterpret_cast<char*>(&val_bytes_)) + sizeof(contains_estimates_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -792,6 +813,17 @@ bool MVCCStats::MergePartialFromCodedStream(
         break;
       }
 
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(122u /* 122 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_max_write_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -819,60 +851,65 @@ void MVCCStats::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(1, this->last_update_nanos(), output);
   }
 
-  if (cached_has_bits & 0x00000002u) {
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(2, this->intent_age(), output);
   }
 
-  if (cached_has_bits & 0x00000004u) {
+  if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(3, this->gc_bytes_age(), output);
   }
 
-  if (cached_has_bits & 0x00000008u) {
+  if (cached_has_bits & 0x00000010u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(4, this->live_bytes(), output);
   }
 
-  if (cached_has_bits & 0x00000010u) {
+  if (cached_has_bits & 0x00000020u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(5, this->live_count(), output);
   }
 
-  if (cached_has_bits & 0x00000020u) {
+  if (cached_has_bits & 0x00000040u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(6, this->key_bytes(), output);
   }
 
-  if (cached_has_bits & 0x00000040u) {
+  if (cached_has_bits & 0x00000080u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(7, this->key_count(), output);
   }
 
-  if (cached_has_bits & 0x00000080u) {
+  if (cached_has_bits & 0x00000100u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(8, this->val_bytes(), output);
   }
 
-  if (cached_has_bits & 0x00000100u) {
+  if (cached_has_bits & 0x00000200u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(9, this->val_count(), output);
   }
 
-  if (cached_has_bits & 0x00000200u) {
+  if (cached_has_bits & 0x00000400u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(10, this->intent_bytes(), output);
   }
 
-  if (cached_has_bits & 0x00000400u) {
+  if (cached_has_bits & 0x00000800u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(11, this->intent_count(), output);
   }
 
-  if (cached_has_bits & 0x00000800u) {
+  if (cached_has_bits & 0x00001000u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(12, this->sys_bytes(), output);
   }
 
-  if (cached_has_bits & 0x00001000u) {
+  if (cached_has_bits & 0x00002000u) {
     ::google::protobuf::internal::WireFormatLite::WriteSFixed64(13, this->sys_count(), output);
   }
 
-  if (cached_has_bits & 0x00002000u) {
+  if (cached_has_bits & 0x00004000u) {
     ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->contains_estimates(), output);
+  }
+
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      15, this->_internal_max_write_timestamp(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -887,6 +924,12 @@ size_t MVCCStats::ByteSizeLong() const {
   total_size += _internal_metadata_.unknown_fields().size();
 
   if (_has_bits_[0 / 32] & 255u) {
+    if (has_max_write_timestamp()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *max_write_timestamp_);
+    }
+
     if (has_last_update_nanos()) {
       total_size += 1 + 8;
     }
@@ -915,12 +958,12 @@ size_t MVCCStats::ByteSizeLong() const {
       total_size += 1 + 8;
     }
 
+  }
+  if (_has_bits_[8 / 32] & 32512u) {
     if (has_val_bytes()) {
       total_size += 1 + 8;
     }
 
-  }
-  if (_has_bits_[8 / 32] & 16128u) {
     if (has_val_count()) {
       total_size += 1 + 8;
     }
@@ -966,48 +1009,51 @@ void MVCCStats::MergeFrom(const MVCCStats& from) {
   cached_has_bits = from._has_bits_[0];
   if (cached_has_bits & 255u) {
     if (cached_has_bits & 0x00000001u) {
-      last_update_nanos_ = from.last_update_nanos_;
+      mutable_max_write_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_write_timestamp());
     }
     if (cached_has_bits & 0x00000002u) {
-      intent_age_ = from.intent_age_;
+      last_update_nanos_ = from.last_update_nanos_;
     }
     if (cached_has_bits & 0x00000004u) {
-      gc_bytes_age_ = from.gc_bytes_age_;
+      intent_age_ = from.intent_age_;
     }
     if (cached_has_bits & 0x00000008u) {
-      live_bytes_ = from.live_bytes_;
+      gc_bytes_age_ = from.gc_bytes_age_;
     }
     if (cached_has_bits & 0x00000010u) {
-      live_count_ = from.live_count_;
+      live_bytes_ = from.live_bytes_;
     }
     if (cached_has_bits & 0x00000020u) {
-      key_bytes_ = from.key_bytes_;
+      live_count_ = from.live_count_;
     }
     if (cached_has_bits & 0x00000040u) {
-      key_count_ = from.key_count_;
+      key_bytes_ = from.key_bytes_;
     }
     if (cached_has_bits & 0x00000080u) {
-      val_bytes_ = from.val_bytes_;
+      key_count_ = from.key_count_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
-  if (cached_has_bits & 16128u) {
+  if (cached_has_bits & 32512u) {
     if (cached_has_bits & 0x00000100u) {
-      val_count_ = from.val_count_;
+      val_bytes_ = from.val_bytes_;
     }
     if (cached_has_bits & 0x00000200u) {
-      intent_bytes_ = from.intent_bytes_;
+      val_count_ = from.val_count_;
     }
     if (cached_has_bits & 0x00000400u) {
-      intent_count_ = from.intent_count_;
+      intent_bytes_ = from.intent_bytes_;
     }
     if (cached_has_bits & 0x00000800u) {
-      sys_bytes_ = from.sys_bytes_;
+      intent_count_ = from.intent_count_;
     }
     if (cached_has_bits & 0x00001000u) {
-      sys_count_ = from.sys_count_;
+      sys_bytes_ = from.sys_bytes_;
     }
     if (cached_has_bits & 0x00002000u) {
+      sys_count_ = from.sys_count_;
+    }
+    if (cached_has_bits & 0x00004000u) {
       contains_estimates_ = from.contains_estimates_;
     }
     _has_bits_[0] |= cached_has_bits;
@@ -1031,6 +1077,7 @@ void MVCCStats::Swap(MVCCStats* other) {
 }
 void MVCCStats::InternalSwap(MVCCStats* other) {
   using std::swap;
+  swap(max_write_timestamp_, other->max_write_timestamp_);
   swap(last_update_nanos_, other->last_update_nanos_);
   swap(intent_age_, other->intent_age_);
   swap(gc_bytes_age_, other->gc_bytes_age_);

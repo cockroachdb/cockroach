@@ -370,6 +370,17 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
 
   // accessors -------------------------------------------------------
 
+  bool has_max_write_timestamp() const;
+  void clear_max_write_timestamp();
+  static const int kMaxWriteTimestampFieldNumber = 15;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_max_write_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& max_write_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_max_write_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_max_write_timestamp();
+  void set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp);
+
   // sfixed64 last_update_nanos = 1;
   void clear_last_update_nanos();
   static const int kLastUpdateNanosFieldNumber = 1;
@@ -457,6 +468,7 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::util::hlc::Timestamp* max_write_timestamp_;
   ::google::protobuf::int64 last_update_nanos_;
   ::google::protobuf::int64 intent_age_;
   ::google::protobuf::int64 gc_bytes_age_;
@@ -561,6 +573,17 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
 
   // accessors -------------------------------------------------------
 
+  bool has_max_write_timestamp() const;
+  void clear_max_write_timestamp();
+  static const int kMaxWriteTimestampFieldNumber = 15;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_max_write_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& max_write_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_max_write_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_max_write_timestamp();
+  void set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp);
+
   // sfixed64 last_update_nanos = 1;
   void clear_last_update_nanos();
   static const int kLastUpdateNanosFieldNumber = 1;
@@ -648,6 +671,7 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::util::hlc::Timestamp* max_write_timestamp_;
   ::google::protobuf::int64 last_update_nanos_;
   ::google::protobuf::int64 intent_age_;
   ::google::protobuf::int64 gc_bytes_age_;
@@ -2025,6 +2049,53 @@ inline void MVCCStatsDelta::set_sys_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.sys_count)
 }
 
+inline bool MVCCStatsDelta::has_max_write_timestamp() const {
+  return this != internal_default_instance() && max_write_timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCStatsDelta::_internal_max_write_timestamp() const {
+  return *max_write_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCStatsDelta::max_write_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = max_write_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.max_write_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCStatsDelta::release_max_write_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCStatsDelta.max_write_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = max_write_timestamp_;
+  max_write_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCStatsDelta::mutable_max_write_timestamp() {
+  
+  if (max_write_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    max_write_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCStatsDelta.max_write_timestamp)
+  return max_write_timestamp_;
+}
+inline void MVCCStatsDelta::set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(max_write_timestamp_);
+  }
+  if (max_write_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      max_write_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, max_write_timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  max_write_timestamp_ = max_write_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCStatsDelta.max_write_timestamp)
+}
+
 // -------------------------------------------------------------------
 
 // MVCCPersistentStats
@@ -2222,6 +2293,53 @@ inline void MVCCPersistentStats::set_sys_count(::google::protobuf::int64 value) 
   
   sys_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCPersistentStats.sys_count)
+}
+
+inline bool MVCCPersistentStats::has_max_write_timestamp() const {
+  return this != internal_default_instance() && max_write_timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCPersistentStats::_internal_max_write_timestamp() const {
+  return *max_write_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCPersistentStats::max_write_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = max_write_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCPersistentStats.max_write_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCPersistentStats::release_max_write_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCPersistentStats.max_write_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = max_write_timestamp_;
+  max_write_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCPersistentStats::mutable_max_write_timestamp() {
+  
+  if (max_write_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    max_write_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCPersistentStats.max_write_timestamp)
+  return max_write_timestamp_;
+}
+inline void MVCCPersistentStats::set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(max_write_timestamp_);
+  }
+  if (max_write_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      max_write_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, max_write_timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  max_write_timestamp_ = max_write_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCPersistentStats.max_write_timestamp)
 }
 
 // -------------------------------------------------------------------

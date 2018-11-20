@@ -31,6 +31,7 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/legacy_timestamp.pb.h"
+#include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto 
 
@@ -355,6 +356,17 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
 
   // accessors -------------------------------------------------------
 
+  bool has_max_write_timestamp() const;
+  void clear_max_write_timestamp();
+  static const int kMaxWriteTimestampFieldNumber = 15;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_max_write_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& max_write_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_max_write_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_max_write_timestamp();
+  void set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp);
+
   bool has_last_update_nanos() const;
   void clear_last_update_nanos();
   static const int kLastUpdateNanosFieldNumber = 1;
@@ -469,10 +481,13 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   void clear_has_sys_bytes();
   void set_has_sys_count();
   void clear_has_sys_count();
+  void set_has_max_write_timestamp();
+  void clear_has_max_write_timestamp();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  ::cockroach::util::hlc::Timestamp* max_write_timestamp_;
   ::google::protobuf::int64 last_update_nanos_;
   ::google::protobuf::int64 intent_age_;
   ::google::protobuf::int64 gc_bytes_age_;
@@ -801,13 +816,13 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::
 // MVCCStats
 
 inline bool MVCCStats::has_contains_estimates() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
+  return (_has_bits_[0] & 0x00004000u) != 0;
 }
 inline void MVCCStats::set_has_contains_estimates() {
-  _has_bits_[0] |= 0x00002000u;
+  _has_bits_[0] |= 0x00004000u;
 }
 inline void MVCCStats::clear_has_contains_estimates() {
-  _has_bits_[0] &= ~0x00002000u;
+  _has_bits_[0] &= ~0x00004000u;
 }
 inline void MVCCStats::clear_contains_estimates() {
   contains_estimates_ = false;
@@ -824,13 +839,13 @@ inline void MVCCStats::set_contains_estimates(bool value) {
 }
 
 inline bool MVCCStats::has_last_update_nanos() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void MVCCStats::set_has_last_update_nanos() {
-  _has_bits_[0] |= 0x00000001u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void MVCCStats::clear_has_last_update_nanos() {
-  _has_bits_[0] &= ~0x00000001u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void MVCCStats::clear_last_update_nanos() {
   last_update_nanos_ = GOOGLE_LONGLONG(0);
@@ -847,13 +862,13 @@ inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_intent_age() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void MVCCStats::set_has_intent_age() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void MVCCStats::clear_has_intent_age() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void MVCCStats::clear_intent_age() {
   intent_age_ = GOOGLE_LONGLONG(0);
@@ -870,13 +885,13 @@ inline void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_gc_bytes_age() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void MVCCStats::set_has_gc_bytes_age() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void MVCCStats::clear_has_gc_bytes_age() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void MVCCStats::clear_gc_bytes_age() {
   gc_bytes_age_ = GOOGLE_LONGLONG(0);
@@ -893,13 +908,13 @@ inline void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_live_bytes() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void MVCCStats::set_has_live_bytes() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void MVCCStats::clear_has_live_bytes() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void MVCCStats::clear_live_bytes() {
   live_bytes_ = GOOGLE_LONGLONG(0);
@@ -916,13 +931,13 @@ inline void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_live_count() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void MVCCStats::set_has_live_count() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void MVCCStats::clear_has_live_count() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void MVCCStats::clear_live_count() {
   live_count_ = GOOGLE_LONGLONG(0);
@@ -939,13 +954,13 @@ inline void MVCCStats::set_live_count(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_key_bytes() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void MVCCStats::set_has_key_bytes() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void MVCCStats::clear_has_key_bytes() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void MVCCStats::clear_key_bytes() {
   key_bytes_ = GOOGLE_LONGLONG(0);
@@ -962,13 +977,13 @@ inline void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_key_count() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void MVCCStats::set_has_key_count() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void MVCCStats::clear_has_key_count() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void MVCCStats::clear_key_count() {
   key_count_ = GOOGLE_LONGLONG(0);
@@ -985,13 +1000,13 @@ inline void MVCCStats::set_key_count(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_val_bytes() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void MVCCStats::set_has_val_bytes() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void MVCCStats::clear_has_val_bytes() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void MVCCStats::clear_val_bytes() {
   val_bytes_ = GOOGLE_LONGLONG(0);
@@ -1008,13 +1023,13 @@ inline void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_val_count() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void MVCCStats::set_has_val_count() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void MVCCStats::clear_has_val_count() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void MVCCStats::clear_val_count() {
   val_count_ = GOOGLE_LONGLONG(0);
@@ -1031,13 +1046,13 @@ inline void MVCCStats::set_val_count(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_intent_bytes() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void MVCCStats::set_has_intent_bytes() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void MVCCStats::clear_has_intent_bytes() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void MVCCStats::clear_intent_bytes() {
   intent_bytes_ = GOOGLE_LONGLONG(0);
@@ -1054,13 +1069,13 @@ inline void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_intent_count() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void MVCCStats::set_has_intent_count() {
-  _has_bits_[0] |= 0x00000400u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void MVCCStats::clear_has_intent_count() {
-  _has_bits_[0] &= ~0x00000400u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void MVCCStats::clear_intent_count() {
   intent_count_ = GOOGLE_LONGLONG(0);
@@ -1077,13 +1092,13 @@ inline void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_sys_bytes() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void MVCCStats::set_has_sys_bytes() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void MVCCStats::clear_has_sys_bytes() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void MVCCStats::clear_sys_bytes() {
   sys_bytes_ = GOOGLE_LONGLONG(0);
@@ -1100,13 +1115,13 @@ inline void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
 }
 
 inline bool MVCCStats::has_sys_count() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 inline void MVCCStats::set_has_sys_count() {
-  _has_bits_[0] |= 0x00001000u;
+  _has_bits_[0] |= 0x00002000u;
 }
 inline void MVCCStats::clear_has_sys_count() {
-  _has_bits_[0] &= ~0x00001000u;
+  _has_bits_[0] &= ~0x00002000u;
 }
 inline void MVCCStats::clear_sys_count() {
   sys_count_ = GOOGLE_LONGLONG(0);
@@ -1120,6 +1135,59 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
   set_has_sys_count();
   sys_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.sys_count)
+}
+
+inline bool MVCCStats::has_max_write_timestamp() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void MVCCStats::set_has_max_write_timestamp() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void MVCCStats::clear_has_max_write_timestamp() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCStats::_internal_max_write_timestamp() const {
+  return *max_write_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCStats::max_write_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = max_write_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.max_write_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCStats::release_max_write_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCStats.max_write_timestamp)
+  clear_has_max_write_timestamp();
+  ::cockroach::util::hlc::Timestamp* temp = max_write_timestamp_;
+  max_write_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCStats::mutable_max_write_timestamp() {
+  set_has_max_write_timestamp();
+  if (max_write_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    max_write_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCStats.max_write_timestamp)
+  return max_write_timestamp_;
+}
+inline void MVCCStats::set_allocated_max_write_timestamp(::cockroach::util::hlc::Timestamp* max_write_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(max_write_timestamp_);
+  }
+  if (max_write_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      max_write_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, max_write_timestamp, submessage_arena);
+    }
+    set_has_max_write_timestamp();
+  } else {
+    clear_has_max_write_timestamp();
+  }
+  max_write_timestamp_ = max_write_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCStats.max_write_timestamp)
 }
 
 #ifdef __GNUC__

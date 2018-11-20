@@ -1370,8 +1370,13 @@ func mvccPutInternal(
 		return err
 	}
 
-	// Update MVCC stats.
+	// Record MaxWriteTimestamp. Update the rest of the MVCC stats.
 	if ms != nil {
+		// Forward MaxWriteTimestamp if its a non-transactional write.
+		// Transactional writes are handled when the intents are resolved.
+		if txn == nil {
+			ms.MaxWriteTimestamp.Forward(timestamp)
+		}
 		ms.Add(updateStatsOnPut(key, prevValSize, origMetaKeySize, origMetaValSize,
 			metaKeySize, metaValSize, meta, newMeta))
 	}
@@ -2108,9 +2113,12 @@ func mvccResolveWriteIntent(
 		if err != nil {
 			return false, err
 		}
-
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
+			// Update MVCCStats with the latest MaxWriteTimestamp.
+			if commit {
+				ms.MaxWriteTimestamp.Forward(intent.Txn.Timestamp)
+			}
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
 				metaKeySize, metaValSize, *meta, buf.newMeta, commit))
 		}
@@ -2729,6 +2737,10 @@ func ComputeStatsGo(
 			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(unsafeValue))
 			ms.ValCount++
+		}
+		// Compute MaxWriteTimestamp here.
+		if meta.Txn == nil {
+			ms.MaxWriteTimestamp.Forward(hlc.Timestamp(meta.Timestamp))
 		}
 	}
 

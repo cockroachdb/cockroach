@@ -1936,6 +1936,15 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 	return timestamp, nil
 }
 
+// discardMVCCWriteTimestamp checks if its the replica needs to discard the timestamp
+// of the most recent write commit collected now, for backwards compatibility reasons.
+func (r *Replica) discardMVCCWriteTimestamp() bool {
+	st := r.store.ClusterSettings()
+	ms := r.GetMVCCStats()
+	return ms.MaxWriteTimestamp.IsEmpty() &&
+		!st.Version.IsMinSupported(cluster.VersionCollectMVCCWriteTimestamp)
+}
+
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
@@ -3555,12 +3564,20 @@ func (r *Replica) evaluateProposal(
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
+	// Determine if the MaxWriteTimestamp in the MVCCStats should be collected.
+	cleanMVCCWrite := r.discardMVCCWriteTimestamp()
+
 	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed. Note that we don't hold any locks at this point. This is
 	// important since evaluating a proposal is expensive.
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
 	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, spans)
+
+	// For backwards compatibility, discard the MVCC MaxWriteTimestamp.
+	if cleanMVCCWrite {
+		ms.MaxWriteTimestamp.Reset()
+	}
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance

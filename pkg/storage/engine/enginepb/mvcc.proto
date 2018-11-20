@@ -19,6 +19,7 @@ option go_package = "enginepb";
 
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/legacy_timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
@@ -137,4 +138,7 @@ message MVCCStats {
   optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
   // sys_count is the number of meta keys tracked under sys_bytes.
   optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
+  // max_write_timestamp is the timestamp of the most recent write
+  // on this key. When a txn commits, the timestamp is updated here.
+  optional util.hlc.Timestamp max_write_timestamp = 15 [(gogoproto.nullable) = false];
 }

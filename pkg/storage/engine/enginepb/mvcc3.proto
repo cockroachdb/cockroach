@@ -101,6 +101,7 @@ message MVCCStatsDelta {
   sint64 intent_count = 11;
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
+  util.hlc.Timestamp max_write_timestamp = 15 [(gogoproto.nullable) = false];
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
@@ -125,6 +126,7 @@ message MVCCPersistentStats {
   int64 intent_count = 11;
   int64 sys_bytes = 12;
   int64 sys_count = 13;
+  util.hlc.Timestamp max_write_timestamp = 15 [(gogoproto.nullable) = false];
 }
 
 // RangeAppliedState combines the raft and lease applied indices with
