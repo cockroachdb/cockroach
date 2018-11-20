@@ -1109,3 +1109,62 @@ select
  │    └── key: (1)
  └── filters
       └── k = ANY '{1,2,3}'::INT[] [type=bool, outer=(1)]
+
+# --------------------------------------------------
+# FoldCollate
+# --------------------------------------------------
+
+norm expect=FoldCollate
+SELECT 'hello' COLLATE en_u_ks_level1
+----
+project
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+
+norm expect=FoldCollate
+SELECT ('hello' COLLATE en_u_ks_level1) COLLATE en_u_ks_level1
+----
+project
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+
+norm expect=FoldCollate
+SELECT ('hello' COLLATE en) COLLATE en_u_ks_level1
+----
+project
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'hello' COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}]
+
+norm expect-not=FoldCollate
+SELECT s COLLATE en_u_ks_level1 FROM a
+----
+project
+ ├── columns: s:7(collatedstring{en_u_ks_level1})
+ ├── scan a
+ │    └── columns: a.s:4(string)
+ └── projections
+      └── a.s COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}, outer=(4)]

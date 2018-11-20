@@ -433,7 +433,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	var private interface{}
 	switch t := scalar.(type) {
-	case *NullExpr, *TupleExpr:
+	case *NullExpr, *TupleExpr, *CollateExpr:
 		// Private is redundant with logical type property.
 		private = nil
 
