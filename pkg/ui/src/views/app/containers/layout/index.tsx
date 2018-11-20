@@ -21,6 +21,8 @@ import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
 
+import "./layout.styl";
+
 /**
  * Defines the main layout of all admin ui pages. This includes static
  * navigation bars and footers which should be present on every page.

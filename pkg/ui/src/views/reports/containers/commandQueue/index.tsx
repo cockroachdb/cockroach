@@ -28,6 +28,8 @@ import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
+import "./command_queue.styl";
+
 interface CommandQueueOwnProps {
   commandQueue: CachedDataReducerState<protos.cockroach.server.serverpb.CommandQueueResponse>;
   refreshCommandQueue: typeof refreshCommandQueue;

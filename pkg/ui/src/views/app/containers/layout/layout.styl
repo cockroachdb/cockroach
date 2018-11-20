@@ -14,8 +14,10 @@ implied. See the License for the specific language governing
 permissions and limitations under the License.
 */
 
+@require '~styl/base/palette.styl'
+@require '~styl/base/layout-vars.styl'
+
 $subnav-background  = $background-color
-$page-padding-top   = 20px
 
 .page
   position relative
@@ -24,7 +26,6 @@ $page-padding-top   = 20px
   height 100vh
   min-width 100%
   padding-left $nav-width
-  padding-top $page-padding-top
   padding-bottom 5px
 
   &:after
@@ -147,7 +148,7 @@ $page-padding-top   = 20px
   &__tooltip
     color $tooltip-color
     display inline-block
-    font-family Lato-Medium
+    font-family Lato-Regular
     font-size 14px
     font-weight normal
     letter-spacing 0
