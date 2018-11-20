@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package cmdq
+package spanlatch
 
 import (
 	"bytes"
@@ -24,11 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
-
-// TODO(nvanbenschoten):
-// 2. Add synchronized node and leafNode freelists
-// 3. Introduce immutability and a copy-on-write policy:
-// 4. Describe pedigree, changes, etc. of this implementation
 
 const (
 	degree  = 16
