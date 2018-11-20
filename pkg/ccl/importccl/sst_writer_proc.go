@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -192,7 +193,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 							// throughput.
 							log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
 						}
-						if err := storageccl.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+						if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
 							return err
 						}
 					} else {
@@ -343,7 +344,7 @@ func makeSSTs(
 	}
 	defer sst.Close()
 
-	var counts storageccl.RowCounter
+	var counts bulk.RowCounter
 	var writtenKVs int
 	writeSST := func(key, endKey roachpb.Key, more bool) error {
 		data, err := sst.Finish()
