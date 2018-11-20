@@ -469,3 +469,21 @@ ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" is being backfilled
 UPDATE t29494 SET x = y
+
+statement ok
+COMMIT
+
+#regression test for #32477
+subtest reject_special_funcs_inset
+
+statement ok
+CREATE TABLE t32477(x) AS SELECT 1
+
+statement error aggregate functions are not allowed in UPDATE SET
+UPDATE t32477 SET x = count(x)
+
+statement error window functions are not allowed in UPDATE SET
+UPDATE t32477 SET x = rank(x) OVER ()
+
+statement error generator functions are not allowed in UPDATE SET
+UPDATE t32477 SET x = generate_series(1,2)
