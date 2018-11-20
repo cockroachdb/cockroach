@@ -492,20 +492,24 @@ render     ·         ·            (a)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-render     ·         ·          (a)        ·
- │         render 0  a          ·          ·
- └── scan  ·         ·          (a, b, c)  ·
-·          table     t@bc       ·          ·
-·          spans     /5/1-/5/2  ·          ·
+render            ·         ·                      (a)              ·
+ │                render 0  a                      ·                ·
+ └── zigzag-join  ·         ·                      (b, a, b, c, a)  ·
+·                 type      inner                  ·                ·
+·                 table     t@b_desc               ·                ·
+·                 table     t@bc                   ·                ·
+·                 pred      (@3 = 5) AND (@4 = 1)  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-render     ·         ·          (a)        ·
- │         render 0  a          ·          ·
- └── scan  ·         ·          (a, b, c)  ·
-·          table     t@bc       ·          ·
-·          spans     /5/1-/5/2  ·          ·
+render            ·         ·                      (a)              ·
+ │                render 0  a                      ·                ·
+ └── zigzag-join  ·         ·                      (b, a, b, c, a)  ·
+·                 type      inner                  ·                ·
+·                 table     t@b_desc               ·                ·
+·                 table     t@bc                   ·                ·
+·                 pred      (@3 = 5) AND (@4 = 1)  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
@@ -784,9 +788,9 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-ts 1
-ts2 1
-ts3 1
+ts3  1
+ts   1
+ts2  1
 
 # Regression tests for #20362 (IS NULL handling).
 query TTTTT
