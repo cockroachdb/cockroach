@@ -449,6 +449,16 @@ func NewTypedIndirectionExpr(expr, index TypedExpr) *IndirectionExpr {
 	return node
 }
 
+// NewTypedCollateExpr returns a new CollateExpr that is verified to be well-typed.
+func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
+	node := &CollateExpr{
+		Expr:   expr,
+		Locale: locale,
+	}
+	node.typ = types.TCollatedString{Locale: locale}
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
