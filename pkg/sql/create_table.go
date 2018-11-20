@@ -326,9 +326,9 @@ func (p *planner) resolveFK(
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
-	mode sqlbase.ConstraintValidity,
+	ts FKTableState,
 ) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts)
 }
 
 func qualifyFKColErrorWithDB(
@@ -345,6 +345,19 @@ func qualifyFKColErrorWithDB(
 	}
 	return tree.ErrString(tree.NewUnresolvedName(db.Name, tree.PublicSchema, tbl.Name, col))
 }
+
+// FKTableState is the state of the referencing table resolveFK() is called on.
+type FKTableState int
+
+const (
+	// NewTable represents a new table, where the FK constraint is specified in the
+	// CREATE TABLE
+	NewTable FKTableState = iota
+	// EmptyTable represents an existing table that is empty
+	EmptyTable
+	// NonEmptyTable represents an existing non-empty table
+	NonEmptyTable
+)
 
 // ResolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
@@ -374,7 +387,7 @@ func ResolveFK(
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
-	mode sqlbase.ConstraintValidity,
+	ts FKTableState,
 ) error {
 	for _, col := range d.FromCols {
 		col, _, err := tbl.FindColumnByName(col)
@@ -397,8 +410,9 @@ func ResolveFK(
 	} else {
 		// Since this FK is referencing another table, this table must be created in
 		// a non-public "ADD" state and made public only after all leases on the
-		// other table are updated to include the backref.
-		if mode == sqlbase.ConstraintValidity_Validated {
+		// other table are updated to include the backref, if it does not already
+		// exist.
+		if ts == NewTable {
 			tbl.State = sqlbase.TableDescriptor_ADD
 		}
 
@@ -511,7 +525,7 @@ func ResolveFK(
 		OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
 	}
 
-	if mode == sqlbase.ConstraintValidity_Unvalidated {
+	if ts != NewTable {
 		ref.Validity = sqlbase.ConstraintValidity_Unvalidated
 	}
 	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
@@ -539,11 +553,11 @@ func ResolveFK(
 		}
 		if !found {
 			// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
-			if mode == sqlbase.ConstraintValidity_Unvalidated {
+			if ts == NonEmptyTable {
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"foreign key requires an existing index on columns %s", colNames(srcCols))
 			}
-			added, err := addIndexForFK(tbl, srcCols, constraintName, ref)
+			added, err := addIndexForFK(tbl, srcCols, constraintName, ref, ts)
 			if err != nil {
 				return err
 			}
@@ -585,6 +599,7 @@ func addIndexForFK(
 	srcCols []sqlbase.ColumnDescriptor,
 	constraintName string,
 	ref sqlbase.ForeignKeyReference,
+	ts FKTableState,
 ) (sqlbase.IndexID, error) {
 	// No existing index for the referencing columns found, so we add one.
 	idx := sqlbase.IndexDescriptor{
@@ -597,23 +612,32 @@ func addIndexForFK(
 		idx.ColumnDirections[i] = sqlbase.IndexDescriptor_ASC
 		idx.ColumnNames[i] = c.Name
 	}
-	if err := tbl.AddIndex(idx, false); err != nil {
+
+	if ts == NewTable {
+		if err := tbl.AddIndex(idx, false); err != nil {
+			return 0, err
+		}
+		if err := tbl.AllocateIDs(); err != nil {
+			return 0, err
+		}
+		added := tbl.Indexes[len(tbl.Indexes)-1]
+
+		// Since we just added the index, we can assume it is the last one rather than
+		// searching all the indexes again. That said, we sanity check that it matches
+		// in case a refactor ever violates that assumption.
+		if !matchesIndex(srcCols, added, matchPrefix) {
+			panic("no matching index and auto-generated index failed to match")
+		}
+		return added.ID, nil
+	}
+
+	if err := tbl.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
 	if err := tbl.AllocateIDs(); err != nil {
 		return 0, err
 	}
-
-	added := tbl.Indexes[len(tbl.Indexes)-1]
-
-	// Since we just added the index, we can assume it is the last one rather than
-	// searching all the indexes again. That said, we sanity check that it matches
-	// in case a refactor ever violates that assumption.
-	if !matchesIndex(srcCols, added, matchPrefix) {
-		panic("no matching index and auto-generated index failed to match")
-	}
-
-	return added.ID, nil
+	return tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID, nil
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
@@ -1156,7 +1180,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
+			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable); err != nil {
 				return desc, err
 			}
 		default:

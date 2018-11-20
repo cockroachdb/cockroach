@@ -17,10 +17,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
-	mysqltypes "vitess.io/vitess/go/sqltypes"
-	mysql "vitess.io/vitess/go/vt/sqlparser"
-
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -32,6 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
+	mysqltypes "vitess.io/vitess/go/sqltypes"
+	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
 
 // mysqldumpReader reads the default output of `mysqldump`, which consists of
@@ -481,7 +480,7 @@ type delayedFK struct {
 func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sqlbase.ConstraintValidity_Validated,
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable,
 		); err != nil {
 			return err
 		}

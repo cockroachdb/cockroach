@@ -15,9 +15,7 @@
 
 package main
 
-import (
-	"strings"
-)
+import "strings"
 
 type blacklist map[string]string
 
@@ -66,7 +64,6 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.jpa.test.criteria.basic.CastTest.testCastToString":                                                                                                                "5807",
 	"org.hibernate.jpa.test.criteria.basic.PredicateTest.testQuotientConversion":                                                                                                     "26732",
 	"org.hibernate.jpa.test.emops.RemoveTest.testUpdatedAndRemove":                                                                                                                   "6583",
-	"org.hibernate.jpa.test.exception.ExceptionTest.testConstraintViolationException":                                                                                                "26738",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne":                           "6583",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheGeneratedIdValuesAreCorrect":                                                          "6583",
 	"org.hibernate.jpa.test.indetifier.DefaultInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne":                            "6583",
@@ -128,7 +125,6 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.annotations.naturalid.ImmutableNaturalKeyLookupTest.testNaturalKeyLookupWithConstraint":                                                                      "6583",
 	"org.hibernate.test.annotations.naturalid.ImmutableNaturalKeyLookupTest.testSimpleImmutableNaturalKeyLookup":                                                                     "6583",
 	"org.hibernate.test.annotations.naturalid.ImmutableNaturalKeyLookupTest.testSubCriteriaOneToOneJoin":                                                                             "6583",
-	"org.hibernate.test.annotations.onetomany.OneToManyTest.testCascadeDeleteWithUnidirectionalAssociation":                                                                          "26738",
 	"org.hibernate.test.annotations.onetoone.hhh9798.OneToOneJoinTableTest.storeNonUniqueRelationship":                                                                               "5807",
 	"org.hibernate.test.annotations.tableperclass.TablePerClassTest.testUnionSubClass":                                                                                               "6583",
 	"org.hibernate.test.annotations.xml.hbm.HbmWithIdentityTest.testManyToOneAndInterface":                                                                                           "24062",
@@ -228,8 +224,8 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.immutable.entitywithmutablecollection.noninverse.VersionedEntityWithNonInverseOneToManyJoinTest.testOneToManyCollectionOptimisticLockingWithUpdate":          "5807",
 	"org.hibernate.test.insertordering.InsertOrderingWithCascadeOnPersist.testInsertOrderingAvoidingForeignKeyConstraintViolation":                                                   "6583",
 	"org.hibernate.test.insertordering.InsertOrderingWithJoinedTableInheritance.testBatchOrdering":                                                                                   "5807",
-	"org.hibernate.test.insertordering.InsertOrderingWithJoinedTableInheritance.testBatchingAmongstSubClasses":                                                                       "26738",
-	"org.hibernate.test.insertordering.InsertOrderingWithJoinedTableMultiLevelInheritance.testBatchingAmongstSubClasses":                                                             "26738",
+	"org.hibernate.test.insertordering.InsertOrderingWithJoinedTableInheritance.testBatchingAmongstSubClasses":                                                                       "5807",
+	"org.hibernate.test.insertordering.InsertOrderingWithJoinedTableMultiLevelInheritance.testBatchingAmongstSubClasses":                                                             "5807",
 	"org.hibernate.test.insertordering.InsertOrderingWithTablePerClassInheritance.testBatchOrdering":                                                                                 "5807",
 	"org.hibernate.test.insertordering.InsertOrderingWithTablePerClassInheritance.testBatchingAmongstSubClasses":                                                                     "5807",
 	"org.hibernate.test.interfaceproxy.InterfaceProxyTest.testInterfaceProxies":                                                                                                      "26725",
@@ -270,7 +266,7 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.legacy.MultiTableTest.testMultiTable":                                                                                                                        "6583",
 	"org.hibernate.test.legacy.MultiTableTest.testMultiTableGeneratedId":                                                                                                             "6583",
 	"org.hibernate.test.legacy.ParentChildTest.testComplexCriteria":                                                                                                                  "6583",
-	"org.hibernate.test.legacy.ParentChildTest.testLoadAfterNonExists":                                                                                                               "26738",
+	"org.hibernate.test.legacy.ParentChildTest.testLoadAfterNonExists":                                                                                                               "unknown",
 	"org.hibernate.test.legacy.ParentChildTest.testLocking":                                                                                                                          "6583",
 	"org.hibernate.test.legacy.SQLFunctionsTest.testBlobClob":                                                                                                                        "26725",
 	"org.hibernate.test.loadplans.process.inheritance.Test.basicTest":                                                                                                                "5807",
@@ -301,7 +297,6 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.locking.paging.PagingAndLockingTest.testCriteria":                                                                                                            "6583",
 	"org.hibernate.test.locking.paging.PagingAndLockingTest.testHql":                                                                                                                 "6583",
 	"org.hibernate.test.locking.paging.PagingAndLockingTest.testNativeSql":                                                                                                           "6583",
-	"org.hibernate.test.manytomany.ManyToManyBidirectionalTest.testRemoveMappedBySide":                                                                                               "26738",
 	"org.hibernate.test.mixed.MixedTest.testMixedInheritance":                                                                                                                        "26725",
 	"org.hibernate.test.naturalid.mutable.cached.CachedMutableNaturalIdNonStrictReadWriteTest.testReattachementUnmodifiedInstance":                                                   "6583",
 	"org.hibernate.test.naturalid.mutable.cached.CachedMutableNaturalIdStrictReadWriteTest.testReattachementUnmodifiedInstance":                                                      "6583",
@@ -332,8 +327,8 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.quote.TableGeneratorQuotingTest.testTableGeneratorQuoting":                                                                                                   "16769",
 	"org.hibernate.test.schemaupdate.MigrationTest.testIndexCreationViaSchemaUpdate":                                                                                                 "31761",
 	"org.hibernate.test.schemaupdate.PostgreSQLMultipleSchemaSequenceTest.test":                                                                                                      "26443",
-	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[0]":                                                                                              "26738",
-	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[1]":                                                                                              "26738",
+	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[0]":                                                                                              "24062",
+	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[1]":                                                                                              "24062",
 	"org.hibernate.test.schemaupdate.SchemaUpdateWithFunctionIndexTest.testUpdateSchema":                                                                                             "9682",
 	"org.hibernate.test.schemaupdate.SchemaUpdateWithViewsTest.testUpdateSchema":                                                                                                     "24897",
 	"org.hibernate.test.schemaupdate.foreignkeys.crossschema.CrossSchemaForeignKeyGenerationTest.testImprovedSchemaMigrationForeignKeysAreGeneratedAfterAllTheTablesAreCreated":      "26443",
