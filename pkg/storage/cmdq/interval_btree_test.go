@@ -170,6 +170,15 @@ func spanWithEnd(start, end int) roachpb.Span {
 	}
 }
 
+func spanWithMemo(i int, memo map[int]roachpb.Span) roachpb.Span {
+	if s, ok := memo[i]; ok {
+		return s
+	}
+	s := span(i)
+	memo[i] = s
+	return s
+}
+
 func randomSpan(rng *rand.Rand, n int) roachpb.Span {
 	start := rng.Intn(n)
 	end := rng.Intn(n + 1)
@@ -183,11 +192,11 @@ func newCmd(s roachpb.Span) *cmd {
 	return &cmd{span: s}
 }
 
-func checkIter(t *testing.T, it iterator, start, end int) {
+func checkIter(t *testing.T, it iterator, start, end int, spanMemo map[int]roachpb.Span) {
 	i := start
 	for it.First(); it.Valid(); it.Next() {
 		cmd := it.Cmd()
-		expected := span(i)
+		expected := spanWithMemo(i, spanMemo)
 		if !expected.Equal(cmd.span) {
 			t.Fatalf("expected %s, but found %s", expected, cmd.span)
 		}
@@ -200,7 +209,7 @@ func checkIter(t *testing.T, it iterator, start, end int) {
 	for it.Last(); it.Valid(); it.Prev() {
 		i--
 		cmd := it.Cmd()
-		expected := span(i)
+		expected := spanWithMemo(i, spanMemo)
 		if !expected.Equal(cmd.span) {
 			t.Fatalf("expected %s, but found %s", expected, cmd.span)
 		}
@@ -212,7 +221,7 @@ func checkIter(t *testing.T, it iterator, start, end int) {
 	all := newCmd(spanWithEnd(start, end))
 	for it.FirstOverlap(all); it.Valid(); it.NextOverlap() {
 		cmd := it.Cmd()
-		expected := span(i)
+		expected := spanWithMemo(i, spanMemo)
 		if !expected.Equal(cmd.span) {
 			t.Fatalf("expected %s, but found %s", expected, cmd.span)
 		}
@@ -225,6 +234,7 @@ func checkIter(t *testing.T, it iterator, start, end int) {
 
 func TestBTree(t *testing.T) {
 	var tr btree
+	spanMemo := make(map[int]roachpb.Span)
 
 	// With degree == 16 (max-items/node == 31) we need 513 items in order for
 	// there to be 3 levels in the tree. The count here is comfortably above
@@ -238,7 +248,7 @@ func TestBTree(t *testing.T) {
 		if e := i + 1; e != tr.Len() {
 			t.Fatalf("expected length %d, but found %d", e, tr.Len())
 		}
-		checkIter(t, tr.MakeIter(), 0, i+1)
+		checkIter(t, tr.MakeIter(), 0, i+1, spanMemo)
 	}
 
 	// Delete keys in sorted order.
@@ -248,7 +258,7 @@ func TestBTree(t *testing.T) {
 		if e := count - (i + 1); e != tr.Len() {
 			t.Fatalf("expected length %d, but found %d", e, tr.Len())
 		}
-		checkIter(t, tr.MakeIter(), i+1, count)
+		checkIter(t, tr.MakeIter(), i+1, count, spanMemo)
 	}
 
 	// Add keys in reverse sorted order.
@@ -258,7 +268,7 @@ func TestBTree(t *testing.T) {
 		if e := i + 1; e != tr.Len() {
 			t.Fatalf("expected length %d, but found %d", e, tr.Len())
 		}
-		checkIter(t, tr.MakeIter(), count-i, count+1)
+		checkIter(t, tr.MakeIter(), count-i, count+1, spanMemo)
 	}
 
 	// Delete keys in reverse sorted order.
@@ -268,7 +278,7 @@ func TestBTree(t *testing.T) {
 		if e := count - (i + 1); e != tr.Len() {
 			t.Fatalf("expected length %d, but found %d", e, tr.Len())
 		}
-		checkIter(t, tr.MakeIter(), 1, count-i)
+		checkIter(t, tr.MakeIter(), 1, count-i, spanMemo)
 	}
 }
 
@@ -446,7 +456,7 @@ func TestBTreeSeekOverlapRandom(t *testing.T) {
 }
 
 func TestBTreeCloneConcurrentOperations(t *testing.T) {
-	const cloneTestSize = 10000
+	const cloneTestSize = 1000
 	p := perm(cloneTestSize)
 
 	var trees []*btree
