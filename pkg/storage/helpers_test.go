@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -359,7 +360,7 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.ReplicaID) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isFollowerActiveLocked(ctx, followerID)
+	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now())
 }
 
 func (r *Replica) CommandSizesLen() int {

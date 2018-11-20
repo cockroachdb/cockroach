@@ -97,6 +97,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
+	// NB: we need an exclusive lock due to grabbing the first index.
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
@@ -139,6 +140,21 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 		return &truncateDecision{}, nil
 	}
 
+	// For all our followers, overwrite the RecentActive field (which is always
+	// true since we don't use CheckQuorum) with our own activity check.
+	r.mu.RLock()
+	updateRaftProgressFromActivity(
+		ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, now,
+	)
+	r.mu.RUnlock()
+
+	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
+		// TODO(tschottdorf): remove this line once we have picked up
+		// https://github.com/etcd-io/etcd/pull/10279
+		pr.State = raft.ProgressStateReplicate
+		raftStatus.Progress[raftStatus.Lead] = pr
+	}
+
 	input := truncateDecisionInput{
 		RaftStatus:                     raftStatus,
 		LogSize:                        raftLogSize,
@@ -152,12 +168,39 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	return &decision, nil
 }
 
+func updateRaftProgressFromActivity(
+	ctx context.Context,
+	prs map[uint64]raft.Progress,
+	replicas []roachpb.ReplicaDescriptor,
+	lastUpdate lastUpdateTimesMap,
+	now time.Time,
+) {
+	for _, replDesc := range replicas {
+		replicaID := replDesc.ReplicaID
+		pr, ok := prs[uint64(replicaID)]
+		if !ok {
+			continue
+		}
+		pr.RecentActive = lastUpdate.isFollowerActive(ctx, replicaID, now)
+		// Override this field for safety since we don't use it. Instead, we use
+		// pendingSnapshotIndex from above which is also populated for
+		// preemptive snapshots.
+		//
+		// TODO(tschottdorf): if we used Raft learners instead of preemptive
+		// snapshots, I think this value would do exactly the right tracking
+		// (including only resetting when the follower resumes replicating).
+		pr.PendingSnapshot = 0
+		prs[uint64(replicaID)] = pr
+	}
+}
+
 const (
-	truncatableIndexChosenViaQuorumIndex = "quorum"
-	truncatableIndexChosenViaFollowers   = "followers"
-	truncatableIndexChosenViaPendingSnap = "pending snapshot"
-	truncatableIndexChosenViaFirstIndex  = "first index"
-	truncatableIndexChosenViaLastIndex   = "last index"
+	truncatableIndexChosenViaQuorumIndex     = "quorum"
+	truncatableIndexChosenViaFollowers       = "followers"
+	truncatableIndexChosenViaProbingFollower = "probing follower"
+	truncatableIndexChosenViaPendingSnap     = "pending snapshot"
+	truncatableIndexChosenViaFirstIndex      = "first index"
+	truncatableIndexChosenViaLastIndex       = "last index"
 )
 
 type truncateDecisionInput struct {
@@ -261,16 +304,33 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision.NewFirstIndex = decision.QuorumIndex
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
 
-	if !input.LogTooLarge() {
-		// Only truncate to one of the follower indexes if the raft log is less
-		// than the target size. If the raft log is greater than the target size we
-		// always truncate to the quorum commit index.
-		for _, progress := range input.RaftStatus.Progress {
-			index := progress.Match
-			if decision.NewFirstIndex > index {
-				decision.NewFirstIndex = index
-				decision.ChosenVia = truncatableIndexChosenViaFollowers
-			}
+	for _, progress := range input.RaftStatus.Progress {
+		// Generally we truncate to the quorum commit index when the log becomes
+		// too large, but we make an exception for live followers which are
+		// being probed (i.e. the leader doesn't know how far they've caught
+		// up). In that case the Match index is too large, and so the quorum
+		// index can be, too. We don't want these followers to require a
+		// snapshot since they are most likely going to be caught up very soon
+		// (they respond with the "right index" to the first probe or don't
+		// respond, in which case they should end up as not recently active).
+		// But we also don't know their index, so we can't possible make a
+		// truncation decision that avoids that at this point and make the
+		// truncation a no-op.
+		//
+		// The scenario in which this is most relevant is during restores, where
+		// we split off new ranges that rapidly receive very large log entries
+		// while the Raft group is still in a state of discovery (a new leader
+		// starts probing followers at its own last index). Additionally, these
+		// ranges will be split many times over, resulting in a flurry of
+		// snapshots with overlapping bounds that put significant stress on the
+		// Raft snapshot queue.
+		probing := (progress.RecentActive && progress.State == raft.ProgressStateProbe)
+		if probing && decision.NewFirstIndex > decision.Input.FirstIndex {
+			decision.NewFirstIndex = decision.Input.FirstIndex
+			decision.ChosenVia = truncatableIndexChosenViaProbingFollower
+		} else if !input.LogTooLarge() && decision.NewFirstIndex > progress.Match {
+			decision.NewFirstIndex = progress.Match
+			decision.ChosenVia = truncatableIndexChosenViaFollowers
 		}
 	}
 

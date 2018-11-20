@@ -251,6 +251,33 @@ func (s *destroyStatus) Reset() {
 	s.Set(nil, destroyReasonAlive)
 }
 
+// a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
+// last communication received from followers, which in turn informs the quota
+// pool and log truncations.
+type lastUpdateTimesMap map[roachpb.ReplicaID]time.Time
+
+func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
+	if m == nil {
+		return
+	}
+	m[replicaID] = now
+}
+
+// isFollowerActive returns whether the specified follower has made
+// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
+func (m lastUpdateTimesMap) isFollowerActive(
+	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time,
+) bool {
+	lastUpdateTime, ok := m[replicaID]
+	if !ok {
+		// If the follower has no entry in lastUpdateTimes, it has not been
+		// updated since r became the leader (at which point all then-existing
+		// replicas were updated).
+		return false
+	}
+	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -423,7 +450,15 @@ type Replica struct {
 		// Progress of a RaftStatus, which has a RecentActive field. However, that field
 		// is always true unless CheckQuorum is active, which at the time of writing in
 		// CockroachDB is not the case.
-		lastUpdateTimes map[roachpb.ReplicaID]time.Time
+		//
+		// TODO(tschottdorf): keeping a map on each replica seems to be
+		// overdoing it. We should map the replicaID to a NodeID and then use
+		// node liveness (or any sensible measure of the peer being around).
+		// The danger in doing so is that a single stuck replica on an otherwise
+		// functioning node could fill up the quota pool. We are already taking
+		// this kind of risk though: a replica that gets stuck on an otherwise
+		// live node will not lose leaseholdership.
+		lastUpdateTimes lastUpdateTimesMap
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -1144,6 +1179,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
+			now := timeutil.Now()
+			for _, desc := range r.mu.state.Desc.Replicas {
+				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+			}
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
@@ -1177,6 +1216,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 
 	// Find the minimum index that active followers have acknowledged.
+	now := timeutil.Now()
 	minIndex := status.Commit
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
@@ -1186,7 +1226,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that are active.
-		if !r.isFollowerActiveLocked(ctx, rep.ReplicaID) {
+		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
 			continue
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
@@ -1924,37 +1964,6 @@ func (r *Replica) setQueueLastProcessed(
 ) error {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	return r.store.DB().PutInline(ctx, key, &timestamp)
-}
-
-func (r *Replica) refreshLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) {
-	if r.mu.lastUpdateTimes != nil {
-		r.mu.lastUpdateTimes[replicaID] = r.store.Clock().PhysicalTime()
-	}
-}
-
-func (r *Replica) refreshLastUpdateTimeForAllReplicasLocked() {
-	if r.mu.lastUpdateTimes != nil {
-		now := r.store.Clock().PhysicalTime()
-		for _, rep := range r.mu.state.Desc.Replicas {
-			r.mu.lastUpdateTimes[rep.ReplicaID] = now
-		}
-	}
-}
-
-// isFollowerActiveLocked returns whether the specified follower has made
-// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
-func (r *Replica) isFollowerActiveLocked(ctx context.Context, followerID roachpb.ReplicaID) bool {
-	if r.mu.lastUpdateTimes == nil {
-		log.Fatalf(ctx, "replica %d has uninitialized lastUpdateTimes map", r.mu.replicaID)
-	}
-	lastUpdateTime, ok := r.mu.lastUpdateTimes[followerID]
-	if !ok {
-		// If the follower has no entry in lastUpdateTimes, it has not been
-		// updated since r became the leader.
-		return false
-	}
-	now := r.store.Clock().PhysicalTime()
-	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
@@ -4100,7 +4109,10 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		if campaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
-		r.refreshLastUpdateTimeForAllReplicasLocked()
+		now := timeutil.Now()
+		for _, desc := range r.mu.state.Desc.Replicas {
+			r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+		}
 	}
 }
 
@@ -4133,7 +4145,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// Note that we avoid campaigning when receiving raft messages, because
 		// we expect the originator to campaign instead.
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
-		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
+		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		err := raftGroup.Step(req.Message)
 		if err == raft.ErrProposalDropped {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -5249,6 +5261,16 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	if msg.Type == raftpb.MsgHeartbeat {
+		if r.mu.replicaID == 0 {
+			log.Fatalf(ctx, "preemptive snapshot attempted to send a heartbeat: %+v", msg)
+		}
+		// For followers, we update lastUpdateTimes when we step a message from
+		// them into the local Raft group. The leader won't hit that path, so we
+		// update it whenever it sends a heartbeat. In effect, this makes sure
+		// it always sees itself as alive.
+		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
+	}
 	r.mu.Unlock()
 
 	if fromErr != nil {
