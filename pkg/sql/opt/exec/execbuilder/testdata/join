@@ -1391,3 +1391,72 @@ render          ·         ·
       └── scan  ·         ·
 ·               table     bar@primary
 ·               spans     ALL
+
+# Zigzag join tests.
+statement ok
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d FLOAT,
+  INDEX b_idx(b),
+  INDEX c_idx(c)
+)
+
+# Simple zigzag case - fixed columns, output cols from indexes only.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
+]
+----
+zigzag-join  ·          ·
+ │           type       inner
+ ├── scan    ·          ·
+ │           table      zigzag@b_idx
+ │           fixedvals  1 column
+ └── scan    ·          ·
+·            table      zigzag@c_idx
+·            fixedvals  1 column
+·            pred       (@2 = 5) AND (@3 = 6.0)
+
+
+# Zigzag join nested inside a lookup.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
+]
+----
+lookup-join       ·          ·
+ │                type       inner
+ ├── zigzag-join  ·          ·
+ │    │           type       inner
+ │    ├── scan    ·          ·
+ │    │           table      zigzag@b_idx
+ │    │           fixedvals  1 column
+ │    └── scan    ·          ·
+ │                table      zigzag@c_idx
+ │                fixedvals  1 column
+ │                pred       (@2 = 5) AND (@3 = 6.0)
+ └── scan         ·          ·
+·                 table      zigzag@primary
+
+# Zigzag join nested inside a lookup, with an on condition on lookup join.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
+]
+----
+lookup-join       ·          ·
+ │                type       inner
+ │                pred       @4 > 4.0
+ ├── zigzag-join  ·          ·
+ │    │           type       inner
+ │    ├── scan    ·          ·
+ │    │           table      zigzag@b_idx
+ │    │           fixedvals  1 column
+ │    └── scan    ·          ·
+ │                table      zigzag@c_idx
+ │                fixedvals  1 column
+ │                pred       (@2 = 5) AND (@3 = 6.0)
+ └── scan         ·          ·
+·                 table      zigzag@primary
