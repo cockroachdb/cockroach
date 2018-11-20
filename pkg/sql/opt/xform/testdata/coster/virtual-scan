@@ -1,26 +1,12 @@
-exec-ddl
-CREATE TABLE system.information_schema.schemata (
-	CATALOG_NAME               STRING NOT NULL,
-	SCHEMA_NAME                STRING NOT NULL,
-	DEFAULT_CHARACTER_SET_NAME STRING,
-	SQL_PATH                   STRING
-)
-----
-TABLE schemata
- ├── catalog_name string not null
- ├── schema_name string not null
- ├── default_character_set_name string
- └── sql_path string
-
 opt
-SELECT * FROM system.information_schema.schemata WHERE SCHEMA_NAME='public'
+SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME='public'
 ----
 select
  ├── columns: catalog_name:1(string) schema_name:2(string!null) default_character_set_name:3(string) sql_path:4(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 20
  ├── fd: ()-->(2)
- ├── virtual-scan system.information_schema.schemata
+ ├── virtual-scan t.information_schema.schemata
  │    ├── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0]
  │    └── cost: 10
