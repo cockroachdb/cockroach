@@ -61,25 +61,24 @@ func expandFields(compiled *lang.CompiledExpr, define *lang.DefineExpr) lang.Def
 	return fields
 }
 
-// generateDefineComments is a helper function that generates a block of
-// op definition comments by converting the Optgen comment to a Go comment.
-// The comments are assumed to start with the name of the op and follow with a
-// description of the op, like this:
-//   # <opname> <description of what this op does>
+// generateComments is a helper function that generates a block of comments by
+// converting an Optgen comment to a Go comment. The comments are assumed to
+// start with the name of an op or field and follow with a description, similar
+// to this:
+//   # <name> <description of what this op or field does>
 //   # ...
 //
-// The initial opname is replaced with the given replaceName, in order to adapt
+// The initial name is replaced with the given replaceName, in order to adapt
 // it to different enums and structs that are generated.
-func generateDefineComments(w io.Writer, define *lang.DefineExpr, replaceName string) {
-	for i, comment := range define.Comments {
-		// Replace the # comment character used in Optgen with the Go
-		// comment character.
+func generateComments(w io.Writer, comments lang.CommentsExpr, findName, replaceName string) {
+	for i, comment := range comments {
+		// Replace the # comment character used in Optgen with the Go comment
+		// character.
 		s := strings.Replace(string(comment), "#", "//", 1)
 
-		// Replace the definition name if it is the first word in the first
-		// comment.
-		if i == 0 && strings.HasPrefix(string(comment), "# "+string(define.Name)) {
-			s = strings.Replace(s, string(define.Name), replaceName, 1)
+		// Replace the findName if it is the first word in the first comment.
+		if i == 0 && strings.HasPrefix(string(comment), "# "+findName) {
+			s = strings.Replace(s, findName, replaceName, 1)
 		}
 
 		fmt.Fprintf(w, "  %s\n", s)

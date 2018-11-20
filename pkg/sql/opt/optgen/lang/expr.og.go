@@ -494,9 +494,10 @@ func (e *DefineFieldsExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type DefineFieldExpr struct {
-	Name StringExpr
-	Type StringExpr
-	Src  *SourceLoc
+	Comments CommentsExpr
+	Name     StringExpr
+	Type     StringExpr
+	Src      *SourceLoc
 }
 
 func (e *DefineFieldExpr) Op() Operator {
@@ -504,14 +505,16 @@ func (e *DefineFieldExpr) Op() Operator {
 }
 
 func (e *DefineFieldExpr) ChildCount() int {
-	return 2
+	return 3
 }
 
 func (e *DefineFieldExpr) Child(nth int) Expr {
 	switch nth {
 	case 0:
-		return &e.Name
+		return &e.Comments
 	case 1:
+		return &e.Name
+	case 2:
 		return &e.Type
 	}
 	panic(fmt.Sprintf("child index %d is out of range", nth))
@@ -520,8 +523,10 @@ func (e *DefineFieldExpr) Child(nth int) Expr {
 func (e *DefineFieldExpr) ChildName(nth int) string {
 	switch nth {
 	case 0:
-		return "Name"
+		return "Comments"
 	case 1:
+		return "Name"
+	case 2:
 		return "Type"
 	}
 	return ""
@@ -534,7 +539,7 @@ func (e *DefineFieldExpr) Value() interface{} {
 func (e *DefineFieldExpr) Visit(visit VisitFunc) Expr {
 	children := visitChildren(e, visit)
 	if children != nil {
-		return &DefineFieldExpr{Name: *children[0].(*StringExpr), Type: *children[1].(*StringExpr), Src: e.Source()}
+		return &DefineFieldExpr{Comments: *children[0].(*CommentsExpr), Name: *children[1].(*StringExpr), Type: *children[2].(*StringExpr), Src: e.Source()}
 	}
 	return e
 }

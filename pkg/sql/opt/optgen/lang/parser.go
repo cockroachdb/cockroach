@@ -203,12 +203,19 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 	}
 
 	for {
+		// Remember any comments scanned by p.scan by initializing p.comments.
+		p.comments = make(CommentsExpr, 0)
+
 		if p.scan() == RBRACE {
 			return define
 		}
-
 		p.unscan()
-		defineField := p.parseDefineField()
+
+		// Get any comments that have accumulated.
+		comments := p.comments
+		p.comments = nil
+
+		defineField := p.parseDefineField(comments)
 		if defineField == nil {
 			return nil
 		}
@@ -218,7 +225,7 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 }
 
 // define-field = field-name field-type
-func (p *Parser) parseDefineField() *DefineFieldExpr {
+func (p *Parser) parseDefineField(comments CommentsExpr) *DefineFieldExpr {
 	if !p.scanToken(IDENT, "define field name") {
 		return nil
 	}
@@ -232,7 +239,12 @@ func (p *Parser) parseDefineField() *DefineFieldExpr {
 
 	typ := p.s.Literal()
 
-	return &DefineFieldExpr{Src: &src, Name: StringExpr(name), Type: StringExpr(typ)}
+	return &DefineFieldExpr{
+		Src:      &src,
+		Name:     StringExpr(name),
+		Comments: comments,
+		Type:     StringExpr(typ),
+	}
 }
 
 // rule = match '=>' replace
