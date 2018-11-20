@@ -319,6 +319,13 @@ func (p *planner) Update(
 		columns = columns[:len(desc.Columns)]
 	}
 
+	// For the analysis below, we need to restrict the planning to only
+	// allow simple expressions. Before we restrict anything, we need to
+	// save the current context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
+	p.semaCtx.Properties.Require("UPDATE SET", tree.RejectSpecial)
+
 	for _, setExpr := range setExprs {
 		if setExpr.Tuple {
 			switch t := setExpr.Expr.(type) {
