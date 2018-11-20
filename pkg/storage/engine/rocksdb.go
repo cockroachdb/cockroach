@@ -903,6 +903,16 @@ func (r *RocksDB) CompactRange(start, end roachpb.Key, forceBottommost bool) err
 	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end), C.bool(forceBottommost)))
 }
 
+// disableAutoCompaction disables automatic compactions. For testing use only.
+func (r *RocksDB) disableAutoCompaction() error {
+	return statusToError(C.DBDisableAutoCompaction(r.rdb))
+}
+
+// enableAutoCompaction enables automatic compactions. For testing use only.
+func (r *RocksDB) enableAutoCompaction() error {
+	return statusToError(C.DBDisableAutoCompaction(r.rdb))
+}
+
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
 func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	start := MVCCKey{Key: from}

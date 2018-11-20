@@ -64,7 +64,7 @@ func cockroachNodeBinary(c *SyncedCluster, i int) string {
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
-		gopath := envutil.EnvOrDefaultString("GOPATH", "")
+		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
 			return config.Binary
 		}

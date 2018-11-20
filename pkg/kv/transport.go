@@ -166,7 +166,7 @@ func (gt *grpcTransport) SendNext(
 	}
 
 	ba.Replica = client.replica
-	reply, err := gt.sendBatch(ctx, iface, ba)
+	reply, err := gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
 
 	// NotLeaseHolderErrors can be retried.
 	var retryable bool
@@ -182,8 +182,9 @@ func (gt *grpcTransport) SendNext(
 	return reply, err
 }
 
+// NB: nodeID is unused, but accessible in stack traces.
 func (gt *grpcTransport) sendBatch(
-	ctx context.Context, iface roachpb.InternalClient, ba roachpb.BatchRequest,
+	ctx context.Context, nodeID roachpb.NodeID, iface roachpb.InternalClient, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context

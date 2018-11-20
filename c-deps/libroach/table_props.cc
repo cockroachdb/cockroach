@@ -12,7 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include "timebound.h"
+#include "table_props.h"
 #include <rocksdb/table_properties.h>
 #include <rocksdb/slice.h>
 #include <rocksdb/status.h>
@@ -104,10 +104,54 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
   const char* Name() const override { return "TimeBoundTblPropCollectorFactory"; }
 };
 
+class DeleteRangeTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const char* Name() const override { return "DeleteRangeTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties*) override {
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice&, const rocksdb::Slice&,
+                             rocksdb::EntryType type, rocksdb::SequenceNumber,
+                             uint64_t) override {
+    if (type == rocksdb::kEntryRangeDeletion) {
+      ntombstones_++;
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+  virtual bool NeedCompact() const override {
+    // NB: Mark any file containing range deletions as requiring a
+    // compaction. This ensures that range deletions are quickly compacted out
+    // of existence.
+    return ntombstones_ > 0;
+  }
+
+ private:
+  int ntombstones_;
+};
+
+class DeleteRangeTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new DeleteRangeTblPropCollector();
+  }
+  const char* Name() const override { return "DeleteRangeTblPropCollectorFactory"; }
+};
+
 }  // namespace
 
 rocksdb::TablePropertiesCollectorFactory* DBMakeTimeBoundCollector() {
   return new TimeBoundTblPropCollectorFactory();
+}
+
+rocksdb::TablePropertiesCollectorFactory* DBMakeDeleteRangeCollector() {
+  return new DeleteRangeTblPropCollectorFactory();
 }
 
 }  // namespace cockroach

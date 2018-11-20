@@ -62,6 +62,7 @@ define ScanPrivate {
 	# rows.
 	HardLimit ScanLimit
 
+	# Flags modify how the table is scanned, such as which index is used to scan.
 	Flags ScanFlags
 }
 

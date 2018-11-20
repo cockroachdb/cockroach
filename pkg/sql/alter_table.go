@@ -589,7 +589,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	if addedMutations {
 		var err error
-		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 		if err != nil {
 			return err

@@ -2091,8 +2091,7 @@ CREATE TABLE t.test (
 
 // Test a DROP failure on a unique column. The rollback
 // process might not be able to reconstruct the index and thus
-// recreates the column as non-UNIQUE. For now this is considered
-// acceptable.
+// purges the rollback. For now this is considered acceptable.
 func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
@@ -2164,43 +2163,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	if len(tableDesc.Indexes) > 0 {
 		t.Fatalf("indexes %+v", tableDesc.Indexes)
 	}
-	// Index data not wiped yet (waiting for GC TTL).
-	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
-		t.Fatal(err)
-	}
 
-	// Column v still exists with the default value.
-	if e := 2; e != len(tableDesc.Columns) {
+	// Unfortunately this is the same failure present when an index drop
+	// fails, so the rollback never completes and leaves orphaned kvs.
+	// TODO(erik): Ignore errors or individually drop indexes in
+	// DELETE_AND_WRITE_ONLY which failed during the creation backfill
+	// as a rollback from a drop.
+	if e := 1; e != len(tableDesc.Columns) {
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.Columns), tableDesc.Columns)
-	} else if tableDesc.Columns[0].Name != "k" || tableDesc.Columns[1].Name != "v" {
+	} else if tableDesc.Columns[0].Name != "k" {
 		t.Fatalf("columns %+v", tableDesc.Columns)
-	} else if len(tableDesc.Mutations) > 0 {
+	} else if len(tableDesc.Mutations) != 2 {
 		t.Fatalf("mutations %+v", tableDesc.Mutations)
-	}
-
-	rows, err := sqlDB.Query(`SELECT v from t.test`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	count := 0
-	for ; rows.Next(); count++ {
-		var v int
-		if err := rows.Scan(&v); err != nil {
-			t.Errorf("row %d scan failed: %s", count, err)
-			continue
-		}
-		if 23 != v {
-			t.Errorf("e = %d, v = %d", 23, v)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	eCount := maxValue + 1
-	if eCount != count {
-		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
 
@@ -2405,6 +2379,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 			`schema change statement cannot follow a statement that has written in the same transaction`},
 		// schema change at the end of a read only transaction.
 		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX bar ON t.kv (v)`, ``},
+		{`index-on-add-col`, `ALTER TABLE t.kv ADD i INT`,
+			`CREATE INDEX foobar ON t.kv (i)`, ``},
 	}
 
 	for _, testCase := range testCases {

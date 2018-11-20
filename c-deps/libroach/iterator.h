@@ -31,6 +31,7 @@ struct DBIterator {
   std::unique_ptr<cockroach::chunkedBuffer> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
   std::unique_ptr<IteratorStats> stats;
+  std::string rev_resume_key;
 
   rocksdb::ReadOptions read_opts;
   std::string lower_bound_str;
