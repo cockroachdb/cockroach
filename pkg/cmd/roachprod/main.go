@@ -676,7 +676,7 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 			extendCmd, destroyCmd,
 			statusCmd, monitorCmd,
 			runCmd, sqlCmd,
-			adminurlCmd, pgurlCmd,
+			adminurlCmd, pgurlCmd, ipCmd,
 		} {
 			cmd.ValidArgs = names
 		}
@@ -1218,6 +1218,40 @@ var adminurlCmd = &cobra.Command{
 	}),
 }
 
+var ipCmd = &cobra.Command{
+	Use:   "ip <cluster>",
+	Short: "get the IP addresses of the nodes in a cluster",
+	Long: `Get the IP addresses of the nodes in a cluster.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0], false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+
+		nodes := c.ServerNodes()
+		ips := make([]string, len(nodes))
+
+		if external {
+			for i := 0; i < len(nodes); i++ {
+				ips[i] = c.VMs[nodes[i]-1]
+			}
+		} else {
+			c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
+				var err error
+				ips[i], err = c.GetInternalIP(nodes[i])
+				return nil, err
+			})
+		}
+
+		for _, ip := range ips {
+			fmt.Println(ip)
+		}
+		return nil
+	}),
+}
+
 func init() {
 	adminurlCmd.Flags().BoolVar(&adminurlOpen, `open`, false, `Open the url in a browser`)
 }
@@ -1276,6 +1310,7 @@ func main() {
 		getCmd,
 		stageCmd,
 		sqlCmd,
+		ipCmd,
 		pgurlCmd,
 		adminurlCmd,
 
@@ -1293,7 +1328,7 @@ func main() {
 
 	for _, cmd := range []*cobra.Command{statusCmd, monitorCmd, startCmd,
 		stopCmd, runCmd, wipeCmd, reformatCmd, testCmd, installCmd, putCmd, getCmd,
-		sqlCmd, pgurlCmd, adminurlCmd,
+		sqlCmd, pgurlCmd, adminurlCmd, ipCmd,
 	} {
 		cmd.Flags().BoolVar(
 			&ssh.InsecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
@@ -1337,6 +1372,9 @@ func main() {
 
 	pgurlCmd.Flags().BoolVar(
 		&external, "external", false, "return pgurls for external connections")
+
+	ipCmd.Flags().BoolVar(
+		&external, "external", false, "return external IP addresses")
 
 	runCmd.Flags().BoolVar(
 		&secure, "secure", false, "use a secure cluster")
