@@ -4440,7 +4440,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
-	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
+	r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
 
 	r.sendRaftMessages(ctx, otherMsgs)
 
