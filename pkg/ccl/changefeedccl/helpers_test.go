@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
@@ -124,7 +125,8 @@ func createBenchmarkChangefeed(
 	encoder := makeJSONEncoder(details.Opts)
 	sink := makeBenchSink()
 
-	buf := makeBuffer()
+	buf := makeBuffer(mon.BoundAccount{})
+	defer buf.Close(ctx)
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	poller := makePoller(
 		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(),
@@ -274,12 +276,6 @@ func makeSinkless(s serverutils.TestServerInterface, db *gosql.DB) *sinklessFeed
 func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
 	t.Helper()
 
-	if _, err := f.db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
 	s := &sinklessFeed{db: f.db, seen: make(map[string]struct{})}
 	now := timeutil.Now()
 	var err error
@@ -396,11 +392,6 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	c := &tableFeed{
 		db: db, urlCleanup: cleanup, sinkURI: sink.String(), flushCh: f.flushCh,
 		seen: make(map[string]struct{}),
-	}
-	if _, err := c.db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
-	); err != nil {
-		t.Fatal(err)
 	}
 	if _, err := c.db.Exec(`CREATE DATABASE ` + sink.Path); err != nil {
 		t.Fatal(err)

@@ -10,11 +10,28 @@ package changefeedccl
 
 import (
 	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+var bufferColTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Key
+	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Value
+	{SemanticType: sqlbase.ColumnType_BYTES}, // span.Key
+	{SemanticType: sqlbase.ColumnType_BYTES}, // span.EndKey
+	{SemanticType: sqlbase.ColumnType_INT},   // ts.WallTime
+	{SemanticType: sqlbase.ColumnType_INT},   // ts.Logical
+}
 
 type bufferEntry struct {
 	kv       roachpb.KeyValue
@@ -26,14 +43,25 @@ type bufferEntry struct {
 
 // buffer mediates between the changed data poller and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
-//
-// TODO(dan): Monitor memory usage and spill to disk when necessary.
 type buffer struct {
-	entriesCh chan bufferEntry
+	mu struct {
+		syncutil.Mutex
+		entries sqlbase.RowContainer
+	}
+
+	a sqlbase.DatumAlloc
 }
 
-func makeBuffer() *buffer {
-	return &buffer{entriesCh: make(chan bufferEntry)}
+func makeBuffer(acc mon.BoundAccount) *buffer {
+	b := &buffer{}
+	b.mu.entries.Init(acc, sqlbase.ColTypeInfoFromColTypes(bufferColTypes), 0 /* rowCapacity */)
+	return b
+}
+
+func (b *buffer) Close(ctx context.Context) {
+	b.mu.Lock()
+	// b.mu.entries.Close(ctx)
+	b.mu.Unlock()
 }
 
 // AddKV inserts a changed kv into the buffer.
@@ -42,31 +70,92 @@ func makeBuffer() *buffer {
 // timestamp order. This will have to change when we add support for RangeFeed,
 // which starts out in a catchup state without this guarantee.
 func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue, minTimestamp hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: minTimestamp})
+	log.Infof(ctx, "AddKV %v", kv)
+	// WIP minTimestamp
+	return b.addRow(ctx, tree.Datums{
+		b.a.NewDBytes(tree.DBytes(kv.Key)),
+		b.a.NewDBytes(tree.DBytes(kv.Value.RawBytes)),
+		tree.DNull,
+		tree.DNull,
+		b.a.NewDInt(tree.DInt(kv.Value.Timestamp.WallTime)),
+		b.a.NewDInt(tree.DInt(kv.Value.Timestamp.Logical)),
+	})
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
 func (b *buffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
-}
-
-func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
-	// TODO(dan): Spill to a temp rocksdb if entriesCh would block.
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case b.entriesCh <- e:
-		return nil
-	}
+	log.Infof(ctx, "AddResolved %v %s", span, ts)
+	return b.addRow(ctx, tree.Datums{
+		tree.DNull,
+		tree.DNull,
+		b.a.NewDBytes(tree.DBytes(span.Key)),
+		b.a.NewDBytes(tree.DBytes(span.EndKey)),
+		b.a.NewDInt(tree.DInt(ts.WallTime)),
+		b.a.NewDInt(tree.DInt(ts.Logical)),
+	})
 }
 
 // Get returns an entry from the buffer. They are handed out in an order that
 // (if it is maintained all the way to the sink) meets our external guarantees.
 func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
-	select {
-	case <-ctx.Done():
-		return bufferEntry{}, ctx.Err()
-	case e := <-b.entriesCh:
-		return e, nil
+	row, err := b.getRow(ctx)
+	if err != nil {
+		return bufferEntry{}, err
+	}
+	ts := hlc.Timestamp{
+		WallTime: int64(*row[4].(*tree.DInt)),
+		Logical:  int32(*row[5].(*tree.DInt)),
+	}
+	if row[0] != tree.DNull {
+		kv := roachpb.KeyValue{
+			Key: []byte(*row[0].(*tree.DBytes)),
+			Value: roachpb.Value{
+				RawBytes:  []byte(*row[1].(*tree.DBytes)),
+				Timestamp: ts,
+			},
+		}
+		// WIP minTimestamp
+		log.Infof(ctx, "Get KV %s %s -> %s", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
+		return bufferEntry{kv: kv}, nil
+	}
+	span := roachpb.Span{
+		Key:    []byte(*row[2].(*tree.DBytes)),
+		EndKey: []byte(*row[3].(*tree.DBytes)),
+	}
+	log.Infof(ctx, "Get Resolved %s %s", span, ts)
+	return bufferEntry{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}}, nil
+}
+
+func (b *buffer) addRow(ctx context.Context, row tree.Datums) error {
+	b.mu.Lock()
+	_, err := b.mu.entries.AddRow(ctx, row)
+	b.mu.Unlock()
+	if err != nil {
+		// WIP check err in case we need to shut down poller.
+		return err
+	}
+	// WIP if b.entries is larger than some size, shut down the poller.
+	return nil
+}
+
+func (b *buffer) getRow(ctx context.Context) (tree.Datums, error) {
+	var row tree.Datums
+	for {
+		b.mu.Lock()
+		if b.mu.entries.Len() > 0 {
+			row = b.mu.entries.At(0)
+			b.mu.entries.PopFirst()
+		}
+		b.mu.Unlock()
+		if row != nil {
+			return row, nil
+		}
+
+		// WIP use a sync.Cond or something
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Millisecond):
+		}
 	}
 }

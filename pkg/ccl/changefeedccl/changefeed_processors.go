@@ -38,6 +38,9 @@ type changeAggregator struct {
 	cancel func()
 	// errCh contains the return values of the poller.
 	errCh chan error
+	// buf divorces the rate at which we can write to the sink from the rate at
+	// which we poll (or read from a RangeFeed).
+	buf *buffer
 	// poller runs in the background and puts kv changes and resolved spans into
 	// a buffer, which is used by `Next()`.
 	poller *poller
@@ -146,13 +149,13 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(metrics, ca.sink)
 
-	buf := makeBuffer()
+	ca.buf = makeBuffer(ca.memAcc)
 	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
 		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
-		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr,
+		spans, ca.spec.Feed, initialHighWater, ca.buf, leaseMgr,
 	)
-	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
+	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, ca.buf.Get)
 
 	var knobs TestingKnobs
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -204,6 +207,10 @@ func (ca *changeAggregator) close() {
 			if err := ca.sink.Close(); err != nil {
 				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
 			}
+		}
+		if ca.buf != nil {
+			log.Info(ca.Ctx, "CLOSING BUF")
+			ca.buf.Close(ca.Ctx)
 		}
 		ca.memAcc.Close(ca.Ctx)
 		ca.MemMonitor.Stop(ca.Ctx)
@@ -281,7 +288,6 @@ type changeFrontier struct {
 
 	flowCtx *distsqlrun.FlowCtx
 	spec    distsqlrun.ChangeFrontierSpec
-	memAcc  mon.BoundAccount
 	a       sqlbase.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
@@ -333,7 +339,6 @@ func newChangeFrontierProcessor(
 	cf := &changeFrontier{
 		flowCtx: flowCtx,
 		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
 		input:   input,
 		sf:      makeSpanFrontier(spec.TrackedSpans...),
 	}
@@ -442,7 +447,6 @@ func (cf *changeFrontier) close() {
 				log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
 			}
 		}
-		cf.memAcc.Close(cf.Ctx)
 		cf.MemMonitor.Stop(cf.Ctx)
 	}
 }

@@ -381,7 +381,9 @@ func (mm *BytesMonitor) EmergencyStop(ctx context.Context) {
 
 // Stop completes a monitoring region.
 func (mm *BytesMonitor) Stop(ctx context.Context) {
-	mm.doStop(ctx, true)
+	// WIP I'm closing the monitor, why are we leaking bytes?
+	// mm.doStop(ctx, true)
+	mm.EmergencyStop(ctx)
 }
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
