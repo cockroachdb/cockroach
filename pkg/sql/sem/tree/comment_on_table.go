@@ -22,19 +22,13 @@ type CommentOnTable struct {
 	Comment *string
 }
 
-func (node *CommentOnTable) String() string {
-	return "Comment"
-}
-
-func (node *CommentOnTable) StatementType() StatementType { return DDL }
-func (node *CommentOnTable) StatementTag() string         { return "COMMENT ON TABLE" }
-
-func (node *CommentOnTable) Format(ctx *FmtCtx) {
+// Format implements the NodeFormatter interface.
+func (n *CommentOnTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON TABLE ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(&n.Table)
 	ctx.WriteString(" IS ")
-	if node.Comment != nil {
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, *node.Comment, ctx.flags.EncodeFlags())
+	if n.Comment != nil {
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
 	} else {
 		ctx.WriteString("NULL")
 	}

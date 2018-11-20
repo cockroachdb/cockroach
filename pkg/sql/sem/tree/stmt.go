@@ -180,6 +180,12 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*CommentOnTable) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
+
+// StatementType implements the Statement interface.
 func (*AlterSequence) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -797,6 +803,7 @@ func (n *AlterTableDropConstraint) String() string  { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string     { return AsString(n) }
 func (n *AlterTableDropStored) String() string      { return AsString(n) }
 func (n *AlterTableSetDefault) String() string      { return AsString(n) }
+func (n *CommentOnTable) String() string            { return AsString(n) }
 func (n *AlterUserSetPassword) String() string      { return AsString(n) }
 func (n *AlterSequence) String() string             { return AsString(n) }
 func (n *Backup) String() string                    { return AsString(n) }
