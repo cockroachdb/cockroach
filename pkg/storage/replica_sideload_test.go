@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -406,7 +407,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		// after having (perhaps) been modified.
 		thin, fat raftpb.Entry
 		// Populate the raft entry cache and sideload storage before running the test.
-		setup func(*raftEntryCache, sideloadStorage)
+		setup func(*raftentry.Cache, sideloadStorage)
 		// If nonempty, the error expected from maybeInlineSideloadedRaftCommand.
 		expErr string
 		// If nonempty, a regex that the recorded trace span must match.
@@ -421,7 +422,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		CRC32: 0, // not checked
 	}
 
-	putOnDisk := func(ec *raftEntryCache, ss sideloadStorage) {
+	putOnDisk := func(ec *raftentry.Cache, ss sideloadStorage) {
 		if err := ss.Put(context.Background(), 5, 6, sstFat.Data); err != nil {
 			t.Fatal(err)
 		}
@@ -448,14 +449,14 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		},
 		"v2-with-payload-with-file-with-cache": {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
-			setup: func(ec *raftEntryCache, ss sideloadStorage) {
+			setup: func(ec *raftentry.Cache, ss sideloadStorage) {
 				putOnDisk(ec, ss)
-				ec.addEntries(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)})
+				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)})
 			}, expTrace: "using cache hit",
 		},
 		"v2-fat-without-file": {
 			thin: mkEnt(v2, 5, 6, &sstFat), fat: mkEnt(v2, 5, 6, &sstFat),
-			setup:    func(ec *raftEntryCache, ss sideloadStorage) {},
+			setup:    func(ec *raftentry.Cache, ss sideloadStorage) {},
 			expTrace: "already inlined",
 		},
 	}
@@ -464,7 +465,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
 		defer cancel()
 
-		ec := newRaftEntryCache(1024) // large enough
+		ec := raftentry.NewCache(1024) // large enough
 		ss := mustNewInMemSideloadStorage(rangeID, roachpb.ReplicaID(1), ".")
 		if test.setup != nil {
 			test.setup(ec, ss)
@@ -934,7 +935,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
 		for _, withSS := range []bool{false, true} {
-			tc.store.raftEntryCache.clearTo(tc.repl.RangeID, sideloadedIndex+1)
+			tc.store.raftEntryCache.Clear(tc.repl.RangeID, sideloadedIndex+1)
 
 			var ss sideloadStorage
 			if withSS {
@@ -951,7 +952,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			if len(entries) != 1 {
 				t.Fatalf("no or too many entries returned from cache: %+v", entries)
 			}
-			ents, _, _, _ := tc.store.raftEntryCache.getEntries(nil, tc.repl.RangeID, sideloadedIndex, sideloadedIndex+1, 1<<20)
+			ents, _, _, _ := tc.store.raftEntryCache.Scan(nil, tc.repl.RangeID, sideloadedIndex, sideloadedIndex+1, 1<<20)
 			if withSS {
 				// We passed the sideload storage, so we expect to get our
 				// inlined index back from the cache.
@@ -1000,7 +1001,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		tc.repl.raftMu.Unlock()
 		// Additionally we need to clear out the entry from the cache because
 		// that would still save the day.
-		tc.store.raftEntryCache.clearTo(tc.repl.RangeID, sideloadedIndex+1)
+		tc.store.raftEntryCache.Clear(tc.repl.RangeID, sideloadedIndex+1)
 
 		mockSender := &mockSender{}
 		err = sendSnapshot(
