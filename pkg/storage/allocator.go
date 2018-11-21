@@ -544,18 +544,19 @@ func (a Allocator) RebalanceTarget(
 	// NB: The len(rangeInfo.Desc.Replicas) > 1 check allows rebalancing of ranges
 	// with only a single replica. This is a corner case which could happen in
 	// practice and also affects tests.
-	if len(rangeInfo.Desc.Replicas) > 1 {
-		var numLiveReplicas int
+	if n := len(rangeInfo.Desc.Replicas); n > 1 {
+		liveReplicas := make([]roachpb.ReplicaDescriptor, 0, n)
 		for _, s := range sl.stores {
 			for _, repl := range rangeInfo.Desc.Replicas {
 				if s.StoreID == repl.StoreID {
-					numLiveReplicas++
+					liveReplicas = append(liveReplicas, repl)
 					break
 				}
 			}
 		}
-		newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas) + 1)
-		if numLiveReplicas < newQuorum {
+		newQuorum := computeQuorum(n + 1)
+		upToDateReplicas := filterBehindReplicas(raftStatus, liveReplicas, 0 /* brandNewReplicaID */)
+		if len(upToDateReplicas) < newQuorum {
 			// Don't rebalance as we won't be able to make quorum after the rebalance
 			// until the new replica has been caught up.
 			return nil, ""

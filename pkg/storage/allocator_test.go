@@ -26,12 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-
-	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -50,6 +44,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/olekukonko/tablewriter"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 const firstRange = roachpb.RangeID(1)
@@ -295,6 +294,22 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+// Create a Raft status that shows everyone fully up to date.
+func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
+	prs := make(map[uint64]raft.Progress)
+	for _, repl := range repls {
+		prs[uint64(repl.ReplicaID)] = raft.Progress{
+			State: raft.ProgressStateReplicate,
+			Match: 100,
+		}
+	}
+	return &raft.Status{
+		HardState: raftpb.HardState{Commit: 100},
+		SoftState: raft.SoftState{Lead: 1},
+		Progress:  prs,
+	}
+}
+
 func testRangeInfo(replicas []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID) RangeInfo {
 	return RangeInfo{
 		Desc: &roachpb.RangeDescriptor{
@@ -309,6 +324,7 @@ func replicas(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
 	for i, storeID := range storeIDs {
 		res[i].NodeID = roachpb.NodeID(storeID)
 		res[i].StoreID = storeID
+		res[i].ReplicaID = roachpb.ReplicaID(i + 1)
 	}
 	return res
 }
@@ -597,37 +613,37 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	}{
 		{
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 			},
 			expectTarget: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 2},
-				{NodeID: 2, StoreID: 3},
+				{NodeID: 1, StoreID: 2, ReplicaID: 1},
+				{NodeID: 2, StoreID: 3, ReplicaID: 2},
 			},
 			expectTarget: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 2},
-				{NodeID: 3, StoreID: 6},
+				{NodeID: 1, StoreID: 2, ReplicaID: 1},
+				{NodeID: 3, StoreID: 6, ReplicaID: 2},
 			},
 			expectTarget: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
-				{NodeID: 2, StoreID: 3},
-				{NodeID: 3, StoreID: 5},
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 3, ReplicaID: 2},
+				{NodeID: 3, StoreID: 5, ReplicaID: 3},
 			},
 			expectTarget: false,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 2},
-				{NodeID: 2, StoreID: 4},
-				{NodeID: 3, StoreID: 6},
+				{NodeID: 1, StoreID: 2, ReplicaID: 3},
+				{NodeID: 2, StoreID: 4, ReplicaID: 2},
+				{NodeID: 3, StoreID: 6, ReplicaID: 1},
 			},
 			expectTarget: false,
 		},
@@ -648,7 +664,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 		result, details := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
-			nil, /* raftStatus */
+			upToDateRaftStatus(tc.existing),
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
 		)
@@ -747,6 +763,56 @@ func TestAllocatorRebalance(t *testing.T) {
 	}
 }
 
+func TestAllocatorRebalanceTargetWhileBehind(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(ctx)
+
+	existing := replicas(1, 2, 3)
+
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 4; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			StoreID: roachpb.StoreID(i),
+			// Create a range imbalance so that it's tempting to try to rebalance.
+			Capacity: roachpb.StoreCapacity{RangeCount: int32(100 / i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	status := upToDateRaftStatus(existing)
+
+	if target, _ := a.RebalanceTarget(
+		ctx,
+		config.EmptyCompleteZoneConfig(),
+		status,
+		testRangeInfo(existing, firstRange),
+		storeFilterThrottled,
+	); target == nil {
+		t.Fatalf("expected a rebalance, but none found")
+	}
+
+	// Now move a follower into non-replicating state.
+	pr := status.Progress[2]
+	pr.State = raft.ProgressStateSnapshot
+	status.Progress[2] = pr
+
+	if target, details := a.RebalanceTarget(
+		ctx,
+		config.EmptyCompleteZoneConfig(),
+		status,
+		testRangeInfo(existing, firstRange),
+		storeFilterThrottled,
+	); target != nil {
+		t.Fatalf("expected no action, but got %v %v", target, details)
+	}
+}
+
 // TestAllocatorRebalanceTarget could help us to verify whether we'll rebalance to a target that
 // we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
@@ -838,9 +904,9 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	sg.GossipStores(stores, t)
 
 	replicas := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 4, StoreID: 4},
-		{NodeID: 5, StoreID: 5},
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 4, StoreID: 4, ReplicaID: 2},
+		{NodeID: 5, StoreID: 5, ReplicaID: 3},
 	}
 	repl := &Replica{RangeID: firstRange}
 
@@ -858,14 +924,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 
-	status := &raft.Status{
-		Progress: make(map[uint64]raft.Progress),
-	}
-	for _, replica := range replicas {
-		status.Progress[uint64(replica.NodeID)] = raft.Progress{
-			Match: 10,
-		}
-	}
+	status := upToDateRaftStatus(replicas)
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
@@ -980,7 +1039,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 			result, _ := a.RebalanceTarget(
 				ctx,
 				config.EmptyCompleteZoneConfig(),
-				nil,
+				upToDateRaftStatus(c.existing),
 				testRangeInfo(c.existing, firstRange),
 				storeFilterThrottled)
 			if c.expected > 0 {
@@ -1451,7 +1510,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		result, details := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
-			nil, /* raftStatus */
+			upToDateRaftStatus(tc.existing),
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
 		)
@@ -1519,7 +1578,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		result, details := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
-			nil, /* raftStatus */
+			upToDateRaftStatus(tc.existing),
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
 		)
@@ -2215,14 +2274,15 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
 		for i, storeID := range c.existing {
 			existingRepls[i] = roachpb.ReplicaDescriptor{
-				NodeID:  roachpb.NodeID(storeID),
-				StoreID: storeID,
+				NodeID:    roachpb.NodeID(storeID),
+				StoreID:   storeID,
+				ReplicaID: roachpb.ReplicaID(i + 1),
 			}
 		}
 		targetStore, details := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
-			nil,
+			upToDateRaftStatus(existingRepls),
 			testRangeInfo(existingRepls, firstRange),
 			storeFilterThrottled,
 		)
@@ -3578,8 +3638,9 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
 		for i, storeID := range tc.existing {
 			existingRepls[i] = roachpb.ReplicaDescriptor{
-				NodeID:  roachpb.NodeID(storeID),
-				StoreID: storeID,
+				NodeID:    roachpb.NodeID(storeID),
+				StoreID:   storeID,
+				ReplicaID: roachpb.ReplicaID(i + 1),
 			}
 		}
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
@@ -3619,16 +3680,20 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		} else {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
+
+			status := upToDateRaftStatus(existingRepls)
 			target, details := a.RebalanceTarget(
-				context.Background(), zone, nil, rangeInfo, storeFilterThrottled)
+				context.Background(), zone, status, rangeInfo, storeFilterThrottled)
 			var found bool
 			if target == nil && len(tc.validTargets) == 0 {
 				found = true
 			}
-			for _, storeID := range tc.validTargets {
-				if storeID == target.StoreID {
-					found = true
-					break
+			if target != nil {
+				for _, storeID := range tc.validTargets {
+					if storeID == target.StoreID {
+						found = true
+						break
+					}
 				}
 			}
 			if !found {
@@ -5270,9 +5335,9 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 	}
 
 	existingReplicas := []roachpb.ReplicaDescriptor{
-		{StoreID: stores[0].StoreID},
-		{StoreID: stores[1].StoreID},
-		{StoreID: stores[2].StoreID},
+		{StoreID: stores[0].StoreID, ReplicaID: 1},
+		{StoreID: stores[1].StoreID, ReplicaID: 2},
+		{StoreID: stores[2].StoreID, ReplicaID: 3},
 	}
 	testCases := []struct {
 		constraint config.Constraint
@@ -5332,7 +5397,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			actual, _ := a.RebalanceTarget(
 				ctx,
 				&config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []config.Constraints{constraints}},
-				nil,
+				upToDateRaftStatus(existingReplicas),
 				testRangeInfo(existingReplicas, firstRange),
 				storeFilterThrottled,
 			)
@@ -5488,11 +5553,12 @@ func TestAllocatorFullDisks(t *testing.T) {
 				ts := &testStores[k]
 				// Rebalance until there's no more rebalancing to do.
 				if ts.Capacity.RangeCount > 0 {
+					rangeInfo := testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID, ReplicaID: roachpb.ReplicaID(ts.StoreID)}}, firstRange)
 					target, details := alloc.RebalanceTarget(
 						ctx,
 						config.EmptyCompleteZoneConfig(),
-						nil,
-						testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
+						upToDateRaftStatus(rangeInfo.Desc.Replicas),
+						rangeInfo,
 						storeFilterThrottled,
 					)
 					if target != nil {
@@ -5610,11 +5676,12 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
+			rangeInfo := testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID, ReplicaID: roachpb.ReplicaID(ts.StoreID)}}, firstRange)
 			target, details := alloc.RebalanceTarget(
 				context.Background(),
 				config.EmptyCompleteZoneConfig(),
-				nil,
-				testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
+				upToDateRaftStatus(rangeInfo.Desc.Replicas),
+				rangeInfo,
 				storeFilterThrottled,
 			)
 			if target != nil {
