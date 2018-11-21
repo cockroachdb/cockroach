@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -123,6 +124,15 @@ func (mq *mergeQueue) enabled() bool {
 	return st.Version.IsMinSupported(cluster.VersionRangeMerges) && storagebase.MergeQueueEnabled.Get(&st.SV)
 }
 
+func (mq *mergeQueue) mergesDisabled(desc *roachpb.RangeDescriptor) bool {
+	_, tableID, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey())
+	if err != nil {
+		return false
+	}
+	_, err = mq.gossip.GetInfo(gossip.MakeTableDisableMergesKey(uint32(tableID)))
+	return err == nil
+}
+
 func (mq *mergeQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
@@ -148,6 +158,10 @@ func (mq *mergeQueue) shouldQueue(
 	if math.IsNaN(sizeRatio) || sizeRatio >= 1 {
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
+		return false, 0
+	}
+
+	if mq.mergesDisabled(desc) {
 		return false, 0
 	}
 
@@ -194,6 +208,12 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
+	lhsDesc := lhsRepl.Desc()
+	if mq.mergesDisabled(lhsDesc) {
+		log.VEventf(ctx, 2, "skipping merge: merges are temporarily disabled for this table")
+		return nil
+	}
+
 	lhsStats := lhsRepl.GetMVCCStats()
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
@@ -202,7 +222,6 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	lhsDesc := lhsRepl.Desc()
 	lhsQPS := lhsRepl.GetSplitQPS()
 	timeSinceLastReq := lhsRepl.store.Clock().PhysicalTime().Sub(lhsRepl.GetLastRequestTime())
 	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
