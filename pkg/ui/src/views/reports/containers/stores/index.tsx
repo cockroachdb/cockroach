@@ -86,11 +86,6 @@ class Stores extends React.Component<StoresProps, {}> {
 
   renderContent = () => {
     const nodeID = this.props.params[nodeIDAttr];
-    if (!_.isNil(this.props.lastError)) {
-      return (
-        <h2>Error loading stores for node {nodeID}</h2>
-      );
-    }
 
     const { stores } = this.props;
     if (_.isEmpty(stores)) {
@@ -124,7 +119,7 @@ class Stores extends React.Component<StoresProps, {}> {
         <h2>{header} stores</h2>
         <Loading
           loading={this.props.loading}
-          className="loading-image loading-image__spinner"
+          error={this.props.lastError}
           render={this.renderContent}
         />
       </div>

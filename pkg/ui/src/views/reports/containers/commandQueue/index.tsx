@@ -122,6 +122,7 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
         </h1>
         <Loading
           loading={!this.props.commandQueue || this.props.commandQueue.inFlight}
+          error={this.props.commandQueue && this.props.commandQueue.lastError}
           render={this.renderReportBody}
         />
       </div>

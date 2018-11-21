@@ -28,6 +28,7 @@ const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContain
 interface ClusterVisualizationProps {
   licenseDataExists: boolean;
   enterpriseEnabled: boolean;
+  clusterDataError: Error | null;
 }
 
 class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
@@ -78,6 +79,7 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
+          error={this.props.clusterDataError}
           render={() => <NodeCanvasContent tiers={tiers} />}
         />
       </div>
@@ -89,6 +91,7 @@ function mapStateToProps(state: AdminUIState) {
   return {
     licenseDataExists: !!state.cachedData.cluster.data,
     enterpriseEnabled: selectEnterpriseEnabled(state),
+    clusterDataError: state.cachedData.cluster.lastError,
   };
 }
 

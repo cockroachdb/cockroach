@@ -111,6 +111,7 @@ class Localities extends React.Component<LocalitiesProps, {}> {
         <section className="section"><h1>Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
+          error={ [this.props.localityStatus.lastError, this.props.locationStatus.lastError] }
           render={() => (
             <section className="section">
               <table className="locality-table">

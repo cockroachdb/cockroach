@@ -20,9 +20,16 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
+import { createSelector } from "reselect";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LivenessStatus, NodesSummary, nodesSummarySelector } from "src/redux/nodes";
+import {
+  LivenessStatus,
+  NodesSummary,
+  nodesSummarySelector,
+  selectLivenessRequestStatus,
+  selectNodeRequestStatus,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
@@ -36,6 +43,7 @@ import Loading from "src/views/shared/components/loading";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
+  nodeSummaryErrors: Error[];
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
 }
@@ -456,6 +464,7 @@ class Network extends React.Component<NetworkProps, {}> {
         <h1>Network Diagnostics</h1>
         <Loading
           loading={!contentAvailable(nodesSummary)}
+          error={this.props.nodeSummaryErrors}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           render={() => (
             <div>
@@ -469,9 +478,16 @@ class Network extends React.Component<NetworkProps, {}> {
   }
 }
 
+const nodeSummaryErrors = createSelector(
+  selectNodeRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, liveness) => [nodes.lastError, liveness.lastError],
+);
+
 function mapStateToProps(state: AdminUIState) {
   return {
     nodesSummary: nodesSummarySelector(state),
+    nodeSummaryErrors: nodeSummaryErrors(state),
   };
 }
 

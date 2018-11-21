@@ -41,6 +41,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
       <h2>Connections {viaNodeID}</h2>
       <Loading
         loading={!range || range.inFlight}
+        error={range && range.lastError}
         render={() => (
           <table className="connections-table">
             <tbody>
