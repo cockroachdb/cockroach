@@ -476,7 +476,7 @@ func (r *Registry) resume(
 	taskName := fmt.Sprintf(`job-%d`, *job.ID())
 	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-job", payload.Username)
+		phs, cleanup := r.planFn("resume-"+taskName, payload.Username)
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
 		var span opentracing.Span
