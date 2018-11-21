@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var zeroTS = hlc.Timestamp{}
@@ -805,13 +806,14 @@ func assertExpectedPrereqs(
 	}
 }
 
-func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
+func BenchmarkCommandQueueReadOnlyMix(b *testing.B) {
 	// Test read-only getPrereqs performance for various number of command queue
 	// entries. See #13627 where a previous implementation of
 	// CommandQueue.getOverlaps had O(n) performance in this setup. Since reads
 	// do not wait on other reads, expected performance is O(1).
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
+			var mu syncutil.Mutex
 			cq := NewCommandQueue(true)
 			spans := []roachpb.Span{{
 				Key:    roachpb.Key("aaaaaaaaaa"),
@@ -823,7 +825,10 @@ func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = cq.getPrereqs(true, zeroTS, spans)
+				mu.Lock()
+				prereqs := cq.getPrereqs(true, zeroTS, spans)
+				cq.add(true, zeroTS, prereqs, spans)
+				mu.Unlock()
 			}
 		})
 	}
@@ -833,32 +838,40 @@ func BenchmarkCommandQueueReadWriteMix(b *testing.B) {
 	// Test performance with a mixture of reads and writes with a high number
 	// of reads per write.
 	// See #15544.
-	for _, readsPerWrite := range []int{1, 4, 16, 64, 128, 256} {
+	for _, readsPerWrite := range []int{0, 1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("readsPerWrite=%d", readsPerWrite), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				totalCmds := 1 << 10
-				liveCmdQueue := make(chan *cmd, 16)
-				cq := NewCommandQueue(true /* coveringOptimization */)
-				for j := 0; j < totalCmds; j++ {
-					a, b := randBytes(100), randBytes(100)
-					// Overwrite first byte so that we do not mix local and global ranges
-					a[0], b[0] = 'a', 'a'
-					if bytes.Compare(a, b) > 0 {
-						a, b = b, a
-					}
-					spans := []roachpb.Span{{
-						Key:    roachpb.Key(a),
-						EndKey: roachpb.Key(b),
-					}}
-					var cmd *cmd
-					readOnly := j%(readsPerWrite+1) != 0
-					prereqs := cq.getPrereqs(readOnly, zeroTS, spans)
-					cmd = cq.add(readOnly, zeroTS, prereqs, spans)
-					if len(liveCmdQueue) == cap(liveCmdQueue) {
-						cq.remove(<-liveCmdQueue)
-					}
-					liveCmdQueue <- cmd
+			var mu syncutil.Mutex
+			cq := NewCommandQueue(true /* coveringOptimization */)
+			liveCmdQueue := make(chan *cmd, 16)
+
+			spans := make([][]roachpb.Span, b.N)
+			for i := range spans {
+				a, b := randBytes(100), randBytes(100)
+				// Overwrite first byte so that we do not mix local and global ranges
+				a[0], b[0] = 'a', 'a'
+				if bytes.Compare(a, b) > 0 {
+					a, b = b, a
 				}
+				spans[i] = []roachpb.Span{{
+					Key:    roachpb.Key(a),
+					EndKey: roachpb.Key(b),
+				}}
+			}
+
+			b.ResetTimer()
+			for i := range spans {
+				mu.Lock()
+				readOnly := i%(readsPerWrite+1) != 0
+				prereqs := cq.getPrereqs(readOnly, zeroTS, spans[i])
+				cmd := cq.add(readOnly, zeroTS, prereqs, spans[i])
+				mu.Unlock()
+
+				if len(liveCmdQueue) == cap(liveCmdQueue) {
+					mu.Lock()
+					cq.remove(<-liveCmdQueue)
+					mu.Unlock()
+				}
+				liveCmdQueue <- cmd
 			}
 		})
 	}

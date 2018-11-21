@@ -530,7 +530,7 @@ func TestBTreeCloneConcurrentOperations(t *testing.T) {
 func TestBTreeCmp(t *testing.T) {
 	testCases := []struct {
 		spanA, spanB roachpb.Span
-		idA, idB     int64
+		idA, idB     uint64
 		exp          int
 	}{
 		{
@@ -593,8 +593,8 @@ func TestBTreeCmp(t *testing.T) {
 	for _, tc := range testCases {
 		name := fmt.Sprintf("cmp(%s:%d,%s:%d)", tc.spanA, tc.idA, tc.spanB, tc.idB)
 		t.Run(name, func(t *testing.T) {
-			laA := &latch{id: tc.idA, span: tc.spanA}
-			laB := &latch{id: tc.idB, span: tc.spanB}
+			laA := &latch{meta: tc.idA, span: tc.spanA}
+			laB := &latch{meta: tc.idB, span: tc.spanB}
 			require.Equal(t, tc.exp, cmp(laA, laB))
 		})
 	}
