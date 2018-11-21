@@ -78,6 +78,10 @@ var trackedMetrics = map[string]threshold{
 	"queue.raftsnapshot.process.failure":  counterZero,
 	"queue.tsmaintenance.process.failure": counterZero,
 	"queue.consistency.process.failure":   counterZero,
+
+	// When there are more than 100 pending items in the Raft snapshot queue,
+	// this is certainly worth pointing out.
+	"queue.raftsnapshot.pending": {gauge: true, min: 100},
 }
 
 type metricsMap map[roachpb.StoreID]map[string]float64
