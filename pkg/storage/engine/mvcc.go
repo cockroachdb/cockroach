@@ -2152,19 +2152,8 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
-	// Otherwise, we're deleting the intent. We must find the next
-	// versioned value and reset the metadata's latest timestamp. If
-	// there are no other versioned values, we delete the metadata
-	// key.
-	//
-	// Note that the somewhat unintuitive case of an ABORT with
-	// intent.Txn.Epoch < meta.Txn.Epoch is possible:
-	// - writer1 writes key0 at epoch 0
-	// - writer2 with higher priority encounters intent at key0 (epoch 0)
-	// - writer1 restarts, now at epoch one (txn record not updated)
-	// - writer1 writes key0 at epoch 1
-	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
-	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
+	// Otherwise, we're deleting the intent, which includes deleting the
+	// MVCCMetadata.
 
 	// First clear the intent value.
 	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
