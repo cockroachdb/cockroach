@@ -106,6 +106,10 @@ func (b *Builder) buildScalar(
 		}
 		out = b.factory.ConstructArray(els, arrayType)
 
+	case *tree.CollateExpr:
+		in := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		out = b.factory.ConstructCollate(in, t.Locale)
+
 	case *tree.ArrayFlatten:
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(t)
