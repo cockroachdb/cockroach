@@ -83,7 +83,7 @@ type _GOTYPE interface{}
 
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
-const _TYPES_T = Unhandled
+const _TYPES_T = types.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
