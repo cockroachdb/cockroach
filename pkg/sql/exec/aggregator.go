@@ -222,7 +222,10 @@ func (a *orderedAggregator) Next() ColBatch {
 		for i := 0; i < len(a.aggTyps); i++ {
 			// According to the aggregate function interface contract, the value at
 			// the current index must also be copied.
-			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i), a.scratch.outputSize, a.scratch.resumeIdx+1, a.aggTyps[i][0])
+			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i),
+				uint64(a.scratch.outputSize),
+				uint64(a.scratch.resumeIdx)+1,
+				a.aggTyps[i][0])
 			a.scratch.resumeIdx = a.scratch.resumeIdx - a.scratch.outputSize
 			if a.scratch.resumeIdx >= a.scratch.outputSize {
 				// We still have overflow output values.
