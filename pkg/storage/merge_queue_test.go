@@ -21,6 +21,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -48,6 +49,13 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *config.NewZoneConfig())
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *config.NewZoneConfig())
+
+	// Disable merges for table ID 3.
+	if err := testCtx.gossip.AddInfo(
+		gossip.MakeTableDisableMergesKey(keys.MaxReservedDescID+3),
+		nil /* value */, 0 /* ttl */); err != nil {
+		t.Fatal(err)
+	}
 
 	type testCase struct {
 		startKey, endKey []byte
@@ -146,6 +154,13 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			bytes:       768,
 			expShouldQ:  true,
 			expPriority: 0.25,
+		},
+
+		// Merges disabled for a table via gossip.
+		{
+			startKey: tableKey(3),
+			endKey:   tableKey(4),
+			minBytes: 1,
 		},
 	}
 
