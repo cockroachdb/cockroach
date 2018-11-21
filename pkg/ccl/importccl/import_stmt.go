@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1037,6 +1038,18 @@ func (r *importResumer) Resume(
 				return errors.Errorf("invalid table specification")
 			}
 		}
+	}
+
+	{
+		// Disable merging for the table IDs being imported into. We don't want the
+		// merge queue undoing the splits performed during IMPORT.
+		tableIDs := make([]uint32, 0, len(tables))
+		for _, t := range tables {
+			tableIDs = append(tableIDs, uint32(t.ID))
+		}
+		disableCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		gossipccl.DisableMerges(disableCtx, p.ExecCfg().Gossip, tableIDs)
 	}
 
 	res, err := doDistributedCSVTransform(
