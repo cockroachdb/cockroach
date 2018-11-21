@@ -54,6 +54,8 @@ func (p *planner) validateCheckExpr(
 	if err != nil {
 		return err
 	}
+	defer rows.Close(ctx)
+
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: &p.extendedEvalCtx,
@@ -125,20 +127,38 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	values, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "validate-fk", p.txn, query,
-	)
+	rows, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
 	if err != nil {
 		return err
 	}
 
-	if len(values) > 0 {
+	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	if err != nil {
+		return err
+	}
+	defer rows.Close(ctx)
+
+	params := runParams{
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
+	}
+	if err := startPlan(params, rows); err != nil {
+		return err
+	}
+	next, err := rows.Next(params)
+	if err != nil {
+		return err
+	}
+
+	if next {
+		values := rows.Values()
 		var pairs bytes.Buffer
-		for i := range values[0] {
+		for i := range values {
 			if i > 0 {
 				pairs.WriteString(", ")
 			}
-			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[0][i]))
+			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
 		}
 		return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 			"foreign key violation: %q row %s has no match in %q",
