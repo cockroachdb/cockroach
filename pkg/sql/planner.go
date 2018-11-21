@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -244,7 +245,7 @@ func newInternalPlanner(
 	p.semaCtx.SearchPath = sd.SearchPath
 
 	plannerMon := mon.MakeUnlimitedMonitor(ctx,
-		"internal-planner",
+		fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
