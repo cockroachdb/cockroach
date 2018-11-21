@@ -707,7 +707,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/rowstovec.eg.go \
   pkg/sql/exec/selection_ops.eg.go \
   pkg/sql/exec/colvec.eg.go \
-  pkg/sql/exec/hashjoiner.eg.go
+  pkg/sql/exec/hashjoiner.eg.go \
+  pkg/sql/exec/sort.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1330,8 +1331,9 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
 pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
-pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
+pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
+pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
 	@# Remove generated files with the old suffix to avoid conflicts.
