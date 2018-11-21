@@ -5184,6 +5184,23 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 			if r.maybeDropMsgAppResp(ctx, message) {
 				drop = true
 			}
+			if !drop && message.Reject && message.RejectHint == 0 {
+				// Raft doesn't use the RejectHint when it's zero, even though
+				// it always correctly populates it. This leads to this peer
+				// spending a lot of time being probed (the number of
+				// untruncated indexes times the heartbeat interval, so
+				// potentially many seconds). Not only does this delay recovery,
+				// it also opens up a wide window during which splitting the
+				// range will require more snapshots down the road.
+				//
+				// Changing the RejectHint to one solves this problem since this
+				// is always a "truncated index" in our use of Raft until we've
+				// fixed this in etcd/raft.
+				//
+				// TODO(tschottdorf): create and link to the upstream PR.
+				message.RejectHint = 1
+			}
+
 		}
 		if !drop {
 			r.sendRaftMessage(ctx, message)
