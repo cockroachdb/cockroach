@@ -36,6 +36,7 @@ import (
 // JSON unmarshaling.
 type regexpAsString struct {
 	re *regexp.Regexp
+	i  int64 // optional, populated if the regexp is an integer to match on goroutine ID
 }
 
 func (r regexpAsString) String() string {
@@ -49,6 +50,11 @@ func (r *regexpAsString) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
+	}
+	if i, err := strconv.ParseInt(s, 10, 64); err != nil {
+		// Ignore.
+	} else {
+		r.i = i
 	}
 	var err error
 	(*r).re, err = regexp.Compile(s)
@@ -187,8 +193,14 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	}
 
 	spy.setIntercept(ctx, func(entry log.Entry) {
-		if re := opts.Grep.re; re != nil && !re.MatchString(entry.Message) && !re.MatchString(entry.File) {
-			return
+		if re := opts.Grep.re; re != nil {
+			switch {
+			case re.MatchString(entry.Message):
+			case re.MatchString(entry.File):
+			case opts.Grep.i != 0 && opts.Grep.i == entry.Goroutine:
+			default:
+				return
+			}
 		}
 
 		select {
