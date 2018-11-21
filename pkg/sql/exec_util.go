@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -147,6 +148,18 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 		int64(sessiondata.SerialUsesRowID):            "rowid",
 		int64(sessiondata.SerialUsesVirtualSequences): "virtual_sequence",
 		int64(sessiondata.SerialUsesSQLSequences):     "sql_sequence",
+	},
+)
+
+// DefaultIntSize controls the SQL type that INT gets mapped to.
+var DefaultIntSize = settings.RegisterEnumSetting(
+	"sql.default_int_size",
+	"the default size of the INT type in bytes",
+	// XXX link to cleanup issue to switch this to INT4.
+	intsize.INT8.String(),
+	map[int64]string{
+		int64(intsize.INT8): intsize.INT8.String(),
+		int64(intsize.INT4): intsize.INT4.String(),
 	},
 )
 
@@ -1604,6 +1617,10 @@ func (m *sessionDataMutator) SetExtraFloatDigits(val int) {
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
 	m.data.Database = dbName
+}
+
+func (m *sessionDataMutator) SetDefaultIntSize(size intsize.IntSize) {
+	m.data.DefaultIntSize = size
 }
 
 func (m *sessionDataMutator) SetDefaultIsolationLevel(iso enginepb.IsolationType) {

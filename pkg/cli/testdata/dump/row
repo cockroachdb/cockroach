@@ -59,7 +59,7 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	i INT NULL,
+	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
 	b BYTES NULL,
@@ -91,4 +91,3 @@ INSERT INTO t (i, f, s, b, d, t, ts, n, o, e, u, ip, j, ary, tz, e1, e2, s1) VAL
 	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 ----
 ----
-

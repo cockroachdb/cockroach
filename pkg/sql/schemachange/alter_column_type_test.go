@@ -46,6 +46,13 @@ func TestColumnConversions(t *testing.T) {
 	}
 
 	columnType := func(t testKey) *sqlbase.ColumnType {
+		// Hack to upgrade INT to INT8
+		// XXX link to issue to switch to INT4
+		if t.SemanticType == sqlbase.ColumnType_INT && t.Width == 0 {
+			t.Width = 64
+			t.VisibleType = sqlbase.ColumnType_BIGINT
+		}
+
 		return &sqlbase.ColumnType{
 			Precision:    t.Precision,
 			SemanticType: t.SemanticType,

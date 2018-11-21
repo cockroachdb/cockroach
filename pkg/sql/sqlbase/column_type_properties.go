@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
@@ -111,7 +112,7 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 // This must be used on ColumnTypes produced from
 // DatumTypeToColumnType if the origin of the type was a coltypes.T
 // (e.g. via CastTargetToDatumType).
-func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
+func PopulateTypeAttrs(ctx *tree.EvalContext, base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
 	case *coltypes.TBitArray:
 		if t.Width > math.MaxInt32 {
@@ -123,11 +124,22 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		}
 
 	case *coltypes.TInt:
-		base.Width = int32(t.Width)
+		if t.Width == 0 {
+			if ctx == nil {
+				// We'll see a nil context when setting up virtual tables.
+				// In this case, we'll default to our hard-coded default.
+				base.Width = int32(intsize.Unknown.Width())
+			} else {
+				base.Width = int32(ctx.GetDefaultIntSize().Width())
+			}
+		} else {
+			base.Width = int32(t.Width)
+		}
 
 		// For 2.1 nodes only Width is sufficient, but we also populate
 		// VisibleType for compatibility with pre-2.1 nodes.
-		switch t.Width {
+		// TODO(bob): Version 2.3: Retire VisibleType for INTS.
+		switch base.Width {
 		case 16:
 			base.VisibleType = ColumnType_SMALLINT
 		case 64:
@@ -165,7 +177,7 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
-		base, err = PopulateTypeAttrs(base, t.ParamType)
+		base, err = PopulateTypeAttrs(ctx, base, t.ParamType)
 		if err != nil {
 			return ColumnType{}, err
 		}
@@ -646,7 +658,7 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 // then a truncated copy is returned. Otherwise, an error is returned. This
 // method is used by INSERT and UPDATE.
 func LimitValueWidth(
-	typ ColumnType, inVal tree.Datum, name *string,
+	ctx *tree.EvalContext, typ ColumnType, inVal tree.Datum, name *string,
 ) (outVal tree.Datum, err error) {
 	switch typ.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
@@ -664,16 +676,11 @@ func LimitValueWidth(
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(inVal); ok {
-			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
-				// Width is defined in bits.
-				width := uint(typ.Width - 1)
-
-				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
-				shifted := v >> width
-				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+			if size, ok := intsize.FromWidth(int(typ.Width), ctx.GetDefaultIntSize()); ok {
+				if !v.RangeCheck(size) {
 					return nil, pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
-						typ.VisibleType, tree.ErrNameString(name))
+						size, tree.ErrNameString(name))
 				}
 			}
 		}
@@ -720,7 +727,7 @@ func LimitValueWidth(
 			var outArr *tree.DArray
 			elementType := *typ.elementColumnType()
 			for i, inElem := range inArr.Array {
-				outElem, err := LimitValueWidth(elementType, inElem, name)
+				outElem, err := LimitValueWidth(ctx, elementType, inElem, name)
 				if err != nil {
 					return nil, err
 				}

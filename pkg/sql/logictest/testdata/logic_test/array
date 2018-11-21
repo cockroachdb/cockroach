@@ -444,9 +444,9 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-     b INT[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+   b INT8[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement ok
 DROP TABLE a
@@ -515,9 +515,9 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-     b INT[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+   b INT8[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -590,7 +590,7 @@ a  CREATE TABLE a (
    FAMILY "primary" (b, rowid)
 )
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type INT2 \(column "b"\)
 INSERT INTO a VALUES (ARRAY[100000])
 
 statement ok

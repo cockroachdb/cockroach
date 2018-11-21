@@ -32,7 +32,7 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	want := `CREATE TABLE jobs (
-			id INT NOT NULL DEFAULT unique_rowid(),
+			id INT8 NOT NULL DEFAULT unique_rowid(),
 			status STRING NOT NULL,
 			created TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 			payload BYTES NOT NULL,

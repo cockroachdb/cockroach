@@ -31,16 +31,16 @@ dump d
 ----
 ----
 CREATE TABLE loop_b (
-	id INT NOT NULL,
-	a_id INT NULL,
+	id INT8 NOT NULL,
+	a_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX loop_b_auto_index_fk_a_id_ref_loop_a (a_id ASC),
 	FAMILY "primary" (id, a_id)
 );
 
 CREATE TABLE loop_a (
-	id INT NOT NULL,
-	b_id INT NULL,
+	id INT8 NOT NULL,
+	b_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX loop_a_b_id_idx (b_id ASC),
 	FAMILY "primary" (id, b_id)
@@ -69,16 +69,16 @@ dump d --dump-mode=schema
 ----
 ----
 CREATE TABLE loop_b (
-	id INT NOT NULL,
-	a_id INT NULL,
+	id INT8 NOT NULL,
+	a_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX loop_b_auto_index_fk_a_id_ref_loop_a (a_id ASC),
 	FAMILY "primary" (id, a_id)
 );
 
 CREATE TABLE loop_a (
-	id INT NOT NULL,
-	b_id INT NULL,
+	id INT8 NOT NULL,
+	b_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX loop_a_b_id_idx (b_id ASC),
 	FAMILY "primary" (id, b_id)

@@ -535,7 +535,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if dropped {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
-			if err := applyColumnMutation(n.tableDesc, &col, t, params); err != nil {
+			if err := applyColumnMutation(&params.extendedEvalCtx.EvalContext, n.tableDesc, &col, t, params); err != nil {
 				return err
 			}
 			n.tableDesc.UpdateColumnDescriptor(col)
@@ -658,6 +658,7 @@ func (n *alterTableNode) Close(context.Context)        {}
 // columnDescriptor, and saves the containing table descriptor. If the column's
 // dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
+	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
@@ -687,7 +688,7 @@ func applyColumnMutation(
 		}
 
 		// Finish populating width, precision, etc. from parsed data.
-		nextType, err = sqlbase.PopulateTypeAttrs(nextType, t.ToType)
+		nextType, err = sqlbase.PopulateTypeAttrs(evalCtx, nextType, t.ToType)
 		if err != nil {
 			return err
 		}

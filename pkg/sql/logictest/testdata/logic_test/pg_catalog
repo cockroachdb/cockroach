@@ -1290,13 +1290,13 @@ SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 column_name       data_type    is_nullable  column_default  generation_expression  indices  is_hidden
 datid             OID          true         NULL            ·                      {}       false
 datname           NAME         true         NULL            ·                      {}       false
-pid               INT          true         NULL            ·                      {}       false
+pid               INT8         true         NULL            ·                      {}       false
 usesysid          OID          true         NULL            ·                      {}       false
 username          NAME         true         NULL            ·                      {}       false
 application_name  STRING       true         NULL            ·                      {}       false
 client_addr       INET         true         NULL            ·                      {}       false
 client_hostname   STRING       true         NULL            ·                      {}       false
-client_port       INT          true         NULL            ·                      {}       false
+client_port       INT8         true         NULL            ·                      {}       false
 backend_start     TIMESTAMPTZ  true         NULL            ·                      {}       false
 xact_start        TIMESTAMPTZ  true         NULL            ·                      {}       false
 query_start       TIMESTAMPTZ  true         NULL            ·                      {}       false
@@ -1304,8 +1304,8 @@ state_change      TIMESTAMPTZ  true         NULL            ·                  
 wait_event_type   STRING       true         NULL            ·                      {}       false
 wait_event        STRING       true         NULL            ·                      {}       false
 state             STRING       true         NULL            ·                      {}       false
-backend_xid       INT          true         NULL            ·                      {}       false
-backend_xmin      INT          true         NULL            ·                      {}       false
+backend_xid       INT8         true         NULL            ·                      {}       false
+backend_xmin      INT8         true         NULL            ·                      {}       false
 query             STRING       true         NULL            ·                      {}       false
 
 
@@ -1331,6 +1331,7 @@ client_encoding                    UTF8          NULL      NULL        NULL     
 client_min_messages                notice        NULL      NULL        NULL        string
 database                           test          NULL      NULL        NULL        string
 datestyle                          ISO, MDY      NULL      NULL        NULL        string
+default_int_size                   INT8          NULL      NULL        NULL        string
 default_transaction_isolation      serializable  NULL      NULL        NULL        string
 default_transaction_read_only      off           NULL      NULL        NULL        string
 distsql                            2.0-off       NULL      NULL        NULL        string
@@ -1375,6 +1376,7 @@ client_encoding                    UTF8          NULL  user     NULL      UTF8  
 client_min_messages                notice        NULL  user     NULL      notice        notice
 database                           test          NULL  user     NULL      ·             test
 datestyle                          ISO, MDY      NULL  user     NULL      ISO, MDY      ISO, MDY
+default_int_size                   INT8          NULL  user     NULL      INT8          INT8
 default_transaction_isolation      serializable  NULL  user     NULL      default       default
 default_transaction_read_only      off           NULL  user     NULL      off           off
 distsql                            2.0-off       NULL  user     NULL      2.0-off       2.0-off
@@ -1415,6 +1417,7 @@ client_min_messages                NULL    NULL     NULL     NULL        NULL
 crdb_version                       NULL    NULL     NULL     NULL        NULL
 database                           NULL    NULL     NULL     NULL        NULL
 datestyle                          NULL    NULL     NULL     NULL        NULL
+default_int_size                   NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation      NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only      NULL    NULL     NULL     NULL        NULL
 distsql                            NULL    NULL     NULL     NULL        NULL

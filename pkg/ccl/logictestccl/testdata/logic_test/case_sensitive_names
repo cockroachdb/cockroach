@@ -11,7 +11,7 @@ query TT
 SHOW CREATE TABLE p
 ----
 p  CREATE TABLE p (
-   a INT NOT NULL,
+   a INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (a ASC),
    FAMILY "primary" (a)
 ) PARTITION BY LIST (a) (

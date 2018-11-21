@@ -59,8 +59,10 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			// INT maps to INT8
+			// XXX link to cleanup to switch to INT4
 			"INT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 		{
@@ -159,13 +161,17 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			// INT maps to INT8
+			// XXX link to cleanup to switch to INT4
 			"INT NOT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			false,
 		},
 		{
+			// INT maps to INT8
+			// XXX link to cleanup to switch to INT4
 			"INT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 	}

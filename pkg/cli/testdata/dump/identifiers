@@ -12,7 +12,7 @@ dump d
 ----
 ----
 CREATE TABLE ";" (
-	";" INT NULL,
+	";" INT8 NULL,
 	INDEX ";_;_idx" (";" ASC),
 	FAMILY "primary" (";", rowid)
 );

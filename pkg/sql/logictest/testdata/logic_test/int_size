@@ -1,0 +1,71 @@
+# LogicTest: local local-opt fakedist fakedist-opt
+
+subtest defaults
+
+query T
+SHOW default_int_size
+----
+INT8
+
+# Verify explicit parse.
+statement error pq: integer out of range
+SELECT '4294967296'::INT4
+
+# Verify cast from other datasource.
+statement error pq: integer out of range
+SELECT a::INT4 FROM (SELECT '4294967296' as a)
+
+# ----------------
+
+subtest int8
+
+statement ok
+CREATE TABLE a (a INT)
+
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE a (
+   a INT8 NULL,
+   FAMILY "primary" (a, rowid)
+)
+
+# Verify explicit parse.
+query I
+SELECT '4294967296'::INT
+----
+4294967296
+
+# Verify cast from other datasource.
+query I
+SELECT a::INT FROM (SELECT '4294967296' as a)
+----
+4294967296
+
+
+# ----------------
+
+subtest int4
+
+statement ok
+SET default_int_size = 'INT4'
+
+statement ok
+CREATE TABLE b (b INT)
+
+query TT
+SHOW CREATE TABLE b
+----
+b  CREATE TABLE b (
+   b INT4 NULL,
+   FAMILY "primary" (b, rowid)
+)
+
+
+# Verify explicit parse.
+statement error pq: integer out of range
+SELECT '4294967296'::INT
+
+# Verify cast from other datasource.
+statement error pq: integer out of range
+SELECT a::INT FROM (SELECT '4294967296' as a)

@@ -263,13 +263,13 @@ query TT
 SHOW CREATE TABLE b
 ----
 b  CREATE TABLE b (
-    parent_id INT NULL,
-    d INT NULL DEFAULT 23:::INT,
-    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent (id),
-    INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
-    INDEX foo (parent_id ASC),
-    UNIQUE INDEX bar (parent_id ASC),
-    FAMILY "primary" (parent_id, rowid, d)
+   parent_id INT8 NULL,
+   d INT8 NULL DEFAULT 23:::INT,
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent (id),
+   INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
+   INDEX foo (parent_id ASC),
+   UNIQUE INDEX bar (parent_id ASC),
+   FAMILY "primary" (parent_id, rowid, d)
 )
 
 # table b is not visible to the transaction #17949

@@ -118,7 +118,7 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, err
 	}
 
-	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
+	col.Type, err = PopulateTypeAttrs(evalCtx, colTyp, d.Type)
 	if err != nil {
 		return nil, nil, nil, err
 	}

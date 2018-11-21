@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
@@ -2610,6 +2611,16 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
+// GetDefaultIntSize implements ParseTimeContext. This method is
+// nil-safe to handle cases where half-baked EvalContexts are created
+// by test frameworks.
+func (ctx *EvalContext) GetDefaultIntSize() intsize.IntSize {
+	if ctx == nil || ctx.SessionData == nil {
+		return intsize.Unknown
+	}
+	return ctx.SessionData.DefaultIntSize
+}
+
 // GetRelativeParseTime implements ParseTimeContext.
 func (ctx *EvalContext) GetRelativeParseTime() time.Time {
 	ret := ctx.TxnTimestamp
@@ -2931,7 +2942,6 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				res = DZero
 			}
 		case *DInt:
-			// TODO(knz): enforce the coltype width here.
 			res = v
 		case *DFloat:
 			f := float64(*v)
@@ -2984,7 +2994,12 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			res = &v.DInt
 		}
 		if res != nil {
-			return res, nil
+			if typSize, ok := intsize.FromWidth(typ.Width, ctx.GetDefaultIntSize()); ok {
+				if !res.RangeCheck(typSize) {
+					return nil, errIntOutOfRange
+				}
+				return res, nil
+			}
 		}
 
 	case *coltypes.TFloat:

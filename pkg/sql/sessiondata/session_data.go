@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase/intsize"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
@@ -82,6 +83,10 @@ type SessionData struct {
 	DurationAdditionMode duration.AdditionMode
 	// Vectorize enables automatic planning of vectorized operators.
 	Vectorize bool
+	// DefaultIntSize controls the interpretation of the INT type.
+	// See discussion on the IntSize type.
+	// XXX link to cleanup issue
+	DefaultIntSize intsize.IntSize
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic

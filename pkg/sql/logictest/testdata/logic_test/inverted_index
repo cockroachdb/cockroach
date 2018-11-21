@@ -37,7 +37,7 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE c (
-   id INT NOT NULL,
+   id INT8 NOT NULL,
    foo JSONB NULL,
    bar JSONB NULL,
    CONSTRAINT "primary" PRIMARY KEY (id ASC),
