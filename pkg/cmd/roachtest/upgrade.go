@@ -280,7 +280,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	// versionStep is an isolated version migration on a running cluster.
 	type versionStep struct {
-		clusterVersion string
+		clusterVersion string // if empty, use crdb_internal.node_executable_version
 		run            func()
 	}
 
@@ -364,6 +364,16 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		return versionStep{
 			clusterVersion: newVersion,
 			run: func() {
+				func() {
+					if newVersion != "" {
+						return
+					}
+					db1 := c.Conn(ctx, 1)
+					defer db1.Close()
+					if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+						t.Fatal(err)
+					}
+				}()
 				t.l.Printf("%s: cluster\n", newVersion)
 
 				// hasShowSettingBug is true when we're working around
@@ -437,20 +447,17 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	const baseVersion = "v1.0.6"
 	steps := []versionStep{
-		// v1.1.0 is the first binary version that knows about cluster versions,
-		// but thinks it can only support up to 1.0-3.
-		binaryVersionUpgrade("v1.1.0", nodes),
-		clusterVersionUpgrade("1.0", true /* manual */),
-		clusterVersionUpgrade("1.0-3", true /* manual */),
-
-		binaryVersionUpgrade("v1.1.1", nodes),
+		// v1.1.0 is the first binary version that knows about cluster versions.
+		binaryVersionUpgrade("v1.1.9", nodes),
 		clusterVersionUpgrade("1.1", true /* manual */),
 
-		binaryVersionUpgrade("v2.0.0", nodes),
-		clusterVersionUpgrade("1.1-6", true /* manual */),
+		// NB: v2.0.6 doesn't have https://github.com/cockroachdb/cockroach/issues/31380,
+		// so this acceptance test will fail on OSX Mojave. v2.0.7 will have the patch.
+		binaryVersionUpgrade("v2.0.6", nodes),
 		clusterVersionUpgrade("2.0", true /* manual */),
 
 		binaryVersionUpgrade("HEAD", nodes),
+		clusterVersionUpgrade("", false /* manual */),
 	}
 
 	type feature struct {
