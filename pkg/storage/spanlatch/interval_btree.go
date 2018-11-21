@@ -31,12 +31,6 @@ const (
 	minLatches = degree - 1
 )
 
-// TODO(nvanbenschoten): remove.
-type latch struct {
-	id   int64
-	span roachpb.Span
-}
-
 // cmp returns a value indicating the sort order relationship between
 // a and b. The comparison is performed lexicographically on
 //  (a.span.Key, a.span.EndKey, a.id)
@@ -59,9 +53,9 @@ func cmp(a, b *latch) int {
 	if c != 0 {
 		return c
 	}
-	if a.id < b.id {
+	if a.id() < b.id() {
 		return -1
-	} else if a.id > b.id {
+	} else if a.id() > b.id() {
 		return 1
 	} else {
 		return 0
