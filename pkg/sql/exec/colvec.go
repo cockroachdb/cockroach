@@ -57,7 +57,7 @@ type ColVec interface {
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
 
-	// Append appends fromLength elements of the the given ColVec to toLength
+	// Append appends fromLength elements of the given ColVec to toLength
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
@@ -66,7 +66,7 @@ type ColVec interface {
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
-	Copy(src ColVec, srcStartIdx, srcEndIdx int, typ types.T)
+	Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
 
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
