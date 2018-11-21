@@ -507,8 +507,14 @@ func runSchemaChangeWithOperations(
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
-			t.Error(err)
+		if rand.Float32() < 0.5 {
+			if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
+				t.Error(err)
+			}
+		} else {
+			if _, err := sqlDB.Exec(`UPSERT INTO t.test (k,v) VALUES ($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 
@@ -522,8 +528,14 @@ func runSchemaChangeWithOperations(
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-			t.Error(err)
+		if rand.Float32() < 0.5 {
+			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
+		} else {
+			if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 
