@@ -42,7 +42,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 				return nil, err
 			}
 		case types.TCollatedString:
-			d = NewDCollatedString(s, t.Locale, &evalCtx.collationEnv)
+			d = NewDCollatedString(s, t.Locale, &evalCtx.CollationEnv)
 		default:
 			d, err = parseStringAs(t, s, evalCtx)
 			if d == nil && err == nil {

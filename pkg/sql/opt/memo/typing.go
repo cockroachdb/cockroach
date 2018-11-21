@@ -122,6 +122,7 @@ func init() {
 	typingFuncMap[opt.SubqueryOp] = typeSubquery
 	typingFuncMap[opt.ColumnAccessOp] = typeColumnAccess
 	typingFuncMap[opt.IndirectionOp] = typeIndirection
+	typingFuncMap[opt.CollateOp] = typeCollate
 
 	// Override default typeAsAggregate behavior for aggregate functions with
 	// a large number of possible overloads or where ReturnType depends on
@@ -175,6 +176,11 @@ func typeArrayAgg(e opt.ScalarExpr) types.T {
 // typeIndirection returns the type of the element of the array.
 func typeIndirection(e opt.ScalarExpr) types.T {
 	return types.UnwrapType(e.Child(0).(opt.ScalarExpr).DataType()).(types.TArray).Typ
+}
+
+// typeCollate returns the collated string typed with the given locale.
+func typeCollate(e opt.ScalarExpr) types.T {
+	return types.TCollatedString{Locale: e.(*CollateExpr).Locale}
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.

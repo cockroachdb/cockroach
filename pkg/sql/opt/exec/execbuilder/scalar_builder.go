@@ -56,6 +56,7 @@ func init() {
 		opt.AnyOp:             (*Builder).buildAny,
 		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
 		opt.IndirectionOp:     (*Builder).buildIndirection,
+		opt.CollateOp:         (*Builder).buildCollate,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Item operators.
@@ -400,6 +401,15 @@ func (b *Builder) buildIndirection(
 	}
 
 	return tree.NewTypedIndirectionExpr(expr, index), nil
+}
+
+func (b *Builder) buildCollate(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	expr, err := b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewTypedCollateExpr(expr, scalar.(*memo.CollateExpr).Locale), nil
 }
 
 func (b *Builder) buildUnsupportedExpr(
