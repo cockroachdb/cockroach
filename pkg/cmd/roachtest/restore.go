@@ -21,6 +21,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -28,6 +29,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -234,6 +237,13 @@ func registerRestore(r *registry) {
 				m.Go(dul.Runner)
 				hc := NewHealthChecker(c, c.All())
 				m.Go(hc.Runner)
+				m.Go(func(ctx context.Context) error {
+					// Make sure the merge queue doesn't muck with our restore.
+					return verifyMetrics(ctx, c, map[string]float64{
+						"cr.store.queue.merge.process.success": 10,
+						"cr.store.queue.merge.process.failure": 10,
+					})
+				})
 
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
@@ -251,5 +261,68 @@ func registerRestore(r *registry) {
 				m.Wait()
 			},
 		})
+	}
+}
+
+// verifyMetrics loops, retrieving the timeseries metrics specified in m every
+// 10s and verifying that the most recent value is less that the limit
+// specified in m. This is particularly useful for verifying that a counter
+// metric does not exceed some threshold during a test. For example, the
+// restore and import tests verify that the range merge queue is inactive.
+func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error {
+	const sample = 10 * time.Second
+	// Query needed information over the timespan of the query.
+	url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + "/ts/query"
+
+	request := tspb.TimeSeriesQueryRequest{
+		// Ask for one minute intervals. We can't just ask for the whole hour
+		// because the time series query system does not support downsampling
+		// offsets.
+		SampleNanos: sample.Nanoseconds(),
+	}
+	for name := range m {
+		request.Queries = append(request.Queries, tspb.Query{
+			Name:             name,
+			Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+			SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+		})
+	}
+
+	ticker := time.NewTicker(sample)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			break
+		}
+
+		now := timeutil.Now()
+		request.StartNanos = now.Add(-sample).UnixNano()
+		request.EndNanos = now.UnixNano()
+
+		var response tspb.TimeSeriesQueryResponse
+		if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+			const futureError = `cannot query time series in the future`
+			if strings.Contains(err.Error(), futureError) {
+				continue
+			}
+			return err
+		}
+
+		for i := range request.Queries {
+			name := request.Queries[i].Name
+			data := response.Results[i].Datapoints
+			n := len(data)
+			if n == 0 {
+				continue
+			}
+			limit := m[name]
+			value := data[n-1].Value
+			if value >= limit {
+				return fmt.Errorf("%s: %.1f >= %.1f @ %d", name, value, limit, data[n-1].TimestampNanos)
+			}
+		}
 	}
 }

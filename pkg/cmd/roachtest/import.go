@@ -96,6 +96,13 @@ func registerImportTPCH(r *registry) {
 				m.Go(dul.Runner)
 				hc := NewHealthChecker(c, c.All())
 				m.Go(hc.Runner)
+				m.Go(func(ctx context.Context) error {
+					// Make sure the merge queue doesn't muck with our import.
+					return verifyMetrics(ctx, c, map[string]float64{
+						"cr.store.queue.merge.process.success": 10,
+						"cr.store.queue.merge.process.failure": 10,
+					})
+				})
 
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
