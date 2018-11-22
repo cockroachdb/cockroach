@@ -890,6 +890,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]string> explain_option_list
 
 %type <coltypes.T> typename simple_typename const_typename
+%type <bool> opt_timezone
 %type <coltypes.T> numeric opt_numeric_modifiers
 %type <coltypes.T> opt_float
 %type <coltypes.T> character_with_length character_without_length
@@ -6784,38 +6785,34 @@ const_datetime:
   {
     $$.val = coltypes.Date
   }
-| TIME
+| TIME opt_timezone
   {
+    if $2.bool() { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
     $$.val = coltypes.Time
   }
-| TIME WITHOUT TIME ZONE
+| TIME '(' ICONST ')' opt_timezone   { return unimplementedWithIssue(sqllex, 32565) }
+| TIMETZ                             { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
+| TIMETZ '(' ICONST ')'              { return unimplementedWithIssueDetail(sqllex, 26097, "type with precision") }
+| TIMESTAMP opt_timezone
   {
-    $$.val = coltypes.Time
+    if $2.bool() {
+      $$.val = coltypes.TimestampWithTZ
+    } else {
+      $$.val = coltypes.Timestamp
+    }
   }
-| TIMETZ
-  {
-    return unimplementedWithIssueDetail(sqllex, 26097, "type")
-  }
-| TIME WITH_LA TIME ZONE
-  {
-    return unimplementedWithIssueDetail(sqllex, 26097, "type")
-  }
-| TIMESTAMP
-  {
-    $$.val = coltypes.Timestamp
-  }
-| TIMESTAMP WITHOUT TIME ZONE
-  {
-    $$.val = coltypes.Timestamp
-  }
+| TIMESTAMP '(' ICONST ')' opt_timezone { return unimplementedWithIssue(sqllex, 32098) }
 | TIMESTAMPTZ
   {
     $$.val = coltypes.TimestampWithTZ
   }
-| TIMESTAMP WITH_LA TIME ZONE
-  {
-    $$.val = coltypes.TimestampWithTZ
-  }
+| TIMESTAMPTZ '(' ICONST ')'            { return unimplementedWithIssue(sqllex, 32098) }
+
+opt_timezone:
+  WITH_LA TIME ZONE	{ $$.val = true; }
+| WITHOUT TIME ZONE	{ $$.val = false; }
+| /*EMPTY*/			{ $$.val = false; }
+
 
 const_interval:
   INTERVAL {
@@ -8969,7 +8966,6 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
-| TIMESTAMPTZ
 | TRACE
 | TRANSACTION
 | TRIGGER
@@ -9044,6 +9040,7 @@ col_name_keyword:
 | TIME
 | TIMETZ
 | TIMESTAMP
+| TIMESTAMPTZ
 | TREAT
 | TRIM
 | VALUES
