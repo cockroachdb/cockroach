@@ -226,6 +226,26 @@ func (rgcq *replicaGCQueue) process(
 	} else if desc.RangeID == replyDesc.RangeID {
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
+
+		if replyDesc.EndKey.Less(desc.EndKey) {
+			// The meta records indicate that the range has split but that this
+			// replica hasn't processed the split trigger yet. By removing this
+			// replica, we're also wiping out the data of what would become the
+			// right hand side of the split (which may or may not still have a
+			// replica on this store), and will need a Raft snapshot. Even worse,
+			// the mechanism introduced in #31875 will artificially delay this
+			// snapshot by seconds, during which time the RHS may see more splits
+			// and incur more snapshots.
+			//
+			// TODO(tschottdorf): we can look up the range descriptor for the
+			// RHS of the split (by querying with replyDesc.EndKey) and fetch
+			// the local replica (which will be uninitialized, i.e. we have to
+			// look it up by RangeID) to disable the mechanism in #31875 for it.
+			// We should be able to use prefetching unconditionally to have this
+			// desc ready whenever we need it.
+			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+		}
+
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
