@@ -6082,7 +6082,7 @@ simple_typename:
 | character_with_length
 | const_interval
 | const_interval interval_qualifier { return unimplemented(sqllex, "interval with unit qualifier") }
-| const_interval '(' ICONST ')' { return unimplemented(sqllex, "interval with precision") }
+| const_interval '(' ICONST ')' { return unimplementedWithIssue(sqllex, 32564) }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -6507,7 +6507,7 @@ interval_second:
   {
     $$.val = tree.Second
   }
-| SECOND '(' ICONST ')' { return unimplemented(sqllex, "interval second with precision") }
+| SECOND '(' ICONST ')' { return unimplementedWithIssueDetail(sqllex, 32564, "interval second") }
 
 // General expressions. This is the heart of the expression syntax.
 //
@@ -7093,7 +7093,7 @@ d_expr:
   {
     $$.val = $1.expr()
   }
-| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
+| const_interval '(' ICONST ')' SCONST { return unimplementedWithIssue(sqllex, 32564) }
 | TRUE
   {
     $$.val = tree.MakeDBool(true)
