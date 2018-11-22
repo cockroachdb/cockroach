@@ -851,7 +851,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.NameList> opt_storing
 %type <*tree.ColumnTableDef> column_def
 %type <tree.TableDef> table_elem
-%type <tree.Expr> where_clause
+%type <tree.Expr> where_clause opt_where_clause
 %type <*tree.ArraySubscript> array_subscript
 %type <tree.Expr> opt_slice_bound
 %type <*tree.IndexFlags> opt_index_flags
@@ -2178,7 +2178,7 @@ opt_changefeed_sink:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
@@ -5318,7 +5318,7 @@ insert_column_item:
 | column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
 
 on_conflict:
-  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
+  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list opt_where_clause
   {
     $$.val = &tree.OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $8.expr())}
   }
@@ -5328,11 +5328,11 @@ on_conflict:
   }
 
 opt_conf_expr:
-  '(' name_list ')' where_clause
+  '(' name_list ')'
   {
-    // TODO(dan): Support the where_clause.
     $$.val = $2.nameList()
   }
+| '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) }
 | ON CONSTRAINT constraint_name { return unimplemented(sqllex, "on conflict on constraint") }
 | /* EMPTY */
   {
@@ -5366,7 +5366,7 @@ returning_clause:
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
   opt_with_clause UPDATE table_name_expr_opt_alias_idx
-    SET set_clause_list update_from_clause where_clause opt_sort_clause opt_limit_clause returning_clause
+    SET set_clause_list update_from_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
       With: $1.with(),
@@ -5567,7 +5567,7 @@ simple_select:
 // %SeeAlso: WEBDOCS/select-clause.html
 simple_select_clause:
   SELECT opt_all_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -5580,7 +5580,7 @@ simple_select_clause:
     }
   }
 | SELECT distinct_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -5594,7 +5594,7 @@ simple_select_clause:
     }
   }
 | SELECT distinct_on_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -6348,6 +6348,9 @@ where_clause:
   {
     $$.val = $2.expr()
   }
+
+opt_where_clause:
+  where_clause
 | /* EMPTY */
   {
     $$.val = tree.Expr(nil)
