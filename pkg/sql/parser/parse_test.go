@@ -2684,6 +2684,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b XML)`, 0, `xml`},
 		{`CREATE TABLE a(b TIMETZ)`, 26097, `type`},
 
+		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``},
+
 		{`WITH RECURSIVE a AS (TABLE b) SELECT c`, 21085, ``},
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 8318, ``},
