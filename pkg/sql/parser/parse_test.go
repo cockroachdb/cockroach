@@ -2569,7 +2569,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		issue    int
 		expected string
 	}{
-		{`ALTER TABLE a ALTER CONSTRAINT foo`, 0, `alter constraint`},
+		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`},
 		{`ALTER TABLE a ALTER b SET NOT NULL`, 28751, ``},
 		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 0, `alter table rename constraint`},
 
