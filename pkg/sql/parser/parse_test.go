@@ -2675,7 +2675,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(c[d])`, 9682, ``},
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``},
 
-		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 8318, ``},
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 0, `on conflict on constraint`},
 
 		{`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`, 24560, `select`},
@@ -2722,12 +2722,12 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`WITH RECURSIVE a AS (TABLE b) SELECT c`, 21085, ``},
 
-		{`UPDATE foo SET (a, a.b) = (1, 2)`, 8318, ``},
-		{`UPDATE foo SET a.b = 1`, 8318, ``},
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``},
+		{`UPDATE foo SET a.b = 1`, 27792, ``},
 		{`UPDATE foo SET x = y FROM a, b`, 7841, ``},
-		{`UPDATE Foo SET x.y = z`, 8318, ``},
+		{`UPDATE Foo SET x.y = z`, 27792, ``},
 
-		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 8318, ``},
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 	}
 	for _, d := range testData {
 		_, err := parser.Parse(d.sql)
