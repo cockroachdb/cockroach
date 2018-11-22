@@ -2656,7 +2656,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT 'a'::INTERVAL SECOND(123)`, 0, `interval second with precision`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`},
-		{`SELECT a(b) 'c'`, 0, `func const`},
+		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`},
 		{`SELECT INTERVAL(3) 'a'`, 0, `expr_const const_interval`},
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`},
