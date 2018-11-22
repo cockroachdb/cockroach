@@ -1966,6 +1966,8 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/32062")
+
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
