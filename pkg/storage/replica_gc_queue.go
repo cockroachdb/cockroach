@@ -227,7 +227,28 @@ func (rgcq *replicaGCQueue) process(
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
 
-		if replyDesc.EndKey.Less(desc.EndKey) {
+		repl.mu.RLock()
+		replicaID := repl.mu.replicaID
+		ticks := repl.mu.ticks
+		repl.mu.RUnlock()
+
+		if replicaID == 0 {
+			// This is a preemptive replica. GC'ing a preemptive replica is a
+			// good idea if and only if the up-replication that it was a part of
+			// did *NOT* commit. If it *did* commit and we're removing the
+			// preemptive snapshot, the newly added follower will first need a
+			// Raft snapshot to catch up, and that snapshot will be delayed by
+			// #31875.
+			// Log if the replica hasn't been around for very long.
+			//
+			// TODO(tschottdorf): avoid these, ideally without a time-based mechanism.
+			// The replica carrying out the replication change could keep the
+			// snapshot alive until it has either committed or aborted the txn.
+			// Or we try to use Raft learners for this purpose.
+			if ticks < 10 {
+				log.Infof(ctx, "removing young preemptive snapshot (%d ticks)", ticks)
+			}
+		} else if replyDesc.EndKey.Less(desc.EndKey) {
 			// The meta records indicate that the range has split but that this
 			// replica hasn't processed the split trigger yet. By removing this
 			// replica, we're also wiping out the data of what would become the
