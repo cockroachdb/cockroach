@@ -10,10 +10,10 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
 # Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
 query BT colnames
-EXPLAIN (DISTSQL) VALUES (1)
+EXPLAIN (DISTSQL) SELECT 1
 ----
-automatic  url
-false       https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+automatic url
+false     https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLBDEUhHt_xTKVQsBs-0q7bU45xEZSLMlwLq7JkpeAcOx_l00KsRCunJnk-3hXxBR4mr-okHeMcAZbTp6qKR9VfzCFb4g1WOJWy1E7A58yIVeUpayE4G1eK_XRwiCwzMvaiHZ4Gu7t4D9q_NQHGJwZA7MMo4hMp1e43SDV8svVMl8Isbu53X2mbikq_7j_JzsDhgv7fZpq9nzJyTdNj8_tXysCtfR17GGKfdrdfvcTAAD__5-jaAo= 
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
