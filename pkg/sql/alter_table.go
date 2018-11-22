@@ -715,7 +715,9 @@ func applyColumnMutation(
 		case schemachange.ColumnConversionTrivial:
 			col.Type = nextType
 		default:
-			return pgerror.Unimplemented("alter column type", "type conversion not yet implemented")
+			return pgerror.UnimplementedWithIssueDetailError(9851,
+				fmt.Sprintf("%s->%s", col.Type.SQLString(), nextType.SQLString()),
+				"type conversion not yet implemented")
 		}
 
 	case *tree.AlterTableSetDefault:
