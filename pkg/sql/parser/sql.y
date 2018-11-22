@@ -4343,10 +4343,27 @@ opt_column_list:
     $$.val = tree.NameList(nil)
   }
 
+// https://www.postgresql.org/docs/10/sql-createtable.html
+//
+// "A value inserted into the referencing column(s) is matched against
+// the values of the referenced table and referenced columns using the
+// given match type. There are three match types: MATCH FULL, MATCH
+// PARTIAL, and MATCH SIMPLE (which is the default). MATCH FULL will
+// not allow one column of a multicolumn foreign key to be null unless
+// all foreign key columns are null; if they are all null, the row is
+// not required to have a match in the referenced table. MATCH SIMPLE
+// allows any of the foreign key columns to be null; if any of them
+// are null, the row is not required to have a match in the referenced
+// table. MATCH PARTIAL is not yet implemented. (Of course, NOT NULL
+// constraints can be applied to the referencing column(s) to prevent
+// these cases from arising.)"
+//
+// Note: CockroachDB's silent default is closer in semantics to pg's
+// MATCH FULL. This is arguably a bug. See discussion in #20305.
 key_match:
-  MATCH FULL { return unimplemented(sqllex, "references match full") }
-| MATCH PARTIAL { return unimplemented(sqllex, "references match partial") }
-| MATCH SIMPLE { return unimplemented(sqllex, "references match simple") }
+  MATCH FULL { return unimplementedWithIssueDetail(sqllex, 20305, "match full") }
+| MATCH PARTIAL { return unimplementedWithIssueDetail(sqllex, 20305, "match partial") }
+| MATCH SIMPLE { return unimplementedWithIssueDetail(sqllex, 20305, "match simple") }
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
