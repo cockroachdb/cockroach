@@ -7214,7 +7214,7 @@ func_expr_windowless:
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
-  COLLATION FOR '(' a_expr ')' { return unimplemented(sqllex, "func_expr_common_subexpr collation for") }
+  COLLATION FOR '(' a_expr ')' { return unimplementedWithIssue(sqllex, 32563) }
 | CURRENT_DATE
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
