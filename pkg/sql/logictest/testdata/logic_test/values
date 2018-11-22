@@ -55,3 +55,9 @@ VALUES ((SELECT 1)), ((SELECT 2))
 
 query error pgcode 42804 VALUES types string and int cannot be matched
 VALUES (NULL, 1), (2, NULL), (NULL, 'a')
+
+# subqueries in VALUES don't cause problems in EXPLAIN(DISTSQL), despite forcing
+# execution on the gateway.
+
+statement ok
+EXPLAIN(DISTSQL) VALUES((SELECT 1), 3)
