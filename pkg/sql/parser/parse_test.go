@@ -2588,7 +2588,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DISCARD TEMPORARY`, 0, `discard temp`},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`},
-		{`SET LOCAL foo = bar`, 0, `set local`},
+		{`SET LOCAL foo = bar`, 32562, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`},
 
 		{`CREATE TEMP TABLE a(b INT)`, 5807, ``},
