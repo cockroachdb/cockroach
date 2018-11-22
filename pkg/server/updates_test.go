@@ -529,7 +529,7 @@ func TestReportUsage(t *testing.T) {
 
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#32555":                   10,
-		"unimplemented.syntax.interval with precision":  10,
+		"unimplemented.syntax.#32564":                   10,
 		"unimplemented.#9148":                           10,
 		"internalerror.":                                10,
 		"othererror.builtins.go":                        10,
