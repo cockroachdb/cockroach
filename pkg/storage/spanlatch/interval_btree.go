@@ -626,8 +626,9 @@ func (n *node) adjustUpperBoundOnRemoval(la *latch, child *node) bool {
 		}
 	}
 	if n.max.compare(up) == 0 {
+		// up was previous upper bound of n.
 		n.max = n.findUpperBound()
-		return true
+		return n.max.compare(up) != 0
 	}
 	return false
 }
