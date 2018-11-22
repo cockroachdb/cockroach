@@ -97,8 +97,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
 			if len(d.CheckExprs) > 0 {
-				return pgerror.Unimplemented(
-					"alter add check", "adding a CHECK constraint via ALTER not supported")
+				return pgerror.UnimplementedWithIssueError(29639,
+					"adding a CHECK constraint via ALTER not supported")
 			}
 			if d.HasFKConstraint() {
 				return pgerror.Unimplemented(
