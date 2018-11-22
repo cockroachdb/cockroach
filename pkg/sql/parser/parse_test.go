@@ -2535,7 +2535,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 	}{
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`},
 		{`ALTER TABLE a ALTER b SET NOT NULL`, 28751, ``},
-		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 0, `alter table rename constraint`},
+		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 32555, ``},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`, 19472, `column`},
 		{`COMMENT ON DATABASE a IS 'b'`, 19472, ``},

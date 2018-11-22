@@ -4552,9 +4552,9 @@ alter_rename_table_stmt:
     $$.val = &tree.RenameColumn{Table: $5.normalizableTableNameFromUnresolvedName(), Name: tree.Name($8), NewName: tree.Name($10), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplemented(sqllex, "alter table rename constraint") }
+  { return unimplementedWithIssue(sqllex, 32555) }
 | ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplemented(sqllex, "alter table rename constraint") }
+  { return unimplementedWithIssue(sqllex, 32555) }
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
