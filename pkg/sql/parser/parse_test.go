@@ -2685,10 +2685,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
 
+		{`SELECT 123 AT TIME ZONE 'b'`, 32005, ``},
+
 		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
 		{`SELECT 'a'::INTERVAL(123)`, 0, `interval with precision`},
 		{`SELECT 'a'::INTERVAL SECOND(123)`, 0, `interval second with precision`},
-		{`SELECT 123 AT TIME ZONE 'b'`, 0, `at tz`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`},
 		{`SELECT a(b) 'c'`, 0, `func const`},
