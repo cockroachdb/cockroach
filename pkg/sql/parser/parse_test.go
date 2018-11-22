@@ -2640,9 +2640,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`},
 
 		{`CREATE TABLE a(b INT AS (123) VIRTUAL)`, 0, `virtual computed columns`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 0, `references match full`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 0, `references match simple`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 20305, `match full`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 20305, `match simple`},
 
 		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`},
 		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`},
