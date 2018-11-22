@@ -582,7 +582,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "delete_stmt",
-		inline: []string{"opt_with_clause", "with_clause", "cte_list", "table_name_expr_opt_alias_idx", "table_name_expr_with_index", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
+		inline: []string{"opt_with_clause", "with_clause", "cte_list", "table_name_expr_opt_alias_idx", "table_name_expr_with_index", "opt_where_clause", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
 		replace: map[string]string{
 			"relation_expr": "table_name",
 		},
@@ -788,7 +788,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "on_conflict",
-		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list",
+		inline: []string{"opt_conf_expr", "name_list", "opt_where_clause", "where_clause", "set_clause_list", "insert_column_list",
 			"insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list",
 			"expr_tuple1_ambiguous", "tuple1_ambiguous_values"},
 		replace: map[string]string{
@@ -968,7 +968,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "simple_select_clause",
-		inline:  []string{"opt_all_clause", "distinct_clause", "distinct_on_clause", "opt_as_of_clause", "as_of_clause", "expr_list", "target_list", "from_clause", "where_clause", "group_clause", "having_clause", "window_clause", "from_list"},
+		inline:  []string{"opt_all_clause", "distinct_clause", "distinct_on_clause", "opt_as_of_clause", "as_of_clause", "expr_list", "target_list", "from_clause", "opt_where_clause", "where_clause", "group_clause", "having_clause", "window_clause", "from_list"},
 		unlink:  []string{"index_name"},
 		nosplit: true,
 	},
@@ -1200,6 +1200,7 @@ var specs = []stmtSpec{
 			"expr_list",
 			"expr_tuple1_ambiguous",
 			"tuple1_ambiguous_values",
+			"opt_where_clause",
 			"where_clause",
 			"opt_sort_clause",
 			"returning_clause",
