@@ -2676,7 +2676,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``},
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
-		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 0, `on conflict on constraint`},
+		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
 		{`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`, 24560, `select`},
 		{`SELECT * FROM ab, LATERAL foo(a)`, 24560, `srf`},
