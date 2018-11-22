@@ -5001,7 +5001,7 @@ opt_conf_expr:
     $$.val = $2.nameList()
   }
 | '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) }
-| ON CONSTRAINT constraint_name { return unimplemented(sqllex, "on conflict on constraint") }
+| ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
 | /* EMPTY */
   {
     $$.val = tree.NameList(nil)
