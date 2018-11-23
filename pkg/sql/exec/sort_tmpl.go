@@ -26,7 +26,6 @@ package exec
 import (
 	"bytes"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/apd"
 
@@ -187,7 +186,8 @@ func (p *sort_TYPEOp) spool() {
 
 	p.sortCol = p.values[p.spec.sortCol]._TemplateType()
 
-	sort.Sort(p)
+	n := p.Len()
+	p.quickSort(0, n, maxDepth(n))
 }
 
 func (s *sort_TYPEOp) Less(i, j int) bool {

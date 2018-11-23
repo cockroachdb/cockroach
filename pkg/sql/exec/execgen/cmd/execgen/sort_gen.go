@@ -49,6 +49,28 @@ func genSortOps(wr io.Writer) error {
 
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.LT])
 }
+
+func genQuickSortOps(wr io.Writer) error {
+	d, err := ioutil.ReadFile("pkg/sql/exec/quicksort_tmpl.go")
+	if err != nil {
+		return err
+	}
+
+	s := string(d)
+
+	// Replace the template variables.
+	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+
+	// Now, generate the op, from the template.
+	tmpl, err := template.New("quicksort").Parse(s)
+	if err != nil {
+		return err
+	}
+
+	return tmpl.Execute(wr, comparisonOpToOverloads[tree.LT])
+}
+
 func init() {
 	registerGenerator(genSortOps, "sort.eg.go")
+	registerGenerator(genQuickSortOps, "quicksort.eg.go")
 }
