@@ -142,6 +142,7 @@ query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
+comments
 descriptor
 eventlog
 jobs

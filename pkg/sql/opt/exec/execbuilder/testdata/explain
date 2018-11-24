@@ -240,7 +240,7 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
            └── values  ·       ·
-·                      size    8 columns, 585 rows
+·                      size    8 columns, 595 rows
 
 
 query TTT

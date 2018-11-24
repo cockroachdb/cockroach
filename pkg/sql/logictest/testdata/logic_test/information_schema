@@ -575,6 +575,7 @@ system         public              web_sessions                       BASE TABLE
 system         public              table_statistics                   BASE TABLE   YES                 1
 system         public              locations                          BASE TABLE   YES                 1
 system         public              role_members                       BASE TABLE   YES                 1
+system         public              comments                           BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -627,6 +628,7 @@ FROM system.information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name        constraint_type  is_deferrable  initially_deferred
+system              public             primary          system         public        comments          PRIMARY KEY      NO             NO
 system              public             primary          system         public        descriptor        PRIMARY KEY      NO             NO
 system              public             primary          system         public        eventlog          PRIMARY KEY      NO             NO
 system              public             primary          system         public        jobs              PRIMARY KEY      NO             NO
@@ -648,6 +650,9 @@ FROM system.information_schema.constraint_column_usage
 ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
 ----
 table_catalog  table_schema  table_name        column_name    constraint_catalog  constraint_schema  constraint_name
+system         public        comments          object_id      system              public             primary
+system         public        comments          sub_id         system              public             primary
+system         public        comments          type           system              public             primary
 system         public        descriptor        id             system              public             primary
 system         public        eventlog          timestamp      system              public             primary
 system         public        eventlog          uniqueID       system              public             primary
@@ -729,6 +734,10 @@ WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog' AND 
 ORDER BY 3,4
 ----
 table_catalog  table_schema  table_name        column_name     ordinal_position
+system         public        comments          comment         4
+system         public        comments          object_id       2
+system         public        comments          sub_id          3
+system         public        comments          type            1
 system         public        descriptor        descriptor      2
 system         public        descriptor        id              1
 system         public        eventlog          eventType       2
@@ -1130,6 +1139,16 @@ NULL     public   system         pg_catalog          pg_type                    
 NULL     public   system         pg_catalog          pg_user                            SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_user_mapping                    SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_views                           SELECT          NULL          NULL
+NULL     admin    system         public              comments                           DELETE          NULL          NULL
+NULL     admin    system         public              comments                           GRANT           NULL          NULL
+NULL     admin    system         public              comments                           INSERT          NULL          NULL
+NULL     admin    system         public              comments                           SELECT          NULL          NULL
+NULL     admin    system         public              comments                           UPDATE          NULL          NULL
+NULL     root     system         public              comments                           DELETE          NULL          NULL
+NULL     root     system         public              comments                           GRANT           NULL          NULL
+NULL     root     system         public              comments                           INSERT          NULL          NULL
+NULL     root     system         public              comments                           SELECT          NULL          NULL
+NULL     root     system         public              comments                           UPDATE          NULL          NULL
 NULL     admin    system         public              descriptor                         GRANT           NULL          NULL
 NULL     admin    system         public              descriptor                         SELECT          NULL          NULL
 NULL     root     system         public              descriptor                         GRANT           NULL          NULL
@@ -1482,6 +1501,16 @@ NULL     root     system         public              role_members               
 NULL     root     system         public              role_members                       INSERT          NULL          NULL
 NULL     root     system         public              role_members                       SELECT          NULL          NULL
 NULL     root     system         public              role_members                       UPDATE          NULL          NULL
+NULL     admin    system         public              comments                           DELETE          NULL          NULL
+NULL     admin    system         public              comments                           GRANT           NULL          NULL
+NULL     admin    system         public              comments                           INSERT          NULL          NULL
+NULL     admin    system         public              comments                           SELECT          NULL          NULL
+NULL     admin    system         public              comments                           UPDATE          NULL          NULL
+NULL     root     system         public              comments                           DELETE          NULL          NULL
+NULL     root     system         public              comments                           GRANT           NULL          NULL
+NULL     root     system         public              comments                           INSERT          NULL          NULL
+NULL     root     system         public              comments                           SELECT          NULL          NULL
+NULL     root     system         public              comments                           UPDATE          NULL          NULL
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

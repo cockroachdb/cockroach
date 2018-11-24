@@ -8,6 +8,7 @@ stmt ::=
 	'HELPTOKEN'
 	| preparable_stmt
 	| copy_from_stmt
+	| comment_stmt
 	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
@@ -45,6 +46,9 @@ preparable_stmt ::=
 
 copy_from_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN'
+
+comment_stmt ::=
+	'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
 
 execute_stmt ::=
 	'EXECUTE' table_alias_name execute_param_clause
@@ -195,6 +199,10 @@ table_name ::=
 opt_column_list ::=
 	'(' name_list ')'
 	| 
+
+comment_text ::=
+	'SCONST'
+	| 'NULL'
 
 table_alias_name ::=
 	name

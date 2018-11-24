@@ -724,8 +724,23 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid, ok := args[0].(*tree.DOid)
+				if !ok {
+					return tree.DNull, nil
+				}
+
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_objdesc",
+					ctx.Txn,
+					"SELECT comment FROM system.comments WHERE object_id=$1 LIMIT 1", oid.DInt)
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
 			},
 			Info: notUsableInfo,
 		},

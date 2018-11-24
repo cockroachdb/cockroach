@@ -941,8 +941,31 @@ CREATE TABLE pg_catalog.pg_description (
 	description STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Comments on database objects are not currently supported.
+	populate: func(
+		ctx context.Context,
+		p *planner,
+		dbContext *DatabaseDescriptor,
+		addRow func(...tree.Datum) error) error {
+
+		comments, _, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+			ctx,
+			"select-comments",
+			p.EvalContext().Txn,
+			"SELECT object_id, sub_id, comment FROM system.comments")
+		if err != nil {
+			return err
+		}
+
+		for _, comment := range comments {
+			if err := addRow(
+				tree.NewDOid(*comment[0].(*tree.DInt)),
+				oidZero,
+				comment[1],
+				comment[2]); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
 }

@@ -11,6 +11,7 @@ test
 query T
 SHOW TABLES FROM system
 ----
+comments
 descriptor
 eventlog
 jobs
@@ -33,6 +34,7 @@ SELECT * FROM system.namespace
 0  postgres          51
 0  system            1
 0  test              52
+1  comments          24
 1  descriptor        3
 1  eventlog          12
 1  jobs              15
@@ -66,6 +68,7 @@ SELECT id FROM system.descriptor
 20
 21
 23
+24
 50
 51
 52
@@ -188,6 +191,16 @@ system  public              root   SELECT
 query TTTTT
 SHOW GRANTS ON system.*
 ----
+system  public  comments          admin  DELETE
+system  public  comments          admin  GRANT
+system  public  comments          admin  INSERT
+system  public  comments          admin  SELECT
+system  public  comments          admin  UPDATE
+system  public  comments          root   DELETE
+system  public  comments          root   GRANT
+system  public  comments          root   INSERT
+system  public  comments          root   SELECT
+system  public  comments          root   UPDATE
 system  public  descriptor        admin  GRANT
 system  public  descriptor        admin  SELECT
 system  public  descriptor        root   GRANT

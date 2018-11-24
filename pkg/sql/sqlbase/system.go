@@ -213,6 +213,16 @@ CREATE TABLE system.role_members (
   INDEX ("role"),
   INDEX ("member")
 );`
+
+	// comments stores comments(database, table, column...).
+	CommentsTableSchema = `
+CREATE TABLE system.comments (
+   type      INT NOT NULL,    -- type of object, to distinguish between db and non-db objects
+   object_id INT NOT NULL,    -- main object ID, this will be usually db/table desc ID
+   sub_id    INT NOT NULL,    -- sub-ID for columns inside table, 0 for pure table and other types
+   comment   STRING NOT NULL, -- the comment
+   PRIMARY KEY (type, object_id, sub_id)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -252,6 +262,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.TableStatisticsTableID: privilege.ReadWriteData,
 	keys.LocationsTableID:       privilege.ReadWriteData,
 	keys.RoleMembersTableID:     privilege.ReadWriteData,
+	keys.CommentsTableID:        privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -818,6 +829,38 @@ var (
 		},
 		NextIndexID:    4,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleMembersTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// CommentsTable is the descriptor for the comments table.
+	CommentsTable = TableDescriptor{
+		Name:     "comments",
+		ID:       keys.CommentsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "type", ID: 1, Type: colTypeInt},
+			{Name: "object_id", ID: 2, Type: colTypeInt},
+			{Name: "sub_id", ID: 3, Type: colTypeInt},
+			{Name: "comment", ID: 4, Type: colTypeString},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []ColumnID{1, 2, 3}},
+			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+		},
+		NextFamilyID: 5,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"type", "object_id", "sub_id"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2, 3},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

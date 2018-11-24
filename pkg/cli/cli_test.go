@@ -2334,10 +2334,12 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
+  debug/nodes/1/ranges/21
   debug/reports/problemranges
   debug/schema/defaultdb@details
   debug/schema/postgres@details
   debug/schema/system@details
+  debug/schema/system/comments
   debug/schema/system/descriptor
   debug/schema/system/eventlog
   debug/schema/system/jobs
