@@ -75,12 +75,7 @@ func TestSort(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
-			sortSpec := sortSpec{
-				sortCol:    0,
-				inputTypes: tc.typ,
-			}
-
-			sort, err := newSorter(input[0], tc.typ[0], sortSpec)
+			sort, err := NewSorter(input[0], tc.typ, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,8 +114,7 @@ func BenchmarkSort(b *testing.B) {
 					}
 
 					source := newFiniteBatchSource(batch, nBatches)
-					sort, err := newSorter(source, types.Int64,
-						sortSpec{sortCol: 0, inputTypes: typs})
+					sort, err := NewSorter(source, typs, 0)
 					if err != nil {
 						b.Fatal(err)
 					}
