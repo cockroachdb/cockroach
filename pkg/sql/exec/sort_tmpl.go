@@ -68,7 +68,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // */}}
 
 type sortSpec struct {
-	sortCol    int
+	sortCol    uint32
 	inputTypes []types.T
 }
 
@@ -81,13 +81,17 @@ const (
 	sortEmitting
 )
 
-func newSorter(input Operator, t types.T, spec sortSpec) (Operator, error) {
+func NewSorter(input Operator, inputTypes []types.T, sortCol uint32) (Operator, error) {
+	t := inputTypes[sortCol]
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
 		return &sort_TYPEOp{
 			input: input,
-			spec:  spec,
+			spec: sortSpec{
+				sortCol:    sortCol,
+				inputTypes: inputTypes,
+			},
 		}, nil
 	// {{end}}
 	default:
@@ -153,8 +157,9 @@ func (p *sort_TYPEOp) Next() ColBatch {
 			return p.output
 		}
 
+		sortColIdx := int(p.spec.sortCol)
 		for j := 0; j < len(p.values); j++ {
-			if j == p.spec.sortCol {
+			if j == sortColIdx {
 				// the sortCol'th vec is already sorted, so just fill it directly.
 				p.output.ColVec(j).Copy(p.values[j], p.emitted, newEmitted, p.spec.inputTypes[j])
 			} else {
