@@ -236,7 +236,7 @@ type TreeIterator interface {
 	Next() (Interface, bool)
 }
 
-var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", true)
+var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", false)
 
 // NewTree creates a new interval tree with the given overlapper function. It
 // uses the augmented Left-Leaning Red Black tree implementation.
