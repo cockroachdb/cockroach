@@ -36,7 +36,15 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
-	0,
+	// NB: there is a tradeoff between the overhead of synchronously waiting for
+	// consensus for a batch if we don't pipeline and proving that all of the
+	// writes in the batch succeed if we do pipeline. We set this default to a
+	// value which experimentally strikes a balance between the two costs.
+	//
+	// Notably, this is well below sql.max{Insert/Update/Upsert/Delete}BatchSize,
+	// so implicit SQL txns should never pipeline their writes - they should either
+	// hit the 1PC fast-path or should have batches which exceed this limit.
+	128,
 )
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using

@@ -40,7 +40,7 @@
 <tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track write intents in transactions</td></tr>
 <tr><td><code>kv.transaction.max_refresh_spans_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track refresh spans in serializable transactions</td></tr>
 <tr><td><code>kv.transaction.write_pipelining_enabled</code></td><td>boolean</td><td><code>true</code></td><td>if enabled, transactional writes are pipelined through Raft consensus</td></tr>
-<tr><td><code>kv.transaction.write_pipelining_max_batch_size</code></td><td>integer</td><td><code>0</code></td><td>if non-zero, defines that maximum size batch that will be pipelined through Raft consensus</td></tr>
+<tr><td><code>kv.transaction.write_pipelining_max_batch_size</code></td><td>integer</td><td><code>128</code></td><td>if non-zero, defines that maximum size batch that will be pipelined through Raft consensus</td></tr>
 <tr><td><code>rocksdb.min_wal_sync_interval</code></td><td>duration</td><td><code>0s</code></td><td>minimum duration between syncs of the RocksDB WAL</td></tr>
 <tr><td><code>schemachanger.lease.duration</code></td><td>duration</td><td><code>5m0s</code></td><td>the duration of a schema change lease</td></tr>
 <tr><td><code>schemachanger.lease.renew_fraction</code></td><td>float</td><td><code>0.4</code></td><td>the fraction of schemachanger.lease_duration remaining to trigger a renew of the lease</td></tr>
