@@ -1815,8 +1815,10 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// Wait for store2 to hear about the split.
 	var rhsRepl2 *storage.Replica
 	testutils.SucceedsSoon(t, func() error {
-		rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID)
-		return err
+		if rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+			return errors.New("store2 has not yet processed split")
+		}
+		return nil
 	})
 
 	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
