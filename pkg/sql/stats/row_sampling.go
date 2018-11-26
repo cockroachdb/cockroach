@@ -42,14 +42,18 @@ type SampledRow struct {
 // requirement is that the capacity of each distributed reservoir must have been
 // at least as large as this reservoir.
 type SampleReservoir struct {
-	samples []SampledRow
+	samples  []SampledRow
+	outTypes []sqlbase.ColumnType
+	da       sqlbase.DatumAlloc
+	ra       sqlbase.EncDatumRowAlloc
 }
 
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int) {
+func (sr *SampleReservoir) Init(numSamples int, outTypes []sqlbase.ColumnType) {
 	sr.samples = make([]SampledRow, 0, numSamples)
+	sr.outTypes = outTypes
 }
 
 // Len is part of heap.Interface.
@@ -78,7 +82,9 @@ func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
 func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) {
 	if len(sr.samples) < cap(sr.samples) {
 		// We haven't accumulated enough rows yet, just append.
-		sr.samples = append(sr.samples, SampledRow{Row: row, Rank: rank})
+		rowCopy := sr.ra.AllocRow(len(row))
+		sr.copyRow(rowCopy, row)
+		sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
 		if len(sr.samples) == cap(sr.samples) {
 			// We just reached the limit; initialize the heap.
 			heap.Init(sr)
@@ -87,7 +93,8 @@ func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) {
 	}
 	// Replace the max rank if ours is smaller.
 	if rank < sr.samples[0].Rank {
-		sr.samples[0] = SampledRow{Row: row, Rank: rank}
+		sr.copyRow(sr.samples[0].Row, row)
+		sr.samples[0].Rank = rank
 		heap.Fix(sr, 0)
 	}
 }
@@ -95,4 +102,15 @@ func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) {
 // Get returns the sampled rows.
 func (sr *SampleReservoir) Get() []SampledRow {
 	return sr.samples
+}
+
+func (sr *SampleReservoir) copyRow(dst, src sqlbase.EncDatumRow) {
+	for i := range src {
+		// Copy only the decoded datum to ensure that we remove any reference to
+		// the encoded bytes. The encoded bytes would have been scanned in a batch
+		// of ~10000 rows, so we must delete the reference to allow the garbage
+		// collector to release the memory from the batch.
+		src[i].EnsureDecoded(&sr.outTypes[i], &sr.da)
+		dst[i] = sqlbase.DatumToEncDatum(sr.outTypes[i], src[i].Datum)
+	}
 }

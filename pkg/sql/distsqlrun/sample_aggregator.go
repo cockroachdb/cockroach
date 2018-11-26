@@ -99,7 +99,7 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize))
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.Init(
 		nil, post, []sqlbase.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
