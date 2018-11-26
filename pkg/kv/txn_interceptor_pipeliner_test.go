@@ -495,6 +495,9 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
+	// Disable maxBatchSize limit.
+	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
+
 	const writes = 2048
 	keyBuf := roachpb.Key(strings.Repeat("a", writes+1))
 	makeKey := func(i int) roachpb.Key { return keyBuf[:i+1] }
