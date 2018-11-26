@@ -195,11 +195,11 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
-		if err := detail.ActualValue.GetProto(&actualDesc); err == nil {
-			if desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-				return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s",
-					desc, actualDesc), true
-			}
+		if !detail.ActualValue.IsPresent() {
+			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
+		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
+			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
+			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, actualDesc), true
 		}
 	}
 	return "", false

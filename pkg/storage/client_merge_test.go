@@ -1587,8 +1587,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeAddReplicaRace verifies that an add replica request that
-// occurs concurrently with a merge is aborted.
+// TestStoreRangeMergeResplitAddReplicaRace verifies that an add replica request
+// that occurs concurrently with a merge is aborted.
 //
 // To see why aborting the add replica request is necessary, consider two
 // adjacent and collocated ranges, Q and R. Say the replicate queue decides to
@@ -1607,25 +1607,80 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 // To avoid this scenario, ChangeReplicas commands will abort if they discover
 // the range descriptor has changed between when the snapshot is sent and when
 // the replica-change transaction starts.
+func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store0, store1 := mtc.Store(0), mtc.Store(1)
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Arrange to block all snapshots until we're ready.
+	snapshotSentCh := make(chan struct{})
+	allowSnapshotCh := make(chan struct{})
+	mtc.transport.Listen(store1.StoreID(), RaftMessageHandlerInterceptor{
+		RaftMessageHandler: store1,
+		handleSnapshotFilter: func(header *storage.SnapshotRequest_Header) {
+			snapshotSentCh <- struct{}{}
+			<-allowSnapshotCh
+		},
+	})
+
+	// Launch the add replicas request. This will get stuck sending a preemptive
+	// snapshot thanks to the handler we installed above.
+	errCh := make(chan error)
+	go func() {
+		errCh <- mtc.replicateRangeNonFatal(rhsDesc.RangeID, 1)
+	}()
+
+	// Wait for the add replicas request to send a snapshot, then merge the ranges
+	// together.
+	<-snapshotSentCh
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	if _, pErr := client.SendWrapped(ctx, store0.TestSender(), mergeArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Allow snapshots, which will allow the add replicas to complete.
+	close(allowSnapshotCh)
+	expErr := `change replicas of r2 failed: descriptor changed: .* \(range subsumed\)`
+	if err := <-errCh; !testutils.IsError(err, expErr) {
+		t.Fatalf("expected error %q, got %v", expErr, err)
+	}
+}
+
+// TestStoreRangeMergeResplitAddReplicaRace tests a diabolical edge case in the
+// merge/add replica race.
 //
-// There is a particularly diabolical edge case here. Consider the same
-// situation as above, except that Q and R merge together and then split at
-// exactly the same key, all before the replica-change transaction starts. Q's
-// range descriptor will have the same start key, end key, and next replica ID
-// that it did when the preemptive snapshot started. That is, it will look
-// unchanged! To protect against this, range descriptors contain a generation
-// counter, which is incremented on every split or merge. The presence of this
-// counter means that ChangeReplicas commands can detect and abort if any merges
-// have occurred since the preemptive snapshot, even if the sequence of splits
-// or merges left the keyspan of the range unchanged. This diabolical edge case
-// is tested here.
+// Consider the same situation as described in the comment on
+// TestStoreRangeMergeAddReplicaRace, except that Q and R merge together and
+// then split at exactly the same key, all before the replica-change transaction
+// starts. Q's range descriptor will have the same start key, end key, and next
+// replica ID that it did when the preemptive snapshot started. That is, it will
+// look unchanged! To protect against this, range descriptors contain a
+// generation counter, which is incremented on every split or merge. The
+// presence of this counter means that ChangeReplicas commands can detect and
+// abort if any merges have occurred since the preemptive snapshot, even if the
+// sequence of splits or merges left the keyspan of the range unchanged. This
+// diabolical edge case is tested here.
 //
 // Note that splits will not increment the generation counter until the cluster
 // version includes VersionRangeMerges. That's ok, because a sequence of splits
 // alone will always result in a descriptor with a smaller end key. Only a
 // sequence of splits AND merges can result in an unchanged end key, and merges
 // always increment the generation counter.
-func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
