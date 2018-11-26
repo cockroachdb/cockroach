@@ -33,8 +33,9 @@ run build/builder.sh make -Otarget c-deps GOFLAGS=-race
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
-run build/builder.sh env \
+run build/builder.sh env TZ=America/New_York \
     COCKROACH_LOGIC_TESTS_SKIP=true \
+    stdbuf -oL -eL \
     make testrace \
     PKG="$pkgspec" \
     TESTTIMEOUT=45m \
