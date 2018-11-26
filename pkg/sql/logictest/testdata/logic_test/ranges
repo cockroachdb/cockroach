@@ -278,41 +278,77 @@ ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0)
 query TTTTTTTTI colnames
 SELECT  start_key, start_pretty, end_key, end_pretty, database_name, table_name, index_name, replicas, crdb_internal.lease_holder(start_key) FROM crdb_internal.ranges_no_leases;
 ----
-start_key                          start_pretty              end_key                            end_pretty                database_name  table_name  index_name  replicas  crdb_internal.lease_holder
-·                                  /Min                      [189 137 137]                      /Table/53/1/1             ·              ·           ·           {1}       1
-[189 137 137]                      /Table/53/1/1             [189 137 141 137]                  /Table/53/1/5/1           test           t           ·           {3,4}     3
-[189 137 141 137]                  /Table/53/1/5/1           [189 137 141 138]                  /Table/53/1/5/2           test           t           ·           {1,2,3}   1
-[189 137 141 138]                  /Table/53/1/5/2           [189 137 141 139]                  /Table/53/1/5/3           test           t           ·           {2,3,5}   5
-[189 137 141 139]                  /Table/53/1/5/3           [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  test           t           ·           {1,2,4}   4
-[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  [189 137 146]                      /Table/53/1/10            test           t           ·           {1,2,4}   4
-[189 137 146]                      /Table/53/1/10            [189 137 147]                      /Table/53/1/11            test           t           ·           {1}       1
-[189 137 147]                      /Table/53/1/11            [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  test           t           ·           {1}       1
-[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  [189 138 144]                      /Table/53/2/8             test           t           ·           {1}       1
-[189 138 144]                      /Table/53/2/8             [189 138 145]                      /Table/53/2/9             test           t           idx         {1}       1
-[189 138 145]                      /Table/53/2/9             [189 138 236 137]                  /Table/53/2/100/1         test           t           idx         {1}       1
-[189 138 236 137]                  /Table/53/2/100/1         [189 138 236 186]                  /Table/53/2/100/50        test           t           idx         {3}       3
-[189 138 236 186]                  /Table/53/2/100/50        [195 137 136]                      /Table/59/1/0             test           t           idx         {1}       1
-[195 137 136]                      /Table/59/1/0             [196 137 246 123]                  /Table/60/1/123           ·              b           ·           {1}       1
-[196 137 246 123]                  /Table/60/1/123           [196 138 136]                      /Table/60/2/0             d              c           ·           {1}       1
-[196 138 136]                      /Table/60/2/0             [255 255]                          /Max                      d              c           c_i_idx     {1}       1
+start_key                          start_pretty                   end_key                            end_pretty                     database_name  table_name        index_name  replicas  crdb_internal.lease_holder
+·                                  /Min                            liveness-                        /System/NodeLiveness           ·              ·                 ·           {1}       1
+ liveness-                        /System/NodeLiveness            liveness.                        /System/NodeLivenessMax        ·              ·                 ·           {1}       1
+ liveness.                        /System/NodeLivenessMax        tsd                               /System/tsd                    ·              ·                 ·           {1}       1
+tsd                               /System/tsd                    tse                               /System/"tse"                  ·              ·                 ·           {1}       1
+tse                               /System/"tse"                  [136]                              /Table/SystemConfigSpan/Start  ·              ·                 ·           {1}       1
+[136]                              /Table/SystemConfigSpan/Start  [147]                              /Table/11                      ·              ·                 ·           {1}       1
+[147]                              /Table/11                      [148]                              /Table/12                      system         lease             ·           {1}       1
+[148]                              /Table/12                      [149]                              /Table/13                      system         eventlog          ·           {1}       1
+[149]                              /Table/13                      [150]                              /Table/14                      system         rangelog          ·           {1}       1
+[150]                              /Table/14                      [151]                              /Table/15                      system         ui                ·           {1}       1
+[151]                              /Table/15                      [152]                              /Table/16                      system         jobs              ·           {1}       1
+[152]                              /Table/16                      [153]                              /Table/17                      ·              ·                 ·           {1}       1
+[153]                              /Table/17                      [154]                              /Table/18                      ·              ·                 ·           {1}       1
+[154]                              /Table/18                      [155]                              /Table/19                      ·              ·                 ·           {1}       1
+[155]                              /Table/19                      [156]                              /Table/20                      system         web_sessions      ·           {1}       1
+[156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics  ·           {1}       1
+[157]                              /Table/21                      [158]                              /Table/22                      system         locations         ·           {1}       1
+[158]                              /Table/22                      [159]                              /Table/23                      ·              ·                 ·           {1}       1
+[159]                              /Table/23                      [189 137 137]                      /Table/53/1/1                  system         role_members      ·           {1}       1
+[189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                 ·           {3,4}     3
+[189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                 ·           {1,2,3}   1
+[189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                 ·           {2,3,5}   5
+[189 137 141 139]                  /Table/53/1/5/3                [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       test           t                 ·           {1,2,4}   4
+[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       [189 137 146]                      /Table/53/1/10                 test           t                 ·           {1,2,4}   4
+[189 137 146]                      /Table/53/1/10                 [189 137 147]                      /Table/53/1/11                 test           t                 ·           {1}       1
+[189 137 147]                      /Table/53/1/11                 [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       test           t                 ·           {1}       1
+[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       [189 138 144]                      /Table/53/2/8                  test           t                 ·           {1}       1
+[189 138 144]                      /Table/53/2/8                  [189 138 145]                      /Table/53/2/9                  test           t                 idx         {1}       1
+[189 138 145]                      /Table/53/2/9                  [189 138 236 137]                  /Table/53/2/100/1              test           t                 idx         {1}       1
+[189 138 236 137]                  /Table/53/2/100/1              [189 138 236 186]                  /Table/53/2/100/50             test           t                 idx         {3}       3
+[189 138 236 186]                  /Table/53/2/100/50             [195 137 136]                      /Table/59/1/0                  test           t                 idx         {1}       1
+[195 137 136]                      /Table/59/1/0                  [196 137 246 123]                  /Table/60/1/123                ·              b                 ·           {1}       1
+[196 137 246 123]                  /Table/60/1/123                [196 138 136]                      /Table/60/2/0                  d              c                 ·           {1}       1
+[196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                 c_i_idx     {1}       1
 
 query TTTTTTTTI colnames
 SELECT start_key, start_pretty, end_key, end_pretty, database_name, table_name, index_name, replicas, lease_holder FROM crdb_internal.ranges
 ----
-start_key                          start_pretty              end_key                            end_pretty                database_name  table_name  index_name  replicas  lease_holder
-·                                  /Min                      [189 137 137]                      /Table/53/1/1             ·              ·           ·           {1}       1
-[189 137 137]                      /Table/53/1/1             [189 137 141 137]                  /Table/53/1/5/1           test           t           ·           {3,4}     3
-[189 137 141 137]                  /Table/53/1/5/1           [189 137 141 138]                  /Table/53/1/5/2           test           t           ·           {1,2,3}   1
-[189 137 141 138]                  /Table/53/1/5/2           [189 137 141 139]                  /Table/53/1/5/3           test           t           ·           {2,3,5}   5
-[189 137 141 139]                  /Table/53/1/5/3           [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  test           t           ·           {1,2,4}   4
-[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  [189 137 146]                      /Table/53/1/10            test           t           ·           {1,2,4}   4
-[189 137 146]                      /Table/53/1/10            [189 137 147]                      /Table/53/1/11            test           t           ·           {1}       1
-[189 137 147]                      /Table/53/1/11            [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  test           t           ·           {1}       1
-[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  [189 138 144]                      /Table/53/2/8             test           t           ·           {1}       1
-[189 138 144]                      /Table/53/2/8             [189 138 145]                      /Table/53/2/9             test           t           idx         {1}       1
-[189 138 145]                      /Table/53/2/9             [189 138 236 137]                  /Table/53/2/100/1         test           t           idx         {1}       1
-[189 138 236 137]                  /Table/53/2/100/1         [189 138 236 186]                  /Table/53/2/100/50        test           t           idx         {3}       3
-[189 138 236 186]                  /Table/53/2/100/50        [195 137 136]                      /Table/59/1/0             test           t           idx         {1}       1
-[195 137 136]                      /Table/59/1/0             [196 137 246 123]                  /Table/60/1/123           ·              b           ·           {1}       1
-[196 137 246 123]                  /Table/60/1/123           [196 138 136]                      /Table/60/2/0             d              c           ·           {1}       1
-[196 138 136]                      /Table/60/2/0             [255 255]                          /Max                      d              c           c_i_idx     {1}       1
+start_key                          start_pretty                   end_key                            end_pretty                     database_name  table_name        index_name  replicas  lease_holder
+·                                  /Min                            liveness-                        /System/NodeLiveness           ·              ·                 ·           {1}       1
+ liveness-                        /System/NodeLiveness            liveness.                        /System/NodeLivenessMax        ·              ·                 ·           {1}       1
+ liveness.                        /System/NodeLivenessMax        tsd                               /System/tsd                    ·              ·                 ·           {1}       1
+tsd                               /System/tsd                    tse                               /System/"tse"                  ·              ·                 ·           {1}       1
+tse                               /System/"tse"                  [136]                              /Table/SystemConfigSpan/Start  ·              ·                 ·           {1}       1
+[136]                              /Table/SystemConfigSpan/Start  [147]                              /Table/11                      ·              ·                 ·           {1}       1
+[147]                              /Table/11                      [148]                              /Table/12                      system         lease             ·           {1}       1
+[148]                              /Table/12                      [149]                              /Table/13                      system         eventlog          ·           {1}       1
+[149]                              /Table/13                      [150]                              /Table/14                      system         rangelog          ·           {1}       1
+[150]                              /Table/14                      [151]                              /Table/15                      system         ui                ·           {1}       1
+[151]                              /Table/15                      [152]                              /Table/16                      system         jobs              ·           {1}       1
+[152]                              /Table/16                      [153]                              /Table/17                      ·              ·                 ·           {1}       1
+[153]                              /Table/17                      [154]                              /Table/18                      ·              ·                 ·           {1}       1
+[154]                              /Table/18                      [155]                              /Table/19                      ·              ·                 ·           {1}       1
+[155]                              /Table/19                      [156]                              /Table/20                      system         web_sessions      ·           {1}       1
+[156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics  ·           {1}       1
+[157]                              /Table/21                      [158]                              /Table/22                      system         locations         ·           {1}       1
+[158]                              /Table/22                      [159]                              /Table/23                      ·              ·                 ·           {1}       1
+[159]                              /Table/23                      [189 137 137]                      /Table/53/1/1                  system         role_members      ·           {1}       1
+[189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                 ·           {3,4}     3
+[189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                 ·           {1,2,3}   1
+[189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                 ·           {2,3,5}   5
+[189 137 141 139]                  /Table/53/1/5/3                [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       test           t                 ·           {1,2,4}   4
+[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       [189 137 146]                      /Table/53/1/10                 test           t                 ·           {1,2,4}   4
+[189 137 146]                      /Table/53/1/10                 [189 137 147]                      /Table/53/1/11                 test           t                 ·           {1}       1
+[189 137 147]                      /Table/53/1/11                 [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       test           t                 ·           {1}       1
+[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       [189 138 144]                      /Table/53/2/8                  test           t                 ·           {1}       1
+[189 138 144]                      /Table/53/2/8                  [189 138 145]                      /Table/53/2/9                  test           t                 idx         {1}       1
+[189 138 145]                      /Table/53/2/9                  [189 138 236 137]                  /Table/53/2/100/1              test           t                 idx         {1}       1
+[189 138 236 137]                  /Table/53/2/100/1              [189 138 236 186]                  /Table/53/2/100/50             test           t                 idx         {3}       3
+[189 138 236 186]                  /Table/53/2/100/50             [195 137 136]                      /Table/59/1/0                  test           t                 idx         {1}       1
+[195 137 136]                      /Table/59/1/0                  [196 137 246 123]                  /Table/60/1/123                ·              b                 ·           {1}       1
+[196 137 246 123]                  /Table/60/1/123                [196 138 136]                      /Table/60/2/0                  d              c                 ·           {1}       1
+[196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                 c_i_idx     {1}       1

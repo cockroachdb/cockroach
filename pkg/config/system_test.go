@@ -167,7 +167,8 @@ func TestGetLargestID(t *testing.T) {
 			ms := sqlbase.MakeMetadataSchema()
 			descIDs := ms.DescriptorIDs()
 			maxDescID := descIDs[len(descIDs)-1]
-			return testCase{ms.GetInitialValues(), uint32(maxDescID), 0, ""}
+			kvs, _ /* splits */ := ms.GetInitialValues()
+			return testCase{kvs, uint32(maxDescID), 0, ""}
 		}(),
 
 		// Test non-zero max.
@@ -259,8 +260,9 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 	}
 
 	cfg := config.NewSystemConfig()
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema().GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
-		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
 		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
@@ -290,10 +292,10 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 
 	schema := sqlbase.MakeMetadataSchema()
 	// Real system tables only.
-	baseSql := schema.GetInitialValues()
+	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
-	userSQL := append(schema.GetInitialValues(),
-		descriptor(start), descriptor(start+1), descriptor(start+5))
+	kvs, _ /* splits */ := schema.GetInitialValues()
+	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
 	subzoneSQL := append(userSQL,
 		zoneConfig(start+1, subzone("a", ""), subzone("c", "e")),
@@ -419,8 +421,10 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		config.ZoneConfigHook = originalZoneConfigHook
 	}()
 	cfg := config.NewSystemConfig()
+
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema().GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
-		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
 		var objectID uint32
