@@ -554,12 +554,23 @@ func makeUpdaterWithoutCascader(
 		// ru.FetchColIDtoRowIndex if it isn't already present.
 		maybeAddCol := func(colID sqlbase.ColumnID) error {
 			if _, ok := ru.FetchColIDtoRowIndex[colID]; !ok {
-				col, err := tableDesc.FindColumnByID(colID)
+				col, err := tableDesc.FindActiveColumnByID(colID)
+				var column sqlbase.ColumnDescriptor
 				if err != nil {
-					return err
+					// Active column lookup failed, try inactive columns.
+					col, err = tableDesc.FindInactiveColumnByID(colID)
+					if err != nil {
+						return err
+					}
+					column = *col
+					// Even if the column is non-nullable it can be null in the
+					// middle of a schema change.
+					column.Nullable = true
+				} else {
+					column = *col
 				}
 				ru.FetchColIDtoRowIndex[col.ID] = len(ru.FetchCols)
-				ru.FetchCols = append(ru.FetchCols, *col)
+				ru.FetchCols = append(ru.FetchCols, column)
 			}
 			return nil
 		}
