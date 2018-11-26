@@ -73,8 +73,6 @@ const (
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
-	defaultConnResultsBufferBytes = 16 << 10 // 16 KiB
-
 	defaultSQLTableStatCacheSize = 256
 )
 
@@ -254,11 +252,6 @@ type Config struct {
 	// the Admin API's HTTP endpoints.
 	EnableWebSessionAuthentication bool
 
-	// ConnResultsBufferBytes is the size of the buffer in which each connection
-	// accumulates results set. Results are flushed to the network when this
-	// buffer overflows.
-	ConnResultsBufferBytes int
-
 	enginesCreated bool
 }
 
@@ -343,10 +336,6 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
-		// TODO(dan): Hack. Remove this env override once changefeeds have
-		// control over buffering.
-		ConnResultsBufferBytes: envutil.EnvOrDefaultInt(
-			"COCKROACH_CONN_RESULTS_BUFFER_BYTES", defaultConnResultsBufferBytes),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

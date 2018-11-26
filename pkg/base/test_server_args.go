@@ -103,11 +103,6 @@ type TestServerArgs struct {
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
 	DisableWebSessionAuthentication bool
-
-	// ConnResultsBufferBytes is the size of the buffer in which each connection
-	// accumulates results set. Results are flushed to the network when this
-	// buffer overflows.
-	ConnResultsBufferBytes int
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

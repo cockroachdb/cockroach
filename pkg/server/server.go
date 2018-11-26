@@ -631,8 +631,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AuditLogger: log.NewSecondaryLogger(
 			s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true, /*forceSyncWrites*/
 		),
-
-		ConnResultsBufferBytes: s.cfg.ConnResultsBufferBytes,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

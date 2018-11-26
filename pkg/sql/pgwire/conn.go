@@ -63,9 +63,9 @@ const (
 type conn struct {
 	conn net.Conn
 
-	sessionArgs sql.SessionArgs
-	execCfg     *sql.ExecutorConfig
-	metrics     *ServerMetrics
+	sessionArgs        sql.SessionArgs
+	resultsBufferBytes int64
+	metrics            *ServerMetrics
 
 	// rd is a buffered reader consuming conn. All reads from conn go through
 	// this.
@@ -136,11 +136,12 @@ func serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
+	resultsBufferBytes int64,
 	metrics *ServerMetrics,
 	reserved mon.BoundAccount,
 	sqlServer *sql.Server,
 	draining func() bool,
-	execCfg *sql.ExecutorConfig,
+	ie *sql.InternalExecutor,
 	stopper *stop.Stopper,
 	insecure bool,
 ) error {
@@ -150,9 +151,9 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, execCfg)
+	c := newConn(netConn, sArgs, metrics, resultsBufferBytes)
 
-	if err := c.handleAuthentication(ctx, insecure); err != nil {
+	if err := c.handleAuthentication(ctx, insecure, ie); err != nil {
 		_ = c.conn.Close()
 		reserved.Close(ctx)
 		return err
@@ -164,14 +165,14 @@ func serveConn(
 }
 
 func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, execCfg *sql.ExecutorConfig,
+	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, resultsBufferBytes int64,
 ) *conn {
 	c := &conn{
-		conn:        netConn,
-		sessionArgs: sArgs,
-		execCfg:     execCfg,
-		metrics:     metrics,
-		rd:          *bufio.NewReader(netConn),
+		conn:               netConn,
+		sessionArgs:        sArgs,
+		resultsBufferBytes: resultsBufferBytes,
+		metrics:            metrics,
+		rd:                 *bufio.NewReader(netConn),
 	}
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
@@ -1095,7 +1096,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 // maybeFlush flushes the buffer to the network connection if it exceeded
 // connResultsBufferSizeBytes.
 func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if c.writerState.buf.Len() <= c.execCfg.ConnResultsBufferBytes {
+	if int64(c.writerState.buf.Len()) <= c.resultsBufferBytes {
 		return false, nil
 	}
 	return true, c.Flush(pos)
@@ -1261,7 +1262,9 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // name, if different from the one given initially. Note: at this
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
-func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
+func (c *conn) handleAuthentication(
+	ctx context.Context, insecure bool, ie *sql.InternalExecutor,
+) error {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 		return err
@@ -1270,7 +1273,7 @@ func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.execCfg, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
+		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
