@@ -138,26 +138,28 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 
 	tc.AddServer(t, base.TestServerArgs{})
 
-	testutils.SucceedsSoon(t, func() error {
-		// After the initial splits have been performed, all of the resulting ranges
-		// should be present in replicate queue purgatory (because we only have a
-		// single store in the test and thus replication cannot succeed).
-		expected, err := tc.Servers[0].ExpectedInitialRangeCount()
-		if err != nil {
-			return err
-		}
+	if err := tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+		return s.ForceReplicationScanAndProcess()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// After the initial splits have been performed, all of the resulting ranges
+	// should be present in replicate queue purgatory (because we only have a
+	// single store in the test and thus replication cannot succeed).
+	expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		var store *storage.Store
-		_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
-			store = s
-			return nil
-		})
-
-		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
-			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
-		}
+	var store *storage.Store
+	_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+		store = s
 		return nil
 	})
+
+	if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+		t.Fatalf("expected %d replicas in purgatory, but found %d", expected, n)
+	}
 
 	tc.AddServer(t, base.TestServerArgs{})
 

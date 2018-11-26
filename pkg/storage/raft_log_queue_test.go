@@ -382,7 +382,13 @@ func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t,
+		testStoreOpts{
+			// This test was written before test stores could start with more than one
+			// range and was not adapted.
+			createSystemRanges: false,
+		},
+		stopper)
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
@@ -431,7 +437,7 @@ func TestNewTruncateDecision(t *testing.T) {
 
 	// Enable the raft log scanner and and force a truncation.
 	store.SetRaftLogQueueActive(true)
-	store.ForceRaftLogScanAndProcess()
+	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
 	// There can be a delay from when the truncation command is issued and the
@@ -461,7 +467,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	// Again, enable the raft log scanner and and force a truncation. This time
 	// we expect no truncation to occur.
 	store.SetRaftLogQueueActive(true)
-	store.ForceRaftLogScanAndProcess()
+	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
 	// Unlike the last iteration, where we expect a truncation and can wait on
@@ -505,7 +511,13 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, _ := createTestStore(t, stopper)
+			store, _ := createTestStore(t,
+				testStoreOpts{
+					// This test was written before test stores could start with more than one
+					// range and was not adapted.
+					createSystemRanges: false,
+				},
+				stopper)
 
 			// Note that turning off the replica scanner does not prevent the queues
 			// from processing entries (in this case specifically the raftLogQueue),

@@ -553,12 +553,19 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	notReplicated := true
 	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
-		for _, s := range tc.Servers {
+		for i, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
 				if n := s.AvailableNodeCount(); n != len(tc.Servers) {
 					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
 					notReplicated = true
 					return nil
+				}
+				// Force the first node to upreplicate everything. Otherwise, if we rely
+				// on the scanner to do it, it'll take a while.
+				if i == 0 {
+					if err := s.ForceReplicationScanAndProcess(); err != nil {
+						return err
+					}
 				}
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					// This can sometimes fail since ComputeMetrics calls

@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -73,11 +74,29 @@ func (s *initServer) Bootstrap(
 	s.semaphore.acquire()
 	defer s.semaphore.release()
 
-	if err := s.server.node.bootstrap(ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion()); err != nil {
+	if err := s.server.node.bootstrap(
+		ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion(),
+	); err != nil {
 		if _, ok := err.(*duplicateBootstrapError); ok {
 			return nil, status.Errorf(codes.AlreadyExists, err.Error())
 		}
 		log.Error(ctx, "node bootstrap failed: ", err)
+		return nil, err
+	}
+	// Force all the system ranges through the replication queue so they
+	// upreplicate as quickly as possible when a new node joins. Without this
+	// code, the upreplication would be up to the whim of the scanner, which
+	// might be too slow for new clusters.
+	done := false
+	if err := s.server.node.stores.VisitStores(func(store *storage.Store) error {
+		if !done {
+			done = true
+			if err := store.ForceReplicationScanAndProcess(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 

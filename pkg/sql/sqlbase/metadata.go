@@ -71,8 +71,9 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 // installed on the underlying persistent storage before a cockroach store can
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
-	descs   []metadataDescriptor
-	otherKV []roachpb.KeyValue
+	descs         []metadataDescriptor
+	otherSplitIDs []uint32
+	otherKV       []roachpb.KeyValue
 }
 
 type metadataDescriptor struct {
@@ -102,6 +103,15 @@ func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
+// AddSplitIDs adds some "table ids" to the MetadataSchema such that
+// corresponding keys are returned as split points by GetInitialValues().
+// AddDescriptor() has the same effect for the table descriptors that are passed
+// to it, but we also have a couple of "fake tables" that don't have descriptors
+// but need splits just the same.
+func (ms *MetadataSchema) AddSplitIDs(id ...uint32) {
+	ms.otherSplitIDs = append(ms.otherSplitIDs, id...)
+}
+
 // SystemDescriptorCount returns the number of descriptors that will be created by
 // this schema. This value is needed to automate certain tests.
 func (ms MetadataSchema) SystemDescriptorCount() int {
@@ -109,10 +119,12 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 }
 
 // GetInitialValues returns the set of initial K/V values which should be added to
-// a bootstrapping CockroachDB cluster in order to create the tables contained
-// in the schema.
-func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
+// a bootstrapping cluster in order to create the tables contained
+// in the schema. Also returns a list of split points (a split for each SQL
+// table descriptor part of the initial values). Both returned sets are sorted.
+func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
+	var splits []roachpb.RKey
 
 	// Save the ID generator value, which will generate descriptor IDs for user
 	// objects.
@@ -144,12 +156,19 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 			Key:   MakeDescMetadataKey(desc.GetID()),
 			Value: value,
 		})
+		if desc.GetID() > keys.MaxSystemConfigDescID {
+			splits = append(splits, roachpb.RKey(keys.MakeTablePrefix(uint32(desc.GetID()))))
+		}
 	}
 
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
 	for _, sysObj := range ms.descs {
 		addDescriptor(sysObj.parentID, sysObj.desc)
+	}
+
+	for _, id := range ms.otherSplitIDs {
+		splits = append(splits, roachpb.RKey(keys.MakeTablePrefix(id)))
 	}
 
 	// Other key/value generation that doesn't fit into databases and
@@ -159,7 +178,11 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	// Sort returned key values; this is valuable because it matches the way the
 	// objects would be sorted if read from the engine.
 	sort.Sort(roachpb.KeyValueByKey(ret))
-	return ret
+	sort.Slice(splits, func(i, j int) bool {
+		return splits[i].Less(splits[j])
+	})
+
+	return ret, splits
 }
 
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in

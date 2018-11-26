@@ -424,7 +424,8 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 
 	// Split range 1 at an arbitrary key.
 	key := roachpb.Key("a")
-	h := roachpb.Header{RangeID: 1}
+	rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
+	h := roachpb.Header{RangeID: rngID}
 	args := adminSplitArgs(key)
 	if _, pErr := client.SendWrappedWith(context.Background(), store, h, args); pErr != nil {
 		t.Fatal(pErr)
@@ -528,7 +529,13 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{
+			// This test was written before the test stores were able to start with
+			// more than one range and is not prepared to handle many ranges.
+			dontCreateSystemRanges: true,
+			cfg: &storeCfg},
+		stopper)
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	content := roachpb.Key("asdvb")
@@ -1130,6 +1137,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			storeCfg := storage.TestStoreConfig(nil)
 			storeCfg.TestingKnobs.DisableGCQueue = true
 			storeCfg.TestingKnobs.DisableMergeQueue = true
+			storeCfg.TestingKnobs.DisableSplitQueue = true
 			storeCfg.TestingKnobs.TestingRequestFilter =
 				func(ba roachpb.BatchRequest) *roachpb.Error {
 					for _, req := range ba.Requests {
@@ -1152,11 +1160,6 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			store := createTestStoreWithConfig(t, stopper, storeCfg)
-
-			if err := server.WaitForInitialSplits(store.DB()); err != nil {
-				t.Fatal(err)
-			}
-			store.SetSplitQueueActive(false)
 
 			// Split at the split key.
 			sArgs := adminSplitArgs(splitKey.AsRawKey())
@@ -1182,14 +1185,18 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				atomic.StoreInt32(&activateSplitFilter, 1)
 				if err := stopper.RunAsyncTask(ctx, "force split", func(_ context.Context) {
 					store.SetSplitQueueActive(true)
-					store.ForceSplitScanAndProcess()
+					if err := store.ForceSplitScanAndProcess(); err != nil {
+						log.Fatal(ctx, err)
+					}
 				}); err != nil {
 					t.Fatal(err)
 				}
 				<-splitPending
 			} else if tc.splitImpossible {
 				store.SetSplitQueueActive(true)
-				store.ForceSplitScanAndProcess()
+				if err := store.ForceSplitScanAndProcess(); err != nil {
+					t.Fatal(err)
+				}
 				if l := store.SplitQueuePurgatoryLength(); l != 1 {
 					t.Fatalf("expected split queue purgatory to contain 1 replica, found %d", l)
 				}
@@ -1257,7 +1264,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			return err
 		}
 		descTablePrefix := keys.MakeTablePrefix(keys.DescriptorTableID)
-		for _, kv := range schema.GetInitialValues() {
+		kvs, _ /* splits */ := schema.GetInitialValues()
+		for _, kv := range kvs {
 			if !bytes.HasPrefix(kv.Key, descTablePrefix) {
 				continue
 			}
@@ -2560,6 +2568,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 func TestUnsplittableRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	ttl := 1 * time.Hour
 	const maxBytes = 1 << 16
 	zoneConfig := config.DefaultZoneConfig()
@@ -2571,7 +2580,7 @@ func TestUnsplittableRange(t *testing.T) {
 	defer config.TestingSetDefaultSystemZoneConfig(zoneConfig)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	manual := hlc.NewManualClock(123)
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
@@ -2579,9 +2588,6 @@ func TestUnsplittableRange(t *testing.T) {
 	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan
 	cfg.TestingKnobs.DisableMergeQueue = true
 	store := createTestStoreWithConfig(t, stopper, cfg)
-	if err := server.WaitForInitialSplits(store.DB()); err != nil {
-		t.Fatal(err)
-	}
 
 	// Add a single large row to /Table/14.
 	tableKey := keys.MakeTablePrefix(keys.UITableID)
@@ -2589,7 +2595,7 @@ func TestUnsplittableRange(t *testing.T) {
 	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
 	valueLen := 0.9 * maxBytes
 	value := bytes.Repeat([]byte("x"), int(valueLen))
-	if err := store.DB().Put(context.Background(), col1Key, value); err != nil {
+	if err := store.DB().Put(ctx, col1Key, value); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2598,13 +2604,15 @@ func TestUnsplittableRange(t *testing.T) {
 	manual.Increment(ttl.Nanoseconds() / 2)
 	value2Len := 0.2 * maxBytes
 	value2 := bytes.Repeat([]byte("y"), int(value2Len))
-	if err := store.DB().Put(context.Background(), col1Key, value2); err != nil {
+	if err := store.DB().Put(ctx, col1Key, value2); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure that an attempt to split the range will hit an
 	// unsplittableRangeError and place the range in purgatory.
-	store.ForceSplitScanAndProcess()
+	if err := store.ForceSplitScanAndProcess(); err != nil {
+		t.Fatal(err)
+	}
 	if purgLen := store.SplitQueuePurgatoryLength(); purgLen != 1 {
 		t.Fatalf("expected split queue purgatory to contain 1 replica, found %d", purgLen)
 	}
@@ -2760,7 +2768,14 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	cfg := storage.TestStoreConfig(hlc.NewClock(manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
-	s := createTestStoreWithConfig(t, stopper, cfg)
+	s := createTestStoreWithOpts(
+		t,
+		testStoreOpts{
+			// This test was written before the test stores were able to start with
+			// more than one range and is not prepared to handle many ranges.
+			dontCreateSystemRanges: true,
+			cfg: &cfg},
+		stopper)
 
 	cap, err := s.Capacity(false /* useCached */)
 	if err != nil {
@@ -3157,7 +3172,11 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 	go storage.WatchForDisappearingReplicas(t, store)
-	if err := server.WaitForInitialSplits(store.DB()); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 100; i++ {
+		key := roachpb.Key(fmt.Sprintf("a%d", i))
+		args := adminSplitArgs(key)
+		if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), args); pErr != nil {
+			t.Fatalf("%q: split unexpected error: %s", key, pErr)
+		}
 	}
 }

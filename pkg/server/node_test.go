@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -168,13 +169,14 @@ func createAndStartTestNode(
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Starting the heartbeat is usually done by the server. This test needs it
+	// because otherwise some of the initial ranges cannot be accessed (since
+	// they need an epoch-based lease).
+	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, nil /* alive */)
 	if err := node.start(ctx, addr, bootstrappedEngines, newEngines,
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
-		t.Fatal(err)
-	}
-	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -224,17 +226,29 @@ func TestBootstrapCluster(t *testing.T) {
 		testutils.MakeKey(roachpb.Key("\x03"), roachpb.KeyMax),
 		roachpb.Key("\x04bootstrap-version"),
 		roachpb.Key("\x04node-idgen"),
+		roachpb.Key("\x04range-idgen"),
 		roachpb.Key("\x04store-idgen"),
 	}
+	for _, splitKey := range config.StaticSplits() {
+		meta2Key := keys.RangeMetaKey(splitKey)
+		expectedKeys = append(expectedKeys, meta2Key.AsRawKey())
+	}
+
 	// Add the initial keys for sql.
-	for _, kv := range GetBootstrapSchema().GetInitialValues() {
+	kvs, tableSplits := GetBootstrapSchema().GetInitialValues()
+	for _, kv := range kvs {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
+	for _, splitKey := range tableSplits {
+		meta2Key := keys.RangeMetaKey(splitKey)
+		expectedKeys = append(expectedKeys, meta2Key.AsRawKey())
+	}
+
 	// Resort the list. The sql values are not sorted.
 	sort.Sort(expectedKeys)
 
 	if !reflect.DeepEqual(foundKeys, expectedKeys) {
-		t.Errorf("expected keys mismatch:\n%s\n  -- vs. -- \n\n%s",
+		t.Errorf("expected keys mismatch (found vs expected):\n%s\n  -- vs. -- \n\n%s",
 			formatKeys(foundKeys), formatKeys(expectedKeys))
 	}
 

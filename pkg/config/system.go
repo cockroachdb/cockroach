@@ -319,6 +319,7 @@ var staticSplits = []roachpb.RKey{
 }
 
 // StaticSplits are predefined split points in the system keyspace.
+// Corresponding ranges are created at cluster bootstrap time.
 //
 // There are two reasons for a static split. First, spans that are critical to
 // cluster stability, like the node liveness span, are split into their own
@@ -326,6 +327,9 @@ var staticSplits = []roachpb.RKey{
 // that can be targeted by zone configs, like the meta span and the timeseries
 // span, are split off into their own ranges because zone configs cannot apply
 // to fractions of a range.
+//
+// Note that these are not the only splits created at cluster bootstrap; splits
+// between various system tables are also created.
 func StaticSplits() []roachpb.RKey {
 	return staticSplits
 }
@@ -338,10 +342,14 @@ func StaticSplits() []roachpb.RKey {
 // system ranges that come before the system tables. The system-config range is
 // somewhat special in that it can contain multiple SQL tables
 // (/table/0-/table/<max-system-config-desc>) within a single range.
-func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
+func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachpb.RKey) {
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
+	//
+	// For new clusters, the static splits correspond to ranges created at
+	// bootstrap time. Older stores might be used with a version with more
+	// staticSplits though, in which case this code is useful.
 	for _, split := range staticSplits {
 		if startKey.Less(split) {
 			if split.Less(endKey) {

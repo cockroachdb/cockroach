@@ -16,15 +16,18 @@ package localtestcluster
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -33,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -62,12 +65,20 @@ type LocalTestCluster struct {
 	Latency                  time.Duration // sleep for each RPC sent
 	tester                   testing.TB
 	DontRetryPushTxnFailures bool
-	// DontStartLivenessHeartbeat, if set, inhibits the heartbeat loop. Some tests
+
+	// DisableLivenessHeartbeat, if set, inhibits the heartbeat loop. Some tests
 	// need this because, for example, the heartbeat loop increments some
 	// transaction metrics.
 	// However, note that without heartbeats, ranges with epoch-based leases
 	// cannot be accessed because the leases cannot be granted.
-	DontStartLivenessHeartbeat bool
+	// See also DontCreateSystemRanges.
+	DisableLivenessHeartbeat bool
+
+	// DontCreateSystemRanges, if set, makes the cluster start with a single
+	// range, not with all the system ranges (as regular cluster start).
+	// If DisableLivenessHeartbeat is set, you probably want to also set this so
+	// that ranges requiring epoch-based leases are not created automatically.
+	DontCreateSystemRanges bool
 }
 
 // InitFactoryFn is a callback used to initiate the txn coordinator
@@ -166,11 +177,30 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
-	if err := ltc.Store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
+
+	var initialValues []roachpb.KeyValue
+	var splits []roachpb.RKey
+	if !ltc.DontCreateSystemRanges {
+		schema := sqlbase.MakeMetadataSchema()
+		var tableSplits []roachpb.RKey
+		initialValues, tableSplits = schema.GetInitialValues()
+		splits = append(config.StaticSplits(), tableSplits...)
+		sort.Slice(splits, func(i, j int) bool {
+			return splits[i].Less(splits[j])
+		})
+	}
+
+	if err := ltc.Store.WriteInitialData(
+		ctx,
+		initialValues,
+		cfg.Settings.Version.ServerVersion,
+		1, /* numStores */
+		splits,
+	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 
-	if !ltc.DontStartLivenessHeartbeat {
+	if !ltc.DisableLivenessHeartbeat {
 		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.Stopper, nil /* alive */)
 	}
 

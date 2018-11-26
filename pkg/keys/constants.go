@@ -335,3 +335,9 @@ const (
 	TableCommentType    = 1
 	ColumnCommentType   = 2
 )
+
+// PseudoTableIDs is the list of ids from above that are not real tables (i.e.
+// there's no table descriptor). They're grouped here because the cluster
+// bootstrap process needs to create splits for them; splits for the tables
+// happen separately.
+var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID}

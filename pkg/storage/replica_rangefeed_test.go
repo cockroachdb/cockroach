@@ -78,7 +78,13 @@ func TestReplicaRangefeed(t *testing.T) {
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 	mtc.replicateRange(1, 1, 2)
@@ -214,7 +220,13 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
@@ -247,7 +259,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		subT.Helper()
 		sc := storage.TestStoreConfig(nil)
 		storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
-		mtc := &multiTestContext{storeConfig: &sc}
+		mtc := &multiTestContext{
+			storeConfig: &sc,
+			// This test was written before the multiTestContext started creating many
+			// system ranges at startup, and hasn't been update to take that into
+			// account.
+			startWithSingleRange: true,
+		}
 		mtc.Start(subT, 3)
 		mtc.replicateRange(1, 1, 2)
 

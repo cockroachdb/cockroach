@@ -564,7 +564,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	s, _ := createTestStore(t, stopper)
+	s, _ := createTestStore(t,
+		testStoreOpts{
+			// This test was written before test stores could start with more than one
+			// range and was not adapted.
+			createSystemRanges: false,
+		},
+		stopper)
 
 	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
 	if err != nil {

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1406,14 +1407,48 @@ func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 // TestAdminAPIRangeLogByRangeID).
 func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					DisableSplitQueue: true,
+				},
+			},
+		})
 	defer s.Stopper().Stop(context.Background())
 
-	expectedRanges, err := ExpectedInitialRangeCount(kvDB)
+	// Insert something in the rangelog table, otherwise it's empty for new
+	// clusters.
+	rows, err := db.Query(`SELECT count(1) FROM system.rangelog`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedEvents := expectedRanges - 1 // one for each split
+	if !rows.Next() {
+		t.Fatal("missing row")
+	}
+	var cnt int
+	if err := rows.Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 0 {
+		t.Fatalf("expected 0 rows in system.rangelog, found: %d", cnt)
+	}
+	const rangeID = 100
+	for i := 0; i < 10; i++ {
+		if _, err := db.Exec(
+			`INSERT INTO system.rangelog (
+             timestamp, "rangeID", "storeID", "eventType"
+           ) VALUES (now(), $1, 1, $2)`,
+			rangeID,
+			storagepb.RangeLogEventType_add.String(),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expectedEvents := 10
 
 	testCases := []struct {
 		hasLimit bool
@@ -1436,8 +1471,13 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 			if err := getAdminJSONProto(s, url, &resp); err != nil {
 				t.Fatal(err)
 			}
-			if e, a := tc.expected, len(resp.Events); e != a {
-				t.Fatalf("expected %d events, got %d", e, a)
+			events := resp.Events
+			if e, a := tc.expected, len(events); e != a {
+				var sb strings.Builder
+				for _, ev := range events {
+					sb.WriteString(ev.String() + "\n")
+				}
+				t.Fatalf("expected %d events, got %d:\n%s", e, a, sb.String())
 			}
 		})
 	}

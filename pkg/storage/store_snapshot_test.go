@@ -36,7 +36,13 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t,
+		testStoreOpts{
+			// This test was written before test stores could start with more than one
+			// range and was not adapted.
+			createSystemRanges: false,
+		},
+		stopper)
 	store.SetRaftLogQueueActive(false)
 	repl, err := store.GetReplica(1)
 	if err != nil {
@@ -110,7 +116,7 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t, testStoreOpts{}, stopper)
 
 	// Create an uninitialized replica.
 	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil)

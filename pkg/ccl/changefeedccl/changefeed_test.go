@@ -207,9 +207,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -299,9 +296,6 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
@@ -577,9 +571,6 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run(`add column with default`, func(t *testing.T) {
@@ -905,9 +896,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
@@ -1131,9 +1119,6 @@ func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		// Set a very simple channel-based, wait-and-resume function as the
 		// BeforeEmitRow hook.
 		var shouldWait int32

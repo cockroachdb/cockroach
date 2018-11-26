@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -47,7 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -190,10 +192,13 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 	return sqlbase.MakeMetadataSchema()
 }
 
-// bootstrapCluster bootstraps a multiple stores using the provided
-// engines and cluster ID. The first bootstrapped store contains a
-// single range spanning all keys. Initial range lookup metadata is
-// populated for the range. Returns the cluster ID.
+// bootstrapCluster bootstraps multiple stores using the provided engines.
+// Returns the cluster ID.
+//
+// Ranges for various static split points are created (i.e. various system
+// ranges and system tables). Note however that many of these ranges cannot be
+// accessed by KV in regular means until the node liveness is written, since
+// epoch-based leases cannot be granted until then.
 func bootstrapCluster(
 	ctx context.Context,
 	cfg storage.StoreConfig,
@@ -261,11 +266,19 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			initialValues := GetBootstrapSchema().GetInitialValues()
+			schema := GetBootstrapSchema()
+			initialValues, tableSplits := schema.GetInitialValues()
+			splits := append(config.StaticSplits(), tableSplits...)
+			sort.Slice(splits, func(i, j int) bool {
+				return splits[i].Less(splits[j])
+			})
+
 			// The MinimumVersion is the ServerVersion when we are bootstrapping
 			// a cluster (except in some tests that specifically want to set up
 			// an "old-looking" cluster).
-			if err := s.BootstrapRange(initialValues, bootstrapVersion.MinimumVersion); err != nil {
+			if err := s.WriteInitialData(
+				ctx, initialValues, bootstrapVersion.MinimumVersion, len(engines), splits,
+			); err != nil {
 				return uuid.UUID{}, err
 			}
 		}
@@ -274,18 +287,6 @@ func bootstrapCluster(
 		}
 
 		stores.AddStore(s)
-
-		// Initialize node and store ids.  Only initialize the node once.
-		if i == 0 {
-			if nodeID, err := allocateNodeID(ctx, cfg.DB); nodeID != sIdent.NodeID || err != nil {
-				return uuid.UUID{}, errors.Errorf("expected to initialize node id allocator to %d, got %d: %s",
-					sIdent.NodeID, nodeID, err)
-			}
-		}
-		if storeID, err := allocateStoreIDs(ctx, sIdent.NodeID, 1, cfg.DB); storeID != sIdent.StoreID || err != nil {
-			return uuid.UUID{}, errors.Errorf("expected to initialize store id allocator to %d, got %d: %s",
-				sIdent.StoreID, storeID, err)
-		}
 	}
 	return clusterID, nil
 }

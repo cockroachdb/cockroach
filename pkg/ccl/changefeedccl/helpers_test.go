@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -668,62 +667,6 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	}
 
 	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
-}
-
-// maybeWaitForEpochLeases waits until all ranges serving user table data have
-// epoch leases.
-//
-// Changefeed resolved timestamps rely on RangeFeed checkpoints which rely on
-// closed timestamps which only work with epoch leases. This means that any
-// changefeed test that _uses RangeFeed_ and _needs resolved timestamps_ should
-// first wait until all the relevant ranges have epoch-leases.
-//
-// We added this to unblock RangeFeed work, but it takes ~10s, so we should fix
-// it for real at some point. The permanent fix is being tracked in #32495.
-func maybeWaitForEpochLeases(t *testing.T, s serverutils.TestServerInterface) {
-	// If it's not a rangefeed test, don't bother waiting.
-	if !strings.Contains(t.Name(), `rangefeed`) {
-		return
-	}
-
-	userTablesSpan := roachpb.RSpan{
-		Key:    roachpb.RKey(keys.MakeTablePrefix(keys.MinUserDescID)),
-		EndKey: roachpb.RKeyMax,
-	}
-	testutils.SucceedsSoon(t, func() error {
-		ctx := context.Background()
-		var rangeDescs []roachpb.RangeDescriptor
-		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			rangeDescs, err = allRangeDescriptors(ctx, txn)
-			return err
-		}); err != nil {
-			return err
-		}
-
-		// Force a lease acquisition so we don't get stuck waiting forever.
-		if _, err := s.DB().Scan(ctx, userTablesSpan.Key, userTablesSpan.EndKey, 0); err != nil {
-			return err
-		}
-
-		stores := s.GetStores().(*storage.Stores)
-		for _, rangeDesc := range rangeDescs {
-			if !rangeDesc.ContainsKeyRange(userTablesSpan.Key, userTablesSpan.EndKey) {
-				continue
-			}
-			replica, err := stores.GetReplicaForRangeID(rangeDesc.RangeID)
-			if err != nil {
-				return err
-			}
-			lease, _ := replica.GetLease()
-			if lease.Epoch == 0 {
-				err := errors.Errorf("%s does not have an epoch lease: should resolve in %s",
-					rangeDesc, lease.Expiration.GoTime().Sub(timeutil.Now()))
-				return err
-			}
-		}
-		return nil
-	})
 }
 
 func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {

@@ -36,7 +36,7 @@ func TestInitialKeys(t *testing.T) {
 	const nonDescKeys = 7
 
 	ms := sqlbase.MakeMetadataSchema()
-	kv := ms.GetInitialValues()
+	kv, _ /* splits */ := ms.GetInitialValues()
 	expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
@@ -55,7 +55,7 @@ func TestInitialKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
-	kv = ms.GetInitialValues()
+	kv, _ /* splits */ = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)

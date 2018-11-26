@@ -85,7 +85,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Force a truncation check.
 	for _, store := range mtc.stores {
-		store.ForceRaftLogScanAndProcess()
+		store.MustForceRaftLogScanAndProcess()
 	}
 
 	// Ensure that firstIndex has increased indicating that the log
@@ -107,7 +107,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// instrumentation of the queues, which was deemed to require too much work
 	// at the time of this writing.
 	for _, store := range mtc.stores {
-		store.ForceRaftLogScanAndProcess()
+		store.MustForceRaftLogScanAndProcess()
 	}
 
 	after2ndTruncationIndex, err := raftLeaderRepl.GetFirstIndex()
