@@ -268,6 +268,7 @@ To repro, try:
 # controls concurrency.
 ./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
 cd ~/go/src/github.com/cockroachdb/cockroach && \
+stdbuf -oL -eL \
 make stressrace TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -timeout 10m' 2>&1 | tee /tmp/stress.log
 ` + "```" + `
 

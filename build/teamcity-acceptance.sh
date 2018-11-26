@@ -26,6 +26,10 @@ tc_end_block "Compile acceptance tests"
 
 tc_start_block "Run acceptance tests"
 run cd pkg/acceptance
-run ./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 | tee "$TMPDIR/acceptance.log" | go-test-teamcity
+run env TZ=America/New_York \
+	stdbuf -eL -oL \
+	./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 \
+	| tee "$TMPDIR/acceptance.log" \
+	| go-test-teamcity
 run cd ../..
 tc_end_block "Run acceptance tests"
