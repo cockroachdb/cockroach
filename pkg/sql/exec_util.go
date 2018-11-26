@@ -324,11 +324,6 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
-
-	// ConnResultsBufferBytes is the size of the buffer in which each connection
-	// accumulates results set. Results are flushed to the network when this
-	// buffer overflows.
-	ConnResultsBufferBytes int
 }
 
 // Organization returns the value of cluster.organization.

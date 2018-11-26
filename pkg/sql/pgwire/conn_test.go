@@ -17,9 +17,11 @@ package pgwire
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"io"
 	"io/ioutil"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -329,7 +332,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, &sql.ExecutorConfig{})
+	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, 16<<10 /* resultsBufferBytes */)
 	return pgwireConn, nil
 }
 
@@ -649,9 +652,6 @@ var _ pgx.Logger = pgxTestLogger{}
 func TestConnClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Make the connections' results buffers really small so that it overflows
-		// when we produce a few results.
-		ConnResultsBufferBytes: 10,
 		// Andrei is too lazy to figure out the incantation for telling pgx about
 		// our test certs.
 		Insecure: true,
@@ -659,7 +659,24 @@ func TestConnClose(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	r := sqlutils.MakeSQLRunner(db)
+	// Disable results buffering.
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+	)
+	pgURL.RawQuery = "sslmode=disable"
+	defer cleanupFunc()
+	noBufferDB, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer noBufferDB.Close()
+
+	r := sqlutils.MakeSQLRunner(noBufferDB)
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.test AS SELECT * FROM generate_series(1,100)")
 
@@ -764,7 +781,12 @@ func TestMaliciousInputs(t *testing.T) {
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
-			conn := newConn(r, sql.SessionArgs{}, &metrics, nil /* execCfg */)
+			conn := newConn(
+				r, sql.SessionArgs{}, &metrics,
+				// resultsBufferBytes - really small so that it overflows when we
+				// produce a few results.
+				10,
+			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
 			_ /* err */ = conn.serveImpl(
