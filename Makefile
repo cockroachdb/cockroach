@@ -1126,6 +1126,24 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 .PHONY: ui-generate
 ui-generate: pkg/ui/distccl/bindata.go
 
+.PHONY: ui-fonts
+ui-fonts:
+	rm -rf pkg/ui/fonts/Inconsolata
+	rm -rf pkg/ui/fonts/Lato
+	rm -f pkg/ui/dist/fonts.zip
+	curl 'https://fonts.google.com/download?family=Lato|Inconsolata' > pkg/ui/dist/fonts.zip
+	unzip pkg/ui/dist/fonts.zip -d pkg/ui/fonts
+	pkg/ui/scripts/font-convert pkg/ui/fonts/Inconsolata/Inconsolata-Regular.ttf
+	pkg/ui/scripts/font-convert pkg/ui/fonts/Lato/Lato-Regular.ttf
+	pkg/ui/scripts/font-convert pkg/ui/fonts/Lato/Lato-Bold.ttf
+	mv pkg/ui/fonts/Inconsolata/Inconsolata-Regular.woff* pkg/ui/fonts
+	mv pkg/ui/fonts/Inconsolata/OFL.txt licenses/OFL-inconsolata.txt
+	mv pkg/ui/fonts/Lato/Lato-*.woff* pkg/ui/fonts
+	mv pkg/ui/fonts/Lato/OFL.txt licenses/OFL-lato.txt
+	rm -rf pkg/ui/fonts/Inconsolata
+	rm -rf pkg/ui/fonts/Lato
+	rm -f pkg/ui/dist/fonts.zip
+
 .PHONY: ui-lint
 ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(STYLINT) -c .stylintrc styl
