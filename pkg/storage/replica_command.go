@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -222,6 +223,71 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 	return s
 }
 
+func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
+	maxDelaySplitToAvoidSnapshotTicks := 5 + r.store.cfg.RaftPostSplitSuppressSnapshotTicks
+
+	var extra string
+
+	tPreWait := timeutil.Now()
+	tPostWait := tPreWait
+	for ticks := 0; ticks < maxDelaySplitToAvoidSnapshotTicks; ticks++ {
+		if ticks > 0 {
+			tPostWait = time.Time{}
+		}
+
+		r.mu.RLock()
+		raftStatus := r.raftStatusRLocked()
+		if raftStatus != nil {
+			updateRaftProgressFromActivity(
+				ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, timeutil.Now(),
+			)
+		}
+		r.mu.RUnlock()
+
+		if raftStatus == nil {
+			// Don't delay followers artificially. This case is hit rarely
+			// enough to not matter.
+			break
+		}
+
+		done := true
+		for replicaID, pr := range raftStatus.Progress {
+			if replicaID == raftStatus.Lead {
+				// TODO(tschottdorf): remove this once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
+
+			if !pr.RecentActive {
+				continue
+			}
+
+			if pr.State != raft.ProgressStateReplicate {
+				if ticks == 0 {
+					extra += fmt.Sprintf("delaying split; replica r%d/%d not caught up: %+v", r.RangeID, replicaID, pr)
+				}
+				done = false
+			}
+		}
+		if done {
+			break
+		}
+		select {
+		case <-time.After(r.store.cfg.RaftTickInterval):
+		case <-ctx.Done():
+			return ""
+		}
+	}
+	if tPostWait == (time.Time{}) {
+		tPostWait = timeutil.Now()
+	}
+
+	if elapsed := tPostWait.Sub(tPreWait); elapsed != 0 {
+		extra += fmt.Sprintf("; delayed split for %s to avoid Raft snapshot", elapsed)
+	}
+	return extra
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -320,10 +386,11 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	leftDesc.EndKey = splitKey
 
-	extra := splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
+	extra := r.maybeDelaySplitToAvoidSnapshot(ctx)
+	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
-		splitKey, rightDesc.RangeID, extra)
+		extra, splitKey, rightDesc.RangeID)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
