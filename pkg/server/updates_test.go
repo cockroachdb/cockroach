@@ -527,12 +527,12 @@ func TestReportUsage(t *testing.T) {
 		"test.b": 2,
 		"test.c": 3,
 
-		"unimplemented.pg_catalog.pg_stat_wal_receiver":      10,
-		"unimplemented.syntax.alter table rename constraint": 10,
-		"unimplemented.syntax.interval with precision":       10,
-		"unimplemented.#9148":                                10,
-		"internalerror.":                                     10,
-		"othererror.builtins.go":                             10,
+		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
+		"unimplemented.syntax.#32555":                   10,
+		"unimplemented.syntax.#32564":                   10,
+		"unimplemented.#9148":                           10,
+		"internalerror.":                                10,
+		"othererror.builtins.go":                        10,
 		"othererror." +
 			pgerror.CodeDataExceptionError +
 			".crdb_internal.set_vmodule()": 10,

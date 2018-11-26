@@ -229,7 +229,7 @@ func assignSequenceOptions(
 
 		switch option.Name {
 		case tree.SeqOptCycle:
-			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.UnimplementedWithIssueError(20961,
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
@@ -242,7 +242,7 @@ func assignSequenceOptions(
 			case v == 1:
 				// Do nothing; this is the default.
 			case v > 1:
-				return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				return pgerror.UnimplementedWithIssueErrorf(32567,
 					"CACHE values larger than 1 are not supported, found %d", v)
 			}
 		case tree.SeqOptIncrement:
