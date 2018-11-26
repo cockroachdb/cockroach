@@ -98,7 +98,7 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize))
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
@@ -154,7 +154,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 				return false, errors.Wrapf(err, "decoding rank column")
 			}
 			// Retain the rows with the top ranks.
-			s.sr.SampleRow(row[:s.rankCol], uint64(rank))
+			if err := s.sr.SampleRow(row[:s.rankCol], uint64(rank)); err != nil {
+				return false, err
+			}
 			continue
 		}
 		// This is a sketch row.
