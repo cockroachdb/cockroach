@@ -2145,26 +2145,23 @@ func mvccResolveWriteIntent(
 		return true, nil
 	}
 
-	// This method shouldn't be called in this instance, but there's
-	// nothing to do if meta's epoch is greater than or equal txn's
-	// epoch and the state is still PENDING.
-	if intent.Status == roachpb.PENDING && meta.Txn.Epoch >= intent.Txn.Epoch {
-		return false, nil
-	}
-
-	// Otherwise, we're deleting the intent. We must find the next
-	// versioned value and reset the metadata's latest timestamp. If
-	// there are no other versioned values, we delete the metadata
-	// key.
+	// Otherwise, we're deleting the intent, which includes deleting the
+	// MVCCMetadata.
 	//
-	// Note that the somewhat unintuitive case of an ABORT with
-	// intent.Txn.Epoch < meta.Txn.Epoch is possible:
+	// Note that we have to support a somewhat unintuitive case - an ABORT with
+	// intent.Txn.Epoch < meta.Txn.Epoch:
 	// - writer1 writes key0 at epoch 0
 	// - writer2 with higher priority encounters intent at key0 (epoch 0)
 	// - writer1 restarts, now at epoch one (txn record not updated)
 	// - writer1 writes key0 at epoch 1
 	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
+
+	// There's nothing to do if meta's epoch is greater than or equal txn's epoch
+	// and the state is still PENDING.
+	if intent.Status == roachpb.PENDING && meta.Txn.Epoch >= intent.Txn.Epoch {
+		return false, nil
+	}
 
 	// First clear the intent value.
 	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
