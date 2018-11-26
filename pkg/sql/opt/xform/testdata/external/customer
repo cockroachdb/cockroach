@@ -581,30 +581,23 @@ EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
 ----
 explain
  ├── columns: tree:4(string) field:5(string) description:6(string)
- └── sort
+ └── limit
       ├── columns: id:1(int!null)
+      ├── internal-ordering: +1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── ordering: +1
-      └── limit
-           ├── columns: id:1(int!null)
-           ├── internal-ordering: +1
-           ├── cardinality: [0 - 10]
-           ├── key: (1)
-           ├── sort
-           │    ├── columns: id:1(int!null)
-           │    ├── key: (1)
-           │    ├── ordering: +1
-           │    └── offset
-           │         ├── columns: id:1(int!null)
-           │         ├── internal-ordering: +1
-           │         ├── key: (1)
-           │         ├── scan test
-           │         │    ├── columns: id:1(int!null)
-           │         │    ├── key: (1)
-           │         │    └── ordering: +1
-           │         └── const: 10000 [type=int]
-           └── const: 10 [type=int]
+      ├── offset
+      │    ├── columns: id:1(int!null)
+      │    ├── internal-ordering: +1
+      │    ├── key: (1)
+      │    ├── ordering: +1
+      │    ├── scan test
+      │    │    ├── columns: id:1(int!null)
+      │    │    ├── key: (1)
+      │    │    └── ordering: +1
+      │    └── const: 10000 [type=int]
+      └── const: 10 [type=int]
 
 # ------------------------------------------------------------------------------
 # Github Issue 17270: Use the o_ok index rather than the primary index, since
