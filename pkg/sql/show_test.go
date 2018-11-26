@@ -206,6 +206,26 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (x, rowid)
 )`,
 		},
+		// Check that FK dependencies using SET NULL or SET DEFAULT
+		// are pretty-printed properly. Regression test for #32529.
+		{
+			stmt: `CREATE TABLE %s (
+	i int DEFAULT 123,
+	j int DEFAULT 123,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	k int REFERENCES items (c) ON DELETE SET NULL
+)`,
+			expect: `CREATE TABLE %s (
+	i INT NULL DEFAULT 123:::INT,
+	j INT NULL DEFAULT 123:::INT,
+	k INT NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	INDEX t9_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) ON DELETE SET NULL,
+	INDEX t9_auto_index_fk_k_ref_items (k ASC),
+	FAMILY "primary" (i, j, k, rowid)
+)`,
+		},
 		// Check that INTERLEAVE dependencies inside the current database
 		// have their db name omitted.
 		{
