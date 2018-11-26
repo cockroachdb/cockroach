@@ -22,9 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // evaluateCommand delegates to the eval method for the given
@@ -205,6 +205,23 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 	return "", false
 }
 
+func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
+	var s string
+	if status != nil && status.RaftState == raft.StateLeader {
+		for replicaID, pr := range status.Progress {
+			if replicaID == status.Lead {
+				// TODO(tschottdorf): remove this line once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
+			if pr.State != raft.ProgressStateReplicate {
+				s += fmt.Sprintf("; may cause Raft snapshot to r%d/%d: %v", rangeID, replicaID, &pr)
+			}
+		}
+	}
+	return s
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -303,8 +320,10 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
-		splitKey, rightDesc.RangeID)
+	extra := splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
+
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
+		splitKey, rightDesc.RangeID, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
