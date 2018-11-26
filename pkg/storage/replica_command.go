@@ -22,9 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // evaluateCommand delegates to the eval method for the given
@@ -303,8 +303,22 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
-		splitKey, rightDesc.RangeID)
+	var extra string
+	if status := r.RaftStatus(); status != nil && status.RaftState == raft.StateLeader {
+		for replicaID, pr := range status.Progress {
+			if replicaID == status.Lead {
+				// TODO(tschottdorf): remove this line once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
+			if pr.State == raft.ProgressStateReplicate {
+				extra += fmt.Sprintf("; may cause Raft snapshot to r%d/%d: %v", r.RangeID, replicaID, &pr)
+			}
+		}
+	}
+
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
+		splitKey, rightDesc.RangeID, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
