@@ -35,6 +35,7 @@ tc_end_block "Compile C dependencies"
 tc_start_block "Run Go tests under race detector"
 run build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \
+    stdbuf -oL -eL \
     make testrace \
     PKG="$pkgspec" \
     TESTTIMEOUT=45m \

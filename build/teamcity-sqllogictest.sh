@@ -14,7 +14,8 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # tests that do require correlated subquery support, but only with the cost-
 # based optimizer.
 for config in local local-opt fakedist fakedist-opt fakedist-disk; do
-    build/builder.sh env \
+    build/builder.sh \
+        stdbuf -oL -eL \
         make test TESTFLAGS="-v -bigtest -config ${config}" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' 2>&1 \
         | tee "artifacts/${config}.log" \
         | go-test-teamcity
@@ -23,7 +24,8 @@ done
 # Need to specify the flex-types flag in order to skip past variations that have
 # numeric typing differences.
 for config in local-opt fakedist-opt; do
-    build/builder.sh env \
+    build/builder.sh \
+        stdbuf -oL -eL \
         make test TESTFLAGS="-v -bigtest -config ${config} -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteCorrelatedLogic$$' 2>&1 \
         | tee "artifacts/${config}.log" \
         | go-test-teamcity

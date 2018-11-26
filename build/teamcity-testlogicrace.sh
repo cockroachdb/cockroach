@@ -8,7 +8,8 @@ maybe_ccache
 
 mkdir -p artifacts
 
-build/builder.sh env \
+build/builder.sh \
+	stdbuf -oL -eL \
 	make testrace \
 	PKG=./pkg/sql/logictest \
 	TESTFLAGS='-v' \
