@@ -189,6 +189,21 @@ func TestLogGCTrigger(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
+
+	// Insert something in the rangelog table, otherwise it's empty for new
+	// clusters.
+	if _, err := db.Exec(
+		`INSERT INTO system.rangelog (
+             timestamp, "rangeID", "storeID", "eventType"
+           ) VALUES (
+             cast(now() - interval '10s' as timestamp), -- cast from timestamptz
+						 100, 1, $1
+          )`,
+		storagepb.RangeLogEventType_add.String(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	defer s.Stopper().Stop(ctx)
 
 	for _, tc := range testCases {

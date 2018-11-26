@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"runtime"
 	"sync"
 	"time"
 
@@ -46,9 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -58,10 +55,6 @@ const (
 	// TestUser is a fixed user used in unittests.
 	// It has valid embedded client certs.
 	TestUser = "testuser"
-	// initialSplitsTimeout is the amount of time to wait for initial splits to
-	// occur on a freshly started server.
-	// Note: this needs to be fairly high or tests become flaky.
-	initialSplitsTimeout = 10 * time.Second
 )
 
 // makeTestConfig returns a config for testing. It overrides the
@@ -344,23 +337,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
 
-	if err := ts.Server.Start(context.Background()); err != nil {
-		return err
-	}
-
-	// If enabled, wait for initial splits to complete before returning control.
-	// If initial splits do not complete, the server is stopped before
-	// returning.
-	if stk, ok := ts.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
-		stk.DisableSplitQueue {
-		return nil
-	}
-	if err := ts.WaitForInitialSplits(); err != nil {
-		ts.Stop()
-		return err
-	}
-
-	return nil
+	return ts.Server.Start(context.Background())
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -380,9 +357,7 @@ func (ts *TestServer) ExpectedInitialUserRangeCount() int {
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
-// be on the server after initial (asynchronous) splits have been completed,
-// assuming no additional information is added outside of the normal bootstrap
-// process.
+// be on the server after bootstrap.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
 	if err != nil {
@@ -411,53 +386,6 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 // process.
 func ExpectedInitialUserRangeCount(db *client.DB) int {
 	return 1
-}
-
-// WaitForInitialSplits waits for the server to complete its expected initial
-// splits at startup. If the expected range count is not reached within a
-// configured timeout, an error is returned.
-func (ts *TestServer) WaitForInitialSplits() error {
-	return WaitForInitialSplits(ts.DB())
-}
-
-// WaitForInitialSplits waits for the expected number of initial ranges to be
-// populated in the meta2 table. If the expected range count is not reached
-// within a configured timeout, an error is returned.
-func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges, err := ExpectedInitialRangeCount(db)
-	if err != nil {
-		return err
-	}
-	err = retry.ForDuration(initialSplitsTimeout, func() error {
-		// Scan all keys in the Meta2Prefix; we only need a count.
-		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
-		if err != nil {
-			return err
-		}
-		if a, e := len(rows), expectedRanges; a != e {
-			err := errors.Errorf("had %d ranges at startup, expected %d", a, e)
-			log.InfoDepth(context.Background(), 3, err)
-			return err
-		}
-		return nil
-	})
-	if err == nil {
-		return nil
-	}
-
-	// TODO(peter): This is a debugging aid to track down the difficult to
-	// reproduce failures with the initial splits not finishing promptly.
-	for bufSize := 1 << 20; ; bufSize *= 2 {
-		buf := make([]byte, bufSize)
-		length := runtime.Stack(buf, true)
-		// If this wasn't large enough to accommodate the full set of
-		// stack traces, increase by 2 and try again.
-		if length == bufSize {
-			continue
-		}
-		log.Infof(context.TODO(), "%s\n%s", err, buf[:length])
-		return err
-	}
 }
 
 // Stores returns the collection of stores from this TestServer's node.
