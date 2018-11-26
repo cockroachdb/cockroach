@@ -107,7 +107,7 @@ create_stmt ::=
 	| create_ddl_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -184,7 +184,7 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
@@ -326,8 +326,8 @@ table_name_expr_opt_alias_idx ::=
 	| table_name_expr_with_index table_alias_name
 	| table_name_expr_with_index 'AS' table_alias_name
 
-where_clause ::=
-	'WHERE' a_expr
+opt_where_clause ::=
+	where_clause
 	| 
 
 opt_sort_clause ::=
@@ -377,7 +377,7 @@ insert_rest ::=
 	| 'DEFAULT' 'VALUES'
 
 on_conflict ::=
-	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list where_clause
+	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
 	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
 
 a_expr ::=
@@ -737,7 +737,6 @@ unreserved_keyword ::=
 	| 'TESTING_RANGES'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
-	| 'TIMESTAMPTZ'
 	| 'TRACE'
 	| 'TRANSACTION'
 	| 'TRIGGER'
@@ -803,6 +802,7 @@ col_name_keyword ::=
 	| 'TIME'
 	| 'TIMETZ'
 	| 'TIMESTAMP'
+	| 'TIMESTAMPTZ'
 	| 'TREAT'
 	| 'TRIM'
 	| 'VALUES'
@@ -935,6 +935,9 @@ with_clause ::=
 table_name_expr_with_index ::=
 	table_name opt_index_flags
 
+where_clause ::=
+	'WHERE' a_expr
+
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
 
@@ -978,7 +981,7 @@ insert_column_list ::=
 	( insert_column_item ) ( ( ',' insert_column_item ) )*
 
 opt_conf_expr ::=
-	'(' name_list ')' where_clause
+	'(' name_list ')'
 	| 
 
 c_expr ::=
@@ -1411,9 +1414,9 @@ scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
 
 simple_select_clause ::=
-	'SELECT' opt_all_clause target_list from_clause where_clause group_clause having_clause window_clause
-	| 'SELECT' distinct_clause target_list from_clause where_clause group_clause having_clause window_clause
-	| 'SELECT' distinct_on_clause target_list from_clause where_clause group_clause having_clause window_clause
+	'SELECT' opt_all_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
+	| 'SELECT' distinct_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
+	| 'SELECT' distinct_on_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
 
 values_clause ::=
 	( 'VALUES' '(' expr_list ')' ) ( ( ',' '(' expr_list ')' ) )*
@@ -1874,12 +1877,8 @@ character_without_length ::=
 
 const_datetime ::=
 	'DATE'
-	| 'TIME'
-	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMP'
-	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMP' opt_timezone
 	| 'TIMESTAMPTZ'
-	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
 
 const_json ::=
 	'JSON'
@@ -2047,6 +2046,11 @@ opt_float ::=
 opt_numeric_modifiers ::=
 	'(' iconst64 ')'
 	| '(' iconst64 ',' iconst64 ')'
+	| 
+
+opt_timezone ::=
+	'WITH' 'TIME' 'ZONE'
+	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
 
 interval_qualifier ::=

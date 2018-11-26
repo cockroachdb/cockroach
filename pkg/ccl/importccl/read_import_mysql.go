@@ -612,12 +612,16 @@ func mysqlColToCockroach(
 		def.Type = coltypes.JSON
 
 	case mysqltypes.Set:
-		fallthrough
+		return nil, pgerror.UnimplementedWithIssueHintError(32560,
+			"cannot import SET columns at this time",
+			"try converting the column to a 64-bit integer before import")
 	case mysqltypes.Geometry:
-		fallthrough
+		return nil, pgerror.UnimplementedWithIssueErrorf(32559,
+			"cannot import GEOMETRY columns at this time")
 	case mysqltypes.Bit:
-		// TODO(dt): is our type close enough to use here?
-		fallthrough
+		return nil, pgerror.UnimplementedWithIssueHintError(32561,
+			"cannot improt BIT columns at this time",
+			"try converting the column to a 64-bit integer before import")
 	default:
 		return nil, pgerror.Unimplemented(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
 	}

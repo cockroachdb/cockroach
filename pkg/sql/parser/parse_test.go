@@ -2569,9 +2569,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		issue    int
 		expected string
 	}{
-		{`ALTER TABLE a ALTER CONSTRAINT foo`, 0, `alter constraint`},
+		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`},
 		{`ALTER TABLE a ALTER b SET NOT NULL`, 28751, ``},
-		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 0, `alter table rename constraint`},
+		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 32555, ``},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`, 19472, `column`},
 		{`COMMENT ON DATABASE a IS 'b'`, 19472, ``},
@@ -2624,7 +2624,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DISCARD TEMPORARY`, 0, `discard temp`},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`},
-		{`SET LOCAL foo = bar`, 0, `set local`},
+		{`SET LOCAL foo = bar`, 32562, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`},
 
 		{`CREATE TEMP TABLE a(b INT)`, 5807, ``},
@@ -2640,9 +2640,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`},
 
 		{`CREATE TABLE a(b INT AS (123) VIRTUAL)`, 0, `virtual computed columns`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 0, `references match full`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
-		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 0, `references match simple`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 20305, `match full`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 20305, `match simple`},
 
 		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`},
 		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`},
@@ -2676,7 +2676,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``},
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
-		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 0, `on conflict on constraint`},
+		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
 		{`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`, 24560, `select`},
 		{`SELECT * FROM ab, LATERAL foo(a)`, 24560, `srf`},
@@ -2685,18 +2685,34 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
 
+		{`SELECT 123 AT TIME ZONE 'b'`, 32005, ``},
+
 		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
-		{`SELECT 'a'::INTERVAL(123)`, 0, `interval with precision`},
-		{`SELECT 'a'::INTERVAL SECOND(123)`, 0, `interval second with precision`},
-		{`SELECT 123 AT TIME ZONE 'b'`, 0, `at tz`},
+		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
+		{`SELECT 'a'::INTERVAL SECOND(123)`, 32564, `interval second`},
+		{`SELECT INTERVAL(3) 'a'`, 32564, ``},
+
+		{`SELECT 'a'::TIMESTAMP(123)`, 32098, ``},
+		{`SELECT 'a'::TIMESTAMP(123) WITHOUT TIME ZONE`, 32098, ``},
+		{`SELECT 'a'::TIMESTAMPTZ(123)`, 32098, ``},
+		{`SELECT 'a'::TIMESTAMP(123) WITH TIME ZONE`, 32098, ``},
+		{`SELECT TIMESTAMP(3) 'a'`, 32098, ``},
+		{`SELECT TIMESTAMPTZ(3) 'a'`, 32098, ``},
+
+		{`SELECT 'a'::TIME(123)`, 32565, ``},
+		{`SELECT 'a'::TIME(123) WITHOUT TIME ZONE`, 32565, ``},
+		{`SELECT 'a'::TIMETZ(123)`, 26097, `type with precision`},
+		{`SELECT 'a'::TIME(123) WITH TIME ZONE`, 32565, ``},
+		{`SELECT TIME(3) 'a'`, 32565, ``},
+		{`SELECT TIMETZ(3) 'a'`, 26097, `type with precision`},
+
+		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`},
-		{`SELECT a(b) 'c'`, 0, `func const`},
-		{`SELECT INTERVAL(3) 'a'`, 0, `expr_const const_interval`},
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`},
-		{`SELECT COLLATION FOR (a)`, 0, `func_expr_common_subexpr collation for`},
+		{`SELECT COLLATION FOR (a)`, 32563, ``},
 		{`SELECT CURRENT_TIME`, 26097, `current_time`},
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT)`, 0, `treat`},
@@ -2719,6 +2735,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`},
 		{`CREATE TABLE a(b XML)`, 0, `xml`},
 		{`CREATE TABLE a(b TIMETZ)`, 26097, `type`},
+
+		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``},
 
 		{`WITH RECURSIVE a AS (TABLE b) SELECT c`, 21085, ``},
 

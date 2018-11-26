@@ -851,7 +851,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.NameList> opt_storing
 %type <*tree.ColumnTableDef> column_def
 %type <tree.TableDef> table_elem
-%type <tree.Expr> where_clause
+%type <tree.Expr> where_clause opt_where_clause
 %type <*tree.ArraySubscript> array_subscript
 %type <tree.Expr> opt_slice_bound
 %type <*tree.IndexFlags> opt_index_flags
@@ -890,6 +890,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]string> explain_option_list
 
 %type <coltypes.T> typename simple_typename const_typename
+%type <bool> opt_timezone
 %type <coltypes.T> numeric opt_numeric_modifiers
 %type <coltypes.T> opt_float
 %type <coltypes.T> character_with_length character_without_length
@@ -1537,7 +1538,7 @@ alter_table_cmd:
     }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
-| ALTER CONSTRAINT constraint_name error { return unimplemented(sqllex, "alter constraint") }
+| ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
 | VALIDATE CONSTRAINT constraint_name
   {
@@ -2178,7 +2179,7 @@ opt_changefeed_sink:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
@@ -2658,7 +2659,7 @@ nonpreparable_set_stmt:
   set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
 | SET CONSTRAINTS error { return unimplemented(sqllex, "set constraints") }
-| SET LOCAL error { return unimplemented(sqllex, "set local") }
+| SET LOCAL error { return unimplementedWithIssue(sqllex, 32562) }
 
 // SET SESSION / SET CLUSTER SETTING
 preparable_set_stmt:
@@ -4343,10 +4344,27 @@ opt_column_list:
     $$.val = tree.NameList(nil)
   }
 
+// https://www.postgresql.org/docs/10/sql-createtable.html
+//
+// "A value inserted into the referencing column(s) is matched against
+// the values of the referenced table and referenced columns using the
+// given match type. There are three match types: MATCH FULL, MATCH
+// PARTIAL, and MATCH SIMPLE (which is the default). MATCH FULL will
+// not allow one column of a multicolumn foreign key to be null unless
+// all foreign key columns are null; if they are all null, the row is
+// not required to have a match in the referenced table. MATCH SIMPLE
+// allows any of the foreign key columns to be null; if any of them
+// are null, the row is not required to have a match in the referenced
+// table. MATCH PARTIAL is not yet implemented. (Of course, NOT NULL
+// constraints can be applied to the referencing column(s) to prevent
+// these cases from arising.)"
+//
+// Note: CockroachDB's silent default is closer in semantics to pg's
+// MATCH FULL. This is arguably a bug. See discussion in #20305.
 key_match:
-  MATCH FULL { return unimplemented(sqllex, "references match full") }
-| MATCH PARTIAL { return unimplemented(sqllex, "references match partial") }
-| MATCH SIMPLE { return unimplemented(sqllex, "references match simple") }
+  MATCH FULL { return unimplementedWithIssueDetail(sqllex, 20305, "match full") }
+| MATCH PARTIAL { return unimplementedWithIssueDetail(sqllex, 20305, "match partial") }
+| MATCH SIMPLE { return unimplementedWithIssueDetail(sqllex, 20305, "match simple") }
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
@@ -4833,9 +4851,9 @@ alter_rename_table_stmt:
     }
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplemented(sqllex, "alter table rename constraint") }
+  { return unimplementedWithIssue(sqllex, 32555) }
 | ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplemented(sqllex, "alter table rename constraint") }
+  { return unimplementedWithIssue(sqllex, 32555) }
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
@@ -5318,7 +5336,7 @@ insert_column_item:
 | column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
 
 on_conflict:
-  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
+  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list opt_where_clause
   {
     $$.val = &tree.OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $8.expr())}
   }
@@ -5328,12 +5346,12 @@ on_conflict:
   }
 
 opt_conf_expr:
-  '(' name_list ')' where_clause
+  '(' name_list ')'
   {
-    // TODO(dan): Support the where_clause.
     $$.val = $2.nameList()
   }
-| ON CONSTRAINT constraint_name { return unimplemented(sqllex, "on conflict on constraint") }
+| '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) }
+| ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
 | /* EMPTY */
   {
     $$.val = tree.NameList(nil)
@@ -5366,7 +5384,7 @@ returning_clause:
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
   opt_with_clause UPDATE table_name_expr_opt_alias_idx
-    SET set_clause_list update_from_clause where_clause opt_sort_clause opt_limit_clause returning_clause
+    SET set_clause_list update_from_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
       With: $1.with(),
@@ -5567,7 +5585,7 @@ simple_select:
 // %SeeAlso: WEBDOCS/select-clause.html
 simple_select_clause:
   SELECT opt_all_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -5580,7 +5598,7 @@ simple_select_clause:
     }
   }
 | SELECT distinct_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -5594,7 +5612,7 @@ simple_select_clause:
     }
   }
 | SELECT distinct_on_clause target_list
-    from_clause where_clause
+    from_clause opt_where_clause
     group_clause having_clause window_clause
   {
     $$.val = &tree.SelectClause{
@@ -6348,6 +6366,9 @@ where_clause:
   {
     $$.val = $2.expr()
   }
+
+opt_where_clause:
+  where_clause
 | /* EMPTY */
   {
     $$.val = tree.Expr(nil)
@@ -6429,7 +6450,7 @@ simple_typename:
 | character_with_length
 | const_interval
 | const_interval interval_qualifier { return unimplemented(sqllex, "interval with unit qualifier") }
-| const_interval '(' ICONST ')' { return unimplemented(sqllex, "interval with precision") }
+| const_interval '(' ICONST ')' { return unimplementedWithIssue(sqllex, 32564) }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -6764,38 +6785,34 @@ const_datetime:
   {
     $$.val = coltypes.Date
   }
-| TIME
+| TIME opt_timezone
   {
+    if $2.bool() { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
     $$.val = coltypes.Time
   }
-| TIME WITHOUT TIME ZONE
+| TIME '(' ICONST ')' opt_timezone   { return unimplementedWithIssue(sqllex, 32565) }
+| TIMETZ                             { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
+| TIMETZ '(' ICONST ')'              { return unimplementedWithIssueDetail(sqllex, 26097, "type with precision") }
+| TIMESTAMP opt_timezone
   {
-    $$.val = coltypes.Time
+    if $2.bool() {
+      $$.val = coltypes.TimestampWithTZ
+    } else {
+      $$.val = coltypes.Timestamp
+    }
   }
-| TIMETZ
-  {
-    return unimplementedWithIssueDetail(sqllex, 26097, "type")
-  }
-| TIME WITH_LA TIME ZONE
-  {
-    return unimplementedWithIssueDetail(sqllex, 26097, "type")
-  }
-| TIMESTAMP
-  {
-    $$.val = coltypes.Timestamp
-  }
-| TIMESTAMP WITHOUT TIME ZONE
-  {
-    $$.val = coltypes.Timestamp
-  }
+| TIMESTAMP '(' ICONST ')' opt_timezone { return unimplementedWithIssue(sqllex, 32098) }
 | TIMESTAMPTZ
   {
     $$.val = coltypes.TimestampWithTZ
   }
-| TIMESTAMP WITH_LA TIME ZONE
-  {
-    $$.val = coltypes.TimestampWithTZ
-  }
+| TIMESTAMPTZ '(' ICONST ')'            { return unimplementedWithIssue(sqllex, 32098) }
+
+opt_timezone:
+  WITH_LA TIME ZONE { $$.val = true; }
+| WITHOUT TIME ZONE { $$.val = false; }
+| /*EMPTY*/         { $$.val = false; }
+
 
 const_interval:
   INTERVAL {
@@ -6870,7 +6887,7 @@ interval_second:
   {
     $$.val = tree.Second
   }
-| SECOND '(' ICONST ')' { return unimplemented(sqllex, "interval second with precision") }
+| SECOND '(' ICONST ')' { return unimplementedWithIssueDetail(sqllex, 32564, "interval second") }
 
 // General expressions. This is the heart of the expression syntax.
 //
@@ -6905,7 +6922,7 @@ a_expr:
   {
     $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
   }
-| a_expr AT TIME ZONE a_expr %prec AT { return unimplemented(sqllex, "at tz") }
+| a_expr AT TIME ZONE a_expr %prec AT { return unimplementedWithIssue(sqllex, 32005) }
   // These operators must be called out explicitly in order to make use of
   // bison's automatic operator-precedence handling. All other operator names
   // are handled by the generic productions using "OP", below; and all those
@@ -7445,7 +7462,7 @@ d_expr:
     if err != nil { sqllex.Error(err.Error()); return 1 }
     $$.val = d
   }
-| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
+| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
 | const_typename SCONST
   {
     $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
@@ -7454,7 +7471,7 @@ d_expr:
   {
     $$.val = $1.expr()
   }
-| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
+| const_interval '(' ICONST ')' SCONST { return unimplementedWithIssue(sqllex, 32564) }
 | TRUE
   {
     $$.val = tree.MakeDBool(true)
@@ -7575,7 +7592,7 @@ func_expr_windowless:
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
-  COLLATION FOR '(' a_expr ')' { return unimplemented(sqllex, "func_expr_common_subexpr collation for") }
+  COLLATION FOR '(' a_expr ')' { return unimplementedWithIssue(sqllex, 32563) }
 | CURRENT_DATE
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
@@ -8949,7 +8966,6 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
-| TIMESTAMPTZ
 | TRACE
 | TRANSACTION
 | TRIGGER
@@ -9024,6 +9040,7 @@ col_name_keyword:
 | TIME
 | TIMETZ
 | TIMESTAMP
+| TIMESTAMPTZ
 | TREAT
 | TRIM
 | VALUES
