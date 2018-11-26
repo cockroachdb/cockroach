@@ -17,13 +17,22 @@ package gce
 
 import (
 	"io/ioutil"
+	"text/template"
 )
 
 // Startup script used to find/format/mount all local SSDs in GCE.
 // Each disk is mounted to /mnt/data<disknum> and chmoded to all users.
-const gceLocalSSDStartupScript = `#!/usr/bin/env bash
+//
+// This is a template because the instantiator needs to optionally configure the
+// mounting options. The script cannot take arguments since it is to be invoked
+// by the gcloud tool which cannot pass args.
+const gceLocalSSDStartupScriptTemplate = `#!/usr/bin/env bash
+# Script for setting up a GCE machine for roachprod use.
+
+mount_opts="discard,defaults"
+{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
+
 disknum=0
-# Assume google.
 for d in $(ls /dev/disk/by-id/google-local-ssd-*); do
   let "disknum++"
   grep -e "${d}" /etc/fstab > /dev/null
@@ -32,8 +41,8 @@ for d in $(ls /dev/disk/by-id/google-local-ssd-*); do
     mountpoint="/mnt/data${disknum}"
     sudo mkdir -p "${mountpoint}"
     sudo mkfs.ext4 -F ${d}
-    sudo mount -o discard,defaults ${d} ${mountpoint}
-    echo "${d} ${mountpoint} ext4 discard,defaults 1 1" | sudo tee -a /etc/fstab
+    sudo mount -o ${mount_opts} ${d} ${mountpoint}
+    echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
   else
     echo "Disk ${disknum}: ${d} already mounted, skipping..."
   fi
@@ -63,17 +72,27 @@ EOF
 sysctl --system  # reload sysctl settings
 `
 
-// write the startup script to a temp file.
+// writeStartupScript writes the startup script to a temp file.
 // Returns the path to the file.
 // After use, the caller should delete the temp file.
-func writeStartupScript() (string, error) {
+//
+// extraMountOpts, if not empty, is appended to the default mount options. It is
+// a comma-separated list of options for the "mount -o" flag.
+func writeStartupScript(extraMountOpts string) (string, error) {
+	type tmplParams struct {
+		ExtraMountOpts string
+	}
+
+	args := tmplParams{ExtraMountOpts: extraMountOpts}
+
 	tmpfile, err := ioutil.TempFile("", "gce-startup-script")
 	if err != nil {
 		return "", err
 	}
 	defer tmpfile.Close()
 
-	if _, err := tmpfile.WriteString(gceLocalSSDStartupScript); err != nil {
+	t := template.Must(template.New("start").Parse(gceLocalSSDStartupScriptTemplate))
+	if err := t.Execute(tmpfile, args); err != nil {
 		return "", err
 	}
 	return tmpfile.Name(), nil
