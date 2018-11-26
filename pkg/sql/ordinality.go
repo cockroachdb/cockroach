@@ -132,25 +132,22 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// We are going to "optimize" the ordering. We had an ordering
 	// initially from the source, but expand() may have caused it to
 	// change. So here retrieve the ordering of the source again.
-	origOrdering := planPhysicalProps(o.source)
+	srcProps := planPhysicalProps(o.source)
+	o.props = srcProps.copy()
 
-	if len(origOrdering.ordering) > 0 {
-		// TODO(knz/radu): we basically have two simultaneous orderings.
-		// What we really want is something that physicalProps cannot
-		// currently express: that the rows are ordered by a set of
-		// columns AND at the same time they are also ordered by a
-		// different set of columns. However since ordinalityNode is
-		// currently the only case where this happens we consider it's not
-		// worth the hassle and just use the source ordering.
-		o.props = origOrdering.copy()
-	} else {
+	// TODO(knz/radu): if srcProps.ordering is not empty, we basically have two
+	// simultaneous orderings.  What we really want is something that
+	// physicalProps cannot currently express: that the rows are ordered by a set
+	// of columns AND at the same time they are also ordered by a different set of
+	// columns. However since ordinalityNode is currently the only case where this
+	// happens we consider it's not worth the hassle and just use the source
+	// ordering.
+	if len(srcProps.ordering) == 0 {
 		// No ordering defined in the source, so create a new one.
-		o.props.eqGroups = origOrdering.eqGroups.Copy()
-		o.props.constantCols = origOrdering.constantCols.Copy()
-		o.props.ordering = sqlbase.ColumnOrdering{{
+		o.props.ordering = o.props.reduce(sqlbase.ColumnOrdering{{
 			ColIdx:    len(o.columns) - 1,
 			Direction: encoding.Ascending,
-		}}
+		}})
 	}
 	// The ordinality column forms a key.
 	var k util.FastIntSet
