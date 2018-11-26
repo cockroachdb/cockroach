@@ -30,6 +30,17 @@ Runs the sequential disk write benchmark.
 	RunE: MaybeDecorateGRPCError(RunSeqWriteBench),
 }
 
+// A cpuBench command runs CPU benchmarks on cockroach.
+var cpuBench = &cobra.Command{
+	Use:   "cpu",
+	Short: "Runs the prime finding cpu benchmark.",
+	Long: `
+Runs the prime finding cpu benchmark.
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(RunCPUBench),
+}
+
 // RunSeqWriteBench runs a sequential write I/O benchmark.
 func RunSeqWriteBench(cmd *cobra.Command, args []string) error {
 	iOOpts := systembench.DiskOptions{
@@ -44,8 +55,20 @@ func RunSeqWriteBench(cmd *cobra.Command, args []string) error {
 	return systembench.Run(iOOpts)
 }
 
+// RunCPUBench runs the prime finding cpu benchmark.
+func RunCPUBench(cmd *cobra.Command, args []string) error {
+	cpuOptions := systembench.CPUOptions{
+		Concurrency: systemBenchCtx.concurrency,
+		Duration:    systemBenchCtx.duration,
+
+		Type: systembench.CPUPrimeTest,
+	}
+	return systembench.RunCPU(cpuOptions)
+}
+
 var systemBenchCmds = []*cobra.Command{
 	seqWriteBench,
+	cpuBench,
 }
 
 var systemBenchCmd = &cobra.Command{
