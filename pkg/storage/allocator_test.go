@@ -309,6 +309,7 @@ func replicas(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
 	for i, storeID := range storeIDs {
 		res[i].NodeID = roachpb.NodeID(storeID)
 		res[i].StoreID = storeID
+		res[i].ReplicaID = roachpb.ReplicaID(i + 1)
 	}
 	return res
 }

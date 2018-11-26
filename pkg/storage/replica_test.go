@@ -33,6 +33,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -133,6 +134,22 @@ func leaseExpiry(repl *Replica) int64 {
 		panic("leaseExpiry only valid for expiration-based leases")
 	}
 	return l.Expiration.WallTime + 1
+}
+
+// Create a Raft status that shows everyone fully up to date.
+func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
+	prs := make(map[uint64]raft.Progress)
+	for _, repl := range repls {
+		prs[uint64(repl.ReplicaID)] = raft.Progress{
+			State: raft.ProgressStateReplicate,
+			Match: 100,
+		}
+	}
+	return &raft.Status{
+		HardState: raftpb.HardState{Commit: 100},
+		SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
+		Progress:  prs,
+	}
 }
 
 // testContext contains all the objects necessary to test a Range.
@@ -10976,4 +10993,22 @@ func TestRollbackMissingTxnRecordNoError(t *testing.T) {
 	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
+}
+
+func TestSplitSnapshotWarningStr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	status := upToDateRaftStatus(replicas(1, 3, 5))
+	assert.Equal(t, "", splitSnapshotWarningStr(12, status))
+
+	pr := status.Progress[2]
+	pr.State = raft.ProgressStateProbe
+	status.Progress[2] = pr
+
+	assert.Equal(
+		t,
+		"; may cause Raft snapshot to r12/2: next = 0, match = 100, state = ProgressStateProbe,"+
+			" waiting = false, pendingSnapshot = 0",
+		splitSnapshotWarningStr(12, status),
+	)
 }
