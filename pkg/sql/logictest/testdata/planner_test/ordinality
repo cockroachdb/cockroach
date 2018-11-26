@@ -23,3 +23,12 @@ filter           ·       ·                        (x, "ordinality")  x!=NULL; 
       └── scan   ·       ·                        (x)                x!=NULL; key(x)
 ·                table   foo@primary              ·                  ·
 ·                spans   ALL                      ·                  ·
+
+# Regression test for #31911: ensure the ordinality properties are set correctly.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM system.role_members WHERE role = 'a' AND member = 'b') WITH ORDINALITY
+----
+ordinality  ·      ·                     (role, member, "isAdmin", "ordinality")  role=CONST; member=CONST; key(); weak-key("ordinality")
+ └── scan   ·      ·                     (role, member, "isAdmin")                role=CONST; member=CONST; key()
+·           table  role_members@primary  ·                                        ·
+·           spans  /"a"/"b"-/"a"/"b"/#   ·                                        ·
