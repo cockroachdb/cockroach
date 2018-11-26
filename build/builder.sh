@@ -175,6 +175,7 @@ docker run --init --privileged -i ${tty-} --rm \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
+  --env="TZ=America/New_York" \
   --env=COCKROACH_BUILDER_CCACHE \
   --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
   "${image}:${version}" "$@"
