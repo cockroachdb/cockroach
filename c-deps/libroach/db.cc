@@ -291,7 +291,7 @@ DBStatus DBSyncWAL(DBEngine* db) {
   options.sync = true;
   return ToDBStatus(db->rep->Write(options, &batch));
 #else
-  return ToDBStatus(db->rep->FlushWAL(true /* sync */));
+  return ToDBStatus(db->rep->SyncWAL());
 #endif
 }
 
