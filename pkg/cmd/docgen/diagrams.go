@@ -544,6 +544,11 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:    "create_stats_stmt",
+		replace: map[string]string{"name_list": "column_name"},
+		unlink:  []string{"statistics_name", "column_name"},
+	},
+	{
 		name:   "create_table_as_stmt",
 		inline: []string{"opt_column_list", "name_list"},
 	},
@@ -1120,6 +1125,10 @@ var specs = []stmtSpec{
 	{
 		name: "show_sessions",
 		stmt: "show_sessions_stmt",
+	},
+	{
+		name: "show_stats",
+		stmt: "show_stats_stmt",
 	},
 	{
 		name:  "show_tables",

@@ -18,6 +18,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
@@ -1005,6 +1006,18 @@ func restore(
 	// use the new IDs.
 	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
 		return mu.res, nil, nil, err
+	}
+
+	{
+		// Disable merging for the table IDs being restored into. We don't want the
+		// merge queue undoing the splits performed during RESTORE.
+		tableIDs := make([]uint32, 0, len(tables))
+		for _, t := range tables {
+			tableIDs = append(tableIDs, uint32(t.ID))
+		}
+		disableCtx, cancel := context.WithCancel(restoreCtx)
+		defer cancel()
+		gossipccl.DisableMerges(disableCtx, gossip, tableIDs)
 	}
 
 	// Get TableRekeys to use when importing raw data.

@@ -105,6 +105,7 @@ create_stmt ::=
 	create_user_stmt
 	| create_role_stmt
 	| create_ddl_stmt
+	| create_stats_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -175,6 +176,7 @@ show_stmt ::=
 	| show_schemas_stmt
 	| show_session_stmt
 	| show_sessions_stmt
+	| show_stats_stmt
 	| show_tables_stmt
 	| show_trace_stmt
 	| show_users_stmt
@@ -316,6 +318,9 @@ create_ddl_stmt ::=
 	| create_table_as_stmt
 	| create_view_stmt
 	| create_sequence_stmt
+
+create_stats_stmt ::=
+	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name
 
 opt_with_clause ::=
 	with_clause
@@ -478,6 +483,9 @@ show_sessions_stmt ::=
 	'SHOW' 'SESSIONS'
 	| 'SHOW' 'CLUSTER' 'SESSIONS'
 	| 'SHOW' 'LOCAL' 'SESSIONS'
+
+show_stats_stmt ::=
+	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name
@@ -928,6 +936,9 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+statistics_name ::=
+	name
 
 with_clause ::=
 	'WITH' cte_list

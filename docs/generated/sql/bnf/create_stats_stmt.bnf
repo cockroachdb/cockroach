@@ -1,0 +1,2 @@
+create_stats_stmt ::=
+	'CREATE' 'STATISTICS' statistics_name 'ON' column_name 'FROM' table_name
