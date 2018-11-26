@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -222,6 +223,85 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 	return s
 }
 
+func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
+	// We have an "optimization" to avoid Raft snapshots by dropping some
+	// outgoing MsgAppResp (see the _ assignment below) which takes effect for
+	// RaftPostSplitSuppressSnapshotTicks ticks after an uninitialized replica
+	// is created. This check can err, in which case the snapshot will be
+	// delayed for that many ticks, and so we want to delay by at least as much
+	// plus a bit of padding to give a snapshot a chance to catch the follower
+	// up. If we run out of time, we'll resume the split no matter what.
+	_ = r.maybeDropMsgAppResp
+	maxDelaySplitToAvoidSnapshotTicks := 50 + r.store.cfg.RaftPostSplitSuppressSnapshotTicks
+
+	var extra string
+
+	tPreWait := timeutil.Now()
+	var waited bool
+	var succeeded bool
+	for ticks := 0; ticks < maxDelaySplitToAvoidSnapshotTicks; ticks++ {
+		succeeded = false
+		extra = ""
+
+		if ticks == 1 {
+			waited = true
+		}
+
+		r.mu.RLock()
+		raftStatus := r.raftStatusRLocked()
+		if raftStatus != nil {
+			updateRaftProgressFromActivity(
+				ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, timeutil.Now(),
+			)
+		}
+		r.mu.RUnlock()
+
+		if raftStatus == nil {
+			// Don't delay followers artificially. This case is hit rarely
+			// enough to not matter.
+			break
+		}
+
+		done := true
+		for replicaID, pr := range raftStatus.Progress {
+			if replicaID == raftStatus.Lead {
+				// TODO(tschottdorf): remove this once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
+
+			if !pr.RecentActive {
+				continue
+			}
+
+			if pr.State != raft.ProgressStateReplicate {
+				extra += fmt.Sprintf("replica r%d/%d not caught up: %+v", r.RangeID, replicaID, pr)
+				done = false
+			}
+		}
+		if done {
+			succeeded = true
+			break
+		}
+		select {
+		case <-time.After(r.store.cfg.RaftTickInterval):
+		case <-ctx.Done():
+			return ""
+		}
+	}
+
+	if !waited {
+		return ""
+	}
+
+	elapsed := timeutil.Since(tPreWait)
+	extra += fmt.Sprintf("; delayed split for %s to avoid Raft snapshot", elapsed)
+	if !succeeded {
+		extra += " (without success)"
+	}
+	return extra
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -320,7 +400,8 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	leftDesc.EndKey = splitKey
 
-	extra := splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
+	extra := r.maybeDelaySplitToAvoidSnapshot(ctx)
+	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
 		splitKey, rightDesc.RangeID, extra)
