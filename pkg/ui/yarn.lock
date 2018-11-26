@@ -2102,6 +2102,24 @@ cyclist@~0.2.2:
   version "0.2.2"
   resolved "https://registry.yarnpkg.com/cyclist/-/cyclist-0.2.2.tgz#1b33792e11e914a2fd6d6ed6447464444e5fa640"
 
+d3-array@1:
+  version "1.2.4"
+  resolved "https://registry.yarnpkg.com/d3-array/-/d3-array-1.2.4.tgz#635ce4d5eea759f6f605863dbcfc30edc737f71f"
+
+d3-geo-projection@^2.5.0:
+  version "2.5.0"
+  resolved "https://registry.yarnpkg.com/d3-geo-projection/-/d3-geo-projection-2.5.0.tgz#15b3cd97cfbe5f1a309e0c63bd15fff67bb082f4"
+  dependencies:
+    commander "2"
+    d3-array "1"
+    d3-geo "^1.10.0"
+
+d3-geo@^1.10.0:
+  version "1.11.2"
+  resolved "https://registry.yarnpkg.com/d3-geo/-/d3-geo-1.11.2.tgz#951129d17aef88332c856613368afa40f345bafd"
+  dependencies:
+    d3-array "1"
+
 d3@<4.0.0, d3@^3.5.6:
   version "3.5.17"
   resolved "https://registry.yarnpkg.com/d3/-/d3-3.5.17.tgz#bc46748004378b21a360c9fc7cf5231790762fb8"
