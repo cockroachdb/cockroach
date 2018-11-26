@@ -74,6 +74,7 @@
     "copy-webpack-plugin": "^4.5.1",
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
+    "d3-geo-projection": "^2.5.0",
     "dagre-layout": "^0.8.0",
     "enzyme": "^3.3.0",
     "enzyme-adapter-react-16": "^1.1.1",
