@@ -27,6 +27,13 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/google/btree"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
+	"golang.org/x/time/rate"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -46,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -64,12 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/google/btree"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -2009,8 +2011,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 func (s *Store) BootstrapRange(
 	initialValues []roachpb.KeyValue, bootstrapVersion roachpb.Version,
 ) error {
+	rangeID := roachpb.RangeID(1)
 	desc := &roachpb.RangeDescriptor{
-		RangeID:       1,
+		RangeID:       rangeID,
 		StartKey:      roachpb.RKeyMin,
 		EndKey:        roachpb.RKeyMax,
 		NextReplicaID: 2,
@@ -2074,6 +2077,24 @@ func (s *Store) BootstrapRange(
 		return err
 	}
 	*ms = updatedMS
+
+	sl := stateloader.Make(s.ClusterSettings(), rangeID)
+	writtenStats, err := sl.LoadMVCCStats(ctx, batch)
+	if err != nil {
+		return err
+	}
+
+	computedStats, err := rditer.ComputeStatsForRange(desc, batch, s.Clock().PhysicalNow())
+	if err != nil {
+		return err
+	}
+	computedStats.AgeTo(writtenStats.LastUpdateNanos)
+
+	if computedStats != writtenStats {
+		return errors.Errorf("computed stats differ from written stats for range %d:\n"+
+			"computed:\n%+v\n\nwritten:\n%+v",
+			rangeID, computedStats, writtenStats)
+	}
 
 	return batch.Commit(true /* sync */)
 }
