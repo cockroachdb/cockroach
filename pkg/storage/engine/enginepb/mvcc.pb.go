@@ -18,6 +18,8 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
+// An MVCCMetadata is stored for a versioned key while there is an intent on
+// that key.
 type MVCCMetadata struct {
 	Txn *TxnMeta `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
 	// The timestamp of the most recent versioned value if this is a
