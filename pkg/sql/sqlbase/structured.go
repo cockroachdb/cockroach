@@ -1914,6 +1914,18 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
+// FindInactiveColumnByID finds the inactive column with specified ID.
+func (desc *TableDescriptor) FindInactiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			if c.ID == id {
+				return c, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
 // FindFamilyByID finds the family with specified ID.
 func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
 	for i, f := range desc.Families {
