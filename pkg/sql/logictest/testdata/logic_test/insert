@@ -588,7 +588,10 @@ INSERT INTO derived(y) VALUES('abcd')
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
+
+statement ok
+BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
 query T
@@ -602,3 +605,17 @@ CREATE TABLE t29494 (
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
 INSERT INTO t29494(x) VALUES (123) RETURNING y
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+query I
+INSERT INTO t29494(x) VALUES (123) RETURNING *
+----
+123
+
+statement ok
+COMMIT
