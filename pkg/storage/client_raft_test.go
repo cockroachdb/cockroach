@@ -1154,6 +1154,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	sc.RaftTickInterval = 10 * time.Millisecond
 	// Don't timeout raft leader. We don't want leadership moving.
 	sc.RaftElectionTimeoutTicks = 1000000
+	// Reduce the max uncommitted entry size.
+	sc.RaftMaxUncommittedEntriesSize = 64 << 10 // 64 KB
 	// Disable leader transfers during leaseholder changes so that we
 	// can easily create leader-not-leaseholder scenarios.
 	sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
@@ -1232,7 +1234,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		// While a majority nodes are down, write some data.
 		putRes := make(chan *roachpb.Error)
 		go func() {
-			putArgs := putArgs([]byte("b"), make([]byte, 8<<10 /* 8 KB */))
+			putArgs := putArgs([]byte("b"), make([]byte, sc.RaftMaxUncommittedEntriesSize/8))
 			_, err := client.SendWrapped(context.Background(), propNode, putArgs)
 			putRes <- err
 		}()
@@ -1253,11 +1255,10 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				}
 
 				// Check raft log size.
-				const logSizeLimit = 64 << 10 // 64 KB
 				curlogSize := leaderRepl.GetRaftLogSize()
 				logSize := curlogSize - initLogSize
 				logSizeStr := humanizeutil.IBytes(logSize)
-				if logSize > logSizeLimit {
+				if uint64(logSize) > sc.RaftMaxUncommittedEntriesSize {
 					t.Fatalf("raft log size grew to %s", logSizeStr)
 				}
 				t.Logf("raft log size grew to %s", logSizeStr)
