@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -65,7 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -1245,7 +1246,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Create ID allocators.
 	idAlloc, err := idalloc.NewAllocator(
-		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* minID */, rangeIDAllocCount, s.stopper,
+		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, rangeIDAllocCount, s.stopper,
 	)
 	if err != nil {
 		return err
@@ -2006,85 +2007,176 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 	return nil
 }
 
-// BootstrapRange creates the first range in the cluster and manually
-// writes it to the store. Default range addressing records are
-// created for meta1 and meta2. Default configurations for
-// zones are created. All configs are specified
-// for the empty key prefix, meaning they apply to the entire
-// database. The zone requires three replicas with no other specifications.
-// It also adds the range tree and the root node, the first range, to it.
-// The 'initialValues' are written as well after each value's checksum
-// is initialized.
-func (s *Store) BootstrapRange(
-	initialValues []roachpb.KeyValue, bootstrapVersion roachpb.Version,
+// WriteInitialData writes bootstrapping data to a store. It creates system
+// ranges (filling in meta1 and meta2) and the default zone config.
+//
+// Args:
+// initialValues: an optional list of k/v to be written as well after each
+//   value's checksum is initialized.
+// bootstrapVersion: the version at which the cluster is bootstrapped.
+// numStores: the number of stores this node will have.
+// splits: an optional list of split points. Range addressing will be created
+//   for all the splits. The list needs to be sorted.
+func (s *Store) WriteInitialData(
+	ctx context.Context,
+	initialValues []roachpb.KeyValue,
+	bootstrapVersion roachpb.Version,
+	numStores int,
+	splits []roachpb.RKey,
 ) error {
-	desc := &roachpb.RangeDescriptor{
-		RangeID:       1,
-		StartKey:      roachpb.RKeyMin,
-		EndKey:        roachpb.RKeyMax,
-		NextReplicaID: 2,
-		Replicas: []roachpb.ReplicaDescriptor{
-			{
-				NodeID:    1,
-				StoreID:   1,
-				ReplicaID: 1,
+	// Bootstrap version information. We'll add the "bootstrap version" to the
+	// list of initialValues, so that we don't have to handle it specially
+	// (particularly since we don't want to manually figure out which range it
+	// falls into).
+	bootstrapVal := roachpb.Value{}
+	if err := bootstrapVal.SetProto(&bootstrapVersion); err != nil {
+		return err
+	}
+	initialValues = append(initialValues,
+		roachpb.KeyValue{Key: keys.BootstrapVersionKey, Value: bootstrapVal})
+
+	// Initialize various sequence generators.
+	var nodeIDVal, storeIDVal, rangeIDVal roachpb.Value
+	nodeIDVal.SetInt(1) // This node has id 1.
+	// The caller will initialize the stores with ids 1..numStores.
+	storeIDVal.SetInt(int64(numStores))
+	// The last range has id = len(splits) + 1
+	rangeIDVal.SetInt(int64(len(splits) + 1))
+	initialValues = append(initialValues,
+		roachpb.KeyValue{Key: keys.NodeIDGenerator, Value: nodeIDVal},
+		roachpb.KeyValue{Key: keys.StoreIDGenerator, Value: storeIDVal},
+		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal})
+
+	// firstRangeMS is going to accumulate the stats for the first range, as we
+	// write the meta records for all the other ranges.
+	firstRangeMS := &enginepb.MVCCStats{}
+
+	// filter initial values for a given descriptor, returning only the ones that
+	// pertain to the respective range.
+	filterInitialValues := func(desc *roachpb.RangeDescriptor) []roachpb.KeyValue {
+		var r []roachpb.KeyValue
+		for _, kv := range initialValues {
+			if desc.ContainsKey(roachpb.RKey(kv.Key)) {
+				r = append(r, kv)
+			}
+		}
+		return r
+	}
+
+	// We iterate through the ranges backwards, since they all need to contribute
+	// to the stats of the first range (i.e. because they all write meta2 records
+	// in the first range), and so we want to create the first range last so that
+	// the stats we compute for it are correct.
+	startKey := roachpb.RKeyMax
+	for i := len(splits) - 1; i >= -1; i-- {
+		endKey := startKey
+		rangeID := roachpb.RangeID(i + 2) // RangeIDs are 1-based.
+		if i >= 0 {
+			startKey = splits[i]
+		} else {
+			startKey = roachpb.RKeyMin
+		}
+
+		desc := &roachpb.RangeDescriptor{
+			RangeID:       rangeID,
+			StartKey:      startKey,
+			EndKey:        endKey,
+			NextReplicaID: 2,
+			Replicas: []roachpb.ReplicaDescriptor{
+				{
+					NodeID:    1,
+					StoreID:   1,
+					ReplicaID: 1,
+				},
 			},
-		},
-	}
-	if err := desc.Validate(); err != nil {
-		return err
-	}
-	batch := s.engine.NewBatch()
-	defer batch.Close()
-	ms := &enginepb.MVCCStats{}
-	now := s.cfg.Clock.Now()
-	ctx := context.Background()
+		}
+		if err := desc.Validate(); err != nil {
+			return err
+		}
+		rangeInitialValues := filterInitialValues(desc)
+		log.VEventf(
+			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
+			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
+		batch := s.engine.NewBatch()
+		defer batch.Close()
 
-	// Bootstrap version information. We don't do this if this is v1.0, which is
-	// never going to be true in versions that have this code in production, but
-	// can be true in tests.
-	if bootstrapVersion != cluster.VersionByKey(cluster.VersionBase) {
-		if err := engine.MVCCPutProto(ctx, batch, ms /* ms */, keys.BootstrapVersionKey, hlc.Timestamp{}, nil, &bootstrapVersion); err != nil {
+		now := s.cfg.Clock.Now()
+		ctx := context.Background()
+
+		// NOTE: We don't do stats computations in any of the puts below. Instead,
+		// we write everything and then compute the stats over the whole range.
+
+		// Range descriptor.
+		if err := engine.MVCCPutProto(
+			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
+			now, nil /* txn */, desc,
+		); err != nil {
+			return err
+		}
+
+		// Replica GC timestamp.
+		if err := engine.MVCCPutProto(
+			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
+			hlc.Timestamp{}, nil /* txn */, &now,
+		); err != nil {
+			return err
+		}
+		// Range addressing for meta2.
+		meta2Key := keys.RangeMetaKey(endKey)
+		if err := engine.MVCCPutProto(ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
+			now, nil /* txn */, desc,
+		); err != nil {
+			return err
+		}
+
+		// The first range gets some special treatment.
+		if startKey.Equal(roachpb.RKeyMin) {
+			// Range addressing for meta1.
+			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			if err := engine.MVCCPutProto(
+				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, nil /* txn */, desc,
+			); err != nil {
+				return err
+			}
+		}
+
+		// Now add all passed-in default entries.
+		for _, kv := range rangeInitialValues {
+			// Initialize the checksums.
+			kv.Value.InitChecksum(kv.Key)
+			if err := engine.MVCCPut(
+				ctx, batch, nil /* ms */, kv.Key, now, kv.Value, nil, /* txn */
+			); err != nil {
+				return err
+			}
+		}
+
+		lease := roachpb.BootstrapLease()
+		_, err := stateloader.WriteInitialState(
+			ctx, s.cfg.Settings, batch,
+			enginepb.MVCCStats{},
+			*desc,
+			lease, hlc.Timestamp{}, hlc.Timestamp{})
+		if err != nil {
+			return err
+		}
+
+		computedStats, err := rditer.ComputeStatsForRange(desc, batch, s.Clock().PhysicalNow())
+		if err != nil {
+			return err
+		}
+
+		sl := stateloader.Make(s.ClusterSettings(), rangeID)
+		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
+			return err
+		}
+
+		if err := batch.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
-	// Range descriptor.
-	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
-		return err
-	}
-	// Replica GC timestamp.
-	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), hlc.Timestamp{}, nil, &now); err != nil {
-		return err
-	}
-	// Range addressing for meta2.
-	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
-	if err := engine.MVCCPutProto(ctx, batch, ms, meta2Key.AsRawKey(), now, nil, desc); err != nil {
-		return err
-	}
-	// Range addressing for meta1.
-	meta1Key := keys.RangeMetaKey(meta2Key)
-	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key.AsRawKey(), now, nil, desc); err != nil {
-		return err
-	}
 
-	// Now add all passed-in default entries.
-	for _, kv := range initialValues {
-		// Initialize the checksums.
-		kv.Value.InitChecksum(kv.Key)
-		if err := engine.MVCCPut(ctx, batch, ms, kv.Key, now, kv.Value, nil); err != nil {
-			return err
-		}
-	}
-
-	lease := roachpb.BootstrapLease()
-	updatedMS, err := stateloader.WriteInitialState(ctx, s.cfg.Settings, batch, *ms, *desc,
-		lease, hlc.Timestamp{}, hlc.Timestamp{})
-	if err != nil {
-		return err
-	}
-	*ms = updatedMS
-
-	return batch.Commit(true /* sync */)
+	return nil
 }
 
 // ClusterID accessor.
@@ -4425,6 +4517,79 @@ func (s *Store) setScannerActive(active bool) {
 // GetTxnWaitKnobs is part of txnwait.StoreInterface.
 func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
 	return s.TestingKnobs().TxnWait
+}
+
+func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
+	if err := forceScanAndProcess(s, q); err != nil {
+		log.Fatal(ctx, err)
+	}
+}
+
+func forceScanAndProcess(s *Store, q *baseQueue) error {
+	// Check that the system config is available. It is needed by many queues. If
+	// it's not available, some queues silently fail to process any replicas,
+	// which is undesirable for this method.
+	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
+		return errors.Errorf("system config not available in gossip")
+	}
+
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		q.MaybeAdd(repl, s.cfg.Clock.Now())
+		return true
+	})
+
+	q.DrainQueue(s.stopper)
+	return nil
+}
+
+// ForceReplicationScanAndProcess iterates over all ranges and
+// enqueues any that need to be replicated.
+func (s *Store) ForceReplicationScanAndProcess() error {
+	return forceScanAndProcess(s, s.replicateQueue.baseQueue)
+}
+
+// MustForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
+// may need to be GC'd.
+func (s *Store) MustForceReplicaGCScanAndProcess() {
+	mustForceScanAndProcess(context.TODO(), s, s.replicaGCQueue.baseQueue)
+}
+
+// MustForceMergeScanAndProcess iterates over all ranges and enqueues any that
+// may need to be merged.
+func (s *Store) MustForceMergeScanAndProcess() {
+	mustForceScanAndProcess(context.TODO(), s, s.mergeQueue.baseQueue)
+}
+
+// ForceSplitScanAndProcess iterates over all ranges and enqueues any that
+// may need to be split.
+func (s *Store) ForceSplitScanAndProcess() error {
+	return forceScanAndProcess(s, s.splitQueue.baseQueue)
+}
+
+// MustForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
+// need their raft logs truncated and then process each of them.
+func (s *Store) MustForceRaftLogScanAndProcess() {
+	mustForceScanAndProcess(context.TODO(), s, s.raftLogQueue.baseQueue)
+}
+
+// ForceTimeSeriesMaintenanceQueueProcess iterates over all ranges, enqueuing
+// any that need time series maintenance, then processes the time series
+// maintenance queue.
+func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() error {
+	return forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
+}
+
+// ForceRaftSnapshotQueueProcess iterates over all ranges, enqueuing
+// any that need raft snapshots, then processes the raft snapshot
+// queue.
+func (s *Store) ForceRaftSnapshotQueueProcess() error {
+	return forceScanAndProcess(s, s.raftSnapshotQueue.baseQueue)
+}
+
+// ForceConsistencyQueueProcess runs all the ranges through the consistency
+// queue.
+func (s *Store) ForceConsistencyQueueProcess() error {
+	return forceScanAndProcess(s, s.consistencyQueue.baseQueue)
 }
 
 func init() {

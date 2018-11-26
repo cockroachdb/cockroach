@@ -63,7 +63,13 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 		manuals = append(manuals, hlc.NewManualClock(1))
 		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
 	}
-	mtc := &multiTestContext{clocks: clocks}
+	mtc := &multiTestContext{
+		clocks: clocks,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, numNodes)
 	mtc.replicateRange(1, 1, 2)
@@ -222,10 +228,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		}
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
-	store := createTestStoreWithEngine(t,
-		eng,
-		true,
-		cfg,
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{eng: eng, cfg: &cfg},
 		stopper,
 	)
 
@@ -363,7 +367,15 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	store := createTestStoreWithOpts(
+		t,
+		testStoreOpts{
+			// This test was written before the test stores were able to start with
+			// more than one range and is not prepared to handle many ranges.
+			dontCreateSystemRanges: true,
+			cfg: &storeCfg,
+		},
+		stopper)
 
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
@@ -530,6 +542,9 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	l.mtc = &multiTestContext{}
+	// This test was written before the multiTestContext started creating many
+	// system ranges at startup, and hasn't been update to take that into account.
+	l.mtc.startWithSingleRange = true
 	l.mtc.storeConfig = &cfg
 	l.mtc.Start(t, 2)
 	l.mtc.initGossipNetwork()
@@ -968,7 +983,13 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			}
 			return nil
 		}
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -1250,10 +1271,7 @@ func LeaseInfo(
 
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
 	kvDB0 := tc.Servers[0].DB()
@@ -1264,16 +1282,6 @@ func TestLeaseInfoRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	rangeDesc, err = tc.AddReplicas(
-		rangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rangeDesc.Replicas) != 3 {
-		t.Fatalf("expected 3 replicas, got %+v", rangeDesc.Replicas)
-	}
 	replicas := make([]roachpb.ReplicaDescriptor, 3)
 	for i := 0; i < 3; i++ {
 		var ok bool
@@ -1283,11 +1291,23 @@ func TestLeaseInfoRequest(t *testing.T) {
 		}
 	}
 
-	// Lease should start on Server 0, since nobody told it to move.
-	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
-	if leaseHolderReplica != replicas[0] {
-		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[0], leaseHolderReplica)
+	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
+	// there might be already a lease owned by a random node.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(0))
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	// Now test the LeaseInfo. We might need to loop until the node we query has
+	// applied the lease.
+	testutils.SucceedsSoon(t, func() error {
+		leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		if leaseHolderReplica != replicas[0] {
+			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
+				replicas[0], leaseHolderReplica)
+		}
+		return nil
+	})
 
 	// Transfer the lease to Server 1 and check that LeaseInfoRequest gets the
 	// right answer.
@@ -1298,7 +1318,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica = LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[1] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
@@ -1325,9 +1345,34 @@ func TestLeaseInfoRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+
+	// We're now going to ask servers[1] for the lease info. We don't use kvDB1;
+	// instead we go directly to the store because otherwise the DistSender might
+	// use an old, cached, version of the range descriptor that doesn't have the
+	// local replica in it (and so the request would be routed away).
+	// TODO(andrei): Add a batch option to not use the range cache.
+	s, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseInfoReq := &roachpb.LeaseInfoRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: rangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	reply, pErr := client.SendWrappedWith(
+		context.Background(), s, roachpb.Header{
+			RangeID:         rangeDesc.RangeID,
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, leaseInfoReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	resp := *(reply.(*roachpb.LeaseInfoResponse))
+	leaseHolderReplica = resp.Lease.Replica
+
 	if leaseHolderReplica != replicas[2] {
-		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[2], leaseHolderReplica)
+		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], leaseHolderReplica)
 	}
 
 	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
@@ -1386,6 +1431,10 @@ func TestRangeInfo(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)

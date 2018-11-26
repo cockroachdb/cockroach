@@ -239,6 +239,10 @@ func TestStoreMetrics(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -312,7 +316,7 @@ func TestStoreMetrics(t *testing.T) {
 	})
 
 	// Force GC Scan on store 0 in order to fully remove range.
-	mtc.stores[1].ForceReplicaGCScanAndProcess()
+	mtc.stores[1].MustForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.

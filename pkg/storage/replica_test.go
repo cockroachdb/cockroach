@@ -104,9 +104,9 @@ func testRangeDescriptor() *roachpb.RangeDescriptor {
 type bootstrapMode int
 
 const (
-	// Use Store.BootstrapRange, which writes the range descriptor and
-	// other metadata. Most tests should use this mode because it more
-	// closely resembles the real world.
+	// Use Store.WriteInitialData, which writes the range descriptor and other
+	// metadata. Most tests should use this mode because it more closely resembles
+	// the real world.
 	bootstrapRangeWithMetadata bootstrapMode = iota
 	// Create a range with NewRange and Store.AddRangeTest. The store's data
 	// will be persisted but metadata will not.
@@ -223,7 +223,10 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.store.mergeQueue.SetDisabled(true)
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := tc.store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
+			if err := tc.store.WriteInitialData(
+				ctx, nil /* initialValues */, cfg.Settings.Version.ServerVersion,
+				1 /* numStores */, nil, /* splits */
+			); err != nil {
 				t.Fatal(err)
 			}
 		}
