@@ -1886,6 +1886,29 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
+// FindReadableColumnByID finds the column with specified ID and also
+// sets it to nullable if it's in the middle of a schema change.
+func (desc *TableDescriptor) FindReadableColumnByID(id ColumnID) (ColumnDescriptor, error) {
+	for i, c := range desc.Columns {
+		if c.ID == id {
+			return desc.Columns[i], nil
+		}
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			if c.ID == id {
+				col := *c
+				// Even if the column is non-nullable it can be null in the
+				// middle of a schema change while it's being baxckfilled
+				// to a non-nullable value.
+				col.Nullable = true
+				return col, nil
+			}
+		}
+	}
+	return ColumnDescriptor{}, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
 // FindFamilyByID finds the family with specified ID.
 func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
 	for i, f := range desc.Families {
