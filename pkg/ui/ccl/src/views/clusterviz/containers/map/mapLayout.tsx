@@ -39,15 +39,13 @@ interface MapLayoutState {
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   gEl: React.RefObject<SVGGElement> = React.createRef();
   zoom: d3.behavior.Zoom<any>;
-  maxLatitude = 80;
 
   constructor(props: MapLayoutProps) {
     super(props);
 
-    // Compute zoomable area bounds based on the default mercator projection.
-    const projection = d3.geo.mercator();
-    const topLeft = projection([-180, this.maxLatitude]);
-    const botRight = projection([180, -this.maxLatitude]);
+    const projection = d3.geo.equirectangular();
+    const topLeft = projection([-180, 140]);
+    const botRight = projection([180, -120]);
     const bounds = new Box(
       topLeft[0],
       topLeft[1],
