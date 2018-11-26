@@ -27,18 +27,18 @@ union
  ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=1990, distinct(8,9)=1990, null(8,9)=19.92]
- ├── cost: 2149.9
+ ├── cost: 2149.93
  ├── key: (8,9)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
-      └── cost: 1050
+      └── cost: 1050.01
 
 opt
 SELECT k, i FROM a UNION ALL SELECT * FROM b
@@ -48,17 +48,17 @@ union-all
  ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=2000]
- ├── cost: 2130
+ ├── cost: 2130.03
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000]
-      └── cost: 1050
+      └── cost: 1050.01
 
 opt
 SELECT k, i FROM a INTERSECT SELECT * FROM b
@@ -68,18 +68,18 @@ intersect
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
- ├── cost: 2139.9
+ ├── cost: 2139.93
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
-      └── cost: 1050
+      └── cost: 1050.01
 
 opt
 SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
@@ -89,17 +89,17 @@ intersect-all
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=1000]
- ├── cost: 2140
+ ├── cost: 2140.03
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000]
-      └── cost: 1050
+      └── cost: 1050.01
 
 opt
 SELECT k, i FROM a EXCEPT SELECT * FROM b
@@ -109,18 +109,18 @@ except
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
- ├── cost: 2139.9
+ ├── cost: 2139.93
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
-      └── cost: 1050
+      └── cost: 1050.01
 
 opt
 SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
@@ -130,14 +130,14 @@ except-all
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=1000]
- ├── cost: 2140
+ ├── cost: 2140.03
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060
+ │    ├── cost: 1060.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
       ├── stats: [rows=1000]
-      └── cost: 1050
+      └── cost: 1050.01

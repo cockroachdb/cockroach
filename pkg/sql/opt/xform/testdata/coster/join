@@ -25,27 +25,27 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 project
  ├── columns: k:1(int!null) x:5(int!null)
  ├── stats: [rows=100]
- ├── cost: 2124.675
+ ├── cost: 2124.725
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
       ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]
-      ├── cost: 2123.675
+      ├── cost: 2123.715
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
       │    ├── columns: x:5(int)
       │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
-      │    └── cost: 1040
+      │    └── cost: 1040.01
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
-      │    ├── cost: 1070
+      │    ├── cost: 1070.02
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=0]
-      │    │    ├── cost: 1060
+      │    │    ├── cost: 1060.01
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
@@ -84,13 +84,13 @@ SELECT * FROM abc WHERE c = 1
 index-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(3)=1, null(3)=0]
- ├── cost: 50.589
+ ├── cost: 50.609
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(3)=1, null(3)=0]
-      ├── cost: 10.296
+      ├── cost: 10.306
       ├── key: (1)
       └── fd: ()-->(3)
