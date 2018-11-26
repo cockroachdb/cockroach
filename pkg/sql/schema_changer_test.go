@@ -2229,6 +2229,8 @@ CREATE TABLE t.test (
     FAMILY "primary" (k, v, length)
 );
 INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
+INSERT INTO t.test (k, v, length) VALUES (1, 2, 1);
+INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2252,7 +2254,17 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	}
 
 	// UPDATE the row using the primary index.
-	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27001 WHERE k = 0`); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27001 WHERE k = 1`); err != nil {
+		t.Error(err)
+	}
+
+	// Use UPSERT instead of UPDATE.
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, length) VALUES (2, 3, 27000)`); err != nil {
+		t.Error(err)
+	}
+
+	// UPSERT inserts a new row.
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, length) VALUES (3, 4, 27000)`); err != nil {
 		t.Error(err)
 	}
 

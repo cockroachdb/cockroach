@@ -554,12 +554,12 @@ func makeUpdaterWithoutCascader(
 		// ru.FetchColIDtoRowIndex if it isn't already present.
 		maybeAddCol := func(colID sqlbase.ColumnID) error {
 			if _, ok := ru.FetchColIDtoRowIndex[colID]; !ok {
-				col, err := tableDesc.FindColumnByID(colID)
+				col, err := tableDesc.FindReadableColumnByID(colID)
 				if err != nil {
 					return err
 				}
 				ru.FetchColIDtoRowIndex[col.ID] = len(ru.FetchCols)
-				ru.FetchCols = append(ru.FetchCols, *col)
+				ru.FetchCols = append(ru.FetchCols, col)
 			}
 			return nil
 		}
