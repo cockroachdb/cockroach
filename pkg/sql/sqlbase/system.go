@@ -911,6 +911,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &LocationsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RoleMembersTable)
 
+	target.AddSplitIDs(keys.PseudoTableIDs...)
+
 	// Adding a new system table? Don't add it to the metadata schema yet!
 	//
 	// The first release to contain the system table must add the system table
