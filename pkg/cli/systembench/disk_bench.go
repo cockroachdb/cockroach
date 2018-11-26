@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
@@ -38,9 +37,6 @@ const (
 	maxFileSize = 1 << 30 // A gigabyte
 )
 
-var numOps uint64
-var numBytes uint64
-
 // DiskBenchmarkType represents an I/O benchmark.
 type DiskBenchmarkType int
 
@@ -59,18 +55,6 @@ type DiskOptions struct {
 	SyncInterval int64
 
 	Type DiskBenchmarkType
-}
-
-// latency is a histogram for the latency of a single worker.
-type latency struct {
-	syncutil.Mutex
-	*hdrhistogram.WindowedHistogram
-}
-
-// worker represents a single worker process generating load.
-type worker interface {
-	getLatencyHistogram() *latency
-	run(ctx context.Context) error
 }
 
 // workerSeqWrite holds a temp file and random byte array to write to
