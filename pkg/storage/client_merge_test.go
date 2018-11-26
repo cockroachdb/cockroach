@@ -1587,8 +1587,59 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeAddReplicaRace verifies that an add replica request that
-// occurs concurrently with a merge is aborted.
+// TestStoreRangeMergeAddReplicaRace tests that a add replica request that races
+// with a merge is aborted with an understandable error message.
+func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store0, store1 := mtc.Store(0), mtc.Store(1)
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Arrange to block all snapshots until we're ready.
+	allowSnapshotCh := make(chan struct{})
+	mtc.transport.Listen(store1.StoreID(), RaftMessageHandlerInterceptor{
+		RaftMessageHandler: store1,
+		handleSnapshotFilter: func(header *storage.SnapshotRequest_Header) {
+			<-allowSnapshotCh
+		},
+	})
+
+	// Launch the add replicas request. This will get stuck sending a preemptive
+	// snapshot thanks to the handler we installed above.
+	errCh := make(chan error)
+	go func() {
+		errCh <- mtc.replicateRangeNonFatal(rhsDesc.RangeID, 1)
+	}()
+
+	// Merge the ranges together.
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	if _, pErr := client.SendWrapped(ctx, store0.TestSender(), mergeArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Allow snapshots, which will allow the add replicas to complete.
+	close(allowSnapshotCh)
+	expErr := `change replicas of r2 failed: descriptor changed: .* \(range subsumed\)`
+	if err := <-errCh; !testutils.IsError(err, expErr) {
+		t.Fatalf("expected error %q, got %v", expErr, err)
+	}
+}
+
+// TestStoreRangeMergeResplitAddReplicaRace verifies that an add replica request
+// that occurs concurrently with a merge and immediate resplit is aborted.
 //
 // To see why aborting the add replica request is necessary, consider two
 // adjacent and collocated ranges, Q and R. Say the replicate queue decides to
@@ -1625,7 +1676,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 // alone will always result in a descriptor with a smaller end key. Only a
 // sequence of splits AND merges can result in an unchanged end key, and merges
 // always increment the generation counter.
-func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
