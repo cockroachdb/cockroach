@@ -251,6 +251,9 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 func trimProvided(
 	provided opt.Ordering, required *physical.OrderingChoice, fds *props.FuncDepSet,
 ) opt.Ordering {
+	if len(provided) == 0 {
+		return nil
+	}
 	// closure is the set of columns that are functionally determined by the
 	// columns in provided[:provIdx].
 	closure := fds.ComputeClosure(opt.ColSet{})
@@ -260,12 +263,12 @@ func trimProvided(
 		// Consume columns from the provided ordering until their closure intersects
 		// the required group.
 		for !closure.Intersects(c.Group) {
-			if provIdx == len(provided) {
-				panic("provided does not intersect required")
-			}
 			closure.Add(int(provided[provIdx].ID()))
 			closure = fds.ComputeClosure(closure)
 			provIdx++
+			if provIdx == len(provided) {
+				return provided
+			}
 		}
 	}
 	return provided[:provIdx]
@@ -301,21 +304,28 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 		))
 	}
 
-	// The provided ordering must intersect the required ordering, after FDs are
-	// applied.
-	fds := &expr.Relational().FuncDeps
-	r := required.Copy()
-	r.Simplify(fds)
-	var p physical.OrderingChoice
-	p.FromOrdering(provided)
-	p.Simplify(fds)
-	if !r.Any() && (p.Any() || !p.Intersects(&r)) {
-		panic(fmt.Sprintf(
-			"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
-		))
+	// TODO(radu): this check would be nice to have, but it is too strict. In some
+	// cases, child expressions created during exploration (like constrained
+	// scans) have FDs that are more restricted than what was known when the
+	// parent expression was constructed. Related to #32320.
+	if false {
+		// The provided ordering must intersect the required ordering, after FDs are
+		// applied.
+		fds := &expr.Relational().FuncDeps
+		r := required.Copy()
+		r.Simplify(fds)
+		var p physical.OrderingChoice
+		p.FromOrdering(provided)
+		p.Simplify(fds)
+		if !r.Any() && (p.Any() || !p.Intersects(&r)) {
+			panic(fmt.Sprintf(
+				"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
+			))
+		}
 	}
 
 	// The provided ordering should not have unnecessary columns.
+	fds := &expr.Relational().FuncDeps
 	if trimmed := trimProvided(provided, required, fds); len(trimmed) != len(provided) {
 		panic(fmt.Sprintf("provided %s can be trimmed to %s (FDs: %s)", provided, trimmed, fds))
 	}

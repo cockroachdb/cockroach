@@ -2115,7 +2115,6 @@ create_ddl_stmt:
 create_stats_stmt:
   CREATE STATISTICS statistics_name ON name_list FROM table_name
   {
-    /* SKIP DOC */
     name, err := tree.NormalizeTableName($7.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
@@ -3086,7 +3085,6 @@ session_var:
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
-    /* SKIP DOC */
     name, err := tree.NormalizeTableName($5.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
