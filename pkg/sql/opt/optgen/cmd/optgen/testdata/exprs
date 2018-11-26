@@ -373,7 +373,7 @@ func (m *Memo) MemoizeProject(
 	input RelExpr,
 	projections ProjectionsExpr,
 	passthrough opt.ColSet,
-) *ProjectExpr {
+) RelExpr {
 	const size = int64(unsafe.Sizeof(projectGroup{}))
 	grp := &projectGroup{mem: m, first: ProjectExpr{
 		Input:       input,
@@ -388,7 +388,7 @@ func (m *Memo) MemoizeProject(
 		m.memEstimate += size
 		m.checkExpr(e)
 	}
-	return interned
+	return interned.FirstExpr()
 }
 
 func (m *Memo) AddProjectToGroup(e *ProjectExpr, grp RelExpr) *ProjectExpr {
@@ -399,7 +399,7 @@ func (m *Memo) AddProjectToGroup(e *ProjectExpr, grp RelExpr) *ProjectExpr {
 		m.memEstimate += size
 		m.checkExpr(e)
 	} else if interned.group() != grp.group() {
-		panic(fmt.Sprintf("%s expression cannot be added to multiple groups: %s", e.Op(), e))
+		panic(fmt.Sprintf("%s expression cannot be added to multiple groups: %s", e.Op(), interned))
 	}
 	return interned
 }

@@ -1597,6 +1597,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		t.Skip()
 	}
 
+	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Scan like a bat out of hell to ensure replication and replica GC
@@ -1604,19 +1605,23 @@ func TestSystemZoneConfigs(t *testing.T) {
 			ScanInterval: 50 * time.Millisecond,
 		},
 	})
-	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
+
 	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	expectedUserRanges := tc.Servers[0].ExpectedInitialUserRangeCount()
-
 	expectedSystemRanges -= expectedUserRanges
-	expectedReplicas := expectedSystemRanges*int(*config.DefaultSystemZoneConfig().NumReplicas) +
-		expectedUserRanges*int(*config.DefaultZoneConfig().NumReplicas)
+	systemNumReplicas := int(*config.DefaultSystemZoneConfig().NumReplicas)
+	userNumReplicas := int(*config.DefaultZoneConfig().NumReplicas)
+	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
+	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
+		expectedSystemRanges, expectedUserRanges)
+	log.Infof(ctx, "TestSystemZoneConfig: expected (%dx%d) + (%dx%d) = %d replicas total",
+		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
+
 	waitForReplicas := func() error {
 		var conflictingID roachpb.RangeID
 		replicas := make(map[roachpb.RangeID]int)
