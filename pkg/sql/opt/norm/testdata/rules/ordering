@@ -237,9 +237,9 @@ project
            └── (123,) [type=tuple{int}]
 
 # --------------------------------------------------
-# SimplifyInsertOrdering
+# SimplifyMutationOrdering
 # --------------------------------------------------
-opt expect=SimplifyInsertOrdering
+opt expect=SimplifyMutationOrdering
 INSERT INTO abcde (a, b, c, d) SELECT y, 1, y+1, 2 FROM xyz ORDER BY y, x, z
 ----
 insert abcde

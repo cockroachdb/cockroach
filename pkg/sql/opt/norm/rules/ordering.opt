@@ -69,12 +69,12 @@
 =>
 (Explain $input (SimplifyExplainOrdering $input $explainPrivate))
 
-# SimplifyInsertOrdering removes redundant columns from the Insert operator's
-# input ordering.
-[SimplifyInsertOrdering, Normalize]
+# SimplifyMutationOrdering removes redundant columns from a mutation operator's
+# (Insert, Update, etc) input ordering.
+[SimplifyMutationOrdering, Normalize]
 (Insert
     $input:*
-    $insertPrivate:* & (CanSimplifyInsertOrdering $input $insertPrivate)
+    $mutationPrivate:* & (CanSimplifyMutationOrdering $input $mutationPrivate)
 )
 =>
-(Insert $input (SimplifyInsertOrdering $input $insertPrivate))
+(Insert $input (SimplifyMutationOrdering $input $mutationPrivate))

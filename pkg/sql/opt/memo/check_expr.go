@@ -162,14 +162,14 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		if len(t.InputCols) != tab.ColumnCount()+tab.MutationColumnCount() {
+		if len(t.InsertCols) != tab.ColumnCount()+tab.MutationColumnCount() {
 			panic("values not provided for all table columns")
 		}
 
 		// Output and ordering columns should never include mutation columns.
 		var mutationCols opt.ColSet
 		for i, n := tab.ColumnCount(), tab.MutationColumnCount(); i < n; i++ {
-			mutationCols.Add(int(t.InputCols[i]))
+			mutationCols.Add(int(t.InsertCols[i]))
 		}
 		if t.Relational().OutputCols.Intersects(mutationCols) {
 			panic("output columns cannot include mutation columns")

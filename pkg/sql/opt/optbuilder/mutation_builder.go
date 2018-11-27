@@ -29,13 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// mutationBuilder is a helper struct that supports building an Insert operator in
-// stages.
+// mutationBuilder is a helper struct that supports building Insert, Update,
+// Upsert, and Delete operators in stages.
+// TODO(andyk): Add support for Upsert and Delete.
 type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
 
-	// op is InsertOp or UpsertOp.
+	// op is InsertOp, UpdateOp, UpsertOp, or DeleteOp.
 	op opt.Operator
 
 	// tab is the target table.
@@ -44,17 +45,23 @@ type mutationBuilder struct {
 	// tabID is the metadata ID of the table.
 	tabID opt.TableID
 
-	// alias is the table alias specified in the INSERT statement, or just the
+	// alias is the table alias specified in the mutation statement, or just the
 	// table name itself if no alias was specified.
 	alias *tree.TableName
 
 	// targetColList is an ordered list of IDs of the table columns into which
-	// values will be inserted by the Insert operator. It is incrementally built
-	// as the operator is built.
+	// values will be inserted, or which will be updated with new values. It is
+	// incrementally built as the operator is built.
 	targetColList opt.ColList
 
 	// targetColSet contains the same column IDs as targetColList, but as a set.
 	targetColSet opt.ColSet
+
+	// insertColList is an ordered list of IDs of input columns which provide
+	// values to be inserted. Its length is always equal to the number of columns
+	// in the target table, including mutation columns. It is empty if this is
+	// not an Insert or Upsert operator.
+	insertColList opt.ColList
 
 	// parsedExprs is a cached set of parsed default and computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
@@ -71,7 +78,11 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alia
 	mb.md = b.factory.Metadata()
 	mb.op = op
 	mb.tab = tab
-	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount())
+	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount()+tab.MutationColumnCount())
+
+	if op == opt.InsertOp {
+		mb.insertColList = make(opt.ColList, cap(mb.targetColList))
+	}
 
 	if alias != nil {
 		mb.alias = alias
@@ -84,11 +95,11 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alia
 	mb.tabID = mb.md.AddTableWithMutations(tab)
 }
 
-// addTargetNamedCols adds a list of user-specified column names to the list of
-// table columns that are the target of the Insert operation.
-func (mb *mutationBuilder) addTargetNamedCols(names tree.NameList) {
+// addTargetNamedColsForInsert adds a list of user-specified column names to the
+// list of table columns that are the target of the Insert operation.
+func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	if len(mb.targetColList) != 0 {
-		panic("addTargetNamedCols cannot be called more than once")
+		panic("addTargetNamedColsForInsert cannot be called more than once")
 	}
 
 	for _, name := range names {
@@ -121,17 +132,18 @@ func (mb *mutationBuilder) addTargetNamedCols(names tree.NameList) {
 
 	// Ensure that primary key columns are in the target column list, or that
 	// they have default values.
-	mb.checkPrimaryKey()
+	mb.checkPrimaryKeyForInsert()
 
 	// Ensure that foreign keys columns are in the target column list, or that
 	// they have default values.
-	mb.checkForeignKeys()
+	mb.checkForeignKeysForInsert()
 }
 
-// checkPrimaryKey ensures that the columns of the primary key are either
-// assigned values by the INSERT statement, or else have default/computed
-// values. If neither condition is true, checkPrimaryKey raises an error.
-func (mb *mutationBuilder) checkPrimaryKey() {
+// checkPrimaryKeyForInsert ensures that the columns of the primary key are
+// either assigned values by the INSERT statement, or else have default/computed
+// values. If neither condition is true, checkPrimaryKeyForInsert raises an
+// error.
+func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 	primary := mb.tab.Index(opt.PrimaryIndex)
 	for i, n := 0, primary.KeyColumnCount(); i < n; i++ {
 		col := primary.Column(i)
@@ -151,10 +163,10 @@ func (mb *mutationBuilder) checkPrimaryKey() {
 	}
 }
 
-// checkForeignKeys ensures that all foreign key columns are either assigned
-// values by the INSERT statement, or else have default/computed values.
-// Alternatively, all columns can be unspecified. If neither condition is true,
-// checkForeignKeys raises an error. Here is an example:
+// checkForeignKeysForInsert ensures that all foreign key columns are either
+// assigned values by the INSERT statement, or else have default/computed
+// values.  Alternatively, all columns can be unspecified. If neither condition
+// is true, checkForeignKeysForInsert raises an error. Here is an example:
 //
 //   CREATE TABLE orders (
 //     id INT,
@@ -170,7 +182,7 @@ func (mb *mutationBuilder) checkPrimaryKey() {
 // as well, or else neither column can be specified.
 //
 // TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
-func (mb *mutationBuilder) checkForeignKeys() {
+func (mb *mutationBuilder) checkForeignKeysForInsert() {
 	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
 		idx := mb.tab.Index(i)
 		fkey, ok := idx.ForeignKey()
@@ -216,16 +228,16 @@ func (mb *mutationBuilder) checkForeignKeys() {
 	}
 }
 
-// addTargetTableCols adds up to maxCols columns to the list of columns that
-// will be set by an INSERT operation. Columns are added from the target table
-// in the same order they appear in its schema. This method is used when the
-// target columns are not explicitly specified in the INSERT statement:
+// addTargetTableColsForInsert adds up to maxCols columns to the list of columns
+// that will be set by an INSERT operation. Columns are added from the target
+// table in the same order they appear in its schema. This method is used when
+// the target columns are not explicitly specified in the INSERT statement:
 //
 //   INSERT INTO t VALUES (1, 2, 3)
 //
 // In this example, the first three columns of table t would be added as target
 // columns.
-func (mb *mutationBuilder) addTargetTableCols(maxCols int) {
+func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	if len(mb.targetColList) != 0 {
 		panic("addTargetTableCols cannot be called more than once")
 	}
@@ -345,9 +357,9 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 	return inRows
 }
 
-// buildInputRows constructs the memo group for the input expression and
+// buildInputForInsert constructs the memo group for the input expression and
 // constructs a new output scope containing that expression's output columns.
-func (mb *mutationBuilder) buildInputRows(inScope *scope, inputRows *tree.Select) {
+func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.Select) {
 	// If there are already required target columns, then those will provide
 	// desired input types. Otherwise, input columns are mapped to the table's
 	// non-hidden columns by corresponding ordinal position. Exclude hidden
@@ -385,14 +397,27 @@ func (mb *mutationBuilder) buildInputRows(inScope *scope, inputRows *tree.Select
 	} else {
 		// No target columns have been added by previous steps, so add columns
 		// that are implicitly targeted by the input expression.
-		mb.addTargetTableCols(len(mb.outScope.cols))
+		mb.addTargetTableColsForInsert(len(mb.outScope.cols))
 	}
 
-	// Type check input columns.
+	// Loop over input columns and:
+	//   1. Type check each column
+	//   2. Assign name to each column
+	//   3. Add id of each column to the insertColList
 	for i := range mb.outScope.cols {
 		inCol := &mb.outScope.cols[i]
-		tabCol := mb.tab.Column(mb.md.ColumnOrdinal(mb.targetColList[i]))
-		checkDatumTypeFitsColumnType(tabCol, inCol.typ)
+		ord := mb.md.ColumnOrdinal(mb.targetColList[i])
+
+		// Type check the input column against the corresponding table column.
+		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
+
+		// Assign name of input column. Computed columns can refer to this column
+		// by its name.
+		inCol.name = tree.Name(mb.md.ColumnLabel(mb.targetColList[i]))
+
+		// Map the ordinal position of each table column to the id of the input
+		// column which will be inserted into that position.
+		mb.insertColList[ord] = inCol.id
 	}
 }
 
@@ -403,35 +428,42 @@ func (mb *mutationBuilder) buildEmptyInput(inScope *scope) {
 	mb.outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
 }
 
-// addDefaultAndComputedCols wraps the input expression with Project operator(s)
-// containing any default (or nullable) and computed columns that are not yet
-// part of the target column list. This includes mutation columns, since they
-// must always have default or computed values.
+// addDefaultAndComputedColsForInsert wraps an Insert input expression with
+// Project operator(s) containing any default (or nullable) and computed columns
+// that are not yet part of the target column list. This includes mutation
+// columns, since they must always have default or computed values.
 //
 // After this call, the input expression will provide values for every one of
 // the target table columns, whether it was explicitly specified or implicitly
 // added.
-func (mb *mutationBuilder) addDefaultAndComputedCols() {
+func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
 	// Add any missing default and nullable columns.
-	mb.addSynthesizedCols(func(tabCol opt.Column) bool { return !tabCol.IsComputed() })
+	mb.addSynthesizedCols(
+		mb.insertColList,
+		func(tabCol opt.Column) bool { return !tabCol.IsComputed() },
+	)
 
 	// Add any missing computed columns. This must be done after adding default
 	// columns above, because computed columns can depend on default columns.
-	mb.addSynthesizedCols(func(tabCol opt.Column) bool { return tabCol.IsComputed() })
+	mb.addSynthesizedCols(
+		mb.insertColList,
+		func(tabCol opt.Column) bool { return tabCol.IsComputed() },
+	)
 }
 
-// addSynthesizedCols is a helper method for addDefaultAndComputedCols that
+// addSynthesizedCols is a helper method for addDefaultAndComputedColsForInsert that
 // scans the list of table columns, looking for any that do not yet have values
 // provided by the input expression. New columns are synthesized for any missing
 // columns, as long as the addCol callback function returns true for that
 // column.
-func (mb *mutationBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) bool) {
+func (mb *mutationBuilder) addSynthesizedCols(
+	colList opt.ColList, addCol func(tabCol opt.Column) bool,
+) {
 	var projectionsScope *scope
 
 	for i, n := 0, mb.tab.ColumnCount()+mb.tab.MutationColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
-		tabColID := mb.tabID.ColumnID(i)
-		if mb.targetColSet.Contains(int(tabColID)) {
+		if colList[i] != 0 {
 			continue
 		}
 
@@ -451,11 +483,20 @@ func (mb *mutationBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) boo
 			projectionsScope.copyOrdering(mb.outScope)
 		}
 
+		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 		texpr := mb.outScope.resolveType(expr, tabCol.DatumType())
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* label */, texpr)
 		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
+		// Assign name to synthesized column. Computed columns may refer to default
+		// columns in the table by name.
+		scopeCol.name = tabCol.ColName()
+
+		// Store id of newly synthesized column in corresponding list slot.
+		colList[i] = scopeCol.id
+
+		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
 		mb.targetColSet.Add(int(tabColID))
 	}
@@ -464,12 +505,6 @@ func (mb *mutationBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) boo
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
-
-	// Alias output columns using table column names. Computed columns may refer
-	// to other columns in the table by name.
-	for i := range mb.outScope.cols {
-		mb.outScope.cols[i].name = tree.Name(mb.md.ColumnLabel(mb.targetColList[i]))
-	}
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
@@ -477,20 +512,13 @@ func (mb *mutationBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) boo
 // returns columns in the same order and with the same names as the target
 // table.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
-	if len(mb.outScope.cols) != len(mb.targetColList) {
-		panic("expected input column count to match table column coun")
+	if len(mb.outScope.cols) != len(mb.insertColList) {
+		panic("expected insert column count to match table column count")
 	}
 
-	// Map unordered input columns to order of target table columns.
-	inputCols := make(opt.ColList, len(mb.outScope.cols))
-	for i := range mb.outScope.cols {
-		tabOrd := mb.md.ColumnOrdinal(mb.targetColList[i])
-		inputCols[tabOrd] = mb.outScope.cols[i].id
-	}
-
-	private := memo.InsertPrivate{
+	private := memo.MutationPrivate{
 		Table:       mb.tabID,
-		InputCols:   inputCols,
+		InsertCols:  mb.insertColList,
 		NeedResults: returning != nil,
 	}
 	private.Ordering.FromOrdering(mb.outScope.ordering)
@@ -498,27 +526,20 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 
 	if returning != nil {
 		// 1. Project only non-mutation columns.
-		// 2. Re-order columns so they're in same order as table columns.
-		// 3. Alias columns to use table column names.
-		// 4. Mark hidden columns.
+		// 2. Alias columns to use table column names.
+		// 3. Mark hidden columns.
 		inScope := mb.outScope.replace()
 		inScope.expr = mb.outScope.expr
 		inScope.cols = make([]scopeColumn, mb.tab.ColumnCount())
-		for i := range mb.outScope.cols {
-			targetColID := mb.targetColList[i]
-			ord := mb.md.ColumnOrdinal(targetColID)
-			if ord >= mb.tab.ColumnCount() {
-				// Exclude mutation columns.
-				continue
-			}
+		for i := 0; i < len(inScope.cols); i++ {
+			outCol := mb.outScope.getColumn(mb.insertColList[i])
 
-			outCol := &mb.outScope.cols[i]
-			inScope.cols[ord] = *outCol
-			inScope.cols[ord].table = *mb.alias
-			inScope.cols[ord].name = mb.tab.Column(ord).ColName()
+			inScope.cols[i] = *outCol
+			inScope.cols[i].table = *mb.alias
+			inScope.cols[i].name = mb.tab.Column(i).ColName()
 
-			if mb.tab.Column(ord).IsHidden() {
-				inScope.cols[ord].hidden = true
+			if mb.tab.Column(i).IsHidden() {
+				inScope.cols[i].hidden = true
 			}
 		}
 
