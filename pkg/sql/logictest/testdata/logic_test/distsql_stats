@@ -115,3 +115,19 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM
 statistics_name  column_names  row_count  distinct_count  null_count
 s1               {"a"}         10000      10              0
 NULL             {"b"}         10000      10              0
+
+# Test AS OF SYSTEM TIME
+
+statement error pgcode 42P01 relation "data" does not exist
+CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '2017'
+
+statement ok
+CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '-1ns'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+NULL             {"b"}         10000      10              0
+s2               {"a"}         10000      10              0
