@@ -520,7 +520,7 @@ func DecodeOidDatum(
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
