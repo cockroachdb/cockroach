@@ -89,7 +89,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize))
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
 	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
@@ -186,7 +186,9 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		s.sr.SampleRow(row, rank)
+		if err := s.sr.SampleRow(row, rank); err != nil {
+			return false, err
+		}
 	}
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))

@@ -30,10 +30,12 @@ import (
 func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	var sr SampleReservoir
-	sr.Init(numSamples)
+	sr.Init(numSamples, []sqlbase.ColumnType{typeInt})
 	for _, r := range ranks {
 		d := sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(r)))
-		sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r))
+		if err := sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
+			t.Errorf("%v", err)
+		}
 	}
 	samples := sr.Get()
 	sampledRanks := make([]int, len(samples))
