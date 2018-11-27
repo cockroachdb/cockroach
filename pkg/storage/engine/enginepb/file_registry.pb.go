@@ -13,6 +13,8 @@
 	It has these top-level messages:
 		FileRegistry
 		FileEntry
+		Entry
+		IntentHistory
 		MVCCMetadata
 		MVCCStats
 		TxnMeta

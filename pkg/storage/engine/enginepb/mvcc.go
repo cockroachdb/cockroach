@@ -129,3 +129,8 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
 }
+
+// Add adds the sequence and value to the history.
+func (ih *IntentHistory) Add(seq int32, val []byte) {
+	ih.History = append(ih.History, Entry{Sequence: seq, Value: val})
+}

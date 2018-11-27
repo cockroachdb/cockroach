@@ -64,8 +64,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			m.Txn = nil // never populated below Raft
 			return m
 		},
-		emptySum:     7551962144604783939,
-		populatedSum: 3716674106872807900,
+		emptySum:     2799399081811390505,
+		populatedSum: 2218169508280718389,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

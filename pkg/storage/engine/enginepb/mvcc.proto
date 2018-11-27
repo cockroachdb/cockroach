@@ -21,6 +21,29 @@ import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";
 
+message Entry {
+  option (gogoproto.populate) = true;
+  // Sequence is a one-indexed number which is increased on each request
+  // set as part of a transaction. It uniquely identifies a value from
+  // the IntentHistory. IntentHistory.GetValue(seq) returns the value
+  // in history if it exists.
+  optional int32 sequence = 1 [(gogoproto.nullable) = false];
+  // Value is the value written to the key as part of the transaction at
+  // the above Sequence.
+  optional bytes value = 2;
+}
+
+// IntentHistory stores the history of sequences and values for a given key
+// to be used within a transaction. Making it possible for a transaction to be
+// more idempotent
+message IntentHistory {
+  option (gogoproto.populate) = true;
+
+  // History of intent entries of ordered by Sequence.
+  // This stores all the writes on the key from this transaction.
+  repeated Entry history = 1 [(gogoproto.nullable) = false];
+}
+
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 // An MVCCMetadata is stored for a versioned key while there is an intent on
 // that key.
@@ -46,6 +69,13 @@ message MVCCMetadata {
   // value inlined, and with empty timestamp, key_bytes, and
   // val_bytes.
   optional bytes raw_bytes = 6;
+  // History stores the IntentHistory of the transaction. It stores
+  // all they values the txn wrote for the key along with each values
+  // corresponding Sequence. Calling History.GetLatest() must return the
+  // current RawBytes for transactional writes. Calling History.GetValue(seq)
+  // returns the value at a given sequence.
+  // History will be empty for non-transactional requests.
+  optional IntentHistory history = 8 [(gogoproto.nullable) = false];
   // This provides a measure of protection against replays caused by
   // Raft duplicating merge commands.
   optional util.hlc.LegacyTimestamp merge_timestamp = 7;
