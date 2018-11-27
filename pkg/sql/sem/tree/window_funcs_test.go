@@ -73,12 +73,13 @@ func testStartPreceding(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		// TODO(bram): speed this up.
+		switch {
+		case types.Int.Identical(offsetType):
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.Float.Identical(offsetType):
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.Decimal.Identical(offsetType):
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -116,12 +117,13 @@ func testStartFollowing(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		// TODO(bram): Speed this up.
+		switch {
+		case types.Int.Identical(offsetType):
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.Float.Identical(offsetType):
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.Decimal.Identical(offsetType):
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -157,12 +159,13 @@ func testEndPreceding(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		// TODO(bram): speed this up.
+		switch {
+		case types.Int.Identical(offsetType):
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.Float.Identical(offsetType):
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.Decimal.Identical(offsetType):
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -198,12 +201,13 @@ func testEndFollowing(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		// TODO(bram): speed this up.
+		switch {
+		case types.Int.Identical(offsetType):
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.Float.Identical(offsetType):
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.Decimal.Identical(offsetType):
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}

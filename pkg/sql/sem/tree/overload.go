@@ -162,7 +162,7 @@ func (a ArgTypes) MatchAt(typ types.T, i int) bool {
 	if typ.FamilyEqual(types.FamTuple) {
 		typ = types.FamTuple
 	}
-	return i < len(a) && (typ == types.Unknown || a[i].Typ.Equivalent(typ))
+	return i < len(a) && (types.Unknown.Identical(typ) || a[i].Typ.Equivalent(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -263,9 +263,9 @@ func (v VariadicType) Match(types []types.T) bool {
 // MatchAt is part of the TypeList interface.
 func (v VariadicType) MatchAt(typ types.T, i int) bool {
 	if i < len(v.FixedTypes) {
-		return typ == types.Unknown || v.FixedTypes[i].Equivalent(typ)
+		return types.Unknown.Identical(typ) || v.FixedTypes[i].Equivalent(typ)
 	}
-	return typ == types.Unknown || v.VarType.Equivalent(typ)
+	return types.Unknown.Identical(typ) || v.VarType.Equivalent(typ)
 }
 
 // MatchLen is part of the TypeList interface.
@@ -351,7 +351,7 @@ func FirstNonNullReturnType() ReturnTyper {
 			return UnknownReturnType
 		}
 		for _, arg := range args {
-			if t := arg.ResolvedType(); t != types.Unknown {
+			if t := arg.ResolvedType(); !types.Unknown.Identical(t) {
 				return t
 			}
 		}
@@ -485,7 +485,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
-	if desired != types.Any {
+	if !types.Any.Identical(desired) {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 			func(o overloadImpl) bool {
 				// For now, we only filter on the return type for overloads with
@@ -648,8 +648,8 @@ func typeCheckOverloadedExprs(
 			}
 			leftType := left.ResolvedType()
 			rightType := right.ResolvedType()
-			leftIsNull := leftType == types.Unknown
-			rightIsNull := rightType == types.Unknown
+			leftIsNull := types.Unknown.Identical(leftType)
+			rightIsNull := types.Unknown.Identical(rightType)
 			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
 			if oneIsNull {
 				if leftIsNull {

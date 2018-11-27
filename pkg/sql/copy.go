@@ -363,15 +363,17 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t {
-		case types.Bytes,
-			types.Date,
-			types.Interval,
-			types.INet,
-			types.String,
-			types.Timestamp,
-			types.TimestampTZ,
-			types.UUID:
+		t := c.resultColumns[i].Typ
+		// TODO(bram) Speed this up.
+		switch {
+		case types.Bytes.Identical(t),
+			types.Date.Identical(t),
+			types.Interval.Identical(t),
+			types.INet.Identical(t),
+			types.String.Identical(t),
+			types.Timestamp.Identical(t),
+			types.TimestampTZ.Identical(t),
+			types.UUID.Identical(t):
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

@@ -268,7 +268,7 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 	if err != nil {
 		t.Fatalf("%s: %v", expr, err)
 	}
-	if typedExpr.ResolvedType().(types.TArray).Typ != expected {
+	if !typedExpr.ResolvedType().(types.TArray).Typ.Identical(expected) {
 		t.Fatalf(
 			"Expression has incorrect type: expected %v but got %v",
 			expected,

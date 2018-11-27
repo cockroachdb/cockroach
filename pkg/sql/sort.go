@@ -300,7 +300,7 @@ func (n *sortNode) Close(ctx context.Context) {
 }
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
-	if _, ok := c.Typ.(types.TArray); ok || c.Typ == types.JSON {
+	if _, ok := c.Typ.(types.TArray); ok || types.JSON.Identical(c.Typ) {
 		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "can't order by column type %s", c.Typ)
 	}
 	return nil

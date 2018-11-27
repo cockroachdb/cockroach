@@ -241,22 +241,22 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 	return d
 }
 
-var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
-	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
-	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
-	types.Bool:        mustParseDBool,
-	types.Date:        mustParseDDate,
-	types.Time:        mustParseDTime,
-	types.Timestamp:   mustParseDTimestamp,
-	types.TimestampTZ: mustParseDTimestampTZ,
-	types.Interval:    mustParseDInterval,
-	types.JSON:        mustParseDJSON,
+var parseFuncs = map[string]func(*testing.T, string) tree.Datum{
+	types.String.String():      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
+	types.Bytes.String():       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
+	types.Bool.String():        mustParseDBool,
+	types.Date.String():        mustParseDDate,
+	types.Time.String():        mustParseDTime,
+	types.Timestamp.String():   mustParseDTimestamp,
+	types.TimestampTZ.String(): mustParseDTimestampTZ,
+	types.Interval.String():    mustParseDInterval,
+	types.JSON.String():        mustParseDJSON,
 }
 
-func typeSet(tys ...types.T) map[types.T]struct{} {
-	set := make(map[types.T]struct{}, len(tys))
+func typeSet(tys ...types.T) map[string]struct{} {
+	set := make(map[string]struct{}, len(tys))
 	for _, t := range tys {
-		set[t] = struct{}{}
+		set[t.String()] = struct{}{}
 	}
 	return set
 }
@@ -269,7 +269,7 @@ func typeSet(tys ...types.T) map[types.T]struct{} {
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	testCases := []struct {
 		c            *tree.StrVal
-		parseOptions map[types.T]struct{}
+		parseOptions map[string]struct{}
 	}{
 		{
 			c:            tree.NewStrVal("abc 世界"),
@@ -343,11 +343,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			}
 			parseableCount++
 
-			if _, isExpected := test.parseOptions[availType]; !isExpected {
+			if _, isExpected := test.parseOptions[availType.String()]; !isExpected {
 				t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
 					i, availType, test.c, res)
 			} else {
-				expectedDatum := parseFuncs[availType](t, test.c.RawString())
+				expectedDatum := parseFuncs[availType.String()](t, test.c.RawString())
 				evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 				defer evalCtx.Stop(context.Background())
 				if res.Compare(evalCtx, expectedDatum) != 0 {

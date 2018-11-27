@@ -27,8 +27,9 @@ import (
 func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
-	switch t {
-	case types.Bytes:
+	// TODO(bram): Speed this up?
+	switch {
+	case types.Bytes.Identical(t):
 		d = NewDBytes(DBytes(s))
 	default:
 		switch t := t.(type) {
@@ -56,45 +57,44 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtParseDatums.
 func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	switch t {
-	case types.Bytes:
+	if types.Bytes.Identical(t) {
 		return ParseDByte(s)
-	default:
-		return ParseStringAs(t, s, evalCtx)
 	}
+	return ParseStringAs(t, s, evalCtx)
 }
 
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
-	switch t {
-	case types.BitArray:
+	// TODO(bram): speed this up?
+	switch {
+	case types.BitArray.Identical(t):
 		return ParseDBitArray(s)
-	case types.Bool:
+	case types.Bool.Identical(t):
 		return ParseDBool(s)
-	case types.Date:
+	case types.Date.Identical(t):
 		return ParseDDate(ctx, s)
-	case types.Decimal:
+	case types.Decimal.Identical(t):
 		return ParseDDecimal(s)
-	case types.Float:
+	case types.Float.Identical(t):
 		return ParseDFloat(s)
-	case types.INet:
+	case types.INet.Identical(t):
 		return ParseDIPAddrFromINetString(s)
-	case types.Int:
+	case types.Int.Identical(t):
 		return ParseDInt(s)
-	case types.Interval:
+	case types.Interval.Identical(t):
 		return ParseDInterval(s)
-	case types.JSON:
+	case types.JSON.Identical(t):
 		return ParseDJSON(s)
-	case types.String:
+	case types.String.Identical(t):
 		return NewDString(s), nil
-	case types.Time:
+	case types.Time.Identical(t):
 		return ParseDTime(ctx, s)
-	case types.Timestamp:
+	case types.Timestamp.Identical(t):
 		return ParseDTimestamp(ctx, s, time.Microsecond)
-	case types.TimestampTZ:
+	case types.TimestampTZ.Identical(t):
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
-	case types.UUID:
+	case types.UUID.Identical(t):
 		return ParseDUuidFromString(s)
 	default:
 		return nil, nil

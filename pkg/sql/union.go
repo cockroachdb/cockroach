@@ -147,14 +147,14 @@ func (p *planner) newUnionNode(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.Typ.Equivalent(r.Typ) || l.Typ == types.Unknown || r.Typ == types.Unknown) {
+		if !(l.Typ.Equivalent(r.Typ) || types.Unknown.Identical(l.Typ) || types.Unknown.Identical(r.Typ)) {
 			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", typ)
 		}
-		if l.Typ == types.Unknown {
+		if types.Unknown.Identical(l.Typ) {
 			unionColumns[i].Typ = r.Typ
 		}
 	}

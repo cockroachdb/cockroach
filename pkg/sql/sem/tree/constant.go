@@ -64,7 +64,7 @@ func isConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired != types.Any {
+	if !types.Any.Identical(desired) {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, desired)
@@ -248,8 +248,9 @@ func (expr *NumVal) DesirableTypes() []types.T {
 
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
-	switch typ {
-	case types.Int:
+	// TODO(bram): speed this up.
+	switch {
+	case types.Int.Identical(typ):
 		// We may have already set expr.resInt in AsInt64.
 		if expr.resInt == 0 {
 			if _, err := expr.AsInt64(); err != nil {
@@ -257,14 +258,14 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		}
 		return &expr.resInt, nil
-	case types.Float:
+	case types.Float.Identical(typ):
 		f, _ := constant.Float64Val(expr.Value)
 		if expr.Negative {
 			f = -f
 		}
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
-	case types.Decimal:
+	case types.Decimal.Identical(typ):
 		dd := &expr.resDecimal
 		s := expr.OrigString
 		if s == "" {
@@ -304,12 +305,12 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			dd.Negative = expr.Negative
 		}
 		return dd, nil
-	case types.Oid,
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegType:
+	case types.Oid.Identical(typ),
+		types.RegClass.Identical(typ),
+		types.RegNamespace.Identical(typ),
+		types.RegProc.Identical(typ),
+		types.RegProcedure.Identical(typ),
+		types.RegType.Identical(typ):
 
 		d, err := expr.ResolveAsType(ctx, types.Int)
 		if err != nil {
@@ -326,7 +327,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 func intersectTypeSlices(xs, ys []types.T) (out []types.T) {
 	for _, x := range xs {
 		for _, y := range ys {
-			if x == y {
+			if x.Identical(y) {
 				out = append(out, x)
 			}
 		}
@@ -472,13 +473,14 @@ func (expr *StrVal) DesirableTypes() []types.T {
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
 	if expr.scannedAsBytes {
 		// We're looking at typing a byte literal constant into some value type.
-		switch typ {
-		case types.Bytes:
+		// TODO(bram): speed this up.
+		switch {
+		case types.Bytes.Identical(typ):
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
-		case types.UUID:
+		case types.UUID.Identical(typ):
 			return ParseDUuidFromBytes([]byte(expr.s))
-		case types.String:
+		case types.String.Identical(typ):
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
@@ -486,14 +488,15 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 	}
 
 	// Typing a string literal constant into some value type.
-	switch typ {
-	case types.String:
+	// TODO(bram): speed this up.
+	switch {
+	case types.String.Identical(typ):
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
-	case types.Name:
+	case types.Name.Identical(typ):
 		expr.resString = DString(expr.s)
 		return NewDNameFromDString(&expr.resString), nil
-	case types.Bytes:
+	case types.Bytes.Identical(typ):
 		return ParseDByte(expr.s)
 	}
 

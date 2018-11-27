@@ -519,5 +519,5 @@ func (cb *constraintsBuilder) makeStringPrefixSpan(
 // mixed-type comparisons because if they become index constraints, we would
 // generate incorrect encodings (#4313).
 func (cb *constraintsBuilder) verifyType(col opt.ColumnID, typ types.T) bool {
-	return typ == types.Unknown || cb.md.ColumnType(col).Equivalent(typ)
+	return types.Unknown.Identical(typ) || cb.md.ColumnType(col).Equivalent(typ)
 }

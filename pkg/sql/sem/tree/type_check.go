@@ -279,7 +279,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Unknown) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || types.Unknown.Identical(typ)) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -316,7 +316,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Unknown || rightReturn == types.Unknown {
+	if types.Unknown.Identical(leftReturn) || types.Unknown.Identical(rightReturn) {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -335,7 +335,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != types.Any {
+		if !types.Any.Identical(desired) {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
@@ -523,7 +523,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t == types.Unknown {
+	if types.IsStringType(t) || types.Unknown.Identical(t) {
 		expr.Expr = subExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
@@ -793,7 +793,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	// as an argument.
 	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
 		for _, expr := range typedSubExprs {
-			if expr.ResolvedType() == types.Unknown {
+			if types.Unknown.Identical(expr.ResolvedType()) {
 				return DNull, nil
 			}
 		}
@@ -809,7 +809,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired != types.Any {
+		if !types.Any.Identical(desired) {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
@@ -1138,7 +1138,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn == types.Unknown {
+		if types.Unknown.Identical(exprReturn) {
 			return DNull, nil
 		}
 	}
@@ -1147,7 +1147,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != types.Any {
+		if !types.Any.Identical(desired) {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
@@ -1247,7 +1247,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == types.Any {
+		if types.Any.Identical(desiredParam) {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.TArray{Typ: desiredParam}
@@ -1433,7 +1433,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ == types.Unknown || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(types.Unknown.Identical(typ) || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1497,7 +1497,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType() == types.Unknown || retType == types.Unknown {
+		if types.Unknown.Identical(leftTyped.ResolvedType()) || types.Unknown.Identical(retType) {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1529,7 +1529,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft == types.Unknown || rightReturn == types.Unknown {
+		if types.Unknown.Identical(cmpTypeLeft) || types.Unknown.Identical(rightReturn) {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 
@@ -1668,7 +1668,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Unknown || rightReturn == types.Unknown {
+	if types.Unknown.Identical(leftReturn) || types.Unknown.Identical(rightReturn) {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1765,14 +1765,14 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType != types.Unknown {
+			if returnType := typedExpr.ResolvedType(); !types.Unknown.Identical(returnType) {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType == types.Unknown {
+		if types.Unknown.Identical(firstValidType) {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1788,7 +1788,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Unknown) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || types.Unknown.Identical(typ)) {
 				return nil, nil, unexpectedTypeError{exprs[i], firstValidType, typ}
 			}
 			typedExprs[i] = typedExpr
@@ -1838,7 +1838,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 	}
 
 	// If typ is not a wildcard, all consts try to become typ.
-	if typ != types.Any {
+	if !types.Any.Identical(typ) {
 		all := true
 		for _, i := range s.constIdxs {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
@@ -1875,7 +1875,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
 			return nil, unexpectedTypeError{s.exprs[i], reqTyp, typ}
 		}
-		if reqTyp == types.Any {
+		if types.Any.Identical(reqTyp) {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}

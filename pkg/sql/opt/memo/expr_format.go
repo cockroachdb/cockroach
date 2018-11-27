@@ -394,7 +394,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			fmt.Fprintf(f.Buffer, format, args...)
 		}
 
-		if typ != types.Any {
+		if !types.Any.Identical(typ) {
 			writeProp("type=%s", typ)
 		}
 

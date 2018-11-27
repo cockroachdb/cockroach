@@ -45,18 +45,19 @@ func TOidToType(ct *TOid) types.T {
 // OidTypeToColType produces an TOid equivalent to the given
 // Datum type.
 func OidTypeToColType(t types.T) *TOid {
-	switch t {
-	case types.Oid:
+	// TODO(bram): This could probably be sped up.
+	switch {
+	case types.Oid.Identical(t):
 		return Oid
-	case types.RegClass:
+	case types.RegClass.Identical(t):
 		return RegClass
-	case types.RegNamespace:
+	case types.RegNamespace.Identical(t):
 		return RegNamespace
-	case types.RegProc:
+	case types.RegProc.Identical(t):
 		return RegProc
-	case types.RegProcedure:
+	case types.RegProcedure.Identical(t):
 		return RegProcedure
-	case types.RegType:
+	case types.RegType.Identical(t):
 		return RegType
 	default:
 		panic(fmt.Sprintf("unexpected type: %v", t))
@@ -67,45 +68,45 @@ func OidTypeToColType(t types.T) *TOid {
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
 func DatumTypeToColumnType(t types.T) (T, error) {
-	switch t {
-	case types.Bool:
+	// TODO(bram) This might be faster to just do a single type lookup.
+	switch {
+	case types.Bool.Identical(t):
 		return Bool, nil
-	case types.BitArray:
+	case types.BitArray.Identical(t):
 		return VarBit, nil
-	case types.Int:
+	case types.Int.Identical(t):
 		return Int, nil
-	case types.Float:
+	case types.Float.Identical(t):
 		return Float8, nil
-	case types.Decimal:
+	case types.Decimal.Identical(t):
 		return Decimal, nil
-	case types.Timestamp:
+	case types.Timestamp.Identical(t):
 		return Timestamp, nil
-	case types.TimestampTZ:
+	case types.TimestampTZ.Identical(t):
 		return TimestampWithTZ, nil
-	case types.Interval:
+	case types.Interval.Identical(t):
 		return Interval, nil
-	case types.JSON:
+	case types.JSON.Identical(t):
 		return JSON, nil
-	case types.UUID:
+	case types.UUID.Identical(t):
 		return UUID, nil
-	case types.INet:
+	case types.INet.Identical(t):
 		return INet, nil
-	case types.Date:
+	case types.Date.Identical(t):
 		return Date, nil
-	case types.Time:
+	case types.Time.Identical(t):
 		return Time, nil
-	case types.String:
+	case types.String.Identical(t):
 		return String, nil
-	case types.Name:
+	case types.Name.Identical(t):
 		return Name, nil
-	case types.Bytes:
+	case types.Bytes.Identical(t):
 		return Bytes, nil
-	case types.Oid,
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegType:
+	case types.Oid.Identical(t),
+		types.RegClass.Identical(t),
+		types.RegNamespace.Identical(t),
+		types.RegProc.Identical(t),
+		types.RegType.Identical(t):
 		return OidTypeToColType(t), nil
 	}
 

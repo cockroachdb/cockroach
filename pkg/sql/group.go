@@ -838,7 +838,7 @@ func (a *aggregateFuncHolder) isDistinct() bool {
 }
 
 func aggregateFuncsEqual(a, b *aggregateFuncHolder) bool {
-	return a.funcName == b.funcName && a.resultType == b.resultType &&
+	return a.funcName == b.funcName && a.resultType.Identical(b.resultType) &&
 		a.argRenderIdx == b.argRenderIdx && a.filterRenderIdx == b.filterRenderIdx
 }
 

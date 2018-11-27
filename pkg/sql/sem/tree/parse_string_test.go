@@ -27,102 +27,148 @@ import (
 // TestParseDatumStringAs tests that datums are roundtrippable between
 // printing with FmtParseDatums and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
-	tests := map[types.T][]string{
-		types.Bool: {
-			"true",
-			"false",
+	tests := []struct {
+		typ   types.T
+		exprs []string
+	}{
+		{
+			typ: types.Bool,
+			exprs: []string{
+				"true",
+				"false",
+			},
 		},
-		types.Bytes: {
-			`\x`,
-			`\x00`,
-			`\xff`,
-			`\xffff`,
-			fmt.Sprintf(`\x%x`, "abc"),
+		{
+			typ: types.Bytes,
+			exprs: []string{
+				`\x`,
+				`\x00`,
+				`\xff`,
+				`\xffff`,
+				fmt.Sprintf(`\x%x`, "abc"),
+			},
 		},
-		types.Date: {
-			"2001-01-01",
+		{
+			typ: types.Date,
+			exprs: []string{
+				"2001-01-01",
+			},
 		},
-		types.Decimal: {
-			"0.0",
-			"1.0",
-			"-1.0",
-			strconv.FormatFloat(math.MaxFloat64, 'G', -1, 64),
-			strconv.FormatFloat(math.SmallestNonzeroFloat64, 'G', -1, 64),
-			strconv.FormatFloat(-math.MaxFloat64, 'G', -1, 64),
-			strconv.FormatFloat(-math.SmallestNonzeroFloat64, 'G', -1, 64),
-			"1E+1000",
-			"1E-1000",
-			"Infinity",
-			"-Infinity",
-			"NaN",
+		{
+			typ: types.Decimal,
+			exprs: []string{
+				"0.0",
+				"1.0",
+				"-1.0",
+				strconv.FormatFloat(math.MaxFloat64, 'G', -1, 64),
+				strconv.FormatFloat(math.SmallestNonzeroFloat64, 'G', -1, 64),
+				strconv.FormatFloat(-math.MaxFloat64, 'G', -1, 64),
+				strconv.FormatFloat(-math.SmallestNonzeroFloat64, 'G', -1, 64),
+				"1E+1000",
+				"1E-1000",
+				"Infinity",
+				"-Infinity",
+				"NaN",
+			},
 		},
-		types.Float: {
-			"0.0",
-			"-0.0",
-			"1.0",
-			"-1.0",
-			strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64),
-			strconv.FormatFloat(math.SmallestNonzeroFloat64, 'g', -1, 64),
-			strconv.FormatFloat(-math.MaxFloat64, 'g', -1, 64),
-			strconv.FormatFloat(-math.SmallestNonzeroFloat64, 'g', -1, 64),
-			"+Inf",
-			"-Inf",
-			"NaN",
+		{
+			typ: types.Float,
+			exprs: []string{
+				"0.0",
+				"-0.0",
+				"1.0",
+				"-1.0",
+				strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64),
+				strconv.FormatFloat(math.SmallestNonzeroFloat64, 'g', -1, 64),
+				strconv.FormatFloat(-math.MaxFloat64, 'g', -1, 64),
+				strconv.FormatFloat(-math.SmallestNonzeroFloat64, 'g', -1, 64),
+				"+Inf",
+				"-Inf",
+				"NaN",
+			},
 		},
-		types.INet: {
-			"127.0.0.1",
+		{
+			typ: types.INet,
+			exprs: []string{
+				"127.0.0.1",
+			},
 		},
-		types.Int: {
-			"1",
-			"0",
-			"-1",
-			strconv.Itoa(math.MaxInt64),
-			strconv.Itoa(math.MinInt64),
+		{
+			typ: types.Int,
+			exprs: []string{
+				"1",
+				"0",
+				"-1",
+				strconv.Itoa(math.MaxInt64),
+				strconv.Itoa(math.MinInt64),
+			},
 		},
-		types.Interval: {
-			"1h",
-			"-1m",
-			"2y3mon",
+		{
+			typ: types.Interval,
+			exprs: []string{
+				"1h",
+				"-1m",
+				"2y3mon",
+			},
 		},
-		types.JSON: {
-			"{}",
-			"[]",
-			"null",
-			"1",
-			"1.0",
-			`""`,
+		{
+			typ: types.JSON,
+			exprs: []string{
+				"{}",
+				"[]",
+				"null",
+				"1",
+				"1.0",
+				`""`,
+			},
 		},
-		types.String: {
-			"",
-			"abc",
-			"abc\x00",
+		{
+			typ: types.String,
+			exprs: []string{
+				"",
+				"abc",
+				"abc\x00",
+			},
 		},
-		types.Time: {
-			"01:02:03",
-			"02:03:04.123456",
+		{
+			typ: types.Time,
+			exprs: []string{
+				"01:02:03",
+				"02:03:04.123456",
+			},
 		},
-		types.Timestamp: {
-			"2001-01-01 01:02:03+00:00",
-			"2001-01-01 02:03:04.123456+00:00",
+		{
+			typ: types.Timestamp,
+			exprs: []string{
+				"2001-01-01 01:02:03+00:00",
+				"2001-01-01 02:03:04.123456+00:00",
+			},
 		},
-		types.TimestampTZ: {
-			"2001-01-01 01:02:03+00:00",
-			"2001-01-01 02:03:04.123456+00:00",
+		{
+			typ: types.TimestampTZ,
+			exprs: []string{
+				"2001-01-01 01:02:03+00:00",
+				"2001-01-01 02:03:04.123456+00:00",
+			},
 		},
-		types.UUID: {
-			uuid.MakeV4().String(),
+		{
+			typ: types.UUID,
+			exprs: []string{
+				uuid.MakeV4().String(),
+			},
 		},
 	}
+
 	evalCtx := NewTestingEvalContext(nil)
-	for typ, exprs := range tests {
-		t.Run(typ.String(), func(t *testing.T) {
-			for _, s := range exprs {
+	for _, test := range tests {
+		t.Run(test.typ.String(), func(t *testing.T) {
+			for _, s := range test.exprs {
 				t.Run(fmt.Sprintf("%q", s), func(t *testing.T) {
-					d, err := ParseDatumStringAs(typ, s, evalCtx)
+					d, err := ParseDatumStringAs(test.typ, s, evalCtx)
 					if err != nil {
 						t.Fatal(err)
 					}
-					if d.ResolvedType() != typ {
+					if !d.ResolvedType().Identical(test.typ) {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtParseDatums)

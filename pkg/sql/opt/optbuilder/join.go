@@ -407,7 +407,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
 		var typ types.T
-		if leftCol.typ != types.Unknown {
+		if !types.Unknown.Identical(leftCol.typ) {
 			typ = leftCol.typ
 		} else {
 			typ = rightCol.typ

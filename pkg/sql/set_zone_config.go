@@ -107,11 +107,13 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			return nil, err
 		}
 
-		switch typ := yamlConfig.ResolvedType(); typ {
-		case types.Unknown:
+		typ := yamlConfig.ResolvedType()
+		// TODO(bram): speed this up.
+		switch {
+		case types.Unknown.Identical(typ):
 			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
-		case types.String:
-		case types.Bytes:
+		case types.String.Identical(typ):
+		case types.Bytes.Identical(typ):
 		default:
 			return nil, fmt.Errorf("zone config must be of type string or bytes, not %s", typ)
 		}

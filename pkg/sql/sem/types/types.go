@@ -15,7 +15,6 @@
 package types
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/lib/pq/oid"
@@ -24,11 +23,18 @@ import (
 // T represents a SQL type.
 type T interface {
 	fmt.Stringer
+
 	// Equivalent returns whether the receiver and the other type are equivalent.
 	// We say that two type patterns are "equivalent" when they are structurally
 	// equivalent given that a wildcard is equivalent to any type. When neither
-	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type equality.
+	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type
+	// equality.
 	Equivalent(other T) bool
+
+	// Identical return whether the receiver and the other type are identical
+	// types. This function should be used in lieu of the == operator.
+	Identical(other T) bool
+
 	// FamilyEqual returns whether the receiver and the other type have the same
 	// constructor.
 	FamilyEqual(other T) bool
@@ -47,42 +53,41 @@ type T interface {
 
 var (
 	// Unknown is the type of an expression that statically evaluates to
-	// NULL. Can be compared with ==.
+	// NULL.
 	Unknown T = tUnknown{}
-	// Bool is the type of a DBool. Can be compared with ==.
+	// Bool is the type of a DBool.
 	Bool T = tBool{}
-	// BitArray is the type of a DBitArray. Can be compared with ==.
+	// BitArray is the type of a DBitArray.
 	BitArray T = tBitArray{}
-	// Int is the type of a DInt. Can be compared with ==.
+	// Int is the type of a DInt.
 	Int T = tInt{}
-	// Float is the type of a DFloat. Can be compared with ==.
+	// Float is the type of a DFloat.
 	Float T = tFloat{}
-	// Decimal is the type of a DDecimal. Can be compared with ==.
+	// Decimal is the type of a DDecimal.
 	Decimal T = tDecimal{}
-	// String is the type of a DString. Can be compared with ==.
+	// String is the type of a DString.
 	String T = tString{}
-	// Bytes is the type of a DBytes. Can be compared with ==.
+	// Bytes is the type of a DBytes.
 	Bytes T = tBytes{}
-	// Date is the type of a DDate. Can be compared with ==.
+	// Date is the type of a DDate.
 	Date T = tDate{}
-	// Time is the type of a DTime. Can be compared with ==.
+	// Time is the type of a DTime.
 	Time T = tTime{}
-	// Timestamp is the type of a DTimestamp. Can be compared with ==.
+	// Timestamp is the type of a DTimestamp.
 	Timestamp T = tTimestamp{}
-	// TimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
+	// TimestampTZ is the type of a DTimestampTZ.
 	TimestampTZ T = tTimestampTZ{}
-	// Interval is the type of a DInterval. Can be compared with ==.
+	// Interval is the type of a DInterval.
 	Interval T = tInterval{}
-	// JSON is the type of a DJSON. Can be compared with ==.
+	// JSON is the type of a DJSON.
 	JSON T = tJSON{}
-	// UUID is the type of a DUuid. Can be compared with ==.
+	// UUID is the type of a DUuid.
 	UUID T = tUUID{}
-	// INet is the type of a DIPAddr. Can be compared with ==.
+	// INet is the type of a DIPAddr.
 	INet T = tINet{}
 	// AnyArray is the type of a DArray with a wildcard parameterized type.
-	// Can be compared with ==.
-	AnyArray T = TArray{Any}
-	// Any can be any type. Can be compared with ==.
+	AnyArray T = makeTArray(Any)
+	// Any can be any type.
 	Any T = tAny{}
 
 	// AnyNonArray contains all non-array types.
@@ -105,387 +110,221 @@ var (
 		Oid,
 	}
 
-	// FamCollatedString is the type family of a DString. CANNOT be
-	// compared with ==.
+	// FamCollatedString is the type family of a DString.
 	FamCollatedString T = TCollatedString{}
-	// FamTuple is the type family of a DTuple. CANNOT be compared with ==.
+	// FamTuple is the type family of a DTuple.
 	FamTuple T = TTuple{}
-	// FamArray is the type family of a DArray. CANNOT be compared with ==.
+	// FamArray is the type family of a DArray.
 	FamArray T = TArray{}
-	// FamPlaceholder is the type family of a placeholder. CANNOT be compared
-	// with ==.
+	// FamPlaceholder is the type family of a placeholder.
 	FamPlaceholder T = TPlaceholder{}
 )
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
-type tUnknown struct{}
-
-func (tUnknown) String() string           { return "unknown" }
-func (tUnknown) Equivalent(other T) bool  { return other == Unknown || other == Any }
-func (tUnknown) FamilyEqual(other T) bool { return other == Unknown }
-func (tUnknown) Oid() oid.Oid             { return oid.T_unknown }
-func (tUnknown) SQLName() string          { return "unknown" }
-func (tUnknown) IsAmbiguous() bool        { return true }
-
-type tBool struct{}
-
-func (tBool) String() string           { return "bool" }
-func (tBool) Equivalent(other T) bool  { return UnwrapType(other) == Bool || other == Any }
-func (tBool) FamilyEqual(other T) bool { return UnwrapType(other) == Bool }
-func (tBool) Oid() oid.Oid             { return oid.T_bool }
-func (tBool) SQLName() string          { return "boolean" }
-func (tBool) IsAmbiguous() bool        { return false }
-
-type tInt struct{}
-
-func (tInt) String() string           { return "int" }
-func (tInt) Equivalent(other T) bool  { return UnwrapType(other) == Int || other == Any }
-func (tInt) FamilyEqual(other T) bool { return UnwrapType(other) == Int }
-func (tInt) Oid() oid.Oid             { return oid.T_int8 }
-func (tInt) SQLName() string          { return "bigint" }
-func (tInt) IsAmbiguous() bool        { return false }
-
-type tBitArray struct{}
-
-func (tBitArray) String() string           { return "varbit" }
-func (tBitArray) Equivalent(other T) bool  { return UnwrapType(other) == BitArray || other == Any }
-func (tBitArray) FamilyEqual(other T) bool { return UnwrapType(other) == BitArray }
-func (tBitArray) Oid() oid.Oid             { return oid.T_varbit }
-func (tBitArray) SQLName() string          { return "bit varying" }
-func (tBitArray) IsAmbiguous() bool        { return false }
-
-type tFloat struct{}
-
-func (tFloat) String() string           { return "float" }
-func (tFloat) Equivalent(other T) bool  { return UnwrapType(other) == Float || other == Any }
-func (tFloat) FamilyEqual(other T) bool { return UnwrapType(other) == Float }
-func (tFloat) Oid() oid.Oid             { return oid.T_float8 }
-func (tFloat) SQLName() string          { return "double precision" }
-func (tFloat) IsAmbiguous() bool        { return false }
-
-type tDecimal struct{}
-
-func (tDecimal) String() string { return "decimal" }
-func (tDecimal) Equivalent(other T) bool {
-	return UnwrapType(other) == Decimal || other == Any
+type tAny struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-func (tDecimal) FamilyEqual(other T) bool { return UnwrapType(other) == Decimal }
-func (tDecimal) Oid() oid.Oid             { return oid.T_numeric }
-func (tDecimal) SQLName() string          { return "numeric" }
-func (tDecimal) IsAmbiguous() bool        { return false }
+func (tAny) String() string             { return "anyelement" }
+func (tAny) Identical(other T) bool     { _, ok := other.(tAny); return ok }
+func (tAny) Equivalent(other T) bool    { return true }
+func (t tAny) FamilyEqual(other T) bool { return t.Identical(other) }
+func (tAny) Oid() oid.Oid               { return oid.T_anyelement }
+func (tAny) SQLName() string            { return "anyelement" }
+func (tAny) IsAmbiguous() bool          { return true }
 
-type tString struct{}
-
-func (tString) String() string           { return "string" }
-func (tString) Equivalent(other T) bool  { return UnwrapType(other) == String || other == Any }
-func (tString) FamilyEqual(other T) bool { return UnwrapType(other) == String }
-func (tString) Oid() oid.Oid             { return oid.T_text }
-func (tString) SQLName() string          { return "text" }
-func (tString) IsAmbiguous() bool        { return false }
-
-// TCollatedString is the type of strings with a locale.
-type TCollatedString struct {
-	Locale string
+type tUnknown struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// String implements the fmt.Stringer interface.
-func (t TCollatedString) String() string {
-	return fmt.Sprintf("collatedstring{%s}", t.Locale)
+func (tUnknown) String() string             { return "unknown" }
+func (tUnknown) Identical(other T) bool     { _, ok := other.(tUnknown); return ok }
+func (t tUnknown) FamilyEqual(other T) bool { return t.Identical(other) }
+func (t tUnknown) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tUnknown) Oid() oid.Oid               { return oid.T_unknown }
+func (tUnknown) SQLName() string            { return "unknown" }
+func (tUnknown) IsAmbiguous() bool          { return true }
+
+type tBool struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// Equivalent implements the T interface.
-func (t TCollatedString) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	u, ok := UnwrapType(other).(TCollatedString)
-	if ok {
-		return t.Locale == "" || u.Locale == "" || t.Locale == u.Locale
-	}
-	return false
+func (tBool) String() string             { return "bool" }
+func (tBool) Identical(other T) bool     { _, ok := other.(tBool); return ok }
+func (t tBool) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tBool) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tBool) Oid() oid.Oid               { return oid.T_bool }
+func (tBool) SQLName() string            { return "boolean" }
+func (tBool) IsAmbiguous() bool          { return false }
+
+type tInt struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// FamilyEqual implements the T interface.
-func (TCollatedString) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TCollatedString)
-	return ok
+func (tInt) String() string             { return "int" }
+func (tInt) Identical(other T) bool     { _, ok := other.(tInt); return ok }
+func (t tInt) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tInt) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tInt) Oid() oid.Oid               { return oid.T_int8 }
+func (tInt) SQLName() string            { return "bigint" }
+func (tInt) IsAmbiguous() bool          { return false }
+
+type tBitArray struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// Oid implements the T interface.
-func (TCollatedString) Oid() oid.Oid { return oid.T_text }
+func (tBitArray) String() string             { return "varbit" }
+func (tBitArray) Identical(other T) bool     { _, ok := other.(tBitArray); return ok }
+func (t tBitArray) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tBitArray) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tBitArray) Oid() oid.Oid               { return oid.T_varbit }
+func (tBitArray) SQLName() string            { return "bit varying" }
+func (tBitArray) IsAmbiguous() bool          { return false }
 
-// SQLName implements the T interface.
-func (TCollatedString) SQLName() string { return "text" }
-
-// IsAmbiguous implements the T interface.
-func (t TCollatedString) IsAmbiguous() bool {
-	return t.Locale == ""
+type tFloat struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-type tBytes struct{}
+func (tFloat) String() string             { return "float" }
+func (tFloat) Identical(other T) bool     { _, ok := other.(tFloat); return ok }
+func (t tFloat) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tFloat) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tFloat) Oid() oid.Oid               { return oid.T_float8 }
+func (tFloat) SQLName() string            { return "double precision" }
+func (tFloat) IsAmbiguous() bool          { return false }
 
-func (tBytes) String() string           { return "bytes" }
-func (tBytes) Equivalent(other T) bool  { return UnwrapType(other) == Bytes || other == Any }
-func (tBytes) FamilyEqual(other T) bool { return UnwrapType(other) == Bytes }
-func (tBytes) Oid() oid.Oid             { return oid.T_bytea }
-func (tBytes) SQLName() string          { return "bytea" }
-func (tBytes) IsAmbiguous() bool        { return false }
-
-type tDate struct{}
-
-func (tDate) String() string           { return "date" }
-func (tDate) Equivalent(other T) bool  { return UnwrapType(other) == Date || other == Any }
-func (tDate) FamilyEqual(other T) bool { return UnwrapType(other) == Date }
-func (tDate) Oid() oid.Oid             { return oid.T_date }
-func (tDate) SQLName() string          { return "date" }
-func (tDate) IsAmbiguous() bool        { return false }
-
-type tTime struct{}
-
-func (tTime) String() string           { return "time" }
-func (tTime) Equivalent(other T) bool  { return UnwrapType(other) == Time || other == Any }
-func (tTime) FamilyEqual(other T) bool { return UnwrapType(other) == Time }
-func (tTime) Oid() oid.Oid             { return oid.T_time }
-func (tTime) SQLName() string          { return "time" }
-func (tTime) IsAmbiguous() bool        { return false }
-
-type tTimestamp struct{}
-
-func (tTimestamp) String() string { return "timestamp" }
-func (tTimestamp) Equivalent(other T) bool {
-	return UnwrapType(other) == Timestamp || other == Any
+type tDecimal struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-func (tTimestamp) FamilyEqual(other T) bool { return UnwrapType(other) == Timestamp }
-func (tTimestamp) Oid() oid.Oid             { return oid.T_timestamp }
-func (tTimestamp) SQLName() string          { return "timestamp without time zone" }
-func (tTimestamp) IsAmbiguous() bool        { return false }
+func (tDecimal) String() string             { return "decimal" }
+func (tDecimal) Identical(other T) bool     { _, ok := other.(tDecimal); return ok }
+func (t tDecimal) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tDecimal) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tDecimal) Oid() oid.Oid               { return oid.T_numeric }
+func (tDecimal) SQLName() string            { return "numeric" }
+func (tDecimal) IsAmbiguous() bool          { return false }
 
-type tTimestampTZ struct{}
-
-func (tTimestampTZ) String() string { return "timestamptz" }
-func (tTimestampTZ) Equivalent(other T) bool {
-	return UnwrapType(other) == TimestampTZ || other == Any
+type tString struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-func (tTimestampTZ) FamilyEqual(other T) bool { return UnwrapType(other) == TimestampTZ }
-func (tTimestampTZ) Oid() oid.Oid             { return oid.T_timestamptz }
-func (tTimestampTZ) SQLName() string          { return "timestamp with time zone" }
-func (tTimestampTZ) IsAmbiguous() bool        { return false }
+func (tString) String() string             { return "string" }
+func (tString) Identical(other T) bool     { _, ok := other.(tString); return ok }
+func (t tString) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tString) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tString) Oid() oid.Oid               { return oid.T_text }
+func (tString) SQLName() string            { return "text" }
+func (tString) IsAmbiguous() bool          { return false }
 
-type tInterval struct{}
-
-func (tInterval) String() string { return "interval" }
-func (tInterval) Equivalent(other T) bool {
-	return UnwrapType(other) == Interval || other == Any
+type tBytes struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-func (tInterval) FamilyEqual(other T) bool { return UnwrapType(other) == Interval }
-func (tInterval) Oid() oid.Oid             { return oid.T_interval }
-func (tInterval) SQLName() string          { return "interval" }
-func (tInterval) IsAmbiguous() bool        { return false }
+func (tBytes) String() string             { return "bytes" }
+func (tBytes) Identical(other T) bool     { _, ok := other.(tBytes); return ok }
+func (t tBytes) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tBytes) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tBytes) Oid() oid.Oid               { return oid.T_bytea }
+func (tBytes) SQLName() string            { return "bytea" }
+func (tBytes) IsAmbiguous() bool          { return false }
 
-type tJSON struct{}
-
-func (tJSON) String() string { return "jsonb" }
-func (tJSON) Equivalent(other T) bool {
-	return UnwrapType(other) == JSON || other == Any
+type tDate struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-func (tJSON) FamilyEqual(other T) bool { return UnwrapType(other) == JSON }
-func (tJSON) Oid() oid.Oid             { return oid.T_jsonb }
-func (tJSON) SQLName() string          { return "json" }
-func (tJSON) IsAmbiguous() bool        { return false }
+func (tDate) String() string             { return "date" }
+func (tDate) Identical(other T) bool     { _, ok := other.(tDate); return ok }
+func (t tDate) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tDate) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tDate) Oid() oid.Oid               { return oid.T_date }
+func (tDate) SQLName() string            { return "date" }
+func (tDate) IsAmbiguous() bool          { return false }
 
-type tUUID struct{}
-
-func (tUUID) String() string           { return "uuid" }
-func (tUUID) Equivalent(other T) bool  { return UnwrapType(other) == UUID || other == Any }
-func (tUUID) FamilyEqual(other T) bool { return UnwrapType(other) == UUID }
-func (tUUID) Oid() oid.Oid             { return oid.T_uuid }
-func (tUUID) SQLName() string          { return "uuid" }
-func (tUUID) IsAmbiguous() bool        { return false }
-
-type tINet struct{}
-
-func (tINet) String() string           { return "inet" }
-func (tINet) Equivalent(other T) bool  { return UnwrapType(other) == INet || other == Any }
-func (tINet) FamilyEqual(other T) bool { return UnwrapType(other) == INet }
-func (tINet) Oid() oid.Oid             { return oid.T_inet }
-func (tINet) SQLName() string          { return "inet" }
-func (tINet) IsAmbiguous() bool        { return false }
-
-// TTuple is the type of a DTuple.
-type TTuple struct {
-	Types  []T
-	Labels []string
+type tTime struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// String implements the fmt.Stringer interface.
-func (t TTuple) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("tuple")
-	if t.Types != nil {
-		buf.WriteByte('{')
-		for i, typ := range t.Types {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(typ.String())
-			if t.Labels != nil {
-				buf.WriteString(" AS ")
-				buf.WriteString(t.Labels[i])
-			}
-		}
-		buf.WriteByte('}')
-	}
-	return buf.String()
+func (tTime) String() string             { return "time" }
+func (tTime) Identical(other T) bool     { _, ok := other.(tTime); return ok }
+func (t tTime) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tTime) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tTime) Oid() oid.Oid               { return oid.T_time }
+func (tTime) SQLName() string            { return "time" }
+func (tTime) IsAmbiguous() bool          { return false }
+
+type tTimestamp struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// Equivalent implements the T interface.
-func (t TTuple) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	u, ok := UnwrapType(other).(TTuple)
-	if !ok {
-		return false
-	}
-	if len(t.Types) == 0 || len(u.Types) == 0 {
-		// Tuples that aren't fully specified (have a nil subtype list) are always
-		// equivalent to other tuples, to allow overloads to specify that they take
-		// an arbitrary tuple type.
-		return true
-	}
-	if len(t.Types) != len(u.Types) {
-		return false
-	}
-	for i, typ := range t.Types {
-		if !typ.Equivalent(u.Types[i]) {
-			return false
-		}
-	}
-	return true
+func (tTimestamp) String() string             { return "timestamp" }
+func (tTimestamp) Identical(other T) bool     { _, ok := other.(tTimestamp); return ok }
+func (t tTimestamp) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tTimestamp) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tTimestamp) Oid() oid.Oid               { return oid.T_timestamp }
+func (tTimestamp) SQLName() string            { return "timestamp without time zone" }
+func (tTimestamp) IsAmbiguous() bool          { return false }
+
+type tTimestampTZ struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// FamilyEqual implements the T interface.
-func (TTuple) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TTuple)
-	return ok
+func (tTimestampTZ) String() string             { return "timestamptz" }
+func (tTimestampTZ) Identical(other T) bool     { _, ok := other.(tTimestampTZ); return ok }
+func (t tTimestampTZ) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tTimestampTZ) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tTimestampTZ) Oid() oid.Oid               { return oid.T_timestamptz }
+func (tTimestampTZ) SQLName() string            { return "timestamp with time zone" }
+func (tTimestampTZ) IsAmbiguous() bool          { return false }
+
+type tInterval struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// Oid implements the T interface.
-func (TTuple) Oid() oid.Oid { return oid.T_record }
+func (tInterval) String() string             { return "interval" }
+func (tInterval) Identical(other T) bool     { _, ok := other.(tInterval); return ok }
+func (t tInterval) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (tInterval) Oid() oid.Oid               { return oid.T_interval }
+func (t tInterval) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tInterval) SQLName() string            { return "interval" }
+func (tInterval) IsAmbiguous() bool          { return false }
 
-// SQLName implements the T interface.
-func (TTuple) SQLName() string { return "record" }
-
-// IsAmbiguous implements the T interface.
-func (t TTuple) IsAmbiguous() bool {
-	for _, typ := range t.Types {
-		if typ == nil || typ.IsAmbiguous() {
-			return true
-		}
-	}
-	return len(t.Types) == 0
+type tJSON struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// TPlaceholder is the type of a placeholder.
-type TPlaceholder struct {
-	Name string
+func (tJSON) String() string             { return "jsonb" }
+func (tJSON) Identical(other T) bool     { _, ok := other.(tJSON); return ok }
+func (t tJSON) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tJSON) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tJSON) Oid() oid.Oid               { return oid.T_jsonb }
+func (tJSON) SQLName() string            { return "json" }
+func (tJSON) IsAmbiguous() bool          { return false }
+
+type tUUID struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// String implements the fmt.Stringer interface.
-func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.Name) }
+func (tUUID) String() string             { return "uuid" }
+func (tUUID) Identical(other T) bool     { _, ok := other.(tUUID); return ok }
+func (t tUUID) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tUUID) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tUUID) Oid() oid.Oid               { return oid.T_uuid }
+func (tUUID) SQLName() string            { return "uuid" }
+func (tUUID) IsAmbiguous() bool          { return false }
 
-// Equivalent implements the T interface.
-func (t TPlaceholder) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	if other.IsAmbiguous() {
-		return true
-	}
-	u, ok := UnwrapType(other).(TPlaceholder)
-	return ok && t.Name == u.Name
+type tINet struct {
+	_ [0][]byte // Prevents use of the == operator.
 }
 
-// FamilyEqual implements the T interface.
-func (TPlaceholder) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TPlaceholder)
-	return ok
-}
-
-// Oid implements the T interface.
-func (TPlaceholder) Oid() oid.Oid { panic("TPlaceholder.Oid() is undefined") }
-
-// SQLName implements the T interface.
-func (TPlaceholder) SQLName() string { panic("TPlaceholder.SQLName() is undefined") }
-
-// IsAmbiguous implements the T interface.
-func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
-
-// TArray is the type of a DArray.
-type TArray struct{ Typ T }
-
-func (a TArray) String() string { return a.Typ.String() + "[]" }
-
-// Equivalent implements the T interface.
-func (a TArray) Equivalent(other T) bool {
-	if other == Any {
-		return true
-	}
-	if u, ok := UnwrapType(other).(TArray); ok {
-		return a.Typ.Equivalent(u.Typ)
-	}
-	return false
-}
-
-// FamilyEqual implements the T interface.
-func (TArray) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TArray)
-	return ok
-}
-
-const noArrayType = 0
-
-// ArrayOids is a set of all oids which correspond to an array type.
-var ArrayOids = map[oid.Oid]struct{}{}
-
-func init() {
-	for _, v := range oidToArrayOid {
-		ArrayOids[v] = struct{}{}
-	}
-}
-
-// Oid implements the T interface.
-func (a TArray) Oid() oid.Oid {
-	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
-		return o
-	}
-	return noArrayType
-}
-
-// SQLName implements the T interface.
-func (a TArray) SQLName() string {
-	return a.Typ.SQLName() + "[]"
-}
-
-// IsAmbiguous implements the T interface.
-func (a TArray) IsAmbiguous() bool {
-	return a.Typ == nil || a.Typ.IsAmbiguous()
-}
-
-type tAny struct{}
-
-func (tAny) String() string           { return "anyelement" }
-func (tAny) Equivalent(other T) bool  { return true }
-func (tAny) FamilyEqual(other T) bool { return other == Any }
-func (tAny) Oid() oid.Oid             { return oid.T_anyelement }
-func (tAny) SQLName() string          { return "anyelement" }
-func (tAny) IsAmbiguous() bool        { return true }
+func (tINet) String() string             { return "inet" }
+func (tINet) Identical(other T) bool     { _, ok := other.(tINet); return ok }
+func (t tINet) FamilyEqual(other T) bool { return t.Identical(UnwrapType(other)) }
+func (t tINet) Equivalent(other T) bool  { return t.FamilyEqual(other) || Any.Identical(other) }
+func (tINet) Oid() oid.Oid               { return oid.T_inet }
+func (tINet) SQLName() string            { return "inet" }
+func (tINet) IsAmbiguous() bool          { return false }
 
 // IsStringType returns true iff t is String
 // or a collated string type.
@@ -501,27 +340,22 @@ func IsStringType(t T) bool {
 // IsValidArrayElementType returns true if the T
 // can be used in TArray.
 func IsValidArrayElementType(t T) bool {
-	switch t {
-	case JSON:
-		return false
-	default:
-		return true
-	}
+	return !JSON.Identical(t)
 }
 
 // IsDateTimeType returns true if the T is
 // date- or time-related type.
 func IsDateTimeType(t T) bool {
-	switch t {
-	case Date:
+	switch t.(type) {
+	case tDate:
 		return true
-	case Time:
+	case tTime:
 		return true
-	case Timestamp:
+	case tTimestamp:
 		return true
-	case TimestampTZ:
+	case tTimestampTZ:
 		return true
-	case Interval:
+	case tInterval:
 		return true
 	default:
 		return false
@@ -531,12 +365,12 @@ func IsDateTimeType(t T) bool {
 // IsAdditiveType returns true if the T
 // supports addition and subtraction.
 func IsAdditiveType(t T) bool {
-	switch t {
-	case Int:
+	switch t.(type) {
+	case tInt:
 		return true
-	case Float:
+	case tFloat:
 		return true
-	case Decimal:
+	case tDecimal:
 		return true
 	default:
 		return IsDateTimeType(t)

@@ -227,7 +227,7 @@ func typeAsAggregate(e opt.ScalarExpr) types.T {
 func typeCoalesce(e opt.ScalarExpr) types.T {
 	for _, arg := range e.(*CoalesceExpr).Args {
 		childType := arg.DataType()
-		if childType != types.Unknown {
+		if !types.Unknown.Identical(childType) {
 			return childType
 		}
 	}
@@ -247,7 +247,7 @@ func typeCase(e opt.ScalarExpr) types.T {
 	caseExpr := e.(*CaseExpr)
 	for _, when := range caseExpr.Whens {
 		childType := when.DataType()
-		if childType != types.Unknown {
+		if !types.Unknown.Identical(childType) {
 			return childType
 		}
 	}
@@ -293,11 +293,11 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.B
 	for _, binOverloads := range tree.BinOps[bin] {
 		o := binOverloads.(*tree.BinOp)
 
-		if leftType == types.Unknown {
+		if types.Unknown.Identical(leftType) {
 			if rightType.Equivalent(o.RightType) {
 				return o, true
 			}
-		} else if rightType == types.Unknown {
+		} else if types.Unknown.Identical(rightType) {
 			if leftType.Equivalent(o.LeftType) {
 				return o, true
 			}
@@ -340,11 +340,11 @@ func FindComparisonOverload(op opt.Operator, leftType, rightType types.T) (_ *tr
 	for _, cmpOverloads := range tree.CmpOps[comp] {
 		o := cmpOverloads.(*tree.CmpOp)
 
-		if leftType == types.Unknown {
+		if types.Unknown.Identical(leftType) {
 			if rightType.Equivalent(o.RightType) {
 				return o, true
 			}
-		} else if rightType == types.Unknown {
+		} else if types.Unknown.Identical(rightType) {
 			if leftType.Equivalent(o.LeftType) {
 				return o, true
 			}
