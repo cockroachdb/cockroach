@@ -1036,7 +1036,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	input, err = b.ensureColumns(input, ins.InputCols, nil, ins.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, ins.InsertCols, nil, ins.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1053,7 +1053,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	ep := execPlan{root: node}
 	if ins.NeedResults {
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			ep.outputCols.Set(int(ins.InputCols[i]), i)
+			ep.outputCols.Set(int(ins.InsertCols[i]), i)
 		}
 	}
 	return ep, nil
