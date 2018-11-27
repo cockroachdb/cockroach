@@ -1,0 +1,27 @@
+# LogicTest: 5node-dist 5node-dist-opt
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (1, 3), (2, 2)
+
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false
+
+statement ok
+ALTER TABLE ab SPLIT AT VALUES (2)
+
+statement ok
+ALTER TABLE ab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2)
+
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE ab
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /2       1         {1}       1
+/2         NULL     2         {2}       2
+
+statement ok
+SELECT ARRAY(SELECT a FROM ab ORDER BY b)
+
