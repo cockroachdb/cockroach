@@ -734,12 +734,21 @@ CREATE TABLE crdb_internal.%s (
 );
 `
 
+func (p *planner) makeSessionsRequest(ctx context.Context) serverpb.ListSessionsRequest {
+	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+	if err := p.RequireSuperUser(ctx, "list sessions"); err == nil {
+		// The root user can see all sessions.
+		req.Username = ""
+	}
+	return req
+}
+
 // crdbInternalLocalQueriesTable exposes the list of running queries
 // on the current node. The results are dependent on the current user.
 var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		req := p.makeSessionsRequest(ctx)
 		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -753,7 +762,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		req := p.makeSessionsRequest(ctx)
 		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -836,7 +845,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		req := p.makeSessionsRequest(ctx)
 		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -850,7 +859,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		req := p.makeSessionsRequest(ctx)
 		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err

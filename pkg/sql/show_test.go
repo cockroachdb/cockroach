@@ -19,12 +19,14 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/cockroachdb/apd"
@@ -734,6 +736,76 @@ func TestShowSessions(t *testing.T) {
 	if errcount != 1 {
 		t.Fatalf("expected 1 error row, got %d", errcount)
 	}
+}
+
+func TestShowSessionPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Prepare a non-root session.
+	_ = sqlDBroot.Exec(t, `CREATE USER nonroot`)
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User("nonroot"),
+		Host:     s.ServingAddr(),
+		RawQuery: "sslmode=disable",
+	}
+	rawSQLDBnonroot, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rawSQLDBnonroot.Close()
+	sqlDBnonroot := sqlutils.MakeSQLRunner(rawSQLDBnonroot)
+
+	// Ensure the non-root session is open.
+	sqlDBnonroot.Exec(t, `SELECT version()`)
+
+	t.Run("root", func(t *testing.T) {
+		// Verify that the root session can use SHOW SESSIONS properly and
+		// can observe other sessions than its own.
+		rows := sqlDBroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var userName string
+			if err := rows.Scan(&userName); err != nil {
+				t.Fatal(err)
+			}
+			counts[userName]++
+		}
+		if counts[security.RootUser] == 0 {
+			t.Fatalf("root session is unable to see its own session: %+v", counts)
+		}
+		if counts["nonroot"] == 0 {
+			t.Fatal("root session is unable to see non-root session")
+		}
+	})
+
+	t.Run("non-root", func(t *testing.T) {
+		// Verify that the non-root session can use SHOW SESSIONS properly
+		// and cannot observe other sessions than its own.
+		rows := sqlDBnonroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var userName string
+			if err := rows.Scan(&userName); err != nil {
+				t.Fatal(err)
+			}
+			counts[userName]++
+		}
+		if counts["nonroot"] == 0 {
+			t.Fatal("non-root session is unable to see its own session")
+		}
+		if len(counts) > 1 {
+			t.Fatalf("non-root session is able to see other sessions: %+v", counts)
+		}
+	})
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
