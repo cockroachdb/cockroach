@@ -1196,8 +1196,11 @@ INSERT INTO a SELECT a, b::float, c::decimal, 'foo' FROM abc ORDER BY b
 ----
 insert a
  ├── columns: <none>
- ├── table columns: x:1(int) y:2(float) z:3(decimal) s:4(string)
- ├── input columns: a:5(int) b:8(float) c:9(decimal) "?column?":10(string)
+ ├── insert:
+ │    ├──  a:5(int) => x:1(int)
+ │    ├──  b:8(float) => y:2(float)
+ │    ├──  c:9(decimal) => z:3(decimal)
+ │    └──  "?column?":10(string) => s:4(string)
  ├── internal-ordering: +8 opt(10)
  └── sort
       ├── columns: a:5(int!null) b:8(float) c:9(decimal) "?column?":10(string!null)
@@ -1217,8 +1220,10 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *] ORDE
 ----
 insert abc
  ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
- ├── table columns: a:1(int) b:2(int) c:3(int)
- ├── input columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── insert:
+ │    ├──  x:4(int!null) => a:1(int)
+ │    ├──  y:5(int!null) => b:2(int)
+ │    └──  z:6(int!null) => c:3(int)
  ├── internal-ordering: +5,+6
  ├── ordering: +5
  └── sort
@@ -1234,8 +1239,10 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz WHERE y=z ORDER BY z RETURNING 
 ----
 insert abc
  ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
- ├── table columns: a:1(int) b:2(int) c:3(int)
- ├── input columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── insert:
+ │    ├──  x:4(int!null) => a:1(int)
+ │    ├──  y:5(int!null) => b:2(int)
+ │    └──  z:6(int!null) => c:3(int)
  ├── internal-ordering: +(5|6)
  ├── side-effects, mutations
  ├── key: (4,6)
