@@ -3346,7 +3346,12 @@ func (s *Store) processRaftRequestWithReplica(
 	ctx context.Context, r *Replica, req *RaftMessageRequest,
 ) *roachpb.Error {
 	if verboseRaftLoggingEnabled() {
-		log.Infof(ctx, "incoming raft message:\n%s", raftDescribeMessage(req.Message, raftEntryFormatter))
+		status := r.RaftStatus()
+		log.Infof(ctx, "raft status: %s", status)
+		s := raftDescribeMessage(req.Message, raftEntryFormatter)
+		for _, line := range strings.Split(s, "\n") {
+			log.Infof(ctx, "incoming raft msg: %s", line)
+		}
 	}
 
 	if req.Message.Type == raftpb.MsgSnap {
