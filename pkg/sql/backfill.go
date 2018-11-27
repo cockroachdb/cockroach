@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -48,17 +49,23 @@ const (
 	// DeleteRange().
 	indexTruncateChunkSize = 600
 
-	// indexBackfillChunkSize is the maximum number index entries backfilled
-	// per chunk during an index backfill. The index backfill involves a table
-	// scan, and a number of individual ops presented in a batch. This value
-	// is smaller than ColumnTruncateAndBackfillChunkSize, because it involves
-	// a number of individual index row updates that can be scattered over
-	// many ranges.
-	indexBackfillChunkSize = 100
+	// indexTxnBackfillChunkSize is the maximum number index entries backfilled
+	// per chunk during an index backfill done in a txn. The index backfill
+	// involves a table scan, and a number of individual ops presented in a batch.
+	// This value is smaller than ColumnTruncateAndBackfillChunkSize, because it
+	// involves a number of individual index row updates that can be scattered
+	// over many ranges.
+	indexTxnBackfillChunkSize = 100
 
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
 	checkpointInterval = 10 * time.Second
+)
+
+var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
+	"sql.backfill.bulk.batch_size",
+	"number of rows to process at a time during bulk index backfill",
+	1000000,
 )
 
 var _ sort.Interface = columnsByID{}
@@ -182,7 +189,17 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Add new indexes.
 	if len(addedIndexDescs) > 0 {
-		if err := sc.backfillIndexes(ctx, evalCtx, lease, version); err != nil {
+		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
+		bulk := backfill.BulkWriteIndex.Get(&sc.settings.SV)
+		if bulk {
+			for _, u := range addedIndexDescs {
+				if u.Unique {
+					bulk = false
+					break
+				}
+			}
+		}
+		if err := sc.backfillIndexes(ctx, evalCtx, lease, version, bulk); err != nil {
 			return err
 		}
 	}
@@ -464,13 +481,19 @@ func (sc *SchemaChanger) backfillIndexes(
 	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
+	useBulkChunkSize bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
 	}
 
+	chunkSize := int64(indexTxnBackfillChunkSize)
+	if useBulkChunkSize {
+		chunkSize = indexBulkBackfillChunkSize.Get(&sc.settings.SV)
+	}
+
 	return sc.distBackfill(
-		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
+		ctx, evalCtx, lease, version, indexBackfill, chunkSize,
 		backfill.IndexMutationFilter)
 }
 
@@ -641,7 +664,7 @@ func indexBackfillInTxn(
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx,
-			txn, tableDesc, sp, indexBackfillChunkSize, false /* alsoCommit */, traceKV)
+			txn, tableDesc, sp, indexTxnBackfillChunkSize, false /* alsoCommit */, traceKV)
 		if err != nil {
 			return err
 		}

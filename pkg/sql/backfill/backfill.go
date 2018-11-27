@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -357,6 +358,21 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 	return ib.fetcher.Init(
 		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &ib.alloc, tableArgs,
 	)
+}
+
+// BulkWriteIndex enables experimental bulk-ingestion of index entries.
+var BulkWriteIndex = settings.RegisterBoolSetting(
+	"sql.backfill.bulk.enabled", "backfill indexes if able in bulk via addsstable", false,
+)
+
+// ContainsUnique returns true if any index being added is unique.
+func (ib *IndexBackfiller) ContainsUnique() bool {
+	for _, i := range ib.added {
+		if i.Unique {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
