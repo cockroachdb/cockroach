@@ -699,12 +699,24 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
-	typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
 	subqueryRecv := recv.clone()
+	var typ sqlbase.ColTypeInfo
 	var rows *sqlbase.RowContainer
 	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
 		typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
+	} else {
+		// Apply the PlanToStreamColMap projection to the ResultTypes to get the
+		// final set of output types for the subquery. The reason this is necessary
+		// is that the output schema of a query sometimes contains columns necessary
+		// to merge the streams, but that aren't required by the final output of the
+		// query. These get projected out, so we need to similarly adjust the
+		// expected result types of the subquery here.
+		colTypes := make([]sqlbase.ColumnType, len(subqueryPhysPlan.PlanToStreamColMap))
+		for i, resIdx := range subqueryPhysPlan.PlanToStreamColMap {
+			colTypes[i] = subqueryPhysPlan.ResultTypes[resIdx]
+		}
+		typ = sqlbase.ColTypeInfoFromColTypes(colTypes)
 	}
 	rows = sqlbase.NewRowContainer(subqueryMemAccount, typ, 0)
 	defer rows.Close(evalCtx.Ctx())
