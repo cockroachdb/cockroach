@@ -1130,6 +1130,10 @@ ui-generate: pkg/ui/distccl/bindata.go
 ui-fonts:
 	pkg/ui/scripts/font-gen
 
+.PHONY: ui-topo
+ui-topo: pkg/ui/yarn.installed
+	pkg/ui/scripts/topo.js
+
 .PHONY: ui-lint
 ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(STYLINT) -c .stylintrc styl
