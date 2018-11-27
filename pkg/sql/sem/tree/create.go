@@ -1126,6 +1126,7 @@ type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
 	Table       TableName
+	AsOf        AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -1138,4 +1139,9 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.Table)
+
+	if node.AsOf.Expr != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(&node.AsOf)
+	}
 }

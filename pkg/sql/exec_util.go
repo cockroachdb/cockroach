@@ -663,7 +663,7 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 // that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
-// ShowTrace (of a Select statement), and Scrub.
+// ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
 //
 // max is a lower bound on what the transaction's timestamp will be.
 // Used to check that the user didn't specify a timestamp in the future.
@@ -694,6 +694,11 @@ func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp
 		asOf = s.AsOf
 	case *tree.Export:
 		return p.isAsOf(s.Query, max)
+	case *tree.CreateStats:
+		if s.AsOf.Expr == nil {
+			return nil, nil
+		}
+		asOf = s.AsOf
 	default:
 		return nil, nil
 	}

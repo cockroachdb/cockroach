@@ -320,7 +320,7 @@ create_ddl_stmt ::=
 	| create_sequence_stmt
 
 create_stats_stmt ::=
-	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name
+	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name opt_as_of_clause
 
 opt_with_clause ::=
 	with_clause
