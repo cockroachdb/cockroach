@@ -197,6 +197,7 @@ enum ConstraintValidity {
 
 message ForeignKeyReference {
   enum Action {
+    option (gogoproto.goproto_enum_stringer) = false;
     NO_ACTION = 0;
     RESTRICT = 1;
     SET_NULL = 2;

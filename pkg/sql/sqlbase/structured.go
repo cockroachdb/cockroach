@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -2390,6 +2391,22 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
 	tree.SetNull:    ForeignKeyReference_SET_NULL,
 	tree.Cascade:    ForeignKeyReference_CASCADE,
+}
+
+// String implements the fmt.Stringer interface.
+func (x ForeignKeyReference_Action) String() string {
+	switch x {
+	case ForeignKeyReference_RESTRICT:
+		return "RESTRICT"
+	case ForeignKeyReference_SET_DEFAULT:
+		return "SET DEFAULT"
+	case ForeignKeyReference_SET_NULL:
+		return "SET NULL"
+	case ForeignKeyReference_CASCADE:
+		return "CASCADE"
+	default:
+		return strconv.Itoa(int(x))
+	}
 }
 
 var _ opt.Column = &ColumnDescriptor{}
