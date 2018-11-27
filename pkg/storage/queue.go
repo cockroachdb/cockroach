@@ -73,6 +73,8 @@ type replicaItem struct {
 	processing bool
 	requeue    bool // enqueue again after processing?
 	callbacks  []processCallback
+
+	added time.Time // time when first added (for logging purposes)
 }
 
 // setProcessing moves the item from an enqueued state to a processing state.
@@ -531,7 +533,7 @@ func (bq *baseQueue) addInternalLocked(
 	if log.V(3) {
 		log.Infof(ctx, "adding: priority=%0.3f", priority)
 	}
-	item = &replicaItem{value: desc.RangeID, priority: priority}
+	item = &replicaItem{value: desc.RangeID, priority: priority, added: timeutil.Now()}
 	bq.addLocked(item)
 
 	// If adding this replica has pushed the queue past its maximum size,
@@ -626,7 +628,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 				// Acquire from the process semaphore.
 				bq.processSem <- struct{}{}
 
-				repl := bq.pop()
+				repl, tAdded := bq.pop()
 				if repl != nil {
 					annotatedCtx := repl.AnnotateCtx(ctx)
 					if stopper.RunAsyncTask(
@@ -635,11 +637,18 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 							// Release semaphore when finished processing.
 							defer func() { <-bq.processSem }()
 
+							if elapsed := timeutil.Since(tAdded); elapsed > 10*time.Second {
+								log.Infof(ctx, "took %s for %s queue processing to start", elapsed, bq.name)
+							}
 							start := timeutil.Now()
 							err := bq.processReplica(annotatedCtx, repl)
 
 							duration := timeutil.Since(start)
 							bq.recordProcessDuration(annotatedCtx, duration)
+
+							if duration > 10*time.Second {
+								log.Infof(ctx, "took %s for %s queue to carry out processing", duration, bq.name)
+							}
 
 							bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 						}) != nil {
@@ -948,12 +957,12 @@ func (bq *baseQueue) addToPurgatoryLocked(
 // replicaItem corresponding to the returned Replica will be moved to the
 // "processing" state and should be cleaned up by calling
 // finishProcessingReplica once the Replica has finished processing.
-func (bq *baseQueue) pop() *Replica {
+func (bq *baseQueue) pop() (_ *Replica, queuedTime time.Time) {
 	bq.mu.Lock()
 	for {
 		if bq.mu.priorityQ.Len() == 0 {
 			bq.mu.Unlock()
-			return nil
+			return nil, time.Time{}
 		}
 		item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
 		item.setProcessing()
@@ -962,7 +971,7 @@ func (bq *baseQueue) pop() *Replica {
 
 		repl, _ := bq.store.GetReplica(item.value)
 		if repl != nil {
-			return repl
+			return repl, item.added
 		}
 
 		// Replica not found, remove from set and try again.
@@ -1024,7 +1033,7 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 	defer bq.lockProcessing()()
 
 	ctx := bq.AnnotateCtx(context.TODO())
-	for repl := bq.pop(); repl != nil; repl = bq.pop() {
+	for repl, _ := bq.pop(); repl != nil; repl, _ = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
 		err := bq.processReplica(annotatedCtx, repl)
 		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
