@@ -1600,6 +1600,13 @@ func TestSystemZoneConfigs(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					// Disable LBS because when the scan is happening at the rate it's happening
+					// below, it's possible that one of the system ranges trigger a split.
+					DisableLoadBasedSplitting: true,
+				},
+			},
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
 			ScanInterval: 50 * time.Millisecond,
