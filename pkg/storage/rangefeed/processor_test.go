@@ -17,6 +17,7 @@ package rangefeed
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"runtime"
 	"sort"
 	"sync"
@@ -26,13 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,7 +146,7 @@ func newTestProcessor(rtsIter engine.SimpleIterator) (*Processor, *stop.Stopper)
 	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
 }
 
-func TestProcessor(t *testing.T) {
+func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	p, stopper := newTestProcessor(nil /* rtsIter */)
 	defer stopper.Stop(context.Background())
@@ -180,6 +181,7 @@ func TestProcessor(t *testing.T) {
 		r1Stream,
 		r1ErrC,
 	)
+	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
@@ -191,7 +193,7 @@ func TestProcessor(t *testing.T) {
 
 	// Test checkpoint with one registration.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -204,7 +206,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedValue(
 			roachpb.Key("c"),
@@ -220,14 +222,14 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 
 	// Test intent that is aborted with one registration.
 	txn1 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOps(writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Abort.
 	p.ConsumeLogicalOps(abortIntentOp(txn1))
@@ -239,11 +241,11 @@ func TestProcessor(t *testing.T) {
 	txn2 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOps(writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Forward closed timestamp. Should now be stuck on intent.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -253,7 +255,7 @@ func TestProcessor(t *testing.T) {
 	)
 	// Update the intent. Should forward resolved timestamp.
 	p.ConsumeLogicalOps(updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -265,7 +267,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOps(
 		commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13}, []byte("ival")),
 	)
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{
 			rangeFeedValue(
@@ -293,6 +295,7 @@ func TestProcessor(t *testing.T) {
 		r2Stream,
 		r2ErrC,
 	)
+	p.syncEventAndRegistrations()
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
@@ -304,7 +307,7 @@ func TestProcessor(t *testing.T) {
 
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 		hlc.Timestamp{WallTime: 20},
@@ -316,7 +319,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 22}, []byte("val2")),
 	)
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	valEvent := []*roachpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("k"),
 		roachpb.Value{
@@ -331,7 +334,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")),
 	)
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	valEvent2 := []*roachpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("v"),
 		roachpb.Value{
@@ -389,7 +392,17 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		r1Stream,
 		r1ErrC,
 	)
-	require.Equal(t, 1, p.Len())
+	r2Stream := newTestStream()
+	r2ErrC := make(chan *roachpb.Error, 1)
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		hlc.Timestamp{WallTime: 1},
+		nil, /* catchUpIter */
+		r2Stream,
+		r2ErrC,
+	)
+	p.syncEventAndRegistrations()
+	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -400,6 +413,11 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 	// Block its Send method and fill up the processor's input channel.
 	unblock := r1Stream.BlockSend()
+	defer func() {
+		if unblock != nil {
+			unblock()
+		}
+	}()
 	fillEventC := func() {
 		// Need one more message to fill the channel because the first one
 		// will be Sent to the stream and block the processor goroutine.
@@ -412,8 +430,14 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		}
 	}
 	fillEventC()
+	p.syncEventC()
 
-	// Consume one more event. Should block.
+	// Wait for just the unblocked registration to catch up. This prevents the
+	// race condition where this registration overflows anyway due to the rapid
+	// event consumption and small buffer size.
+	p.syncEventAndRegistrationSpan(spXY)
+
+	// Consume one more event. Should not block.
 	consumedC := make(chan struct{})
 	go func() {
 		p.ConsumeLogicalOps(
@@ -421,31 +445,29 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		)
 		close(consumedC)
 	}()
-	select {
-	case <-consumedC:
-		t.Errorf("ConsumeLogicalOps should have blocked")
-	case <-time.After(p.EventChanTimeout / 2):
-	}
+	<-consumedC
+	p.syncEventC()
+
+	// Wait for just the unblocked registration to catch up.
+	p.syncEventAndRegistrationSpan(spXY)
+	events := r2Stream.Events()
+	require.Equal(t, testProcessorEventCCap+3, len(events))
+	require.Equal(t, 2, p.reg.Len())
 
 	// Unblock the send channel. The events should quickly be consumed.
 	unblock()
+	unblock = nil
 	<-consumedC
-	p.syncEventC()
-	require.Equal(t, testProcessorEventCCap+2, len(r1Stream.Events()))
-
-	// Block the Send method again and fill up the processor's input channel.
-	unblock = r1Stream.BlockSend()
-	fillEventC()
-
-	// Consume one more event. Should tear down processor after timeout.
-	sent := p.ConsumeLogicalOps(
-		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 15}, []byte("val")),
-	)
-	require.False(t, sent)
-
-	// Registration should be rejected with error.
-	unblock()
-	require.Equal(t, newErrBufferCapacityExceeded().Message, (<-r1ErrC).Message)
+	p.syncEventAndRegistrations()
+	// One event was dropped due to overflow.
+	require.Equal(t, testProcessorEventCCap+1, len(r1Stream.Events()))
+	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
+	testutils.SucceedsSoon(t, func() error {
+		if p.Len() != 1 {
+			return fmt.Errorf("processor had %d regs, wanted %d", p.reg.Len(), 1)
+		}
+		return nil
+	})
 }
 
 // TestProcessorInitializeResolvedTimestamp tests that when a Processor is given
@@ -492,6 +514,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		r1Stream,
 		make(chan *roachpb.Error, 1),
 	)
+	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
 
 	// The registration should be provided a checkpoint immediately with an
@@ -522,7 +545,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	// timestamp. Txn1 has intents at many times but the unresolvedIntentQueue
 	// tracks its latest, which is 19, so the resolved timestamp is
 	// 19.FloorPrev() = 18.
-	p.syncEventC()
+	p.syncEventAndRegistrations()
 	require.True(t, p.rts.IsInit())
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, p.rts.Get())
 
@@ -532,150 +555,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		hlc.Timestamp{WallTime: 18},
 	)}
 	require.Equal(t, chEvent, r1Stream.Events())
-}
-
-func TestProcessorCatchUpScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor(nil /* rtsIter */)
-	defer stopper.Stop(context.Background())
-
-	// The resolved timestamp should be initialized.
-	p.syncEventC()
-	require.True(t, p.rts.IsInit())
-	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
-
-	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	catchUpIter := newTestIterator([]engine.MVCCKeyValue{
-		makeKV("a", "val1", 10),
-		makeInline("b", "val2"),
-		makeIntent("c", txn1, "txnKey1", 15),
-		makeKV("c", "val3", 11),
-		makeKV("c", "val4", 9),
-		makeIntent("d", txn2, "txnKey2", 21),
-		makeKV("d", "val5", 20),
-		makeKV("d", "val6", 19),
-		makeInline("g", "val7"),
-		makeKV("m", "val8", 1),
-		makeIntent("n", txn1, "txnKey1", 12),
-		makeIntent("r", txn1, "txnKey1", 19),
-		makeKV("r", "val9", 4),
-		makeIntent("w", txn1, "txnKey1", 3),
-		makeInline("x", "val10"),
-		makeIntent("z", txn2, "txnKey2", 21),
-		makeKV("z", "val11", 4),
-	})
-	catchUpIter.block = make(chan struct{})
-
-	// Add a registration with the catch-up iterator.
-	r1Stream := newTestStream()
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("w")},
-		hlc.Timestamp{WallTime: 2}, // too large to see key @ m
-		catchUpIter,
-		r1Stream,
-		make(chan *roachpb.Error, 1),
-	)
-	require.Equal(t, 1, p.Len())
-
-	// The registration should not have gotten an initial checkpoint.
-	require.Nil(t, r1Stream.Events())
-
-	// Forward the closed timestamp. The resolved timestamp should be
-	// initialized and should move forward, but the registration should
-	// still not get a checkpoint.
-	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
-	p.syncEventC()
-	require.True(t, p.rts.IsInit())
-	require.Equal(t, hlc.Timestamp{WallTime: 20}, p.rts.Get())
-	require.Nil(t, r1Stream.Events())
-
-	// Let the scan proceed.
-	close(catchUpIter.block)
-	<-catchUpIter.done
-	require.True(t, catchUpIter.closed)
-
-	// Synchronize the event channel then verify that the registration's stream
-	// was sent all values in its range and the resolved timestamp once the
-	// catch-up scan was complete.
-	p.syncEventC()
-	expEvents := []*roachpb.RangeFeedEvent{
-		rangeFeedValue(
-			roachpb.Key("a"),
-			roachpb.Value{RawBytes: []byte("val1"), Timestamp: hlc.Timestamp{WallTime: 10}},
-		),
-		rangeFeedValue(
-			roachpb.Key("b"),
-			roachpb.Value{RawBytes: []byte("val2"), Timestamp: hlc.Timestamp{WallTime: 0}},
-		),
-		rangeFeedValue(
-			roachpb.Key("c"),
-			roachpb.Value{RawBytes: []byte("val3"), Timestamp: hlc.Timestamp{WallTime: 11}},
-		),
-		rangeFeedValue(
-			roachpb.Key("c"),
-			roachpb.Value{RawBytes: []byte("val4"), Timestamp: hlc.Timestamp{WallTime: 9}},
-		),
-		rangeFeedValue(
-			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val5"), Timestamp: hlc.Timestamp{WallTime: 20}},
-		),
-		rangeFeedValue(
-			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val6"), Timestamp: hlc.Timestamp{WallTime: 19}},
-		),
-		rangeFeedValue(
-			roachpb.Key("g"),
-			roachpb.Value{RawBytes: []byte("val7"), Timestamp: hlc.Timestamp{WallTime: 0}},
-		),
-		rangeFeedValue(
-			roachpb.Key("r"),
-			roachpb.Value{RawBytes: []byte("val9"), Timestamp: hlc.Timestamp{WallTime: 4}},
-		),
-		rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
-			hlc.Timestamp{WallTime: 20},
-		),
-	}
-	require.Equal(t, expEvents, r1Stream.Events())
-
-	// Forward the closed timestamp. The registration should get a checkpoint
-	// this time.
-	p.ForwardClosedTS(hlc.Timestamp{WallTime: 25})
-	p.syncEventC()
-	require.True(t, p.rts.IsInit())
-	require.Equal(t, hlc.Timestamp{WallTime: 25}, p.rts.Get())
-	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
-			hlc.Timestamp{WallTime: 25},
-		)},
-		r1Stream.Events(),
-	)
-
-	// Add a second registration, this time with an iterator that will throw an
-	// error.
-	r2Stream := newTestStream()
-	r2ErrC := make(chan *roachpb.Error, 1)
-	errCatchUpIter := newErrorIterator(errors.New("iteration error"))
-	errCatchUpIter.block = make(chan struct{})
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		errCatchUpIter,
-		r2Stream,
-		r2ErrC,
-	)
-	require.Equal(t, 2, p.Len())
-
-	// Wait for the scan to hit the error and finish.
-	close(errCatchUpIter.block)
-	<-errCatchUpIter.done
-	require.True(t, errCatchUpIter.closed)
-
-	// The registration should throw an error and be unregistered.
-	require.NotNil(t, <-r2ErrC)
-	p.syncEventC()
-	require.Equal(t, 1, p.Len())
 }
 
 func TestProcessorTxnPushAttempt(t *testing.T) {
@@ -938,6 +817,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+	p.syncEventAndRegistrations()
 
 	// Verify that no registrations were given operations
 	// from before they registered.
@@ -949,5 +829,30 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 		firstVal := events[1].GetValue().(*roachpb.RangeFeedValue)
 		firstIdx := firstVal.Value.Timestamp.WallTime
 		require.Equal(t, expFirstIdx, firstIdx)
+	}
+}
+
+// syncEventAndRegistrations waits for all previously sent events to be
+// processed *and* for all registration output loops to fully process their own
+// internal buffers.
+func (p *Processor) syncEventAndRegistrations() {
+	p.syncEventAndRegistrationSpan(all)
+}
+
+// syncEventAndRegistrations waits for all previously sent events to be
+// processed *and* for all registration output loops for registrations
+// overlapping the given span to fully process their own internal buffers.
+func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
+	syncC := make(chan struct{})
+	select {
+	case p.eventC <- event{syncC: syncC, testRegCatchupSpan: span}:
+		select {
+		case <-syncC:
+		// Synchronized.
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		}
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
 	}
 }
