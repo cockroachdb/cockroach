@@ -218,25 +218,25 @@ memo (optimized, ~5KB, required=[presentation: y:2,z:5] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:5] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
- │    │    └── cost: 1076.67
+ │    │    └── cost: 1076.70
  │    └── []
  │         ├── best: (project G2 G3 x y)
- │         └── cost: 1076.67
+ │         └── cost: 1076.70
  ├── G2: (select G4 G5)
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (select G4="[ordering: +1,-2]" G5)
- │    │    └── cost: 1070.00
+ │    │    └── cost: 1070.02
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1070.00
+ │         └── cost: 1070.02
  ├── G3: (projections G6)
  ├── G4: (scan a,cols=(1,2))
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1060.00
+ │    │    └── cost: 1060.01
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1060.00
+ │         └── cost: 1060.01
  ├── G5: (filters G7)
  ├── G6: (minus G8 G9)
  ├── G7: (gt G8 G10)
@@ -267,25 +267,25 @@ memo (optimized, ~4KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G1: (project G2 G3 y z)
  │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1145.87
+ │    │    └── cost: 1145.91
  │    └── []
  │         ├── best: (project G2 G3 y z)
- │         └── cost: 1083.33
+ │         └── cost: 1083.36
  ├── G2: (select G4 G5)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1142.54
+ │    │    └── cost: 1142.57
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1080.00
+ │         └── cost: 1080.02
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1289.32
+ │    │    └── cost: 1289.34
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
- │         └── cost: 1070.00
+ │         └── cost: 1070.01
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable x)
@@ -534,14 +534,14 @@ memo (optimized, ~1KB, required=[presentation: tree:5,field:8,description:9,colu
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │    └── [presentation: tree:5,field:8,description:9,columns:10,ordering:11]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │         └── cost: 1299.32
+ │         └── cost: 1299.35
  └── G2: (scan a)
       ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1299.32
+      │    └── cost: 1299.34
       └── []
            ├── best: (scan a)
-           └── cost: 1080.00
+           └── cost: 1080.01
 
 # --------------------------------------------------
 # With Ordinality
@@ -554,14 +554,14 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +5])
  ├── G1: (row-number G2)
  │    ├── [presentation: y:2] [ordering: +5]
  │    │    ├── best: (row-number G2)
- │    │    └── cost: 1060.00
+ │    │    └── cost: 1060.02
  │    └── []
  │         ├── best: (row-number G2)
- │         └── cost: 1060.00
+ │         └── cost: 1060.02
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1050.01
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
@@ -570,19 +570,19 @@ memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +6])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +6]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1299.32
+ │    │    └── cost: 1299.36
  │    └── []
  │         ├── best: (project G2 G3 y)
- │         └── cost: 1080.00
+ │         └── cost: 1080.03
  ├── G2: (row-number G4)
  │    └── []
  │         ├── best: (row-number G4)
- │         └── cost: 1060.00
+ │         └── cost: 1060.02
  ├── G3: (projections G5)
  ├── G4: (scan a,cols=(2))
  │    └── []
  │         ├── best: (scan a,cols=(2))
- │         └── cost: 1050.00
+ │         └── cost: 1050.01
  ├── G5: (unary-minus G6)
  └── G6: (variable ordinality)
 
@@ -593,14 +593,14 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +5])
  ├── G1: (row-number G2)
  │    ├── [presentation: y:2] [ordering: +5]
  │    │    ├── best: (row-number G2)
- │    │    └── cost: 1060.00
+ │    │    └── cost: 1060.02
  │    └── []
  │         ├── best: (row-number G2)
- │         └── cost: 1060.00
+ │         └── cost: 1060.02
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1050.01
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
@@ -609,17 +609,17 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +2,+5])
  ├── G1: (row-number G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+5]
  │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1279.35
  │    └── []
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1279.32
+ │         └── cost: 1279.35
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1269.32
+      │    └── cost: 1269.34
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1050.01
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
@@ -628,17 +628,17 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +5])
  ├── G1: (row-number G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +5]
  │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1279.35
  │    └── []
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1279.32
+ │         └── cost: 1279.35
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1269.32
+      │    └── cost: 1269.34
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1050.01
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
@@ -647,14 +647,14 @@ memo (optimized, ~3KB, required=[presentation: y:2] [ordering: -5])
  ├── G1: (row-number G2)
  │    ├── [presentation: y:2] [ordering: -5]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1279.32
+ │    │    └── cost: 1279.35
  │    └── []
  │         ├── best: (row-number G2)
- │         └── cost: 1060.00
+ │         └── cost: 1060.02
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1050.01
 
 # --------------------------------------------------
 # Merge Join
