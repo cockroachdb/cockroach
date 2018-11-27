@@ -7023,7 +7023,8 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 // SplitByLoadEnabled returns whether load based splitting is enabled.
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
-		r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionLoadSplits)
+		r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionLoadSplits) &&
+		!r.store.TestingKnobs().DisableLoadBasedSplitting
 }
 
 // needsSplitByLoadLocked returns two bools indicating first, whether

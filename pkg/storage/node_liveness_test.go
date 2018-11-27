@@ -785,6 +785,9 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// Disable replica rebalancing to ensure that the liveness range
 				// does not get out of the first node (we'll be shutting down nodes).
 				DisableReplicaRebalancing: true,
+				// Disable LBS because when the scan is happening at the rate it's happening
+				// below, it's possible that one of the system ranges trigger a split.
+				DisableLoadBasedSplitting: true,
 			},
 		},
 		RaftConfig: base.RaftConfig{
