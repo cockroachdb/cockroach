@@ -38,17 +38,20 @@
   fill $link-color
 
 .node-status-icon
-  display inline
-  padding-right 9px
+  display inline-block
+  margin-right 6px
   font-size 6px
   line-height 14px
   vertical-align middle
+  width 6px
+  height 6px
+  border-radius 3px
 
   &--dead
-    color $alert-color
+    background-color $alert-color
   &--suspect
-    color $warning-color
+    background-color $warning-color
   &--decommissioning
-    color $warning-color
+    background-color $warning-color
   &--healthy
-    color $healthy-color
+    background-color $healthy-color
