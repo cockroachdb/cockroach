@@ -263,8 +263,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if len(colList) == 0 {
 			tp.Child("columns: <none>")
 		}
-		f.formatColList(e, tp, "table columns:", tableColsToList(md, t.Table))
-		f.formatColList(e, tp, "input columns:", t.InputCols)
+		tpChild := tp.Child("insert:")
+		f.formatMutation(e, tpChild, t.InputCols, t.Table)
 		if !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
@@ -534,6 +534,27 @@ func (f *ExprFmtCtx) formatColList(
 	}
 }
 
+// formatMutation adds a new treeprinter child for each non-zero column in the
+// given list. Each child shows how the column will be mutated, with the id of
+// the "before" and "after" columns, similar to this:
+//
+//   a:1(int) => x:4(int)
+//
+func (f *ExprFmtCtx) formatMutation(
+	nd RelExpr, tp treeprinter.Node, colList opt.ColList, tabID opt.TableID,
+) {
+	notNullCols := nd.Relational().NotNullCols
+	for i, col := range colList {
+		if col != 0 {
+			f.Buffer.Reset()
+			formatCol(f, "", col, notNullCols)
+			f.Buffer.WriteString(" =>")
+			formatCol(f, "", tabID.ColumnID(i), notNullCols)
+			tp.Child(f.Buffer.String())
+		}
+	}
+}
+
 // formatCol outputs the specified column into the context's buffer using the
 // following format:
 //   label:index(type)
@@ -671,16 +692,4 @@ func isSimpleColumnName(label string) bool {
 		}
 	}
 	return true
-}
-
-// tableColsToList returns the list of columns in the given table, in the same
-// order they're defined in that table. This list contains mutation columns as
-// well as regular columns.
-func tableColsToList(md *opt.Metadata, tabID opt.TableID) opt.ColList {
-	tab := md.Table(tabID)
-	colList := make(opt.ColList, tab.ColumnCount()+tab.MutationColumnCount())
-	for i := range colList {
-		colList[i] = tabID.ColumnID(i)
-	}
-	return colList
 }
