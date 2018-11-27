@@ -108,6 +108,8 @@ type StoreTestingKnobs struct {
 	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
 	// leaves the replicate queue operational.
 	DisableReplicaRebalancing bool
+	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
+	DisableLoadBasedSplitting bool
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance

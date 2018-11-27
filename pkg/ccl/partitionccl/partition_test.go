@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1105,6 +1106,13 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					// Disable LBS because when the scan is happening at the rate it's happening
+					// below, it's possible that one of the system ranges trigger a split.
+					DisableLoadBasedSplitting: true,
+				},
+			},
 			ScanInterval: 100 * time.Millisecond,
 			StoreSpecs: []base.StoreSpec{
 				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},

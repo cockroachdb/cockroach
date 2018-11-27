@@ -264,6 +264,13 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 		}
 	}
 
+	if serverArgs.ScanInterval <= 100*time.Millisecond {
+		// Disable LBS if the server being added has a scan interval arg this low.
+		if _, err := conn.Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	tc.Servers = append(tc.Servers, s.(*server.TestServer))
 	tc.Conns = append(tc.Conns, conn)
 	tc.mu.Lock()
