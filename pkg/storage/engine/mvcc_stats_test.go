@@ -352,12 +352,16 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	txn.Sequence++
 
 	// Annoyingly, the new meta value is actually a little larger thanks to the
-	// sequence number.
+	// sequence number. Also since there was a write previously on the same
+	// transaction, the IntentHistory will add a few bytes to the metadata.
 	m2ValSize := int64((&enginepb.MVCCMetadata{
 		Timestamp: hlc.LegacyTimestamp(ts2),
 		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: value.RawBytes},
+		},
 	}).Size())
-	require.EqualValues(t, m2ValSize, 46)
+	require.EqualValues(t, m2ValSize, 62)
 
 	if err := MVCCDelete(ctx, engine, aggMS, key, ts2, txn); err != nil {
 		t.Fatal(err)
@@ -455,12 +459,16 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	txn.Sequence++
 
 	// Annoyingly, the new meta value is actually a little larger thanks to the
-	// sequence number.
+	// sequence number. Also the value is larger because the previous intent on the
+	// transaction is recorded in the IntentHistory.
 	m2ValSize := int64((&enginepb.MVCCMetadata{
 		Timestamp: hlc.LegacyTimestamp(ts2),
 		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: []byte{}},
+		},
 	}).Size())
-	require.EqualValues(t, m2ValSize, 46)
+	require.EqualValues(t, m2ValSize, 52)
 
 	if err := MVCCPut(ctx, engine, aggMS, key, ts2, value, txn); err != nil {
 		t.Fatal(err)
@@ -749,14 +757,26 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Annoyingly, the new meta value is actually a little larger thanks to the
+		// sequence number.
+		m2ValSizeWithHistory := int64((&enginepb.MVCCMetadata{
+			Timestamp: hlc.LegacyTimestamp(ts3),
+			Txn:       &txn.TxnMeta,
+			IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+				{Sequence: 0, Value: []byte{}},
+			},
+		}).Size())
+
+		require.EqualValues(t, m2ValSizeWithHistory, 52)
+
 		expAggMS := enginepb.MVCCStats{
 			LastUpdateNanos: 3E9,
 			KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 			KeyCount:        1,
-			ValBytes:        m2ValSize + vValSize + vVal2Size,
+			ValBytes:        m2ValSizeWithHistory + vValSize + vVal2Size,
 			ValCount:        2,
 			LiveCount:       1,
-			LiveBytes:       mKeySize + m2ValSize + vKeySize + vVal2Size,
+			LiveBytes:       mKeySize + m2ValSizeWithHistory + vKeySize + vVal2Size,
 			IntentCount:     1,
 			IntentBytes:     vKeySize + vVal2Size,
 			// The original write was previously non-live at 2s because that's where the
@@ -897,6 +917,9 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	m2ValSize := int64((&enginepb.MVCCMetadata{ // 46
 		Timestamp: hlc.LegacyTimestamp(ts201),
 		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: value.RawBytes},
+		},
 	}).Size())
 	if err := MVCCPut(ctx, engine, aggMS, key, ts099, value, txn); err != nil {
 		t.Fatal(err)
@@ -1127,12 +1150,17 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	txn.Sequence++
 
 	// The new meta value grows because we've bumped `txn.Sequence`.
+	// The value also grows as the older value is part of the same
+	// transaction and so contributes to the intent history.
 	mVal2Size := int64((&enginepb.MVCCMetadata{
 		Timestamp: hlc.LegacyTimestamp(ts2),
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: val1.RawBytes},
+		},
 	}).Size())
-	require.EqualValues(t, mVal2Size, 46)
+	require.EqualValues(t, mVal2Size, 62)
 
 	if err := MVCCPut(ctx, engine, aggMS, key, ts2, val2, txn); err != nil {
 		t.Fatal(err)
