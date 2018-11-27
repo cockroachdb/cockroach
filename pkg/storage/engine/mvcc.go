@@ -1179,7 +1179,8 @@ func mvccPutInternal(
 		return errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
 	}
-	// Handle inline put.
+	// Handle inline put. No IntentHistory is required for inline writes
+	// as they aren't allowed within transactions.
 	if putIsInline {
 		if txn != nil {
 			return errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
@@ -1217,6 +1218,7 @@ func mvccPutInternal(
 	var meta *enginepb.MVCCMetadata
 	var maybeTooOldErr error
 	var prevValSize int64
+	var prevValBytes []byte
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
@@ -1237,15 +1239,35 @@ func mvccPutInternal(
 						txn.DeprecatedBatchIndex <= meta.Txn.DeprecatedBatchIndex)) {
 				// Replay error if we encounter an older sequence number or
 				// the same (or earlier) batch index for the same sequence.
+				// TODO(ridwanmsharif, nvanbenschoten): Use the IntentHistory here
+				// to figure out what should happen here.
 				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
+
+			// We need the previous value written here for the intent history.
+			getBuf := newGetBuffer()
+			getBuf.meta = buf.meta // initialize get metadata from what we've already read
+			existingVal, _, _, err := mvccGetInternal(
+				ctx, iter, metaKey, timestamp, true /* consistent */, safeValue, txn, getBuf)
+			if err != nil {
+				return err
+			}
+			if existingVal != nil {
+				prevValBytes = existingVal.RawBytes
+			}
+			prevSequence := meta.Txn.Sequence
 			// Make sure we process valueFn before clearing any earlier
 			// version.  For example, a conditional put within same
 			// transaction should read previous write.
-			if value, err = maybeGetValue(
-				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
-				return err
+			if valueFn != nil {
+				value, err = valueFn(existingVal)
+				if err != nil {
+					return err
+				}
 			}
+			// Release the buffer after using the existing value.
+			getBuf.release()
+
 			// We are replacing our own write intent. If we are writing at
 			// the same timestamp (see comments in else block) we can
 			// overwrite the existing intent; otherwise we must manually
@@ -1258,12 +1280,12 @@ func mvccPutInternal(
 					// move the intent above it. A similar phenomenon occurs in
 					// MVCCResolveWriteIntent.
 					latestKey := MVCCKey{Key: key, Timestamp: metaTimestamp}
-					_, prevVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+					_, prevUnsafeVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
 					if err != nil {
 						return err
 					}
 					if haveNextVersion {
-						prevValSize = int64(len(prevVal))
+						prevValSize = int64(len(prevUnsafeVal))
 					}
 				}
 
@@ -1280,6 +1302,9 @@ func mvccPutInternal(
 				// MVCCMetadata could end up pointing *under* the newer write.
 				timestamp = metaTimestamp
 			}
+			// Since a transaction exists for the MVCCMetadata, we must add the
+			// previous value and sequence to the intent history.
+			meta.AddToIntentHistory(prevSequence, prevValBytes)
 		} else if !metaTimestamp.Less(timestamp) {
 			// This is the case where we're trying to write under a
 			// committed value. Obviously we can't do that, but we can
@@ -1329,8 +1354,9 @@ func mvccPutInternal(
 			txnMeta = &txn.TxnMeta
 		}
 		buf.newMeta = enginepb.MVCCMetadata{
-			Txn:       txnMeta,
-			Timestamp: hlc.LegacyTimestamp(timestamp),
+			Txn:           txnMeta,
+			Timestamp:     hlc.LegacyTimestamp(timestamp),
+			IntentHistory: buf.meta.IntentHistory,
 		}
 	}
 	newMeta := &buf.newMeta
