@@ -414,7 +414,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 
 	// Can and should the raft logs be truncated?
 	if decision.ShouldTruncate() {
-		if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
+		if n := decision.NumNewRaftSnapshots(); true || log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
 			log.Info(ctx, decision)
 		} else {
 			log.VEvent(ctx, 1, decision.String())
