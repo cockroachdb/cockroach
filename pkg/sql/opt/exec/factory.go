@@ -181,6 +181,25 @@ type Factory interface {
 		reqOrdering OutputOrdering,
 	) (Node, error)
 
+	// ConstructZigzagJoin returns a node that performs a zigzag join.
+	// Each side of the join has two kinds of columns that form a prefix
+	// of the specified index: fixed columns (with values specified in
+	// fixedVals), and equal columns (with column ordinals specified in
+	// {left,right}EqCols). The lengths of leftEqCols and rightEqCols
+	// must match.
+	ConstructZigzagJoin(
+		joinType sqlbase.JoinType,
+		leftTable opt.Table,
+		leftIndex opt.Index,
+		rightTable opt.Table,
+		rightIndex opt.Index,
+		leftEqCols []ColumnOrdinal,
+		rightEqCols []ColumnOrdinal,
+		onCond tree.TypedExpr,
+		fixedVals []Node,
+		reqOrdering OutputOrdering,
+	) (Node, error)
+
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If one or the other is not needed, then it is
 	// set to nil.

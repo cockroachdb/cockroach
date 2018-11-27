@@ -622,6 +622,113 @@ func (ef *execFactory) ConstructLookupJoin(
 	return n, nil
 }
 
+// Helper function to create a scanNode from just a table / index descriptor
+func (ef *execFactory) constructScanForZigzag(
+	indexDesc *sqlbase.IndexDescriptor, tableDesc *sqlbase.TableDescriptor,
+) (*scanNode, error) {
+	colCount := len(indexDesc.ColumnIDs) + len(indexDesc.ExtraColumnIDs)
+	colCount += len(indexDesc.StoreColumnIDs)
+
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, colCount),
+	}
+
+	err := indexDesc.RunOverAllColumns(func(c sqlbase.ColumnID) error {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	scan := ef.planner.Scan()
+	if err := scan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+
+	scan.index = indexDesc
+	scan.run.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIndex.ID)
+
+	return scan, nil
+}
+
+// ConstructZigzagJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructZigzagJoin(
+	joinType sqlbase.JoinType,
+	leftTable opt.Table,
+	leftIndex opt.Index,
+	rightTable opt.Table,
+	rightIndex opt.Index,
+	leftEqCols []exec.ColumnOrdinal,
+	rightEqCols []exec.ColumnOrdinal,
+	onCond tree.TypedExpr,
+	fixedVals []exec.Node,
+	reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	leftIndexDesc := leftIndex.(*optIndex).desc
+	leftTabDesc := leftTable.(*optTable).desc
+	rightIndexDesc := rightIndex.(*optIndex).desc
+	rightTabDesc := rightTable.(*optTable).desc
+
+	leftScan, err := ef.constructScanForZigzag(leftIndexDesc, leftTabDesc)
+	if err != nil {
+		return nil, err
+	}
+	rightScan, err := ef.constructScanForZigzag(rightIndexDesc, rightTabDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	n := &zigzagJoinNode{
+		joinType: joinType,
+		props: physicalProps{
+			ordering: sqlbase.ColumnOrdering(reqOrdering),
+		},
+	}
+	if onCond != nil && onCond != tree.DBoolTrue {
+		n.onCond = onCond
+	}
+	n.sides = make([]zigzagJoinSide, 2)
+	n.sides[0].scan = leftScan
+	n.sides[1].scan = rightScan
+	n.sides[0].eqCols = make([]int, len(leftEqCols))
+	n.sides[1].eqCols = make([]int, len(rightEqCols))
+
+	if len(leftEqCols) != len(rightEqCols) {
+		panic("creating zigzag join with unequal number of equated cols")
+	}
+
+	for i, c := range leftEqCols {
+		n.sides[0].eqCols[i] = int(c)
+		n.sides[1].eqCols[i] = int(rightEqCols[i])
+	}
+	// The resultant columns are identical to those from individual index scans; so
+	// reuse the resultColumns generated in the scanNodes.
+	n.columns = make(
+		sqlbase.ResultColumns,
+		0,
+		len(leftScan.resultColumns)+len(rightScan.resultColumns),
+	)
+	n.columns = append(n.columns, leftScan.resultColumns...)
+	n.columns = append(n.columns, rightScan.resultColumns...)
+
+	// Fixed values are the values fixed for a prefix of each side's index columns.
+	// See the comment in pkg/sql/distsqlrun/zigzagjoiner.go for how they are used.
+	for i := range fixedVals {
+		valNode, ok := fixedVals[i].(*valuesNode)
+		if !ok {
+			panic("non-values node passed as fixed value to zigzag join")
+		}
+		if i >= len(n.sides) {
+			panic("more fixed values passed than zigzag join sides")
+		}
+		n.sides[i].fixedVals = valNode
+	}
+	return n, nil
+}
+
 // ConstructLimit is part of the exec.Factory interface.
 func (ef *execFactory) ConstructLimit(
 	input exec.Node, limit, offset tree.TypedExpr,

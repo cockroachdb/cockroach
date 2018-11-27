@@ -293,6 +293,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *scanNode:
 	case *indexJoinNode:
 	case *lookupJoinNode:
+	case *zigzagJoinNode:
 	case *joinNode:
 	case *renderNode:
 	case *groupNode:
@@ -1959,6 +1960,138 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	return plan, nil
 }
 
+// createPlanForZigzagJoin creates a distributed plan for a zigzagJoinNode.
+func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
+	planCtx *PlanningCtx, n *zigzagJoinNode,
+) (plan PhysicalPlan, err error) {
+
+	tables := make([]sqlbase.TableDescriptor, len(n.sides))
+	indexIds := make([]uint32, len(n.sides))
+	cols := make([]distsqlrun.Columns, len(n.sides))
+	numStreamCols := 0
+	for i, side := range n.sides {
+		tables[i] = *side.scan.desc
+		indexIds[i], err = getIndexIdx(side.scan)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+
+		cols[i].Columns = make([]uint32, len(side.eqCols))
+		for j, col := range side.eqCols {
+			cols[i].Columns[j] = uint32(col)
+		}
+
+		numStreamCols += len(side.scan.desc.Columns)
+	}
+
+	zigzagJoinerSpec := distsqlrun.ZigzagJoinerSpec{
+		Tables:    tables,
+		IndexIds:  indexIds,
+		EqColumns: cols,
+		Type:      n.joinType,
+	}
+	zigzagJoinerSpec.FixedValues = make([]*distsqlrun.ValuesCoreSpec, len(n.sides))
+
+	// The fixed values are represented as a Values node with one tuple.
+	for i := range n.sides {
+		valuesPlan, err := dsp.createPlanForValues(planCtx, n.sides[i].fixedVals)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+		zigzagJoinerSpec.FixedValues[i] = valuesPlan.PhysicalPlan.Processors[0].Spec.Core.Values
+	}
+
+	// The internal schema of the zigzag joiner is:
+	//    <side 1 table columns> ... <side 2 table columns> ...
+	// with only the columns in the specified index populated.
+	//
+	// The schema of the zigzagJoinNode is:
+	//    <side 1 index columns> ... <side 2 index columns> ...
+	// so the planToStreamColMap has to basically map index ordinals
+	// to table ordinals.
+	post := distsqlrun.PostProcessSpec{Projection: true}
+	numOutCols := len(n.columns)
+
+	post.OutputColumns = make([]uint32, numStreamCols)
+	types := make([]sqlbase.ColumnType, numStreamCols)
+	planToStreamColMap := makePlanToStreamColMap(numOutCols)
+	colOffset := 0
+	i := 0
+
+	// Populate post.OutputColumns (the implicit projection), result types,
+	// and the planToStreamColMap for index columns from all sides.
+	for _, side := range n.sides {
+		err := side.scan.index.RunOverAllColumns(func(colID sqlbase.ColumnID) error {
+			ord := tableOrdinal(side.scan.desc, colID, side.scan.colCfg.visibility)
+
+			post.OutputColumns[colOffset+ord] = uint32(colOffset + ord)
+			col := side.scan.desc.Columns[ord]
+			types[colOffset+ord] = col.Type
+			planToStreamColMap[i] = colOffset + ord
+			i++
+
+			return nil
+		})
+
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+
+		colOffset += len(side.scan.desc.Columns)
+	}
+
+	// Figure out the node where this zigzag joiner goes.
+	//
+	// TODO(itsbilal): Add support for restricting the Zigzag joiner
+	// to a certain set of spans (similar to the InterleavedReaderJoiner)
+	// on one side. Once that's done, we can split this processor across
+	// multiple nodes here.
+	left := n.sides[0].scan
+	var nodeID roachpb.NodeID
+	if planCtx.isLocal {
+		nodeID = dsp.nodeDesc.NodeID
+	} else {
+		nodeID, err = dsp.getNodeIDForScan(planCtx, left.spans, left.reverse)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+	}
+
+	stageID := plan.NewStageID()
+	// Set the ON condition.
+	if n.onCond != nil {
+		// Note that the ON condition refers to the *internal* columns of the
+		// processor (before the OutputColumns projection).
+		zigzagJoinerSpec.OnExpr, err = distsqlplan.MakeExpression(
+			n.onCond, planCtx, planToStreamColMap,
+		)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+	}
+
+	// Build the PhysicalPlan.
+	proc := distsqlplan.Processor{
+		Node: nodeID,
+		Spec: distsqlrun.ProcessorSpec{
+			Core:    distsqlrun.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
+			Post:    post,
+			Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+			StageID: stageID,
+		},
+	}
+
+	plan.Processors = append(plan.Processors, proc)
+
+	// Each result router correspond to each of the processors we appended.
+	plan.ResultRouters = []distsqlplan.ProcessorIdx{distsqlplan.ProcessorIdx(0)}
+
+	plan.PlanToStreamColMap = planToStreamColMap
+	plan.ResultTypes = types
+
+	return plan, nil
+}
+
 // getTypesForPlanResult returns the types of the elements in the result streams
 // of a plan that corresponds to a given planNode. If planToStreamColMap is nil,
 // a 1-1 mapping is assumed.
@@ -2311,6 +2444,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	case *lookupJoinNode:
 		plan, err = dsp.createPlanForLookupJoin(planCtx, n)
+
+	case *zigzagJoinNode:
+		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
