@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -42,11 +42,12 @@ const (
 
 // init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
 func init() {
-	if _, err := exec.LookPath("gcloud"); err == nil {
-		vm.Providers[ProviderName] = &Provider{}
-	} else {
-		log.Printf("please install the gcloud CLI utilities (https://cloud.google.com/sdk/downloads)")
+	var p vm.Provider = &Provider{}
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		p = flagstub.New(p, "please install the gcloud CLI utilities "+
+			"(https://cloud.google.com/sdk/downloads)")
 	}
+	vm.Providers[ProviderName] = p
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
