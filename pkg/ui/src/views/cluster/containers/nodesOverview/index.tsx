@@ -113,7 +113,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 }
                 return (
                   <div className="sort-table__unbounded-column">
-                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
+                    <div className={"node-status-icon node-status-icon--" + s} title={tooltip} />
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
