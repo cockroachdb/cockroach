@@ -31,7 +31,11 @@ tc_start_block "Lint"
 #
 # TODO(benesch): once GOPATH/pkg goes away because Go static analysis tools can
 # rebuild on demand, remove this. Upstream issue: golang/go#25650.
-COCKROACH_BUILDER_CCACHE= run build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
+COCKROACH_BUILDER_CCACHE= build/builder.sh \
+	stdbuf -eL -oL \
+	make lint 2>&1 \
+	| tee artifacts/lint.log \
+	| go-test-teamcity
 tc_end_block "Lint"
 
 tc_start_block "Test web UI"

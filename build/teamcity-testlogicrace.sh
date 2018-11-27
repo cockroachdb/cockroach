@@ -8,7 +8,8 @@ maybe_ccache
 
 mkdir -p artifacts
 
-build/builder.sh env \
+build/builder.sh \
+	stdbuf -oL -eL \
 	make testrace \
 	PKG=./pkg/sql/logictest \
 	TESTFLAGS='-v' \
@@ -20,7 +21,8 @@ build/builder.sh env \
 # Run each of the optimizer tests again with randomized alternate query plans.
 
 # Perturb the cost of each expression by up to 90%.
-build/builder.sh env \
+build/builder.sh \
+	stdbuf -oL -eL \
 	make testrace \
 	PKG=./pkg/sql/logictest \
 	TESTS='^TestLogic/local-opt$$' \
@@ -42,7 +44,8 @@ optimizer|orms|sequences_distsql|show_trace|subquery_correlated)"
 # Disable each rule with 50% probability.
 for file in $LOGICTESTS; do
 	  if [[ ! "$file" =~ (^|[[:space:]])${EXCLUDE}($|[[:space:]]) ]]; then
-	      build/builder.sh env \
+	      build/builder.sh \
+	        stdbuf -oL -eL \
 	        make testrace \
 	        PKG=./pkg/sql/logictest \
 	        TESTS='^TestLogic/local-opt/'${file}'$$' \
