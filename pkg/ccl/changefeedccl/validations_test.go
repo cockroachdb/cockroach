@@ -28,6 +28,9 @@ func TestValidations(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run("bank", func(t *testing.T) {
@@ -115,4 +118,5 @@ func TestValidations(t *testing.T) {
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
