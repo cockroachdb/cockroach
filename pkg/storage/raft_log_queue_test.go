@@ -382,7 +382,13 @@ func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t,
+		testStoreOpts{
+			// This test was written before test stores could start with more than one
+			// range and was not adapted.
+			createSystemRanges: false,
+		},
+		stopper)
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
@@ -505,7 +511,13 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, _ := createTestStore(t, stopper)
+			store, _ := createTestStore(t,
+				testStoreOpts{
+					// This test was written before test stores could start with more than one
+					// range and was not adapted.
+					createSystemRanges: false,
+				},
+				stopper)
 
 			// Note that turning off the replica scanner does not prevent the queues
 			// from processing entries (in this case specifically the raftLogQueue),

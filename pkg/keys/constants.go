@@ -335,3 +335,13 @@ const (
 	TableCommentType = 1
 	// ColumnCommentType   = 2
 )
+
+// NotQuiteTableIDs is the list of ids from above that are not real tables
+// (i.e. there's no table descriptor). They're grouped here because the
+// cluster bootstrap process needs to create splits for them; splits for the
+// table happen separately.
+var NotQuiteTableIDs []uint32
+
+func init() {
+	NotQuiteTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID}
+}

@@ -1081,6 +1081,9 @@ func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetr
 	dbCtx := client.DefaultDBContext()
 	s := &localtestcluster.LocalTestCluster{
 		DBContext: &dbCtx,
+		// Liveness heartbeat txns mess up the metrics.
+		DontStartLivenessHeartbeat: true,
+		DontCreateSystemRanges:     true,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 

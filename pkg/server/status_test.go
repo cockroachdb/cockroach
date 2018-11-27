@@ -818,6 +818,7 @@ func TestRangeResponse(t *testing.T) {
 
 func TestRemoteDebugModeSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
@@ -829,6 +830,16 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	defer ts.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`SET CLUSTER SETTING server.remote_debugging.mode = 'off'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a split so that there's some records in the system.rangelog table.
+	// The test needs them.
+	if _, err := db.Exec(
+		`set experimental_force_split_at = true;
+		create table t(x int primary key);
+		alter table t split at values(1);`,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -871,7 +882,6 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := serverpb.NewStatusClient(conn)
-	ctx := context.Background()
 	if _, err := client.Gossip(ctx, &serverpb.GossipRequest{}); err != nil {
 		t.Error(err)
 	}
@@ -917,9 +927,11 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		t.Errorf("didn't get any Events")
 	}
 	for _, event := range rangelogResp.Events {
-		if event.Event.Info.NewDesc.StartKey != nil || event.Event.Info.NewDesc.EndKey != nil ||
-			event.Event.Info.UpdatedDesc.StartKey != nil || event.Event.Info.UpdatedDesc.EndKey != nil {
-			t.Errorf("unexpected key value found in rangelog event: %+v", event)
+		if event.Event.Info.NewDesc != nil {
+			if event.Event.Info.NewDesc.StartKey != nil || event.Event.Info.NewDesc.EndKey != nil ||
+				event.Event.Info.UpdatedDesc.StartKey != nil || event.Event.Info.UpdatedDesc.EndKey != nil {
+				t.Errorf("unexpected key value found in rangelog event: %+v", event)
+			}
 		}
 		if strings.Contains(event.PrettyInfo.NewDesc, "Min-System") ||
 			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {

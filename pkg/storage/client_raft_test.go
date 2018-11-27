@@ -71,7 +71,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 
@@ -110,7 +110,15 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
-		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
+		store := createTestStoreWithOpts(t,
+			testStoreOpts{
+				eng: eng,
+				cfg: &storeCfg,
+				// This test was written before the test stores were able to start with
+				// more than one range and is not prepared to handle many ranges.
+				dontCreateSystemRanges: true,
+			},
+			stopper)
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
@@ -147,7 +155,13 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store := createTestStoreWithEngine(t, eng, false, storeCfg, engineStopper)
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{
+			dontBootstrap: true,
+			eng:           eng,
+			cfg:           &storeCfg,
+		},
+		engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -192,7 +206,10 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 				}
 				return nil
 			}
-		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
+		store := createTestStoreWithOpts(
+			t,
+			testStoreOpts{eng: eng, cfg: &storeCfg},
+			stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(keyA, []byte("asdf"))
@@ -216,7 +233,13 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Recover from the engine.
-	store := createTestStoreWithEngine(t, eng, false, storeCfg, stopper)
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{
+			dontBootstrap: true,
+			eng:           eng,
+			cfg:           &storeCfg,
+		},
+		stopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	keyB := roachpb.Key("b")
@@ -235,7 +258,12 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -316,7 +344,13 @@ func TestRestoreReplicas(t *testing.T) {
 	// Allow a replica to use the lease it had before a restart; we don't want
 	// this test to deal with needing to acquire new leases after the restart.
 	sc.TestingKnobs.DontPreventUseOfOldLeaseOnStart = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -497,7 +531,12 @@ func TestFailedReplicaChange(t *testing.T) {
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -593,7 +632,12 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -659,7 +703,12 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			name = "differentTerm"
 		}
 		t.Run(name, func(t *testing.T) {
-			mtc := &multiTestContext{}
+			mtc := &multiTestContext{
+				// This test was written before the multiTestContext started creating many
+				// system ranges at startup, and hasn't been update to take that into
+				// account.
+				startWithSingleRange: true,
+			}
 			defer mtc.Stop()
 			mtc.Start(t, 3)
 			const stoppedStore = 1
@@ -859,7 +908,12 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 5)
 	repl, err := mtc.stores[0].GetReplica(1)
@@ -924,7 +978,13 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// Disable the replica GC queue so that it doesn't accidentally pick up the
 	// removed replica and GC it. We'll explicitly enable it later in the test.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 	rep1, err := mtc.stores[0].GetReplica(1)
@@ -1028,7 +1088,13 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Disable periodic gossip tasks which can move the range 1 lease
 			// unexpectedly.
 			sc.TestingKnobs.DisablePeriodicGossips = true
-			mtc := &multiTestContext{storeConfig: &sc}
+			mtc := &multiTestContext{
+				storeConfig: &sc,
+				// This test was written before the multiTestContext started creating
+				// many system ranges at startup, and hasn't been update to take that
+				// into account.
+				startWithSingleRange: true,
+			}
 			defer mtc.Stop()
 			mtc.Start(t, 3)
 
@@ -1165,7 +1231,13 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	// Disable periodic gossip tasks which can move the range 1 lease
 	// unexpectedly.
 	sc.TestingKnobs.DisablePeriodicGossips = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 5)
 
@@ -1406,6 +1478,10 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
 	mtc.Start(t, numReplicas+extraStores)
@@ -1543,7 +1619,12 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // case in stats already) or doesn't produce a Ready.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1626,7 +1707,12 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 // with a downed node.
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1672,9 +1758,9 @@ func TestProgressWithDownNode(t *testing.T) {
 	verify([]int64{16, 16, 16})
 }
 
-// TestReplicateAddAndRemoveRestart is motivated by issue #8111, which suggests the
-// following test (which verifies the ability of a snapshot with a new replica ID
-// to overwrite existing data):
+// TestReplicateRestartAfterTruncationWithRemoveAndReAdd is motivated by issue
+// #8111, which suggests the following test (which verifies the ability of a
+// snapshot with a new replica ID to overwrite existing data):
 //   - replicate a range to three stores
 //   - stop a store
 //   - remove the stopped store from the range
@@ -1683,7 +1769,7 @@ func TestProgressWithDownNode(t *testing.T) {
 //   - ensure that store can catch up with the rest of the group
 func TestReplicateRestartAfterTruncationWithRemoveAndReAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runReplicateRestartAfterTruncation(t, true)
+	runReplicateRestartAfterTruncation(t, true /* removeBeforeTruncateAndReAdd */)
 }
 
 // TestReplicateRestartAfterTruncation is a variant of
@@ -1692,7 +1778,7 @@ func TestReplicateRestartAfterTruncationWithRemoveAndReAdd(t *testing.T) {
 // without a new replica ID works correctly.
 func TestReplicateRestartAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runReplicateRestartAfterTruncation(t, false)
+	runReplicateRestartAfterTruncation(t, false /* removeBeforeTruncateAndReAdd */)
 }
 
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
@@ -1701,7 +1787,13 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1781,7 +1873,13 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 4)
 
@@ -1903,13 +2001,13 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testReplicaAddRemove(t, true)
+	testReplicaAddRemove(t, true /* addFirst */)
 }
 
 func TestReplicateRemoveAndAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testReplicaAddRemove(t, false)
+	testReplicaAddRemove(t, false /* addFirst */)
 }
 
 // TestQuotaPool verifies that writes get throttled in the case where we have
@@ -1926,7 +2024,13 @@ func TestQuotaPool(t *testing.T) {
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, numReplicas)
 	defer mtc.Stop()
 
@@ -2061,7 +2165,13 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, numReplicas)
 	defer mtc.Stop()
 	mtc.replicateRange(rangeID, 1, 2)
@@ -2181,7 +2291,12 @@ func TestRaftHeartbeats(t *testing.T) {
 func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2972,7 +3087,13 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -3135,7 +3256,12 @@ func (errorChannelTestHandler) HandleSnapshot(
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 4)
 
@@ -3265,7 +3391,13 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 4)
 
@@ -3339,7 +3471,13 @@ func TestReplicaLazyLoad(t *testing.T) {
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	sc.TestingKnobs.DisableMergeQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
@@ -3378,7 +3516,12 @@ func TestReplicaLazyLoad(t *testing.T) {
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -3457,7 +3600,12 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 func TestRemovedReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	mtc := &multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -3579,7 +3727,13 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and remove a replica in the middle of the test. Disable the
 	// replication queue; we'll control replication manually.
 	sc.TestingKnobs.DisableReplicateQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, numStores)
 	store0 := mtc.Store(0)
@@ -3699,7 +3853,13 @@ func TestRaftBlockedReplica(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.DisableScanner = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -3755,7 +3915,13 @@ func TestRangeQuiescence(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -4191,7 +4357,13 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)

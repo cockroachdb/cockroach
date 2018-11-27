@@ -63,7 +63,13 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 		manuals = append(manuals, hlc.NewManualClock(1))
 		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
 	}
-	mtc := &multiTestContext{clocks: clocks}
+	mtc := &multiTestContext{
+		clocks: clocks,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, numNodes)
 	mtc.replicateRange(1, 1, 2)
@@ -220,10 +226,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		}
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
-	store := createTestStoreWithEngine(t,
-		eng,
-		true,
-		cfg,
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{eng: eng, cfg: &cfg},
 		stopper,
 	)
 
@@ -361,7 +365,15 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	store := createTestStoreWithOpts(
+		t,
+		testStoreOpts{
+			// This test was written before the test stores were able to start with
+			// more than one range and is not prepared to handle many ranges.
+			dontCreateSystemRanges: true,
+			cfg: &storeCfg,
+		},
+		stopper)
 
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
@@ -528,6 +540,9 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	l.mtc = &multiTestContext{}
+	// This test was written before the multiTestContext started creating many
+	// system ranges at startup, and hasn't been update to take that into account.
+	l.mtc.startWithSingleRange = true
 	l.mtc.storeConfig = &cfg
 	l.mtc.Start(t, 2)
 	l.mtc.initGossipNetwork()
@@ -966,7 +981,13 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			}
 			return nil
 		}
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -1384,6 +1405,10 @@ func TestRangeInfo(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)

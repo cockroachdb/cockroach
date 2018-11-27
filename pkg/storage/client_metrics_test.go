@@ -239,6 +239,10 @@ func TestStoreMetrics(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
