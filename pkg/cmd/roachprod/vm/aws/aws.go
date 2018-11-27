@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -38,6 +39,9 @@ const ProviderName = "aws"
 // init will inject the AWS provider into vm.Providers, but only
 // if the aws tool is available on the local path.
 func init() {
+	const unimplemented = "please install the AWS CLI utilities " +
+		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
+	var p vm.Provider = &Provider{}
 	if _, err := exec.LookPath("aws"); err == nil {
 		// NB: This is a bit hacky, but using something like `aws iam get-user` is
 		// slow and not something we want to do at startup.
@@ -52,16 +56,13 @@ func init() {
 			return false
 		}
 
-		if haveCredentials() {
-			vm.Providers[ProviderName] = &Provider{}
+		if !haveCredentials() {
+			p = flagstub.New(p, unimplemented)
 		}
 	} else {
-		// TODO(bob): This breaks the use of `roachprod pgurl --external` to
-		// power roachtest's `(*cluster).Conn` and was failing the nightlies.
-		// log.Printf("please install the AWS CLI utilities " +
-		// 	"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)")
-		_ = 0
+		p = flagstub.New(p, unimplemented)
 	}
+	vm.Providers[ProviderName] = p
 }
 
 // providerOpts implements the vm.ProviderFlags interface for aws.Provider.
