@@ -2545,17 +2545,17 @@ Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 UTC  150.00   350.00
 query TTRR
 SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval, group_id
 ----
-iPhone           1m2s          900.00   586.36363636363636364
-Dell             1m2s          800.00   586.36363636363636364
-Nexus            1h2m3s        500.00   586.36363636363636364
-Sony VAIO        1h2m3s        700.00   586.36363636363636364
-Samsung          1h2m3s        200.00   586.36363636363636364
-HTC One          1d2h3m4s      400.00   558.33333333333333333
-Lenovo Thinkpad  1d2h3m4s      700.00   558.33333333333333333
-Kindle Fire      1d2h3m4s      150.00   558.33333333333333333
-Microsoft Lumia  1mon2d3h4m5s  200.00   700.00
-HP Elite         1mon2d3h4m5s  1200.00  700.00
-iPad             1mon2d3h4m5s  700.00   700.00
+iPhone           00:01:02               900.00   586.36363636363636364
+Dell             00:01:02               800.00   586.36363636363636364
+Nexus            01:02:03               500.00   586.36363636363636364
+Sony VAIO        01:02:03               700.00   586.36363636363636364
+Samsung          01:02:03               200.00   586.36363636363636364
+HTC One          1 day 02:03:04         400.00   558.33333333333333333
+Lenovo Thinkpad  1 day 02:03:04         700.00   558.33333333333333333
+Kindle Fire      1 day 02:03:04         150.00   558.33333333333333333
+Microsoft Lumia  1 mon 2 days 03:04:05  200.00   700.00
+HP Elite         1 mon 2 days 03:04:05  1200.00  700.00
+iPad             1 mon 2 days 03:04:05  700.00   700.00
 
 query TTRR
 SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE 200 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
@@ -2770,47 +2770,47 @@ Tablet      iPad             2018-07-30 01:23:45 +0000 UTC  700.00   350.00
 query TTRR
 SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval DESC RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval DESC, group_id
 ----
-Microsoft Lumia  1mon2d3h4m5s  200.00   586.36363636363636364
-HP Elite         1mon2d3h4m5s  1200.00  586.36363636363636364
-iPad             1mon2d3h4m5s  700.00   586.36363636363636364
-HTC One          1d2h3m4s      400.00   543.75
-Lenovo Thinkpad  1d2h3m4s      700.00   543.75
-Kindle Fire      1d2h3m4s      150.00   543.75
-Nexus            1h2m3s        500.00   620.00
-Sony VAIO        1h2m3s        700.00   620.00
-Samsung          1h2m3s        200.00   620.00
-iPhone           1m2s          900.00   620.00
-Dell             1m2s          800.00   620.00
+Microsoft Lumia  1 mon 2 days 03:04:05  200.00   586.36363636363636364
+HP Elite         1 mon 2 days 03:04:05  1200.00  586.36363636363636364
+iPad             1 mon 2 days 03:04:05  700.00   586.36363636363636364
+HTC One          1 day 02:03:04         400.00   543.75
+Lenovo Thinkpad  1 day 02:03:04         700.00   543.75
+Kindle Fire      1 day 02:03:04         150.00   543.75
+Nexus            01:02:03               500.00   620.00
+Sony VAIO        01:02:03               700.00   620.00
+Samsung          01:02:03               200.00   620.00
+iPhone           00:01:02               900.00   620.00
+Dell             00:01:02               800.00   620.00
 
 query TRTT
 SELECT group_name, price, product_name, array_agg(product_name) OVER (PARTITION BY group_name ORDER BY price, group_id) FROM products ORDER BY group_id
 ----
 Smartphone  200.00   Microsoft Lumia  {"Microsoft Lumia"}
 Smartphone  400.00   HTC One          {"Microsoft Lumia","HTC One"}
-Smartphone  500.00   Nexus            {"Microsoft Lumia","HTC One","Nexus"}
-Smartphone  900.00   iPhone           {"Microsoft Lumia","HTC One","Nexus","iPhone"}
-Laptop      1200.00  HP Elite         {"Lenovo Thinkpad","Sony VAIO","Dell","HP Elite"}
+Smartphone  500.00   Nexus            {"Microsoft Lumia","HTC One",Nexus}
+Smartphone  900.00   iPhone           {"Microsoft Lumia","HTC One",Nexus,iPhone}
+Laptop      1200.00  HP Elite         {"Lenovo Thinkpad","Sony VAIO",Dell,"HP Elite"}
 Laptop      700.00   Lenovo Thinkpad  {"Lenovo Thinkpad"}
 Laptop      700.00   Sony VAIO        {"Lenovo Thinkpad","Sony VAIO"}
-Laptop      800.00   Dell             {"Lenovo Thinkpad","Sony VAIO","Dell"}
-Tablet      700.00   iPad             {"Kindle Fire","Samsung","iPad"}
+Laptop      800.00   Dell             {"Lenovo Thinkpad","Sony VAIO",Dell}
+Tablet      700.00   iPad             {"Kindle Fire",Samsung,iPad}
 Tablet      150.00   Kindle Fire      {"Kindle Fire"}
-Tablet      200.00   Samsung          {"Kindle Fire","Samsung"}
+Tablet      200.00   Samsung          {"Kindle Fire",Samsung}
 
 query TT
 SELECT product_name, array_agg(product_name) OVER (ORDER BY group_id) FROM products ORDER BY group_id
 ----
 Microsoft Lumia  {"Microsoft Lumia"}
 HTC One          {"Microsoft Lumia","HTC One"}
-Nexus            {"Microsoft Lumia","HTC One","Nexus"}
-iPhone           {"Microsoft Lumia","HTC One","Nexus","iPhone"}
-HP Elite         {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite"}
-Lenovo Thinkpad  {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad"}
-Sony VAIO        {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO"}
-Dell             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell"}
-iPad             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad"}
-Kindle Fire      {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire"}
-Samsung          {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire","Samsung"}
+Nexus            {"Microsoft Lumia","HTC One",Nexus}
+iPhone           {"Microsoft Lumia","HTC One",Nexus,iPhone}
+HP Elite         {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite"}
+Lenovo Thinkpad  {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad"}
+Sony VAIO        {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO"}
+Dell             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell}
+iPad             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad}
+Kindle Fire      {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire"}
+Samsung          {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire",Samsung}
 
 statement error frame starting offset must not be null
 SELECT avg(price) OVER (GROUPS NULL PRECEDING) FROM products

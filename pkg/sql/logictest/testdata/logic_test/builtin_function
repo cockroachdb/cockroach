@@ -67,7 +67,7 @@ SELECT
  quote_literal('2018-06-11 12:13:14'::timestamp), quote_nullable('2018-06-11 12:13:14'::timestamp),
  quote_literal('2018-06-11'::date), quote_nullable('2018-06-11'::date)
 ----
-'1d'  '1d'  '2018-06-11 12:13:14+00:00'  '2018-06-11 12:13:14+00:00'  '2018-06-11'  '2018-06-11'
+'1 day'  '1 day'  '2018-06-11 12:13:14+00:00'  '2018-06-11 12:13:14+00:00'  '2018-06-11'  '2018-06-11'
 
 query TTBB
 SELECT
@@ -1423,20 +1423,20 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog","public"}
+{pg_catalog,public}
 
 query T
 SELECT current_schemas(false)
 ----
-{"public"}
+{public}
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
 query T
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
-{"pg_catalog","public"}
-{"public"}
+{pg_catalog,public}
+{public}
 
 statement ok
 SET search_path=test,pg_catalog
@@ -1444,12 +1444,12 @@ SET search_path=test,pg_catalog
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 query T
 SELECT current_schemas(false)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 statement ok
 RESET search_path
@@ -1975,7 +1975,7 @@ SELECT i FROM (VALUES
 4dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b37b89903a740e1ee172da793a6e79d560e5f7f9bd058a12a280433ed6fa46510a
 be09b235155bae6cb96b94ce4645260937e856ac3907d710850256e6351f50b428f948a7af33937445604f41cf3a3121b2dd069a057708ed1f047e133e09151e
 f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254d8820772c5518a2c5a8c0c7f7eda19594a7eb539453e1ed7
-6ca65db2a861fa0ecd0c1e29ef9566425e952d2a205706a6e955a6b1bbd721fdc2d28efdba515f9d29f34aa84223382f6ca6d11bdef23984b8ff9339b59e80f5
+95bce0fdbcf48ba9c944dae46238d89bbd6df696a0d0b7cc8fc16eeabd30c03d6d2506cfcce81de320b37bc677df1bd045ac9231b43ae11807773db3909d1220
 b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
 960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181

@@ -33,6 +33,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"text/template"
@@ -82,12 +83,17 @@ func main() {
 
 	for _, expr := range stmts {
 		sql := fmt.Sprintf("SELECT %s", expr)
+		text, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatText)
+		if err != nil {
+			log.Fatalf("text: %s: %v", sql, err)
+		}
 		binary, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatBinary)
 		if err != nil {
-			log.Println(err)
+			log.Fatalf("binary: %s: %v", sql, err)
 		}
 		data = append(data, entry{
 			SQL:    expr,
+			Text:   text,
 			Binary: binary,
 		})
 	}
@@ -103,6 +109,7 @@ func main() {
 
 type entry struct {
 	SQL    string
+	Text   []byte
 	Binary []byte
 }
 
@@ -124,6 +131,8 @@ const outputJSON = `[
 	{{- if gt $idx 0 }},{{end}}
 	{
 		"SQL": {{.SQL | json}},
+		"Text": {{printf "%q" .Text}},
+		"TextAsBinary": {{.Text | binary}},
 		"Binary": {{.Binary | binary}}
 	}
 {{- end}}
@@ -132,6 +141,7 @@ const outputJSON = `[
 
 var inputs = map[string][]string{
 	"'%s'::decimal": {
+		"NaN",
 		"-000.000",
 		"-0000021234.23246346000000",
 		"-1.2",
@@ -185,14 +195,58 @@ var inputs = map[string][]string{
 		"42",
 	},
 
+	"'%s'::float8": {
+		// The Go binary encoding of NaN differs from Postgres by a 1 at the
+		// end. Go also uses Inf instead of Infinity (used by Postgres) for text
+		// float encodings. These deviations are still correct, and it's not worth
+		// special casing them into the code, so they are commented out here.
+		//"NaN",
+		//"Inf",
+		//"-Inf",
+		"-000.000",
+		"-0000021234.23246346000000",
+		"-1.2",
+		".0",
+		".1",
+		".1234",
+		".12345",
+		fmt.Sprint(math.MaxFloat32),
+		fmt.Sprint(math.SmallestNonzeroFloat32),
+		fmt.Sprint(math.MaxFloat64),
+		fmt.Sprint(math.SmallestNonzeroFloat64),
+	},
+
 	"'%s'::timestamp": {
+		"1999-01-08 04:05:06+00",
+		"1999-01-08 04:05:06+00:00",
+		"1999-01-08 04:05:06+10",
+		"1999-01-08 04:05:06+10:00",
+		"1999-01-08 04:05:06+10:30",
 		"1999-01-08 04:05:06",
 		"2004-10-19 10:23:54",
 		"0001-01-01 00:00:00",
 		"0004-10-19 10:23:54",
+		"0004-10-19 10:23:54 BC",
 		"4004-10-19 10:23:54",
 		"9004-10-19 10:23:54",
 	},
+
+	/* TODO(mjibson): fix these; there's a slight timezone display difference
+	"'%s'::timestamptz": {
+		"1999-01-08 04:05:06+00",
+		"1999-01-08 04:05:06+00:00",
+		"1999-01-08 04:05:06+10",
+		"1999-01-08 04:05:06+10:00",
+		"1999-01-08 04:05:06+10:30",
+		"1999-01-08 04:05:06",
+		"2004-10-19 10:23:54",
+		"0001-01-01 00:00:00",
+		"0004-10-19 10:23:54",
+		"0004-10-19 10:23:54 BC",
+		"4004-10-19 10:23:54",
+		"9004-10-19 10:23:54",
+	},
+	*/
 
 	"'%s'::date": {
 		"1999-01-08",
@@ -200,6 +254,9 @@ var inputs = map[string][]string{
 		"9999-01-08",
 		"1999-12-30",
 		"1996-02-29",
+		"0001-01-01",
+		"0001-01-01 BC",
+		"3592-12-31 BC",
 	},
 
 	"'%s'::time": {
@@ -232,6 +289,23 @@ var inputs = map[string][]string{
 		"-1y",
 		"-1y1mon",
 		"-1y1mon10s",
+		"1ms",
+		".2ms",
+		".003ms",
+		"-6s2ms",
+		"-1d6s2ms",
+		"-1d -6s2ms",
+		"-1mon1m",
+		"-1mon -1m",
+		"-1d1m",
+		"-1d -1m",
+		"-1y1m",
+		"-1y -1m",
+		"3y4mon5d6ms",
+		"296537y20d15h30m7s",
+		"-2965y -20d -15h -30m -7s",
+		"00:00:00",
+		"-00:00:00",
 	},
 
 	"'%s'::inet": {
@@ -311,5 +385,33 @@ var inputs = map[string][]string{
 		"00000000",
 		"000000001",
 		"0010101000011010101111100100011001110101100001010101",
+	},
+
+	"array[%s]::text[]": {
+		`NULL`,
+		`''`,
+		`'test'`,
+		`'test with spaces'`,
+		`e'\f'`,
+		// byte order mark
+		`e'\uFEFF'`,
+		// snowman
+		`e'\u2603'`,
+	},
+
+	"array[%s]": {
+		`''`,
+		`'\x0d53e338548082'::BYTEA`,
+		`'test with spaces'::BYTEA`,
+		`'name'::NAME`,
+	},
+
+	"(%s,null)": {
+		`1::int8,2::int8,3::int8,4::int8`,
+		`'test with spaces'::BYTEA`,
+		`'test with spaces'::TEXT`,
+		`'name'::NAME`,
+		`'false'::JSONB`,
+		`'{"a": []}'::JSONB`,
 	},
 }

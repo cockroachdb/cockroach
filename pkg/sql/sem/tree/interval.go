@@ -98,10 +98,14 @@ func (l *intervalLexer) consumeInt() int64 {
 	start := l.offset
 
 	// Advance offset to prepare a valid argument to ParseInt().
-	if l.offset < len(l.str) && l.str[l.offset] == '-' {
+	if l.offset < len(l.str) && (l.str[l.offset] == '-' || l.str[l.offset] == '+') {
 		l.offset++
 	}
 	for ; l.offset < len(l.str) && l.str[l.offset] >= '0' && l.str[l.offset] <= '9'; l.offset++ {
+	}
+	// Check if we have something like ".X".
+	if start == l.offset && len(l.str) > (l.offset+1) && l.str[l.offset] == '.' {
+		return 0
 	}
 
 	x, err := strconv.ParseInt(l.str[start:l.offset], 10, 64)
@@ -430,13 +434,16 @@ func parseDuration(s string) (duration.Duration, error) {
 			pgerror.CodeInvalidDatetimeFormatError, "interval: invalid input syntax: %q", l.str)
 	}
 	for l.offset != len(l.str) {
+		// To support -00:XX:XX we record the sign here since -0 doesn't exist
+		// as an int64.
+		sign := l.str[l.offset] == '-'
 		// Parse the next number.
 		v, hasDecimal, vp := l.consumeNum()
 		l.consumeSpaces()
 
 		if l.offset < len(l.str) && l.str[l.offset] == ':' && !hasDecimal {
 			// Special case: HH:MM[:SS.ffff] or MM:SS.ffff
-			delta, err := l.parseShortDuration(v)
+			delta, err := l.parseShortDuration(v, sign)
 			if err != nil {
 				return d, err
 			}
@@ -466,9 +473,9 @@ func parseDuration(s string) (duration.Duration, error) {
 	return d, l.err
 }
 
-func (l *intervalLexer) parseShortDuration(h int64) (duration.Duration, error) {
+func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Duration, error) {
 	sign := int64(1)
-	if h < 0 {
+	if hasSign {
 		sign = -1
 	}
 	// postgresToDuration() has rewound the cursor to just after the
@@ -498,7 +505,7 @@ func (l *intervalLexer) parseShortDuration(h int64) (duration.Duration, error) {
 		return duration.Duration{
 			Nanos: h*time.Minute.Nanoseconds() +
 				sign*(m*time.Second.Nanoseconds()+
-					int64(mp*float64(time.Second.Nanoseconds()))),
+					floatToNanos(mp)),
 		}, nil
 	}
 
@@ -521,7 +528,7 @@ func (l *intervalLexer) parseShortDuration(h int64) (duration.Duration, error) {
 			sign*(m*time.Minute.Nanoseconds()+
 				int64(mp*float64(time.Minute.Nanoseconds()))+
 				s*time.Second.Nanoseconds()+
-				int64(sp*float64(time.Second.Nanoseconds()))),
+				floatToNanos(sp)),
 	}, nil
 }
 
@@ -546,4 +553,16 @@ func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Du
 		d.Nanos += int64(float64(unit.Nanos) * f)
 	}
 	return d
+}
+
+// floatToNanos converts a fractional number representing nanoseconds to the
+// number of integer nanoseconds. For example: ".354874219" to "354874219"
+// or ".123" to "123000000". This function takes care to round correctly
+// when a naive conversion would incorrectly truncate due to floating point
+// inaccuracies. This function should match the semantics of rint() from
+// Postgres. See:
+// https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/backend/utils/adt/timestamp.c;h=449164ae7e5b00f6580771017888d4922685a73c;hb=HEAD#l1511
+// https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/port/rint.c;h=d59d9ab774307b7db2f7cb2347815a30da563fc5;hb=HEAD
+func floatToNanos(f float64) int64 {
+	return int64(math.Round(f * float64(time.Second.Nanoseconds())))
 }
