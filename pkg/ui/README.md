@@ -139,6 +139,19 @@ $ make buildoss
 $ open pkg/ui/dist/stats.oss.html
 ```
 
+## Bundling fonts
+
+To comply with the SIL Open Font License, we have reproducible builds of our WOFF
+font bundles based on the original TTF files sourced from Google Fonts.
+
+To rebuild the font bundles (perhaps to bring in an updated version of a typeface),
+simply run `make fonts` in the UI directory (or `make ui-fonts` elsewhere).  This
+requires `fontforge` to be available on your system.  Then validate the updated
+fonts and commit them.
+
+To add a new typeface, edit the script `scripts/font-gen` to fetch and convert it,
+and then add it to `styl/base/typography.styl` to pull it into the bundle.
+
 ## Managing dependencies
 
 The NPM registry (and the Yarn proxy in front of it) have historically proven

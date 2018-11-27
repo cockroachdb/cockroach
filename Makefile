@@ -1126,6 +1126,10 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 .PHONY: ui-generate
 ui-generate: pkg/ui/distccl/bindata.go
 
+.PHONY: ui-fonts
+ui-fonts:
+	pkg/ui/scripts/font-gen
+
 .PHONY: ui-lint
 ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(STYLINT) -c .stylintrc styl
