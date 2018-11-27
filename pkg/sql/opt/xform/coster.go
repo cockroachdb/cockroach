@@ -149,6 +149,12 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		// without EXPLAIN, i.e. the lowest cost plan. So do nothing special to get
 		// default behavior.
 	}
+
+	// Add a one-time cost for any operator, meant to reflect the cost of setting
+	// up execution for the operator. This makes plans with fewer operators
+	// preferable, all else being equal.
+	cost += cpuCostFactor
+
 	if !cost.Less(memo.MaxCost) {
 		// Optsteps uses MaxCost to suppress nodes in the memo. When a node with
 		// MaxCost is added to the memo, it can lead to an obscure crash with an

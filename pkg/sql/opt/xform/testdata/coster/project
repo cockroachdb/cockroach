@@ -15,13 +15,13 @@ SELECT k, i, s || 'foo' FROM a
 project
  ├── columns: k:1(int!null) i:2(int) "?column?":5(string)
  ├── stats: [rows=1000]
- ├── cost: 1090
+ ├── cost: 1090.02
  ├── key: (1)
  ├── fd: (1)-->(2,5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1070
+ │    ├── cost: 1070.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
@@ -33,13 +33,13 @@ SELECT k, k+2, i*d FROM a
 project
  ├── columns: k:1(int!null) "?column?":5(int) "?column?":6(decimal)
  ├── stats: [rows=1000]
- ├── cost: 1100
+ ├── cost: 1100.02
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1070
+ │    ├── cost: 1070.01
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections

@@ -368,14 +368,14 @@ project
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.03
+ ├── cost: 0.05
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 0.01
+ │    ├── cost: 0.02
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
@@ -389,14 +389,14 @@ project
  ├── columns: "?column?":1(decimal!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.03
+ ├── cost: 0.05
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 0.01
+ │    ├── cost: 0.02
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
@@ -409,14 +409,14 @@ project
  ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.03
+ ├── cost: 0.05
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 0.01
+ │    ├── cost: 0.02
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
