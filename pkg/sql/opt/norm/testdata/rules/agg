@@ -1,0 +1,94 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ ├── arr int[]
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# EliminateAggDistinct
+# --------------------------------------------------
+
+opt expect=EliminateAggDistinct
+SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f) FROM a
+----
+scalar-group-by
+ ├── columns: min:7(int) max:8(int) bool_and:10(bool) bool_or:11(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7,8,10,11)
+ ├── project
+ │    ├── columns: column9:9(bool) i:2(int)
+ │    ├── scan a
+ │    │    └── columns: i:2(int) f:3(float)
+ │    └── projections
+ │         └── i > f [type=bool, outer=(2,3)]
+ └── aggregations
+      ├── min [type=int, outer=(2)]
+      │    └── variable: i [type=int]
+      ├── max [type=int, outer=(2)]
+      │    └── variable: i [type=int]
+      ├── bool-and [type=bool, outer=(9)]
+      │    └── variable: column9 [type=bool]
+      └── bool-or [type=bool, outer=(9)]
+           └── variable: column9 [type=bool]
+
+# The rule should not apply to these aggregations.
+opt expect-not=EliminateAggDistinct
+SELECT
+    count(DISTINCT i),
+    sum(DISTINCT i),
+    sum_int(DISTINCT i),
+    avg(DISTINCT i),
+    stddev(DISTINCT f),
+    variance(DISTINCT f),
+    xor_agg(DISTINCT s::BYTES),
+    array_agg(DISTINCT i),
+    json_agg(DISTINCT j)
+FROM a
+----
+scalar-group-by
+ ├── columns: count:7(int) sum:8(decimal) sum_int:9(int) avg:10(decimal) stddev:11(float) variance:12(float) xor_agg:14(bytes) array_agg:15(int[]) json_agg:16(jsonb)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7-12,14-16)
+ ├── project
+ │    ├── columns: column13:13(bytes) i:2(int) f:3(float) j:5(jsonb)
+ │    ├── scan a
+ │    │    └── columns: i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    └── projections
+ │         └── s::BYTES [type=bytes, outer=(4)]
+ └── aggregations
+      ├── count [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
+      ├── sum [type=decimal, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
+      ├── sum-int [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
+      ├── avg [type=decimal, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
+      ├── std-dev [type=float, outer=(3)]
+      │    └── agg-distinct [type=float]
+      │         └── variable: f [type=float]
+      ├── variance [type=float, outer=(3)]
+      │    └── agg-distinct [type=float]
+      │         └── variable: f [type=float]
+      ├── xor-agg [type=bytes, outer=(13)]
+      │    └── agg-distinct [type=bytes]
+      │         └── variable: column13 [type=bytes]
+      ├── array-agg [type=int[], outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
+      └── json-agg [type=jsonb, outer=(5)]
+           └── agg-distinct [type=jsonb]
+                └── variable: j [type=jsonb]

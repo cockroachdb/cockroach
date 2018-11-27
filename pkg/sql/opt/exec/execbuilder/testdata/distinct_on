@@ -1,0 +1,397 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z INT,
+  pk1 INT,
+  pk2 INT,
+  PRIMARY KEY (pk1, pk2)
+)
+
+statement ok
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b, c)
+)
+
+##################
+# Simple queries #
+##################
+
+# 3/3 columns
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
+----
+distinct   ·            ·            (x, y, z)  weak-key(x,y,z)
+ │         distinct on  x, y, z      ·          ·
+ └── scan  ·            ·            (x, y, z)  ·
+·          table        xyz@primary  ·          ·
+·          spans        ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
+----
+render          ·            ·            (x)        ·
+ │              render 0     x            ·          ·
+ └── distinct   ·            ·            (x, y, z)  weak-key(x,y,z)
+      │         distinct on  x, y, z      ·          ·
+      └── scan  ·            ·            (x, y, z)  ·
+·               table        xyz@primary  ·          ·
+·               spans        ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
+----
+render     ·         ·            (a, c, b)  ·
+ │         render 0  a            ·          ·
+ │         render 1  c            ·          ·
+ │         render 2  b            ·          ·
+ └── scan  ·         ·            (a, b, c)  ·
+·          table     abc@primary  ·          ·
+·          spans     ALL          ·          ·
+
+# Distinct node should be elided since we have a strong key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
+----
+scan  ·      ·            (a)  ·
+·     table  abc@primary  ·    ·
+·     spans  ALL          ·    ·
+
+# Distinct node should be elided since we have a strong key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
+----
+sort       ·      ·            (b)  +b
+ │         order  +b           ·    ·
+ └── scan  ·      ·            (b)  ·
+·          table  abc@primary  ·    ·
+·          spans  ALL          ·    ·
+
+
+# 2/3 columns
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
+----
+render          ·            ·            (y, x)  ·
+ │              render 0     y            ·       ·
+ │              render 1     x            ·       ·
+ └── distinct   ·            ·            (x, y)  weak-key(x,y)
+      │         distinct on  x, y         ·       ·
+      └── scan  ·            ·            (x, y)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
+----
+render          ·            ·            (x)     ·
+ │              render 0     x            ·       ·
+ └── distinct   ·            ·            (x, y)  weak-key(x,y)
+      │         distinct on  x, y         ·       ·
+      └── scan  ·            ·            (x, y)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
+----
+distinct   ·            ·            (x, y)  weak-key(x,y)
+ │         distinct on  x, y         ·       ·
+ └── scan  ·            ·            (x, y)  ·
+·          table        xyz@primary  ·       ·
+·          spans        ALL          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
+----
+render          ·            ·            (pk1, x)  ·
+ │              render 0     pk1          ·         ·
+ │              render 1     x            ·         ·
+ └── distinct   ·            ·            (x, pk1)  weak-key(x,pk1); +pk1
+      │         distinct on  x, pk1       ·         ·
+      │         order key    pk1          ·         ·
+      └── scan  ·            ·            (x, pk1)  +pk1
+·               table        xyz@primary  ·         ·
+·               spans        ALL          ·         ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
+----
+render          ·            ·            (a, b)     ·
+ │              render 0     a            ·          ·
+ │              render 1     b            ·          ·
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
+      │         distinct on  a, c         ·          ·
+      │         order key    a            ·          ·
+      └── scan  ·            ·            (a, b, c)  +a
+·               table        abc@primary  ·          ·
+·               spans        ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
+----
+render          ·            ·            (b, c, a)  ·
+ │              render 0     b            ·          ·
+ │              render 1     c            ·          ·
+ │              render 2     a            ·          ·
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
+      │         distinct on  a, c         ·          ·
+      │         order key    a            ·          ·
+      └── scan  ·            ·            (a, b, c)  +a
+·               table        abc@primary  ·          ·
+·               spans        ALL          ·          ·
+
+
+# 1/3 columns
+
+# Check that distinct propagates the smaller, tighter key (pk1) as opposed to
+# the original key (pk1, pk2).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
+----
+distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1
+ │         distinct on  pk1          ·           ·
+ │         order key    pk1          ·           ·
+ └── scan  ·            ·            (pk1, pk2)  +pk1
+·          table        xyz@primary  ·           ·
+·          spans        ALL          ·           ·
+
+# Ensure the distinctNode advertises an a+ ordering.
+# TODO(radu): set the ordering in the render node to fix this.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+distinct             ·            ·            (a, c)     weak-key(a); +a
+ │                   distinct on  a            ·          ·
+ │                   order key    a            ·          ·
+ └── render          ·            ·            (a, c)     +a
+      │              render 0     a            ·          ·
+      │              render 1     c            ·          ·
+      └── sort       ·            ·            (a, b, c)  +a,-c,+b
+           │         order        +a,-c,+b     ·          ·
+           └── scan  ·            ·            (a, b, c)  ·
+·                    table        abc@primary  ·          ·
+·                    spans        ALL          ·          ·
+
+#################
+# With ORDER BY #
+#################
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
+----
+sort            ·            ·            (x)  weak-key(x); -x
+ │              order        -x           ·    ·
+ └── distinct   ·            ·            (x)  weak-key(x)
+      │         distinct on  x            ·    ·
+      └── scan  ·            ·            (x)  ·
+·               table        xyz@primary  ·    ·
+·               spans        ALL          ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
+----
+render               ·            ·            (y, z, x)  ·
+ │                   render 0     y            ·          ·
+ │                   render 1     z            ·          ·
+ │                   render 2     x            ·          ·
+ └── distinct        ·            ·            (x, y, z)  weak-key(x,z); +z
+      │              distinct on  x, z         ·          ·
+      │              order key    z            ·          ·
+      └── sort       ·            ·            (x, y, z)  +z
+           │         order        +z           ·          ·
+           └── scan  ·            ·            (x, y, z)  ·
+·                    table        xyz@primary  ·          ·
+·                    spans        ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
+----
+render               ·            ·            (y, z, x)  ·
+ │                   render 0     y            ·          ·
+ │                   render 1     z            ·          ·
+ │                   render 2     x            ·          ·
+ └── distinct        ·            ·            (x, y, z)  weak-key(x); +x,-z,-y
+      │              distinct on  x            ·          ·
+      │              order key    x            ·          ·
+      └── sort       ·            ·            (x, y, z)  +x,-z,-y
+           │         order        +x,-z,-y     ·          ·
+           └── scan  ·            ·            (x, y, z)  ·
+·                    table        xyz@primary  ·          ·
+·                    spans        ALL          ·          ·
+
+#####################
+# With aggregations #
+#####################
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
+----
+group           ·            ·            (max)   ·
+ │              aggregate 0  max(x)       ·       ·
+ │              scalar       ·            ·       ·
+ └── render     ·            ·            (x)     ·
+      │         render 0     x            ·       ·
+      └── scan  ·            ·            (x, y)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
+----
+group              ·            ·                (max)      ·
+ │                 aggregate 0  any_not_null(a)  ·          ·
+ │                 scalar       ·                ·          ·
+ └── render        ·            ·                (a)        ·
+      │            render 0     a                ·          ·
+      └── revscan  ·            ·                (a, b, c)  ·
+·                  table        abc@primary      ·          ·
+·                  spans        ALL              ·          ·
+·                  limit        1                ·          ·
+
+#################
+# With GROUP BY #
+#################
+
+# We can elide the DISTINCT ON since its key is equivalent to the group key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
+----
+render          ·            ·            (min)      ·
+ │              render 0     agg0         ·          ·
+ └── group      ·            ·            (y, agg0)  ·
+      │         aggregate 0  y            ·          ·
+      │         aggregate 1  min(x)       ·          ·
+      │         group by     @2           ·          ·
+      └── scan  ·            ·            (x, y)     ·
+·               table        xyz@primary  ·          ·
+·               spans        ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
+----
+distinct                  ·            ·            (min)      weak-key(min)
+ └── render               ·            ·            (min)      ·
+      │                   render 0     agg0         ·          ·
+      └── filter          ·            ·            (y, agg0)  ·
+           │              filter       agg0 = 1     ·          ·
+           └── group      ·            ·            (y, agg0)  ·
+                │         aggregate 0  y            ·          ·
+                │         aggregate 1  min(x)       ·          ·
+                │         group by     @2           ·          ·
+                └── scan  ·            ·            (x, y)     ·
+·                         table        xyz@primary  ·          ·
+·                         spans        ALL          ·          ·
+
+#########################
+# With window functions #
+#########################
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+----
+render                    ·            ·                     (y)                                                      ·
+ │                        render 0     y                     ·                                                        ·
+ └── distinct             ·            ·                     (y, row_number)                                          weak-key(row_number)
+      │                   distinct on  row_number            ·                                                        ·
+      └── window          ·            ·                     (y, row_number)                                          ·
+           │              window 0     row_number() OVER ()  ·                                                        ·
+           │              render 1     row_number() OVER ()  ·                                                        ·
+           └── render     ·            ·                     (y)                                                      ·
+                │         render 0     test.public.xyz.y     ·                                                        ·
+                └── scan  ·            ·                     (x[omitted], y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+·                         table        xyz@primary           ·                                                        ·
+·                         spans        ALL                   ·                                                        ·
+
+###########################
+# With ordinal references #
+###########################
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
+----
+distinct   ·            ·            (x, y, z)  weak-key(x)
+ │         distinct on  x            ·          ·
+ └── scan  ·            ·            (x, y, z)  ·
+·          table        xyz@primary  ·          ·
+·          spans        ALL          ·          ·
+
+# Distinct node elided because of strong key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
+----
+scan  ·      ·            (a, b, c)  ·
+·     table  abc@primary  ·          ·
+·     spans  ALL          ·          ·
+
+#########################
+# With alias references #
+#########################
+
+# This should priortize alias (use 'x' as the key).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
+----
+distinct   ·            ·            (y, x)  weak-key(y)
+ │         distinct on  y            ·       ·
+ └── scan  ·            ·            (y, x)  ·
+·          table        xyz@primary  ·       ·
+·          spans        ALL          ·       ·
+
+# Ignores the alias.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
+----
+distinct   ·            ·            (y)  weak-key(y)
+ │         distinct on  y            ·    ·
+ └── scan  ·            ·            (y)  ·
+·          table        xyz@primary  ·    ·
+·          spans        ALL          ·    ·
+
+##################################
+# With nested parentheses/tuples #
+##################################
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
+----
+distinct   ·            ·            (x, y)  weak-key(x,y)
+ │         distinct on  x, y         ·       ·
+ └── scan  ·            ·            (x, y)  ·
+·          table        xyz@primary  ·       ·
+·          spans        ALL          ·       ·
+
+################################
+# Hybrid PK and non-PK queries #
+################################
+
+# Distinct elided because of strong key presence.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
+----
+sort       ·      ·            (x, y, z)  +x,+y
+ │         order  +x,+y        ·          ·
+ └── scan  ·      ·            (x, y, z)  ·
+·          table  xyz@primary  ·          ·
+·          spans  ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
+----
+render               ·            ·            (pk1)           ·
+ │                   render 0     pk1          ·               ·
+ └── distinct        ·            ·            (x, y, z, pk1)  weak-key(x,y,z); +x
+      │              distinct on  x, y, z      ·               ·
+      │              order key    x            ·               ·
+      └── sort       ·            ·            (x, y, z, pk1)  +x
+           │         order        +x           ·               ·
+           └── scan  ·            ·            (x, y, z, pk1)  ·
+·                    table        xyz@primary  ·               ·
+·                    spans        ALL          ·               ·

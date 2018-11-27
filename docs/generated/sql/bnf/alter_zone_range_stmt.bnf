@@ -1,0 +1,3 @@
+alter_zone_range_stmt ::=
+	'ALTER' 'RANGE' range_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value ) )*
+	| 'ALTER' 'RANGE' range_name 'CONFIGURE' 'ZONE' 'DISCARD'

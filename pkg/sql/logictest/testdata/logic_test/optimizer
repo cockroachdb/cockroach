@@ -1,0 +1,120 @@
+# LogicTest: local local-opt fakedist fakedist-opt
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT)
+
+statement ok
+CREATE VIEW tview AS SELECT k, v FROM t
+
+statement ok
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO xy VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+SET OPTIMIZER = ON
+
+# ParenSelect
+query II rowsort
+(SELECT * FROM test.t)
+----
+1  10
+2  20
+3  30
+
+# Select
+query II
+SELECT * FROM test.t ORDER BY 1-t.k
+----
+3  30
+2  20
+1  10
+
+# SelectClause
+query II rowsort
+SELECT * FROM test.t
+----
+1  10
+2  20
+3  30
+
+# UnionClause
+query II rowsort
+SELECT * FROM test.t UNION SELECT * FROM test.t
+----
+1  10
+2  20
+3  30
+
+# Correlated subquery (only supported by cost-based optimizer)
+query II rowsort
+SELECT * FROM t WHERE EXISTS(SELECT * FROM xy WHERE x=t.k)
+----
+2  20
+3  30
+
+# Insert
+statement ok
+INSERT INTO t VALUES (4, 40)
+
+query B
+SELECT EXISTS(SELECT * FROM t WHERE k > 2)
+----
+true
+
+query II rowsort
+SELECT * FROM test.t WHERE 2*v > (SELECT max(v) FROM test.t)
+----
+3  30
+4  40
+
+# Fall back to heuristic planner when feature is not support in cost-based
+# optimizer.
+query I rowsort
+SELECT count(*) FILTER (WHERE v>10) FROM t
+----
+3
+
+query II rowsort
+SELECT * FROM tview
+----
+1  10
+2  20
+3  30
+4  40
+
+query I rowsort
+SELECT job_id FROM crdb_internal.jobs
+----
+
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+SET OPTIMIZER = ALWAYS
+
+query error pq: unsupported statement: \*tree\.Insert
+INSERT INTO test (k, v) VALUES (5, 50)
+
+# Don't fall back to heuristic planner in ALWAYS mode.
+query error pq: aggregates with FILTER are not supported yet
+SELECT count(*) FILTER (WHERE v>10) FROM t
+
+query error pq: sequences are not supported
+SELECT * FROM seq
+
+statement ok
+SET OPTIMIZER = LOCAL
+
+# In local mode, we should always get the results in order (no rowsort).
+query II
+SELECT * FROM test.t
+----
+1  10
+2  20
+3  30
+4  40

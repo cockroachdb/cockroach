@@ -11,21 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 var _ DescriptorProto = &DatabaseDescriptor{}
@@ -43,19 +40,22 @@ type DescriptorKey interface {
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
 type DescriptorProto interface {
-	proto.Message
+	protoutil.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
 	SetID(ID)
 	TypeName() string
 	GetName() string
 	SetName(string)
+	GetAuditMode() TableDescriptor_AuditMode
 }
 
 // WrapDescriptor fills in a Descriptor.
 func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
+	case *MutableTableDescriptor:
+		desc.Union = &Descriptor_Table{Table: &t.TableDescriptor}
 	case *TableDescriptor:
 		desc.Union = &Descriptor_Table{Table: t}
 	case *DatabaseDescriptor:
@@ -116,13 +116,6 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 	return len(ms.descs)
 }
 
-// SystemConfigDescriptorCount returns the number of config descriptors that
-// will be created by this schema. This value is needed to automate certain
-// tests.
-func (ms MetadataSchema) SystemConfigDescriptorCount() int {
-	return ms.configs
-}
-
 // GetInitialValues returns the set of initial K/V values which should be added to
 // a bootstrapping CockroachDB cluster in order to create the tables contained
 // in the schema.
@@ -132,7 +125,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	// Save the ID generator value, which will generate descriptor IDs for user
 	// objects.
 	value := roachpb.Value{}
-	value.SetInt(int64(keys.MaxReservedDescID + 1))
+	value.SetInt(int64(keys.MinUserDescID))
 	ret = append(ret, roachpb.KeyValue{
 		Key:   keys.DescIDGenerator,
 		Value: value,
@@ -177,17 +170,13 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	return ret
 }
 
-// InitialRangeCount returns the number of ranges that would be installed if
-// this metadata schema were installed on a fresh cluster and nothing else. Most
-// clusters will have additional ranges installed by migrations, so this
-// function should be used when only a lower bound, and not an exact count, is
-// needed. See server.ExpectedInitialRangeCount() for a count that includes
-// migrations.
-func (ms MetadataSchema) InitialRangeCount() int {
-	// The number of fixed ranges is determined by the pre-defined split points
-	// in SystemConfig.ComputeSplitKey. The early keyspace is split up in order
-	// to support separate zone configs for different parts of the system ranges.
-	// There are 4 pre-defined split points, so 5 fixed ranges.
-	const fixedRanges = 5
-	return len(ms.descs) - ms.configs + fixedRanges
+// DescriptorIDs returns the descriptor IDs present in the metadata schema in
+// sorted order.
+func (ms MetadataSchema) DescriptorIDs() IDs {
+	descriptorIDs := IDs{}
+	for _, md := range ms.descs {
+		descriptorIDs = append(descriptorIDs, md.desc.GetID())
+	}
+	sort.Sort(descriptorIDs)
+	return descriptorIDs
 }

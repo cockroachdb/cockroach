@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
 
 package metric
 
@@ -85,6 +83,36 @@ func TestPrometheusExporter(t *testing.T) {
 						l.GetName(), i, name, l.GetValue(), val)
 				}
 			}
+		}
+	}
+
+	// Test Gather
+	families, err := pe.Gather()
+	if err != nil {
+		t.Errorf("unexpected error from Gather(): %v", err)
+	}
+	for _, fam := range families {
+		if len(fam.Metric) == 0 {
+			t.Errorf("gathered %s has no data points", fam.GetName())
+		}
+	}
+
+	// Test clearMetrics
+	pe.clearMetrics()
+	for _, fam := range pe.families {
+		if numPoints := len(fam.Metric); numPoints != 0 {
+			t.Errorf("%s has %d data points, want 0", fam.GetName(), numPoints)
+		}
+	}
+	// Check families returned by Gather are empty, right after calling clearMetrics
+	// before another call to scrape.
+	families, err = pe.Gather()
+	if err != nil {
+		t.Errorf("unexpected error from Gather(): %v", err)
+	}
+	for _, fam := range families {
+		if num := len(fam.Metric); num != 0 {
+			t.Errorf("gathered %s has %d data points but expect none", fam.GetName(), num)
 		}
 	}
 }

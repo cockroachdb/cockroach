@@ -1,0 +1,51 @@
+# LogicTest: 5node-dist
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE data
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /1       1         {1}       1
+/1         /2       2         {2}       2
+/2         /3       3         {3}       3
+/3         /4       4         {4}       4
+/4         /5       5         {5}       5
+/5         /6       6         {1}       1
+/6         /7       7         {2}       2
+/7         /8       8         {3}       3
+/8         /9       9         {4}       4
+/9         NULL     10        {5}       5
+
+# Ensure sort-all strategy is used
+query BT
+EXPLAIN(DISTSQL) SELECT * FROM data ORDER BY d
+----
+true  https://cockroachdb.github.io/distsqlplan/decode.html#eJyskz1vwjAQhvf-jHetK-IkfGViZaEV7VZlcOMTigRxZBupFeK_V_mQaBA4Fu5oO-89fi6-EyolaSMOZJB9goMhBkMChhQMU-QMtVYFGaN080kXWMtvZBFDWdVH22znDIXShOwEW9o9IcOH-NrTloQkPYnAIMmKct9ial0ehP5ZSWEF8jODOtpLIWPFjpDxM_OHvSttSU-mQ84qfb5bPr5b_lJVaUma5K2iN-6wUS-qnvCh6z18MsBz_1by4FaOwPpWzh5tZezvEge7jMB6l_mjLom_SxLsMgLrXRaPuqT-Lmmwywisd1n-x7jeKL8lU6vKkNckRs0sk9xRN_tGHXVBb1oVLaZbvra5dkOSsd0p7xbrqjtqLvg3zJ3heBDm1-HYTR5BJ8506g6nIfeeOsMzN3kWQp47wws3eRFCXrr_VTTyTNyP7Jqdn59-AwAA__-GYYnr
+
+# Ensure top-k strategy is used
+query BT
+EXPLAIN(DISTSQL) SELECT * FROM data ORDER BY d limit 10
+----
+true  https://cockroachdb.github.io/distsqlplan/decode.html#eJyslE1r4zAQhu_7K5b3ulpi2c6XT7kGSlrS3ooPqjUEQ2IZSYGW4P9e_AGp00Q2yEdJeeeZZyLrgkJJ2okTGSTv4GAIwRCBIQbDHClDqVVGxihd_6QNbOUnkoAhL8qzrbdThkxpQnKBze2RkOBNfBxpT0KSngVgkGRFfmwwpc5PQn9tpLACacWgzvZayFhxICS8YuNhr0pb0rN5n7OJ_4HhKT_l9i8PHpLCh6QrQGlJmuTv-ml1p52d-q_KGb_RHmwk6jXCx8-Xe893ANbNdzHBfMPxWqG31gCs01pOoBWN14q8tQZgndZqAq14vFbsrTUA67TWE3_kd0h7MqUqDPVIjyoH9QtA8kDti2HUWWf0olXWYNrlc5NrNiQZ257ydrEt2qO6wZ9h7gyHvTC_DYdu8gA6cqZjdzj26XvuDC_c5IUPeekMr9zklQ957f6vgoFr4r5kt-y0-vMdAAD__55em18=
+
+# Ensure chunk strategy is used
+query BT
+EXPLAIN(DISTSQL) SELECT * FROM data ORDER BY a, c
+----
+true  https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lLtugzAUhvc-RfSvcRUM5MaUNUtapd0qBhcfpUgEI9uRWkW8e8VFSokSg0Q62ubnO9_x5YxcSdqJIxlEH-Bg8MEQgCEEwxwxQ6FVQsYoXX3SBLbyG5HHkObFyVbTMUOiNCE6w6Y2I0R4F58Z7UlI0jMPDJKsSLMaU-j0KPTPRgorEJcM6mQvPzJWHAgRL9lw2JvSlvRs3uVs-JRtgikYjsImX5OM8mjC7xL9u8QLSGlJmuRtTlzeKG2nnlUx490W3Csh6JTAh3eYj-5wD6zt8OKBHfaH6_mj9Xpgrd7ygXrBcL1gtF4PrNVbPVAvHK4XjtbrgbV663-6_jeIezKFyg0NutVe9S6QPFDzlhh10gm9apXUmGb4UufqCUnGNqu8GWzzZqkq8G-YO8N-J8yvw76b3IMOnOnQHQ7H1D13hhdu8mIMeekMr9zk1Rjy2r1XXs8xcR-ya3ZcPv0GAAD__3XopJg=

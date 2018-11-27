@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package protoutil
 
@@ -23,8 +21,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)
@@ -34,63 +30,67 @@ type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
 func (*ProtoPb) ContentType() string {
-	return httputil.ProtoContentType
+	// NB: This is the same as httputil.ProtoContentType which we can't use due
+	// to an import cycle.
+	const ProtoContentType = "application/x-protobuf"
+	return ProtoContentType
 }
 
 // Marshal implements gwruntime.Marshaler.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
 	if p, ok := v.(proto.Message); ok {
-		return Marshal(p)
+		return proto.Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
 
 // Unmarshal implements gwruntime.Marshaler.
 func (*ProtoPb) Unmarshal(data []byte, v interface{}) error {
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
 	if p, ok := v.(proto.Message); ok {
 		return proto.Unmarshal(data, p)
 	}
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
 
-type protoDecoder struct {
-	r io.Reader
-}
-
 // NewDecoder implements gwruntime.Marshaler.
 func (*ProtoPb) NewDecoder(r io.Reader) gwruntime.Decoder {
-	return &protoDecoder{r: r}
-}
-
-// Decode implements gwruntime.Marshaler.
-func (d *protoDecoder) Decode(v interface{}) error {
-	if p, ok := v.(proto.Message); ok {
-		bytes, err := ioutil.ReadAll(d.r)
-		if err == nil {
-			err = proto.Unmarshal(bytes, p)
+	return gwruntime.DecoderFunc(func(v interface{}) error {
+		// NB: we use proto.Message here because grpc-gateway passes us protos that
+		// we don't control and thus don't implement protoutil.Message.
+		if p, ok := v.(proto.Message); ok {
+			bytes, err := ioutil.ReadAll(r)
+			if err == nil {
+				err = proto.Unmarshal(bytes, p)
+			}
+			return err
 		}
-		return err
-	}
-	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
-}
-
-type protoEncoder struct {
-	w io.Writer
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	})
 }
 
 // NewEncoder implements gwruntime.Marshaler.
 func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
-	return &protoEncoder{w: w}
+	return gwruntime.EncoderFunc(func(v interface{}) error {
+		// NB: we use proto.Message here because grpc-gateway passes us protos that
+		// we don't control and thus don't implement protoutil.Message.
+		if p, ok := v.(proto.Message); ok {
+			bytes, err := proto.Marshal(p)
+			if err == nil {
+				_, err = w.Write(bytes)
+			}
+			return err
+		}
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	})
 }
 
-// Encode implements gwruntime.Marshaler.
-func (e *protoEncoder) Encode(v interface{}) error {
-	if p, ok := v.(proto.Message); ok {
-		bytes, err := Marshal(p)
-		if err == nil {
-			_, err = e.w.Write(bytes)
-		}
-		return err
-	}
-	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+var _ gwruntime.Delimited = (*ProtoPb)(nil)
+
+// Delimiter implements gwruntime.Delimited.
+func (*ProtoPb) Delimiter() []byte {
+	return nil
 }

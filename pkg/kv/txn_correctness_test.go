@@ -11,13 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -29,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -895,7 +893,7 @@ func checkConcurrency(
 	s := &localtestcluster.LocalTestCluster{
 		DontRetryPushTxnFailures: true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 	defer s.Stop()
 	verifier.run(isolations, s.DB, t)
 }

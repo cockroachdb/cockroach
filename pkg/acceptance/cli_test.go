@@ -11,20 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package acceptance
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/docker/docker/api/types/container"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"
@@ -33,6 +32,7 @@ const containerPath = "/go/src/github.com/cockroachdb/cockroach/cli/interactive_
 var cmdBase = []string{
 	"/usr/bin/env",
 	"COCKROACH_SKIP_UPDATE_CHECK=1",
+	"COCKROACH_CRASH_REPORTS=",
 	"/bin/bash",
 	"-c",
 }
@@ -41,10 +41,9 @@ func TestDockerCLI(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
-	}
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
@@ -58,12 +57,21 @@ func TestDockerCLI(t *testing.T) {
 		t.Fatalf("no testfiles found (%v)", testGlob)
 	}
 
-	verbose := testing.Verbose() || log.V(1)
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
+		if strings.Contains(testPath, "disabled") {
+			t.Logf("Skipping explicitly disabled test %s", testFile)
+			continue
+		}
 		t.Run(testFile, func(t *testing.T) {
 			log.Infof(ctx, "-- starting tests from: %s", testFile)
+
+			// Symlink the logs directory to /logs, which is visible outside of the
+			// container and preserved if the test fails. (They don't write to /logs
+			// directly because they are often run manually outside of Docker, where
+			// /logs is unlikely to exist.)
+			cmd := "ln -s /logs logs"
 
 			// We run the expect command using `bash -c "(expect ...)"`.
 			//
@@ -73,8 +81,8 @@ func TestDockerCLI(t *testing.T) {
 			// upon by the PID 1 process when they terminate, lest they
 			// remain forever in the zombie state. Unfortunately, Expect
 			// does not contain code to do this. Bash does.
-			cmd := "(expect"
-			if verbose {
+			cmd += "; (expect"
+			if log.V(2) {
 				cmd = cmd + " -d"
 			}
 			cmd = cmd + " -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"
@@ -91,10 +99,8 @@ func TestDockerStartFlags(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
-	}
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
@@ -111,9 +117,9 @@ function finish() {
 trap finish EXIT
 
 HOST=$(hostname -f)
-$bin start --logtostderr=INFO --background --insecure --host="${HOST}" --port=12345 &> out
-$bin sql --insecure --host="${HOST}" --port=12345 -e "show databases"
-$bin quit --insecure --host="${HOST}" --port=12345
+$bin start --logtostderr=INFO --background --insecure --listen-addr="${HOST}":12345 &> out
+$bin sql --insecure --host="${HOST}":12345 -e "show databases"
+$bin quit --insecure --host="${HOST}":12345
 `
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
 	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {

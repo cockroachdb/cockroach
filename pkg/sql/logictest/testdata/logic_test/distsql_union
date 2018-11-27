@@ -1,0 +1,426 @@
+# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z TEXT
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (NULL, NULL, NULL),
+  (1, 1, NULL),
+  (2, 1, 'a'),
+  (3, 1, 'b'),
+  (4, 2, 'b'),
+  (5, 2, 'c')
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (3), (4), (5)
+
+statement ok
+ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], 1),
+  (ARRAY[2], 2),
+  (ARRAY[3], 3),
+  (ARRAY[4], 4),
+  (ARRAY[5], 5)
+
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /2       1         {1}       1
+/2         /3       2         {2}       2
+/3         /4       3         {3}       3
+/4         /5       4         {4}       4
+/5         NULL     5         {5}       5
+
+subtest Union
+
+# Simple UNION ALL and UNION. (The ORDER BY applies to the UNION, not the last select.)
+query I
+SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
+----
+NULL
+NULL
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query I
+SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+# UNION with no overlap.
+query I
+SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x
+----
+1
+2
+3
+4
+5
+
+# UNION with partial overlap.
+query I
+SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
+----
+1
+2
+3
+4
+5
+
+# UNION ALL with swapped column orders.
+query II rowsort
+SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
+----
+NULL NULL
+NULL NULL
+1 1
+1 1
+1 2
+1 3
+2 1
+2 4
+2 5
+3 1
+4 2
+5 2
+
+# UNION ALL and UNION with different ORDER BY types.
+query I
+(SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+NULL
+NULL
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query I
+(SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+# UNION ALL with conflicting numbers of ORDER BY columns.
+query I
+(SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+NULL
+NULL
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query I rowsort
+VALUES (1), (2) UNION VALUES (2), (3)
+----
+1
+2
+3
+
+subtest Intersect
+
+# Basic INTERSECT ALL and INTERSECT case -- should return every row.
+query I
+(SELECT y FROM xyz) INTERSECT ALL (SELECT y FROM xyz) ORDER BY y
+----
+NULL
+1
+1
+1
+2
+2
+
+query I
+(SELECT y FROM xyz) INTERSECT (SELECT y FROM xyz) ORDER BY y
+----
+NULL
+1
+2
+
+# INTERSECT ALL and INTERSECT with MergeJoiner.
+query I rowsort
+(SELECT y FROM xyz ORDER BY y) INTERSECT ALL (SELECT y FROM xyz ORDER BY y)
+----
+NULL
+1
+1
+1
+2
+2
+
+query I rowsort
+(SELECT y FROM xyz ORDER BY y) INTERSECT (SELECT y FROM xyz ORDER BY y)
+----
+NULL
+1
+2
+
+# INTERSECT ALL and INTERSECT with no overlap.
+query I
+(SELECT x FROM xyz WHERE x < 2) INTERSECT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
+----
+
+
+query I
+(SELECT x FROM xyz WHERE x < 2) INTERSECT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
+----
+
+
+# INTERSECT ALL and INTERSECT with some overlap.
+query I
+(SELECT y FROM xyz WHERE x < 3) INTERSECT ALL (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
+----
+1
+1
+
+query I
+(SELECT y FROM xyz WHERE x < 3) INTERSECT (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
+----
+1
+
+# INTERSECT ALL and INTERSECT with swapped column orders.
+query II rowsort
+SELECT x, y FROM xyz INTERSECT ALL SELECT y, x from xyz
+----
+NULL NULL
+1 1
+
+query II rowsort
+SELECT x, y FROM xyz INTERSECT SELECT y, x from xyz
+----
+NULL  NULL
+1  1
+
+# INTERSECT ALL and INTERSECT with different ORDER BY types.
+query I
+(SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+query I
+(SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+# INTERSECT ALL and INTERSECT with different numbers of ORDER BY columns.
+query I
+(SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+query I
+(SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+NULL
+1
+2
+3
+4
+5
+
+# INTERSECT ALL and INTERSECT with compatible ORDER BY columns that are not in the final result.
+query I rowsort
+(SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
+----
+NULL
+1
+1
+1
+2
+2
+
+query I rowsort
+(SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
+----
+NULL
+1
+1
+1
+2
+2
+
+# INTERSECT ALL and INTERSECT with a projection on the result.
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
+----
+NULL
+1
+2
+3
+4
+5
+
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))
+----
+NULL
+1
+2
+3
+4
+5
+
+subtest Except
+
+# Basic EXCEPT ALL and EXCEPT case.
+query I
+(SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
+----
+1
+1
+2
+
+query I
+(SELECT y FROM xyz) EXCEPT (SELECT x AS y FROM xyz) ORDER BY y
+----
+
+
+# EXCEPT ALL and EXCEPT with MergeJoiner.
+query I rowsort
+(SELECT y FROM xyz ORDER BY y) EXCEPT ALL (SELECT y FROM xyz ORDER BY y)
+----
+
+
+query I rowsort
+(SELECT y FROM xyz ORDER BY y) EXCEPT (SELECT y FROM xyz ORDER BY y)
+----
+
+
+# EXCEPT ALL and EXCEPT with no overlap.
+query I
+(SELECT x FROM xyz WHERE x < 2) EXCEPT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
+----
+1
+
+query I
+(SELECT x FROM xyz WHERE x < 2) EXCEPT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
+----
+1
+
+# EXCEPT ALL and EXCEPT with some overlap.
+query I
+(SELECT y FROM xyz WHERE x >= 1) EXCEPT ALL (SELECT y FROM xyz WHERE x < 3) ORDER BY y
+----
+1
+2
+2
+
+query I
+(SELECT y FROM xyz WHERE x >= 1) EXCEPT (SELECT y FROM xyz WHERE x < 3) ORDER BY y
+----
+2
+
+# EXCEPT ALL and EXCEPT with swapped column orders.
+query II rowsort
+SELECT x, y FROM xyz EXCEPT ALL SELECT y, x from xyz
+----
+2 1
+3 1
+4 2
+5 2
+
+query II rowsort
+SELECT x, y FROM xyz EXCEPT SELECT y, x from xyz
+----
+5  2
+4  2
+2  1
+3  1
+
+# EXCEPT ALL and EXCEPT with different ORDER BY types.
+query I
+(SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
+----
+3
+4
+5
+
+query I
+(SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
+----
+3
+4
+5
+
+# EXCEPT ALL and EXCEPT with different numbers of ORDER BY columns.
+query I
+(SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+
+query I
+(SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+
+# EXCEPT ALL and EXCEPT with compatible ORDER BY columns that are not in the final result.
+query I rowsort
+(SELECT y FROM xyz ORDER BY z) EXCEPT ALL (SELECT y FROM xyz ORDER BY z)
+----
+
+query I rowsort
+(SELECT y FROM xyz ORDER BY z) EXCEPT (SELECT y FROM xyz ORDER BY z)
+----
+
+# EXCEPT ALL and EXCEPT with a projection on the result.
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT ALL (SELECT x, y FROM xyz))
+----
+
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT (SELECT x, y FROM xyz))
+----

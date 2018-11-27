@@ -11,14 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Kathy Spradlin (kathyspradlin@gmail.com)
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 syntax = "proto2";
 package cockroach.rpc;
 option go_package = "rpc";
 
+import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
@@ -51,6 +49,11 @@ message PingRequest {
   optional string addr = 3 [(gogoproto.nullable) = false];
   // The configured maximum clock offset (in nanoseconds) on the server.
   optional int64 max_offset_nanos = 4 [(gogoproto.nullable) = false];
+  // Cluster ID to prevent connections between nodes in different clusters.
+  optional bytes cluster_id = 5 [
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
 }
 
 // A PingResponse contains the echoed ping request string.
@@ -58,8 +61,12 @@ message PingResponse {
   // An echo of value sent with PingRequest.
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
+  optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
 }
 
 service Heartbeat {
   rpc Ping (PingRequest) returns (PingResponse) {}
+}
+service TestingHeartbeatStream {
+  rpc PingStream (stream PingRequest) returns (stream PingResponse) {}
 }

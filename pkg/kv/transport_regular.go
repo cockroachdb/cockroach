@@ -12,20 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
-//
-// Author: Tobias Schottdorf
 
 // +build !race
 
 package kv
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 )
 
-func grpcTransportFactory(
-	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
+// GRPCTransportFactory is the default TransportFactory, using GRPC.
+func GRPCTransportFactory(
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
 ) (Transport, error) {
-	return grpcTransportFactoryImpl(opts, rpcContext, replicas, args)
+	return grpcTransportFactoryImpl(opts, nodeDialer, replicas)
 }

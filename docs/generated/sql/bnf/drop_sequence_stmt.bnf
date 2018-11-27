@@ -1,0 +1,7 @@
+drop_sequence_stmt ::=
+	'DROP' 'SEQUENCE' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'SEQUENCE' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'SEQUENCE' table_name ( ( ',' table_name ) )* 
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 

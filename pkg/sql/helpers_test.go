@@ -11,15 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrei Matei(andreimatei1@gmail.com)
 
 package sql
 
 import (
+	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -38,7 +37,7 @@ type LeaseRemovalTracker struct {
 	mu syncutil.Mutex
 	// map from a lease whose release we're waiting for to a tracker for that
 	// lease.
-	tracking map[*LeaseState]RemovalTracker
+	tracking map[tableVersionID]RemovalTracker
 }
 
 type RemovalTracker struct {
@@ -50,21 +49,25 @@ type RemovalTracker struct {
 // NewLeaseRemovalTracker creates a LeaseRemovalTracker.
 func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 	return &LeaseRemovalTracker{
-		tracking: make(map[*LeaseState]RemovalTracker),
+		tracking: make(map[tableVersionID]RemovalTracker),
 	}
 }
 
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(lease *LeaseState) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.TableDescriptor) RemovalTracker {
+	id := tableVersionID{
+		id:      table.ID,
+		version: table.Version,
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if tracker, ok := w.tracking[lease]; ok {
+	if tracker, ok := w.tracking[id]; ok {
 		return tracker
 	}
 	tracker := RemovalTracker{removed: make(chan struct{}), err: new(error)}
-	w.tracking[lease] = tracker
+	w.tracking[id] = tracker
 	return tracker
 }
 
@@ -77,13 +80,21 @@ func (t RemovalTracker) WaitForRemoval() error {
 // LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
-func (w *LeaseRemovalTracker) LeaseRemovedNotification(lease *LeaseState, err error) {
+func (w *LeaseRemovalTracker) LeaseRemovedNotification(
+	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
+) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if tracker, ok := w.tracking[lease]; ok {
+
+	idx := tableVersionID{
+		id:      id,
+		version: version,
+	}
+
+	if tracker, ok := w.tracking[idx]; ok {
 		*tracker.err = err
 		close(tracker.removed)
-		delete(w.tracking, lease)
+		delete(w.tracking, idx)
 	}
 }
 
@@ -91,10 +102,28 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 	past := clock.Now().GoTime().Add(-time.Millisecond)
 
 	m.tableNames.mu.Lock()
-	for _, lease := range m.tableNames.tables {
-		lease.expiration = parser.DTimestamp{
-			Time: past,
-		}
+	for _, table := range m.tableNames.tables {
+		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
+}
+
+// AcquireAndAssertMinVersion acquires a read lease for the specified table ID.
+// The lease is grabbed on the latest version if >= specified version.
+// It returns a table descriptor and an expiration time valid for the timestamp.
+func (m *LeaseManager) AcquireAndAssertMinVersion(
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	minVersion sqlbase.DescriptorVersion,
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	t := m.findTableState(tableID, true)
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	table, _, err := t.findForTimestamp(ctx, timestamp)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	return &table.TableDescriptor, table.expiration, nil
 }

@@ -1,0 +1,282 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+# Case sensitivity of database names
+
+statement ok
+CREATE DATABASE D
+
+statement ok
+SHOW TABLES FROM d
+
+statement error "D" does not match any valid database or schema
+SHOW TABLES FROM "D"
+
+statement ok
+CREATE DATABASE "E"
+
+statement error "e" does not match any valid database or schema
+SHOW TABLES FROM e
+
+statement ok
+SHOW TABLES FROM "E"
+
+# Case sensitivity of table names:
+# When non-quoted, table names are normalized during creation.
+
+statement ok
+CREATE TABLE A(x INT)
+
+statement error pgcode 42P01 relation "A" does not exist
+SHOW COLUMNS FROM "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+SHOW INDEXES FROM "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+SHOW CREATE TABLE "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+SHOW GRANTS ON TABLE "A"
+
+statement error pgcode 42P01 relation "test.A" does not exist
+SHOW GRANTS ON TABLE test."A"
+
+statement error pgcode 42P01 relation "A" does not exist
+SHOW CONSTRAINTS FROM "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+SELECT * FROM "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+INSERT INTO "A"(x) VALUES(1)
+
+statement error pgcode 42P01 relation "A" does not exist
+UPDATE "A" SET x = 42
+
+statement error pgcode 42P01 relation "A" does not exist
+DELETE FROM "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+TRUNCATE "A"
+
+statement error pgcode 42P01 relation "A" does not exist
+DROP TABLE "A"
+
+statement ok
+SHOW COLUMNS FROM a
+
+statement ok
+SHOW INDEXES FROM a
+
+statement ok
+SHOW CREATE TABLE a
+
+statement ok
+SHOW CONSTRAINTS FROM a
+
+statement ok
+SELECT * FROM a
+
+statement ok
+INSERT INTO a(x) VALUES(1)
+
+statement ok
+UPDATE a SET x = 42
+
+statement ok
+DELETE FROM a
+
+statement ok
+TRUNCATE a
+
+statement ok
+DROP TABLE a
+
+# When quoted, a table name does not get normalized during create, and
+# must be thus quoted during use.
+
+statement ok
+CREATE TABLE "B"(x INT)
+
+statement error pgcode 42P01 relation "b" does not exist
+SHOW COLUMNS FROM B
+
+statement error pgcode 42P01 relation "b" does not exist
+SHOW INDEXES FROM B
+
+statement error pgcode 42P01 relation "b" does not exist
+SHOW CREATE TABLE B
+
+statement error pgcode 42P01 relation "b" does not exist
+SHOW GRANTS ON TABLE B
+
+statement error pgcode 42P01 relation "test.b" does not exist
+SHOW GRANTS ON TABLE test.B
+
+statement error pgcode 42P01 relation "b" does not exist
+SHOW CONSTRAINTS FROM B
+
+statement error pgcode 42P01 relation "b" does not exist
+SELECT * FROM B
+
+statement error pgcode 42P01 relation "b" does not exist
+INSERT INTO B(x) VALUES(1)
+
+statement error pgcode 42P01 relation "b" does not exist
+UPDATE B SET x = 42
+
+statement error pgcode 42P01 relation "b" does not exist
+DELETE FROM B
+
+statement error pgcode 42P01 relation "b" does not exist
+TRUNCATE B
+
+statement error pgcode 42P01 relation "b" does not exist
+DROP TABLE B
+
+statement ok
+SHOW COLUMNS FROM "B"
+
+statement ok
+SHOW INDEXES FROM "B"
+
+statement ok
+SHOW CREATE TABLE "B"
+
+statement ok
+SHOW GRANTS ON TABLE "B"
+
+statement ok
+SHOW GRANTS ON TABLE test."B"
+
+statement ok
+SHOW CONSTRAINTS FROM "B"
+
+statement ok
+SELECT * FROM "B"
+
+statement ok
+INSERT INTO "B"(x) VALUES(1)
+
+statement ok
+UPDATE "B" SET x = 42
+
+statement ok
+DELETE FROM "B"
+
+statement ok
+TRUNCATE "B"
+
+statement ok
+DROP TABLE "B"
+
+# Case sensitivity of column names.
+
+statement ok
+CREATE TABLE foo(X INT, "Y" INT)
+
+query III colnames
+SELECT x, X, "Y" FROM foo
+----
+x x Y
+
+statement error column "X" does not exist
+SELECT "X" FROM foo
+
+statement error column "y" does not exist
+SELECT Y FROM foo
+
+# The following should not be ambiguous.
+query II colnames
+SELECT Y, "Y" FROM (SELECT x as y, "Y" FROM foo)
+----
+y Y
+
+# Case sensitivity of view names.
+
+statement ok
+CREATE VIEW XV AS SELECT X, "Y" FROM foo
+
+query TT
+SHOW CREATE VIEW xv
+----
+xv  CREATE VIEW xv (x, "Y") AS SELECT x, "Y" FROM test.public.foo
+
+query error pgcode 42P01 relation "XV" does not exist
+SHOW CREATE VIEW "XV"
+
+statement ok
+CREATE VIEW "YV" AS SELECT X, "Y" FROM foo
+
+query TT
+SHOW CREATE VIEW "YV"
+----
+"YV"  CREATE VIEW "YV" (x, "Y") AS SELECT x, "Y" FROM test.public.foo
+
+query error pgcode 42P01 relation "yv" does not exist
+SHOW CREATE VIEW YV
+
+# Case sensitivity of index names.
+
+statement ok
+CREATE TABLE a(x INT, y INT, CONSTRAINT Foo PRIMARY KEY(x)); CREATE INDEX I ON a(y)
+
+statement error index "I" not found
+SELECT * FROM a@"I"
+
+statement error index "Foo" not found
+SELECT * FROM a@"Foo"
+
+statement error index "I" not found
+SELECT * FROM a ORDER BY INDEX a@"I"
+
+statement error index "Foo" not found
+SELECT * FROM a ORDER BY INDEX a@"Foo"
+
+statement error index "I" does not exist
+DROP INDEX a@"I"
+
+statement ok
+SELECT * FROM a@I
+
+statement ok
+SELECT * FROM a@Foo
+
+statement ok
+SELECT * FROM a ORDER BY INDEX a@I
+
+statement ok
+SELECT * FROM a ORDER BY INDEX a@Foo
+
+statement ok
+DROP INDEX a@I
+
+# Unicode sequences are preserved.
+
+statement ok
+CREATE TABLE Amelie("Amélie" INT, "Amélie" INT); INSERT INTO Amelie VALUES (1, 2)
+
+# Check that the column names were encoded properly
+query I
+SELECT ordinal_position FROM information_schema.columns WHERE table_name = 'amelie' AND column_name::BYTES = b'Ame\xcc\x81lie'
+----
+1
+
+query I
+SELECT ordinal_position FROM information_schema.columns WHERE table_name = 'amelie' AND column_name::BYTES = b'Am\xc3\xa9lie'
+----
+2
+
+# Check that the non-normalized names propagate throughout until results.
+
+query II colnames
+SELECT "Amélie", "Amélie" FROM Amelie
+----
+Amélie Amélie
+2      1
+
+# Check that function names are also recognized case-insensitively.
+query I
+SELECT LENGTH('abc') -- lint: uppercase function OK
+----
+3

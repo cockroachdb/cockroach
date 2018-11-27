@@ -1,0 +1,421 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+##################
+# TABLE DDL
+##################
+
+# Create two tables + superfluous "IF NOT EXISTS"
+##################
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE IF NOT EXISTS b (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+
+
+# Verify that two create tables were logged - the second
+# NOT EXISTS should not result in a log message.
+##################
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'create_table'
+----
+53  1
+54  1
+
+# Verify the contents of the 'Info' field of each log message using a LIKE
+# statement.
+##################
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'create_table'
+  AND info::JSONB->>'Statement' LIKE 'CREATE TABLE a%'
+----
+53  1  test.public.a
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'create_table'
+  AND info::JSONB->>'Statement' LIKE 'CREATE TABLE IF NOT EXISTS b%'
+----
+54  1  test.public.b
+
+# Sanity check - check for a non-matching info value.
+##################
+
+query I
+SELECT count(*)
+FROM system.eventlog
+WHERE "eventType" = 'create_table'
+  AND info LIKE '%CREATE TABLE badtable%'
+----
+0
+
+# Alter the table. Expect "alter_table" and "finish_schema_change" events.
+##################
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'alter_table'
+----
+
+statement ok
+ALTER TABLE a ADD val INT
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'alter_table'
+----
+53  1  test.public.a
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+53  1
+
+query II
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'reverse_schema_change'
+----
+
+# Verify the contents of the 'Info' field of each log message using a LIKE
+# statement.
+##################
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'alter_table'
+  AND info::JSONB->>'Statement' LIKE 'ALTER TABLE a%'
+----
+53  1  test.public.a
+
+# Add a UNIQUE constraint to the table in a way that will ensure the schema
+# change is reversed.
+##################
+
+statement ok
+INSERT INTO a VALUES (1, 1), (2, 1)
+
+statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint \"foo\"
+ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'alter_table'
+----
+53  1  test.public.a
+53  1  test.public.a
+
+query II rowsort
+SELECT "targetID", "reportingID"  FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+53  1
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'reverse_schema_change'
+----
+53  1
+
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change_rollback'
+----
+53  1
+
+# Create an Index on the table
+#################
+
+statement ok
+CREATE INDEX a_foo ON a (val)
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'create_index'
+  AND info::JSONB->>'Statement' LIKE 'CREATE INDEX a_foo%'
+----
+53  1  test.public.a
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+53  1
+53  1
+
+# Drop the index
+#################
+
+statement ok
+DROP INDEX a@a_foo
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+WHERE "eventType" = 'drop_index'
+  AND info::JSONB->>'Statement' LIKE 'DROP INDEX%a_foo'
+----
+53  1  test.public.a
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+53  1
+53  1
+53  1
+
+# Truncate a table
+##################
+
+statement ok
+TRUNCATE TABLE a
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'truncate_table'
+----
+53  1  test.public.a
+
+# Drop both tables + superfluous "IF EXISTS"
+##################
+
+statement ok
+DROP TABLE a
+
+statement ok
+DROP TABLE IF EXISTS b
+
+statement ok
+DROP TABLE IF EXISTS b
+
+
+# Verify that two drop table events were logged - the second IF EXISTS statement
+# should have failed.
+##################
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'drop_table'
+----
+55  1  test.public.a
+54  1  test.public.b
+
+# Verify the contents of the 'info' field of each event.
+##################
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'drop_table'
+  AND info::JSONB->>'Statement' LIKE 'DROP TABLE a%'
+----
+55  1  test.public.a
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'drop_table'
+  AND info::JSONB->>'Statement' LIKE 'DROP TABLE IF EXISTS b%'
+----
+54  1  test.public.b
+
+
+##################
+# DATABASE DDL
+##################
+
+# Create two databases + superfluous "IF NOT EXISTS"
+##################
+
+statement ok
+CREATE DATABASE eventlogtest
+
+statement ok
+CREATE DATABASE IF NOT EXISTS othereventlogtest
+
+statement ok
+CREATE DATABASE IF NOT EXISTS othereventlogtest
+
+
+# Verify the two events that were logged.
+##################
+
+query II
+SELECT "targetID", "reportingID"
+FROM system.eventlog
+WHERE "eventType" = 'create_database'
+  AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE eventlogtest%'
+----
+56  1
+
+query II
+SELECT "targetID", "reportingID"
+FROM system.eventlog
+WHERE "eventType" = 'create_database'
+  AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE IF NOT EXISTS othereventlogtest%'
+----
+57  1
+
+# Add some tables to eventlogtest.
+##################
+
+statement ok
+SET DATABASE = eventlogtest
+
+statement ok
+CREATE TABLE eventlogtest.testtable (id int PRIMARY KEY)
+
+statement ok
+CREATE TABLE eventlogtest.anothertesttable (id int PRIMARY KEY)
+
+# drop both databases.
+##################
+
+statement ok
+DROP DATABASE eventlogtest CASCADE
+
+statement ok
+DROP DATABASE IF EXISTS othereventlogtest CASCADE
+
+statement ok
+DROP DATABASE IF EXISTS othereventlogtest CASCADE
+
+# verify contents of drop event
+##################
+
+# verify event is there, and cascading table drops are logged.
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
+FROM system.eventlog
+WHERE "eventType" = 'drop_database'
+  AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
+----
+56  1  ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
+
+query IIT
+SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
+FROM system.eventlog
+WHERE "eventType" = 'drop_database'
+  AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
+----
+57  1  []
+
+statement ok
+SET DATABASE = test
+
+##################
+# Cluster Settings
+##################
+
+# Set and unset a cluster setting
+##################
+
+statement ok
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
+
+statement ok
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = DEFAULT
+
+statement ok
+PREPARE set_setting AS SET CLUSTER SETTING cluster.organization = $1
+
+statement ok
+EXECUTE set_setting('some string')
+
+# verify setting changes are logged
+##################
+query IIT
+SELECT "targetID", "reportingID", "info"
+FROM system.eventlog
+WHERE "eventType" = 'set_cluster_setting'
+AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%' AND info NOT LIKE '%cluster.secret%'
+ORDER BY "timestamp"
+----
+0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}
+0  1  {"SettingName":"trace.debug.enable","Value":"false","User":"root"}
+0  1  {"SettingName":"kv.range_merge.queue_enabled","Value":"false","User":"root"}
+0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"false","User":"root"}
+0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"DEFAULT","User":"root"}
+0  1  {"SettingName":"cluster.organization","Value":"'some string'","User":"root"}
+
+# Set and unset zone configs
+##################
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 67108865
+
+statement ok
+ALTER TABLE a CONFIGURE ZONE DISCARD
+
+# verify zone config changes are logged
+##################
+query IIT
+SELECT "targetID", "reportingID", "info"
+FROM system.eventlog
+WHERE "eventType" = 'set_zone_config'
+ORDER BY "timestamp"
+----
+60  1  {"Target":"test.a","Options":"range_max_bytes = 67108865","User":"root"}
+
+query IIT
+SELECT "targetID", "reportingID", "info"
+FROM system.eventlog
+WHERE "eventType" = 'remove_zone_config'
+ORDER BY "timestamp"
+----
+60  1  {"Target":"test.a","User":"root"}
+
+statement ok
+DROP TABLE a
+
+# Sequences
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+ALTER SEQUENCE s START 10
+
+statement ok
+DROP SEQUENCE s
+
+query TIIT rowsort
+SELECT "eventType", "targetID", "reportingID", info::JSONB->>'SequenceName'
+  FROM system.eventlog
+ WHERE "eventType" in ('create_sequence', 'alter_sequence', 'drop_sequence')
+----
+create_sequence  61  1  test.public.s
+alter_sequence   61  1  test.public.s
+drop_sequence    61  1  test.public.s
+
+# Views
+
+statement ok
+CREATE VIEW v AS SELECT 1
+
+statement ok
+DROP VIEW v
+
+query TIIT rowsort
+SELECT "eventType", "targetID", "reportingID", info::JSONB->>'ViewName'
+  FROM system.eventlog
+ WHERE "eventType" in ('create_view', 'drop_view')
+----
+create_view  62  1  test.public.v
+drop_view    62  1  test.public.v

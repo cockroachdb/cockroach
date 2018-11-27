@@ -1,0 +1,322 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+TABLE uv
+ ├── u int
+ ├── v int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM xy UNION SELECT * FROM uv
+----
+union
+ ├── columns: x:6(int) y:7(int)
+ ├── left columns: xy.x:1(int) xy.y:2(int)
+ ├── right columns: u:3(int) v:4(int)
+ ├── key: (6,7)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── project
+      ├── columns: u:3(int) v:4(int!null)
+      ├── prune: (3,4)
+      └── scan uv
+           ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+           ├── key: (5)
+           ├── fd: (5)-->(3,4)
+           ├── prune: (3-5)
+           └── interesting orderings: (+5)
+
+build
+SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM uv WHERE u=1) uv
+----
+intersect
+ ├── columns: x:1(int!null) y:2(int) x:1(int!null)
+ ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
+ ├── right columns: v:4(int) u:3(int) rowid:5(int)
+ ├── key: (1,2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── select
+      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
+      ├── key: (5)
+      ├── fd: ()-->(3), (5)-->(4)
+      ├── prune: (4,5)
+      ├── interesting orderings: (+5)
+      ├── scan uv
+      │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(3,4)
+      │    ├── prune: (3-5)
+      │    └── interesting orderings: (+5)
+      └── filters
+           └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                ├── variable: u [type=int]
+                └── const: 1 [type=int]
+
+build
+SELECT x, x, y FROM xy EXCEPT SELECT u, v, v FROM (SELECT * FROM uv WHERE u=1) uv
+----
+except
+ ├── columns: x:1(int!null) x:1(int!null) y:2(int)
+ ├── left columns: x:1(int!null) x:1(int!null) y:2(int)
+ ├── right columns: u:3(int) v:4(int) v:4(int)
+ ├── key: (1,2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── project
+      ├── columns: u:3(int!null) v:4(int!null)
+      ├── fd: ()-->(3)
+      ├── prune: (3,4)
+      └── select
+           ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
+           ├── key: (5)
+           ├── fd: ()-->(3), (5)-->(4)
+           ├── prune: (4,5)
+           ├── interesting orderings: (+5)
+           ├── scan uv
+           │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+           │    ├── key: (5)
+           │    ├── fd: (5)-->(3,4)
+           │    ├── prune: (3-5)
+           │    └── interesting orderings: (+5)
+           └── filters
+                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                     ├── variable: u [type=int]
+                     └── const: 1 [type=int]
+
+# Propagate outer columns.
+build
+SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── interesting orderings: (+1)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── filters
+      └── eq [type=bool, outer=(1,2)]
+           ├── subquery [type=tuple{int, int}]
+           │    └── max1-row
+           │         ├── columns: column13:13(tuple{int, int})
+           │         ├── outer: (1,2)
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(13)
+           │         └── project
+           │              ├── columns: column13:13(tuple{int, int})
+           │              ├── outer: (1,2)
+           │              ├── prune: (13)
+           │              ├── union
+           │              │    ├── columns: x:11(int) u:12(int)
+           │              │    ├── left columns: x:6(int) uv.u:3(int)
+           │              │    ├── right columns: y:10(int) uv.v:8(int)
+           │              │    ├── outer: (1,2)
+           │              │    ├── key: (11,12)
+           │              │    ├── project
+           │              │    │    ├── columns: x:6(int) uv.u:3(int)
+           │              │    │    ├── outer: (1)
+           │              │    │    ├── fd: ()-->(6)
+           │              │    │    ├── prune: (3,6)
+           │              │    │    ├── scan uv
+           │              │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │              │    │    │    ├── key: (5)
+           │              │    │    │    ├── fd: (5)-->(3,4)
+           │              │    │    │    ├── prune: (3-5)
+           │              │    │    │    └── interesting orderings: (+5)
+           │              │    │    └── projections
+           │              │    │         └── variable: xy.x [type=int, outer=(1)]
+           │              │    └── project
+           │              │         ├── columns: y:10(int) uv.v:8(int!null)
+           │              │         ├── outer: (2)
+           │              │         ├── fd: ()-->(10)
+           │              │         ├── prune: (8,10)
+           │              │         ├── scan uv
+           │              │         │    ├── columns: uv.u:7(int) uv.v:8(int!null) uv.rowid:9(int!null)
+           │              │         │    ├── key: (9)
+           │              │         │    ├── fd: (9)-->(7,8)
+           │              │         │    ├── prune: (7-9)
+           │              │         │    └── interesting orderings: (+9)
+           │              │         └── projections
+           │              │              └── variable: xy.y [type=int, outer=(2)]
+           │              └── projections
+           │                   └── tuple [type=tuple{int, int}, outer=(11,12)]
+           │                        ├── variable: x [type=int]
+           │                        └── variable: u [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+# Calculate union cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+UNION ALL
+SELECT * FROM (VALUES (4), (5))
+UNION
+SELECT * FROM (VALUES (6), (7), (8))
+----
+union
+ ├── columns: column1:5(int)
+ ├── left columns: column1:3(int)
+ ├── right columns: column1:4(int)
+ ├── cardinality: [1 - 8]
+ ├── key: (5)
+ ├── union-all
+ │    ├── columns: column1:3(int)
+ │    ├── left columns: column1:1(int)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [5 - 5]
+ │    ├── values
+ │    │    ├── columns: column1:1(int)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:4(int)
+      ├── cardinality: [3 - 3]
+      ├── prune: (4)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 8 [type=int]
+
+# Calculate intersection cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+INTERSECT ALL
+SELECT * FROM (VALUES (4), (5))
+INTERSECT
+SELECT * FROM (VALUES (6), (7), (8))
+----
+intersect
+ ├── columns: column1:1(int)
+ ├── left columns: column1:1(int)
+ ├── right columns: column1:3(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── intersect-all
+ │    ├── columns: column1:1(int)
+ │    ├── left columns: column1:1(int)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [0 - 2]
+ │    ├── values
+ │    │    ├── columns: column1:1(int)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:3(int)
+      ├── cardinality: [3 - 3]
+      ├── prune: (3)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 8 [type=int]
+
+# Calculate except cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+EXCEPT ALL
+SELECT * FROM (VALUES (4), (5))
+EXCEPT
+SELECT * FROM (VALUES (6), (7), (8), (9))
+----
+except
+ ├── columns: column1:1(int)
+ ├── left columns: column1:1(int)
+ ├── right columns: column1:3(int)
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── except-all
+ │    ├── columns: column1:1(int)
+ │    ├── left columns: column1:1(int)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [1 - 3]
+ │    ├── values
+ │    │    ├── columns: column1:1(int)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:3(int)
+      ├── cardinality: [4 - 4]
+      ├── prune: (3)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 8 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 9 [type=int]

@@ -1,0 +1,135 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+# Check that we can alter the default zone config.
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
+
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
+----
+0  ALTER RANGE default CONFIGURE ZONE USING
+   range_min_bytes = 16777216,
+   range_max_bytes = 67108864,
+   gc.ttlseconds = 90000,
+   num_replicas = 1,
+   constraints = '[]',
+   lease_preferences = '[]'
+
+# Check that we can reset the default zone config to defaults.
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING DEFAULT
+
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
+----
+0  ALTER RANGE default CONFIGURE ZONE USING
+   range_min_bytes = 16777216,
+   range_max_bytes = 67108864,
+   gc.ttlseconds = 90000,
+   num_replicas = 3,
+   constraints = '[]',
+   lease_preferences = '[]'
+
+# Make an override for the tests below
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING range_min_bytes = 1234567
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+# Ensure that SHOW ZONE CONFIGURATION retrieves the default zone (ID 0) if
+# no zone was set.
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+0  ALTER RANGE default CONFIGURE ZONE USING
+   range_min_bytes = 1234567,
+   range_max_bytes = 67108864,
+   gc.ttlseconds = 90000,
+   num_replicas = 3,
+   constraints = '[]',
+   lease_preferences = '[]'
+
+# Once USING DEFAULT has been used, we get the default config
+# but with our own zone config ID.
+
+statement ok
+ALTER TABLE a CONFIGURE ZONE USING DEFAULT
+
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+53  ALTER TABLE a CONFIGURE ZONE USING
+    range_min_bytes = 1234567,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+
+# Check that configurations can be adjusted with USING.
+statement ok
+ALTER TABLE a CONFIGURE ZONE USING
+  range_min_bytes = 200000 + 1,
+  range_max_bytes = 300000 + 1,
+  gc.ttlseconds = 3000 + 600,
+  num_replicas = floor(1.2)::int,
+  constraints = '[+region=test]',
+  lease_preferences = '[[+region=test]]'
+
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+53  ALTER TABLE a CONFIGURE ZONE USING
+    range_min_bytes = 200001,
+    range_max_bytes = 300001,
+    gc.ttlseconds = 3600,
+    num_replicas = 1,
+    constraints = '[+region=test]',
+    lease_preferences = '[[+region=test]]'
+
+# Check that we can set just one value without altering the others.
+statement ok
+ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 400000
+
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+53  ALTER TABLE a CONFIGURE ZONE USING
+    range_min_bytes = 200001,
+    range_max_bytes = 400000,
+    gc.ttlseconds = 3600,
+    num_replicas = 1,
+    constraints = '[+region=test]',
+    lease_preferences = '[[+region=test]]'
+
+# Check that we can reset the configuration to defaults.
+
+statement ok
+ALTER TABLE a CONFIGURE ZONE USING DEFAULT
+
+# Note: the range_min_bytes here should reflect the non-standard
+# default that was set initially.
+query IT
+SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+53  ALTER TABLE a CONFIGURE ZONE USING
+    range_min_bytes = 1234567,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+
+# Check that we can drop a configuration to get back to inherinting
+# the defaults.
+statement ok
+ALTER TABLE a CONFIGURE ZONE DISCARD
+
+query I
+SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+0

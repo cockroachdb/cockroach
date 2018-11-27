@@ -11,16 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
-// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
 import (
+	"context"
+	"sync"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -39,9 +36,8 @@ func TestRenameTable(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	counter := int64(keys.MaxReservedDescID)
+	counter := int64(keys.MinNonPredefinedUserDescID)
 
-	counter++
 	oldDBID := sqlbase.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -100,7 +96,7 @@ func isRenamed(
 	tableID sqlbase.ID,
 	expectedName string,
 	expectedVersion sqlbase.DescriptorVersion,
-	cfg config.SystemConfig,
+	cfg *config.SystemConfig,
 ) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
@@ -132,7 +128,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &SchemaChangerTestingKnobs{
-				RenameOldNameNotInUseNotification: func() {
+				OldNamesDrainedNotification: func() {
 					<-renameUnblocked
 				},
 			},
@@ -149,7 +145,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
 	lmKnobs.TestingLeasesRefreshedEvent =
-		func(cfg config.SystemConfig) {
+		func(cfg *config.SystemConfig) {
 			mu.Lock()
 			defer mu.Unlock()
 			if waitTableID != 0 {
@@ -187,15 +183,21 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	}
 
 	// Concurrently, rename the table.
-	threadDone := make(chan interface{})
+	threadDone := make(chan error)
 	go func() {
 		// The ALTER will commit and signal the main thread through `renamed`, but
 		// the schema changer will remain blocked by the lease on the "t" version
 		// held by the txn started above.
-		if _, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
-			panic(err)
+		_, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2")
+		threadDone <- err
+	}()
+	defer func() {
+		close(renameUnblocked)
+		// Block until the thread doing the rename has finished, so the test can clean
+		// up. It needed to wait for the transaction to release its lease.
+		if err := <-threadDone; err != nil {
+			t.Fatal(err)
 		}
-		close(threadDone)
 	}()
 
 	// Block until the LeaseManager has processed the gossip update.
@@ -223,20 +225,15 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// Check that the old name is not usable outside of the transaction now
 	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
-	// old name), even thoudh the name mapping still exists.
-	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock())
+	// old name), even though the name mapping still exists.
+	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock().Now())
 	if lease != nil {
 		t.Fatalf(`still have lease on "t"`)
 	}
 	if _, err := db.Exec("SELECT * FROM test.t"); !testutils.IsError(
-		err, `table "test.t" does not exist`) {
+		err, `relation "test.t" does not exist`) {
 		t.Fatal(err)
 	}
-	close(renameUnblocked)
-
-	// Block until the thread doing the rename has finished, so the test can clean
-	// up. It needed to wait for the transaction to release its lease.
-	<-threadDone
 }
 
 // Test that a txn doing a rename can use the new name immediately.
@@ -256,28 +253,51 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
+	// Make sure we take a lease on the version called "t".
+	if _, err := db.Exec("SELECT * FROM test.t"); err != nil {
 		t.Fatal(err)
+	}
+	{
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we can use the new name.
+		if _, err := txn.Exec("SELECT * FROM test.t2"); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txn.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// Make sure we take a lease on the version called "t".
-	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
-		t.Fatal(err)
-	}
-	// Check that we can use the new name.
-	if _, err := txn.Exec("SELECT * FROM test.t2"); err != nil {
-		t.Fatal(err)
-	}
-	// Check that we can also use the old name, since we have a lease on it.
-	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
+	{
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := txn.Exec("ALTER TABLE test.t2 RENAME TO test.t"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we can use the new name.
+		if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we cannot use the old name.
+		if _, err := txn.Exec(`
+SELECT * FROM test.t2
+`); !testutils.IsError(err, "relation \"test.t2\" does not exist") {
+			t.Fatalf("err = %v", err)
+		}
+		if err := txn.Rollback(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -323,6 +343,94 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE TABLE test.t3 (a INT PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Tests that a RENAME while a name is being drained will result in the
+// table version being incremented again, implying that all old names
+// are drained correctly. The new RENAME will succeed with
+// all old names drained.
+func TestRenameDuringDrainingName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// two channels that signal the start of the second rename
+	// and the end of the second rename.
+	startRename := make(chan interface{})
+	finishRename := make(chan interface{})
+	serverParams := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &SchemaChangerTestingKnobs{
+				OldNamesDrainedNotification: func() {
+					if startRename != nil {
+						// Run second rename.
+						start := startRename
+						startRename = nil
+						close(start)
+						<-finishRename
+					}
+				},
+				SyncFilter: func(tscc TestingSchemaChangerCollection) {
+					// Clear the schema changer for the second RENAME so
+					// that we can be sure that the first schema changer
+					// runs both schema changes.
+					if startRename == nil {
+						tscc.ClearSchemaChangers()
+					}
+				},
+			},
+		}}
+
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer s.Stopper().Stop(context.TODO())
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t (a INT PRIMARY KEY);
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	// The expected version will be the result of two increments for the
+	// two schema changes and one increment for signaling of the completion
+	// of the drain.
+	expectedVersion := tableDesc.Version + 3
+
+	// Concurrently, rename the table.
+	start := startRename
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-start
+	if _, err := db.Exec("ALTER TABLE test.t2 RENAME TO test.t3"); err != nil {
+		t.Fatal(err)
+	}
+	close(finishRename)
+
+	wg.Wait()
+
+	// Table rename to t3 was successful.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "t3")
+	if version := tableDesc.Version; expectedVersion != version {
+		t.Fatalf("version mismatch: expected = %d, current = %d", expectedVersion, version)
+	}
+
+	// Old names are gone.
+	if _, err := db.Exec("SELECT * FROM test.t"); !testutils.IsError(
+		err, `relation "test.t" does not exist`) {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("SELECT * FROM test.t2"); !testutils.IsError(
+		err, `relation "test.t2" does not exist`) {
 		t.Fatal(err)
 	}
 }

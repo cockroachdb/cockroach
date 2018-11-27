@@ -1,6 +1,5 @@
 // Copyright 2013 Google Inc. All Rights Reserved.
-//
-// Go support for leveled logs, analogous to https://code.google.com/p/google-clog/
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This code originated in the github.com/golang/glog package.
+
 package log
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,15 +30,15 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Test that shortHostname works as advertised.
@@ -89,10 +92,9 @@ func contains(str string, t *testing.T) bool {
 	return strings.Contains(c, str)
 }
 
-// setFlags configures the logging flags and exitFunc how the test expects
-// them.
+// setFlags resets the logging flags and exit function to what tests expect.
 func setFlags() {
-	SetExitFunc(os.Exit)
+	ResetExitFunc()
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	logging.noStderrRedirect = false
@@ -150,15 +152,30 @@ func TestEntryDecoder(t *testing.T) {
 		return buf.String()
 	}
 
-	t1 := time.Now().Round(time.Microsecond)
+	t1 := timeutil.Now().Round(time.Microsecond)
 	t2 := t1.Add(time.Microsecond)
 	t3 := t2.Add(time.Microsecond)
 	t4 := t3.Add(time.Microsecond)
+	t5 := t4.Add(time.Microsecond)
+	t6 := t5.Add(time.Microsecond)
+	t7 := t6.Add(time.Microsecond)
+	t8 := t7.Add(time.Microsecond)
+
+	// Verify the truncation logic for reading logs that are longer than the
+	// default scanner can handle.
+	preambleLength := len(formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, ""))
+	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
+	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
+	tooLongEntry := reallyLongEntry + "a"
 
 	contents := formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, "info")
-	contents += formatEntry(Severity_WARNING, t2, 1, "clog_test.go", 137, "warning")
-	contents += formatEntry(Severity_ERROR, t3, 2, "clog_test.go", 138, "error")
-	contents += formatEntry(Severity_FATAL, t4, 3, "clog_test.go", 139, "fatal")
+	contents += formatEntry(Severity_INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
+	contents += formatEntry(Severity_INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
+	contents += formatEntry(Severity_INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
+	contents += formatEntry(Severity_WARNING, t5, 4, "clog_test.go", 140, "warning")
+	contents += formatEntry(Severity_ERROR, t6, 5, "clog_test.go", 141, "error")
+	contents += formatEntry(Severity_FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
+	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
 	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents))
@@ -187,28 +204,63 @@ func TestEntryDecoder(t *testing.T) {
 			Message:   `info`,
 		},
 		{
-			Severity:  Severity_WARNING,
+			Severity:  Severity_INFO,
 			Time:      t2.UnixNano(),
 			Goroutine: 1,
 			File:      `clog_test.go`,
 			Line:      137,
-			Message:   `warning`,
+			Message: `multi-
+line`,
 		},
 		{
-			Severity:  Severity_ERROR,
+			Severity:  Severity_INFO,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
 			Line:      138,
-			Message:   `error`,
+			Message:   reallyLongEntry,
 		},
 		{
-			Severity:  Severity_FATAL,
+			Severity:  Severity_INFO,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
 			Line:      139,
-			Message:   `fatal`,
+			Message:   tooLongEntry[:maxMessageLength],
+		},
+		{
+			Severity:  Severity_WARNING,
+			Time:      t5.UnixNano(),
+			Goroutine: 4,
+			File:      `clog_test.go`,
+			Line:      140,
+			Message:   `warning`,
+		},
+		{
+			Severity:  Severity_ERROR,
+			Time:      t6.UnixNano(),
+			Goroutine: 5,
+			File:      `clog_test.go`,
+			Line:      141,
+			Message:   `error`,
+		},
+		{
+			Severity:  Severity_FATAL,
+			Time:      t7.UnixNano(),
+			Goroutine: 6,
+			File:      `clog_test.go`,
+			Line:      142,
+			Message: `fatal
+stack
+trace`,
+		},
+		{
+			Severity:  Severity_INFO,
+			Time:      t8.UnixNano(),
+			Goroutine: 7,
+			File:      `clog_test.go`,
+			Line:      143,
+			Message:   tooLongEntry[:maxMessageLength],
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -401,7 +453,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := logDir.get()
+	dir, err := logging.logDir.get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,33 +579,51 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	const maxTotalLogFileSize = 1500
-	const singleLineLogFileSize = 650 // This is an approximation.
-	// Since each log file is ~650 bytes in size. GC should always trim the
-	// total log files down to 2.
-	const expectedFilesAfterGC = maxTotalLogFileSize / singleLineLogFileSize
 	const newLogFiles = 20
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
 	logging.noStderrRedirect = true
 
-	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
-	LogFileMaxSize = 1 // ensure rotation on every log write
-	defer func(previous int64) {
-		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
-	}(LogFilesCombinedMaxSize)
-	atomic.StoreInt64(&LogFilesCombinedMaxSize, 1500)
+	// Create 1 log file to figure out its size.
+	Infof(context.Background(), "0")
 
 	allFilesOriginal, err := ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e, a := 0, len(allFilesOriginal); e != a {
+	if e, a := 1, len(allFilesOriginal); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
+	dir, err := logging.logDir.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(dir, allFilesOriginal[0].Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// logFileSize is the size of the first log file we wrote to.
+	logFileSize := stat.Size()
+	const expectedFilesAfterGC = 2
+	// Pick a max total size that's between 2 and 3 log files in size.
+	maxTotalLogFileSize := logFileSize*expectedFilesAfterGC + logFileSize // 2
 
-	for i := 0; i < newLogFiles; i++ {
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+	atomic.StoreInt64(&LogFilesCombinedMaxSize, maxTotalLogFileSize)
+
+	for i := 1; i < newLogFiles; i++ {
 		Infof(context.Background(), "%d", i)
 		Flush()
 	}
@@ -562,12 +632,7 @@ func TestGC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The +1 here is created from clog's createFile(). All subsequent files are
-	// created from clog's write(). Both of these are called from clog's
-	// outputLogEntry, but it's a quirk of this test due to setting MaxSize to
-	// such a low number that the first file is ignored and the 2nd file is
-	// created within the same call.
-	if e, a := newLogFiles+1, len(allFilesBefore); e != a {
+	if e, a := newLogFiles, len(allFilesBefore); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
 
@@ -633,7 +698,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	SetExitFunc(func(int) {})
+	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
 	defer logging.swap(logging.newBuffers())
@@ -691,6 +756,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
+	defer func(save Severity) { logging.fileThreshold = save }(logging.fileThreshold)
 	logging.fileThreshold = Severity_ERROR
 
 	Infof(context.Background(), "test1")
@@ -710,9 +776,50 @@ func TestFileSeverityFilter(t *testing.T) {
 	}
 }
 
+type outOfSpaceWriter struct{}
+
+func (w *outOfSpaceWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("no space left on device")
+}
+
+func TestExitOnFullDisk(t *testing.T) {
+	oldLogExitFunc := logExitFunc
+	logExitFunc = nil
+	defer func() { logExitFunc = oldLogExitFunc }()
+
+	var exited sync.WaitGroup
+	exited.Add(1)
+	l := &loggingT{}
+	l.exitOverride.f = func(int) {
+		exited.Done()
+	}
+
+	l.file = &syncBuffer{
+		logger: l,
+		Writer: bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
+	}
+
+	l.mu.Lock()
+	l.exitLocked(fmt.Errorf("out of space"))
+	l.mu.Unlock()
+
+	exited.Wait()
+}
+
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(Severity_INFO, time.Now(), 200, "file.go", 100, nil)
+		buf := formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
+}
+
+func BenchmarkVDepthWithVModule(b *testing.B) {
+	if err := SetVModule("craigthecockroach=5"); err != nil {
+		b.Fatal(err)
+	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = VDepth(1, 1)
+		}
+	})
 }

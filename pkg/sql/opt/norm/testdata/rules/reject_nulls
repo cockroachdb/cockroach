@@ -1,0 +1,601 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
+----
+TABLE uv
+ ├── u int not null
+ ├── v int
+ └── INDEX primary
+      └── u int not null
+
+# ----------------------------------------------------------
+# RejectNullsLeftJoin + RejectNullsRightJoin
+# ----------------------------------------------------------
+
+opt expect=RejectNullsRightJoin
+SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
+----
+left-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+opt expect=RejectNullsLeftJoin
+SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
+----
+right-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── constraint: /5: [/6 - ]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+# Inner-join operator.
+opt expect=RejectNullsLeftJoin
+SELECT *
+FROM (SELECT * FROM a LEFT JOIN uv ON True) AS l
+INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True) AS r
+ON l.u=1 AND r.v>2
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int!null) v:6(int) k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
+ ├── key: (1,7,11)
+ ├── fd: ()-->(5,6), (1)-->(2-4), (7)-->(8-10), (11)-->(12)
+ ├── inner-join
+ │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string) uv.u:11(int!null) uv.v:12(int!null)
+ │    ├── key: (7,11)
+ │    ├── fd: (7)-->(8-10), (11)-->(12)
+ │    ├── scan a
+ │    │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string)
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8-10)
+ │    ├── select
+ │    │    ├── columns: uv.u:11(int!null) uv.v:12(int!null)
+ │    │    ├── key: (11)
+ │    │    ├── fd: (11)-->(12)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:11(int!null) uv.v:12(int)
+ │    │    │    ├── key: (11)
+ │    │    │    └── fd: (11)-->(12)
+ │    │    └── filters
+ │    │         └── uv.v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    └── filters (true)
+ ├── inner-join
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) uv.u:5(int!null) uv.v:6(int)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(5,6), (1)-->(2-4)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:5(int!null) uv.v:6(int)
+ │    │    ├── constraint: /5: [/1 - /1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(5,6)
+ │    └── filters (true)
+ └── filters (true)
+
+# Left-join operator.
+opt expect=RejectNullsLeftJoin
+SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
+----
+inner-join (merge)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    └── ordering: +5
+ └── filters (true)
+
+# Right-join operator.
+opt expect=RejectNullsRightJoin
+SELECT * FROM a RIGHT JOIN xy ON true WHERE a.k > xy.y
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int!null)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters
+      └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+# Full-join operator.
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
+SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── constraint: /5: [/6 - ]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+# Apply operators.
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
+SELECT *
+FROM (SELECT * FROM a FULL JOIN xy ON True)
+WHERE (SELECT u FROM uv WHERE v=k)=i
+----
+right-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ ├── project
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── inner-join-apply
+ │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:7(int!null)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4,7), (2)==(7), (7)==(2)
+ │         ├── scan a
+ │         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-4)
+ │         ├── max1-row
+ │         │    ├── columns: u:7(int!null)
+ │         │    ├── outer: (1)
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(7)
+ │         │    └── project
+ │         │         ├── columns: u:7(int!null)
+ │         │         ├── outer: (1)
+ │         │         ├── key: (7)
+ │         │         └── select
+ │         │              ├── columns: u:7(int!null) v:8(int!null)
+ │         │              ├── outer: (1)
+ │         │              ├── key: (7)
+ │         │              ├── fd: ()-->(8)
+ │         │              ├── scan uv
+ │         │              │    ├── columns: u:7(int!null) v:8(int)
+ │         │              │    ├── key: (7)
+ │         │              │    └── fd: (7)-->(8)
+ │         │              └── filters
+ │         │                   └── v = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │         └── filters
+ │              └── i = u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ └── filters (true)
+
+# ----------------------------------------------------------
+# RejectNullsGroupBy
+# ----------------------------------------------------------
+
+# Single max aggregate function.
+opt expect=RejectNullsGroupBy
+SELECT max(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+GROUP BY k
+HAVING max(x)=1
+----
+project
+ ├── columns: max:7(int!null)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) max:7(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) max:7(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) x:5(int!null)
+      │    │    ├── key: (1,5)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    └── key: (5)
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         └── max [type=int, outer=(5)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# Aggregate function with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT y FROM xy)
+ON True
+GROUP BY k
+HAVING sum(DISTINCT y)=1
+----
+project
+ ├── columns: sum:7(decimal!null)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         └── sum [type=decimal, outer=(6)]
+      │              └── agg-distinct [type=int]
+      │                   └── variable: y [type=int]
+      └── filters
+           └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# Single max aggregate function without grouping columns.
+opt expect=RejectNullsGroupBy
+SELECT max(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+HAVING max(x)=1
+----
+select
+ ├── columns: max:7(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scalar-group-by
+ │    ├── columns: max:7(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7)
+ │    ├── inner-join
+ │    │    ├── columns: x:5(int!null)
+ │    │    ├── scan a
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:5(int!null)
+ │    │    │    └── key: (5)
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── max [type=int, outer=(5)]
+ │              └── variable: x [type=int]
+ └── filters
+      └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# Multiple aggregate functions on same column.
+opt expect=RejectNullsGroupBy
+SELECT min(x), max(x)
+FROM a
+LEFT JOIN xy
+ON True
+GROUP BY k
+HAVING min(x)=1
+----
+project
+ ├── columns: min:7(int!null) max:8(int)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) min:7(int!null) max:8(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(8)
+      ├── group-by
+      │    ├── columns: k:1(int!null) min:7(int) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) x:5(int!null)
+      │    │    ├── key: (1,5)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    └── key: (5)
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── min [type=int, outer=(5)]
+      │         │    └── variable: x [type=int]
+      │         └── max [type=int, outer=(5)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# Multiple aggregate functions on same column, some with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y), max(y)
+FROM a
+LEFT JOIN xy
+ON True
+GROUP BY k
+HAVING max(y)=1
+----
+project
+ ├── columns: sum:7(decimal) max:8(int!null)
+ ├── fd: ()-->(8)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal) max:8(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(8), (1)-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── sum [type=decimal, outer=(6)]
+      │         │    └── agg-distinct [type=int]
+      │         │         └── variable: y [type=int]
+      │         └── max [type=int, outer=(6)]
+      │              └── variable: y [type=int]
+      └── filters
+           └── max = 1 [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+
+
+# Ignore ConstAgg aggregates on other columns.
+opt expect=RejectNullsGroupBy
+SELECT * FROM a WHERE (SELECT sum(x) FROM xy WHERE x=k)>i
+----
+project
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) sum:7(decimal!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4,7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) sum:7(decimal)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── internal-ordering: +(1|5)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4,7)
+      │    ├── inner-join (merge)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null)
+      │    │    ├── left ordering: +1
+      │    │    ├── right ordering: +5
+      │    │    ├── key: (5)
+      │    │    ├── fd: (1)-->(2-4), (1)==(5), (5)==(1)
+      │    │    ├── ordering: +(1|5) [provided: +1]
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4)
+      │    │    │    └── ordering: +1
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    └── ordering: +5
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── sum [type=decimal, outer=(5)]
+      │         │    └── variable: x [type=int]
+      │         ├── const-agg [type=int, outer=(2)]
+      │         │    └── variable: i [type=int]
+      │         ├── const-agg [type=float, outer=(3)]
+      │         │    └── variable: f [type=float]
+      │         └── const-agg [type=string, outer=(4)]
+      │              └── variable: s [type=string]
+      └── filters
+           └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+
+# Don't reject nulls when multiple columns are used.
+opt expect-not=RejectNullsGroupBy
+SELECT min(x), max(y)
+FROM (select k from a)
+LEFT JOIN (select x, y from xy)
+ON True
+GROUP BY k
+HAVING min(x)=1
+----
+project
+ ├── columns: min:7(int!null) max:8(int)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) min:7(int!null) max:8(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(8)
+      ├── group-by
+      │    ├── columns: k:1(int!null) min:7(int) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int) y:6(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── fd: (5)-->(6)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    ├── key: (5)
+      │    │    │    └── fd: (5)-->(6)
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── min [type=int, outer=(5)]
+      │         │    └── variable: x [type=int]
+      │         └── max [type=int, outer=(6)]
+      │              └── variable: y [type=int]
+      └── filters
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# Don't reject column when count function is used (it doesn't return nil when
+# input is empty).
+opt expect-not=RejectNullsGroupBy
+SELECT count(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+GROUP BY k
+HAVING count(x)=1
+----
+project
+ ├── columns: count:7(int!null)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) count:7(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) count:7(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    └── key: (5)
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         └── count [type=int, outer=(5)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+
+# ConstNotNullAgg rejects nulls (regression test for #28810).
+# TODO(andyk): Removal of filter pushdown into apply join inputs means that this
+# rule no longer triggers RejectNullsGroupBy. Find another way to decorrelate
+# this query.
+# opt expect=RejectNullsGroupBy
+opt
+SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
+----
+project
+ ├── columns: "?column?":17(int!null)
+ ├── fd: ()-->(17)
+ ├── left-join-apply
+ │    ├── columns: a.s:4(string) exists:16(bool)
+ │    ├── scan a
+ │    │    └── columns: a.s:4(string)
+ │    ├── project
+ │    │    ├── columns: exists:16(bool)
+ │    │    ├── outer: (4)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.k:5(int!null) true_agg:15(bool)
+ │    │    │    ├── grouping columns: a.k:5(int!null)
+ │    │    │    ├── outer: (4)
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: (5)-->(15)
+ │    │    │    ├── left-join
+ │    │    │    │    ├── columns: a.k:5(int!null) true:14(bool)
+ │    │    │    │    ├── outer: (4)
+ │    │    │    │    ├── fd: ()~~>(14)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: a.k:5(int!null)
+ │    │    │    │    │    └── key: (5)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:14(bool!null)
+ │    │    │    │    │    ├── outer: (4)
+ │    │    │    │    │    ├── fd: ()-->(14)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: a.s:12(string!null)
+ │    │    │    │    │    │    ├── outer: (4)
+ │    │    │    │    │    │    ├── fd: ()-->(12)
+ │    │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    │    └── columns: a.s:12(string)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── a.s = a.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── true [type=bool]
+ │    │    │    │    └── filters (true)
+ │    │    │    └── aggregations
+ │    │    │         └── const-not-null-agg [type=bool, outer=(14)]
+ │    │    │              └── variable: true [type=bool]
+ │    │    └── projections
+ │    │         └── true_agg IS NOT NULL [type=bool, outer=(15)]
+ │    └── filters
+ │         └── variable: exists [type=bool, outer=(16), constraints=(/16: [/true - /true]; tight), fd=()-->(16)]
+ └── projections
+      └── const: 1 [type=int]

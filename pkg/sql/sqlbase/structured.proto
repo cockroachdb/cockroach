@@ -11,23 +11,112 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
-import "cockroach/pkg/sql/sqlbase/privilege.proto";
+import "util/hlc/timestamp.proto";
+import "sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
+
+// Protobuf encoding for scalar values
+// ===================================
+//
+// Simple (unary) scalars types
+// ----------------------------
+//
+// | SQL type          | Semantic Type  | Visible Type | Precision | Width | Notes            |
+// |-------------------|----------------|--------------|-----------|-------|------------------|
+// | NULL (unknown)    | NULL           | NONE         | 0         | 0     |                  |
+// | BOOL              | BOOL           | NONE         | 0         | 0     |                  |
+// | DATE              | DATE           | NONE         | 0         | 0     |                  |
+// | TIMESTAMP         | TIMESTAMP      | NONE         | 0         | 0     |                  |
+// | TIMESTAMPTZ       | TIMESTAMPTZ    | NONE         | 0         | 0     |                  |
+// | INTERVAL          | INTERVAL       | NONE         | 0         | 0     |                  |
+// | NAME              | NAME           | NONE         | 0         | 0     |                  |
+// | OID               | OID            | NONE         | 0         | 0     |                  |
+// | UUID              | UUID           | NONE         | 0         | 0     |                  |
+// | INET              | INET           | NONE         | 0         | 0     |                  |
+// | TIME              | TIME           | NONE         | 0         | 0     |                  |
+// | JSON              | JSON           | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BYTES             | BYTES          | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | STRING            | STRING         | NONE         | 0         | 0     |                  |
+// | STRING(N)         | STRING         | NONE         | 0         | N     |                  |
+// | VARCHAR           | STRING         | VARCHAR      | 0         | 0     |                  |
+// | VARCHAR(N)        | STRING         | VARCHAR      | 0         | N     |                  |
+// | CHAR              | STRING         | CHAR         | 0         | 1     |                  |
+// | CHAR(N)           | STRING         | CHAR         | 0         | N     |                  |
+// | "char"            | STRING         | QCHAR        | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | COLLATEDSTRING    | COLLATEDSTRING | NONE         | 0         | 0     | also uses Locale |
+// | COLLATEDSTRING(N) | COLLATEDSTRING | NONE         | 0         | N     | also uses Locale |
+// |                   |                |              |           |       |                  |
+// | DECIMAL           | DECIMAL        | NONE         | 0         | 0     |                  |
+// | DECIMAL(N)        | DECIMAL        | NONE         | N         | 0     |                  |
+// | DECIMAL(N,M)      | DECIMAL        | NONE         | N         | M     |                  |
+// |                   |                |              |           |       |                  |
+// | FLOAT8            | FLOAT          | NONE         | 0         | 0     |                  |
+// | FLOAT4            | FLOAT          | REAL         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BIT               | BIT            | NONE         | 0         | 1     |                  |
+// | BIT(N)            | BIT            | NONE         | 0         | N     |                  |
+// | VARBIT            | BIT            | VARBIT       | 0         | 0     |                  |
+// | VARBIT(N)         | BIT            | VARBIT       | 0         | N     |                  |
+// |                   |                |              |           |       |                  |
+// | INT,INTEGER       | INT            | NONE         | 0         | 0     |                  |
+// | INT2,SMALLINT     | INT            | NONE         | 0         | 16    |                  |
+// | INT4              | INT            | NONE         | 0         | 32    |                  |
+// | INT8,INT64,BIGINT | INT            | NONE         | 0         | 64    |                  |
+//
+// Tuple columns
+// -------------
+//
+// These cannot (yet) be used in tables but are used in DistSQL flow
+// processors for queries that have tuple-typed intermediate results.
+//
+// - SemanticType is set to TUPLE.
+// - TupleContents contains the tuple element types. These can be recursively defined.
+// - TupleLabels contains the tuple labels, if any.
+//
+// Array values
+// ------------
+//
+// | Field           | Description                                                         |
+// |-----------------|---------------------------------------------------------------------|
+// | SemanticType    | ARRAY (with 2 exceptions, see below)                                |
+// | ArrayDimensions | array sizes in each dimension.                                      |
+// | ArrayContents   | semantic type of the array elements, as per the two sections above. |
+// | VisibleType     | describes the element type like above.                              |
+// | Width           | describes the element type like above.                              |
+// | Precision       | describes the element type like above.                              |
+// | TupleContents   | describes the element type like above. (Arrays of tuples)           |
+// | TupleLabels     | describes the element type like above. (Arrays of tuples)           |
+//
+// If the original type was INT2VECTOR or OIDVECTOR, the semantic type is set to that. The
+// other fields are set as per regular arrays:
+//
+// - INT2VECTOR: SemanticType=INT2VECTOR, ArrayContents=INT,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+// - OIDVECTOR: SemanticType=OIDVECTOR, ArrayContents=OID,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+//
+
 message ColumnType {
-  // These mirror the types supported by the sql/parser. See
-  // sql/parser/col_types.go.
-  enum Kind {
+  option (gogoproto.equal) = true;
+
+  // These mirror the types supported by sql/coltypes.
+  //
+  // Note: when adding constants to this list or renaming constants,
+  // verify with PostgreSQL what the type name should be in
+  // information_schema.columns.data_type, and modify
+  // (*ColumnType).InformationSchemaVisibleType() accordingly.
+  //
+  enum SemanticType {
     BOOL = 0;
     INT = 1;        // INT(width)
     FLOAT = 2;      // FLOAT(precision)
@@ -52,27 +141,53 @@ message ColumnType {
     // transferred through distsql streams.
     NULL = 13;
 
-    // Array and vector types.
-    //
-    // TODO(cuongdo): Fix this before allowing persistence of array/vector types
-    // It would be cleaner if when array_dimensions are specified, Kind is
-    // simply the parameterized type of the array. However, because Kind is used
-    // to determine type information elsewhere, it isn't possible to take the
-    // cleaner approach without an extensive refactoring.
-    INT_ARRAY = 100;
+    UUID = 14;
+    ARRAY = 15;
+    INET = 16;
+    TIME = 17;
+    JSONB = 18;
+    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
+    TUPLE = 20;
+	BIT = 21;
+
     INT2VECTOR = 200;
+    OIDVECTOR = 201;
   }
 
-  optional Kind kind = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  enum VisibleType {
+    NONE = 0;
+    INTEGER = 1;   // Deprecated, remove post-2.2.
+    SMALLINT = 2;  // Deprecated, remove post-2.2.
+    BIGINT = 3;    // Deprecated, remove post-2.2.
+    reserved 4;
+    REAL = 5;
+    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+    VARCHAR = 7;
+    CHAR = 8;
+    QCHAR = 9;
+	VARBIT = 10;
+  }
+
+  optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
+  // INT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
-  // FLOAT and DECIMAL.
+  // DECIMAL
+  // Also FLOAT pre-2.1 (this was incorrect.)
   optional int32 precision = 3 [(gogoproto.nullable) = false];
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.
   repeated int32 array_dimensions = 4;
   // Collated STRING, CHAR, and VARCHAR
   optional string locale = 5;
+  // Alias for any types where our internal representation is different than
+  // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
+  // compatibility.
+  optional VisibleType visible_type = 6 [(gogoproto.nullable) = false];
+  // Only used if the kind is ARRAY.
+  optional SemanticType array_contents = 7;
+  // Only used if the kind is TUPLE
+  repeated ColumnType tuple_contents = 8 [(gogoproto.nullable) = false];
+  repeated string tuple_labels = 9;
 }
 
 enum ConstraintValidity {
@@ -81,6 +196,15 @@ enum ConstraintValidity {
 }
 
 message ForeignKeyReference {
+  enum Action {
+    option (gogoproto.goproto_enum_stringer) = false;
+    NO_ACTION = 0;
+    RESTRICT = 1;
+    SET_NULL = 2;
+    SET_DEFAULT = 3;
+    CASCADE = 4;
+  }
+
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
@@ -88,6 +212,8 @@ message ForeignKeyReference {
   // If this FK only uses a prefix of the columns in its index, we record how
   // many to avoid spuriously counting the additional cols as used by this FK.
   optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
+  optional Action on_delete = 6 [(gogoproto.nullable) = false];
+  optional Action on_update = 7 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -103,6 +229,11 @@ message ColumnDescriptor {
   reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
   reserved 7;
+  // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
+  repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
+  // Expression to use to compute the value of this column if this is a
+  // computed column.
+  optional string compute_expr = 11;
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
@@ -123,9 +254,9 @@ message ColumnFamilyDescriptor {
 
   // If nonzero, the column involved in the single column optimization.
   //
-  // Families store colums in a ValueType_TUPLE as repeated <colid><data>
+  // Families store columns in a ValueType_TUPLE as repeated <columnID><data>
   // entries. As a space optimization and for backward compatibility, a single
-  // column is written without the columnid prefix. Because more columns could
+  // column is written without the column id prefix. Because more columns could
   // be added, it would be ambiguous which column was stored when read back in,
   // so this field supplies it.
   optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
@@ -153,8 +284,10 @@ message InterleaveDescriptor {
     // SharedPrefixLen is how many fields are shared between a parent and child
     // being interleaved, excluding any fields shared between parent and
     // grandparent. Thus, the sum of SharedPrefixLens in the components of an
-    // InterleaveDescriptor is always strictly less than the number of fields
-    // in the index being interleaved.
+    // InterleaveDescriptor is never more than the number of fields in the index
+    // being interleaved.
+    // In cockroach 1.0, this value did not exist and thus a check for > 0
+    // must be performed prior to its use.
     optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "SharedPrefixLen"];
   }
@@ -163,6 +296,53 @@ message InterleaveDescriptor {
   // an encoded key. This means they are always in the far-to-near ancestor
   // order (e.g. grand-grand-parent, grand-parent, parent).
   repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
+}
+
+// PartitioningDescriptor represents the partitioning of an index into spans
+// of keys addressable by a zone config. The key encoding is unchanged. Each
+// partition may optionally be itself divided into further partitions, called
+// subpartitions.
+message PartitioningDescriptor {
+  // List represents a list partitioning, which maps individual tuples to
+  // partitions.
+  message List {
+    // Name is the partition name.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // Values is an unordered set of the tuples included in this partition. Each
+    // tuple is encoded with the EncDatum value encoding. DEFAULT is encoded as
+    // NOT NULL followed by PartitionDefaultVal encoded as a non-sorting
+    // uvarint.
+    repeated bytes values = 2;
+    // Subpartitioning represents a further partitioning of this list partition.
+    optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
+  }
+
+  // Range represents a range partitioning, which maps ranges of tuples to
+  // partitions by specifying exclusive upper bounds. The range partitions in a
+  // PartitioningDescriptor are required be sorted by UpperBound.
+  message Range {
+    // Name is the partition name.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // FromInclusive is the inclusive lower bound of this range partition. It is
+    // encoded with the EncDatum value encoding. MINVALUE and MAXVALUE are
+    // encoded as NOT NULL followed by a PartitionSpecialValCode encoded as a
+    // non-sorting uvarint.
+    optional bytes from_inclusive = 3;
+    // ToExclusive is the exclusive upper bound of this range partition. It is
+    // encoded in the same way as From.
+    optional bytes to_exclusive = 2;
+  }
+
+  // NumColumns is how large of a prefix of the columns in an index are used in
+  // the function mapping column values to partitions. If this is a
+  // subpartition, this is offset to start from the end of the parent
+  // partition's columns. If NumColumns is 0, then there is no partitioning.
+  optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
+
+  // Exactly one of List or Range is required to be non-empty if NumColumns is
+  // non-zero.
+  repeated List list = 2 [(gogoproto.nullable) = false];
+  repeated Range range = 3 [(gogoproto.nullable) = false];
 }
 
 // IndexDescriptor describes an index (primary or secondary).
@@ -215,6 +395,12 @@ message IndexDescriptor {
     DESC = 1;
   }
 
+  // The direction of a column in the index.
+  enum Type {
+    FORWARD = 0;
+    INVERTED = 1;
+  }
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -252,7 +438,9 @@ message IndexDescriptor {
   //
   // Only used for secondary indexes.
   // For non-unique indexes, these columns are appended to the key.
-  // For unique indexes, these columns are stored in the value.
+  // For unique indexes, these columns are stored in the value (unless the key
+  // contains a NULL value: then the extra columns are appended to the key to
+  // unique-ify it).
   // This distinction exists because we want to be able to insert an entry using
   // a single conditional put on the key.
   repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
@@ -280,6 +468,13 @@ message IndexDescriptor {
   // InterleavedBy contains a reference to every table/index that is interleaved
   // into this one.
   repeated ForeignKeyReference interleaved_by = 12  [(gogoproto.nullable) = false];
+
+  // Partitioning, if it's not the zero value, describes how this index's data
+  // is partitioned into spans of keys each addressable by zone configs.
+  optional PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
+
+  // Type is the type of index, inverted or forward.
+  optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
 // A DescriptorMutation represents a column or an index that
@@ -321,8 +516,8 @@ message DescriptorMutation {
     //
     // When adding a descriptor, all descriptor related data
     // (column default or index data) can only be backfilled once
-    // all nodes have transitioned into the WRITE_ONLY state.
-    WRITE_ONLY = 2;
+    // all nodes have transitioned into the DELETE_AND_WRITE_ONLY state.
+    DELETE_AND_WRITE_ONLY = 2;
   }
   optional State state = 3 [(gogoproto.nullable) = false];
 
@@ -343,13 +538,10 @@ message DescriptorMutation {
   // unique constraint index.
   optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+  reserved 6;
 
-  // A schema change can involve running multiple processors backfilling
-  // or deleting data. They occasionally checkpoint Spans so that the
-  // processing can resume in the event of a node failure. The spans are
-  // non-overlapping contiguous areas of the KV space that still need to
-  // be processed.
-  repeated roachpb.Span resume_spans = 6 [(gogoproto.nullable) = false];
+  // Indicates that this mutation is a rollback.
+  optional bool rollback = 7 [(gogoproto.nullable) = false];
 }
 
 // A TableDescriptor represents a table or view and is stored in a
@@ -359,8 +551,8 @@ message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
-  // The table name. It should be normalized using sqlbase.NormalizeName()
-  // before comparing it.
+  // The table name. It should be normalized using NormalizeName() before
+  // comparing it.
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
@@ -369,48 +561,24 @@ message TableDescriptor {
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
-  // Invariants:
-  // 1. not more than two subsequent versions of the table
-  // descriptor can be leased. This is to make the system
-  // easy to reason about, by permiting mutation state
-  // changes (reflected in the next version), only when the existing
-  // state (reflected in the current version) is present on all
-  // outstanding unexpired leases.
-  // 2. A schema change command (ALTER, RENAME, etc) never directly
-  // increments the version. This allows the command to execute without
-  // waiting for the entire cluster to converge to a single version
-  // preventing weird deadlock situations. For instance, a transaction
-  // with a schema change command might use a descriptor lease that is
-  // at version: v - 1, and therefore deadlock when it tries to wait
-  // for version: v, in the process of incrementing it to v + 1.
-  // Therefore, a schema change command never increments the version,
-  // and instead, sets the up_version boolean to notify the schema
-  // changer execution engine that runs a future transaction to
-  // increment the version.
+  // The design maintains two invariant:
+  // 1. Two safe versions: A transaction at a particular timestamp is
+  //    allowed to use one of two versions of a table descriptor:
+  //    the one that would be read from the store at that timestamp,
+  //    and the one behind it in version.
+  // 2. Two leased version: There can be valid leases on at most the 2
+  //    latest versions of a table in the cluster at any time. New leases
+  //    are only granted on the latest version.
   //
-  // The schema change commands must therefore make *safe* modifications
-  // to the table descriptor, such as scheduling long running schema
-  // changes through mutations for future execution, or making simple
-  // schema changes like RENAME that only modify the table descriptor in a
-  // single transaction.
+  // The database must maintain correctness in light of there being two
+  // versions of a descriptor that can be used.
   //
-  // Multiple schema changes in the same transaction set up_version.
-  // The actual schema change execution that follows a schema change
-  // command sees the up_version boolean set, and increments the
-  // table version after ensuring that there are no unexpired leases
-  // for version - 1. The schema change execution must increment
-  // the version before executing future state changes, to ensure
-  // that the scheduled mutations made by the original commands are
-  // visible on all leases. Multiple schema change mutations can be
-  // grouped together on a particular version increment.
-  //
-  // If schema change commands are safe to run without incrementing
-  // the version, why do it later on? We increment the version
-  // to ensure that all the nodes renew their leases with the new version
-  // and get to see what the schema change command has done quickly.
+  // Multiple schema change mutations can be grouped together on a
+  // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
-  // See comment above.
-  optional bool up_version = 6 [(gogoproto.nullable) = false];
+
+  reserved 6;
+
   // Last modification time of the table descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
@@ -473,24 +641,95 @@ message TableDescriptor {
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+    reserved 4;
+    // An ordered list of column IDs used by the check constraint.
+    repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
   }
 
   repeated CheckConstraint checks = 20;
 
-  message RenameInfo{
+  // A table descriptor is named through a name map stored in the
+  // system.namespace table: a map from {parent_id, table_name} -> id.
+  // This name map can be cached for performance on a node in the cluster
+  // making reassigning a name complicated. In particular, since a
+  // name cannot be withdrawn across a cluster in a transaction at
+  // timestamp T, we have to worry about the following:
+  //
+  // 1. A table is dropped at T, and the name and descriptor are still
+  // cached and used by transactions at timestamps >= T.
+  // 2. A table is renamed from foo to bar at T, and both names foo and bar
+  // can be used by transactions at timestamps >= T.
+  // 3. A name foo is reassigned from one table to another at T, and the name
+  // foo can reference two different tables at timestamps >= T.
+  //
+  // The system ensures that a name can be resolved only to a single
+  // descriptor at a timestamp thereby permitting 1 and 2, but not 3
+  // (the name references two tables).
+  //
+  // The transaction at T is followed by a time period when names no longer
+  // a part of the namespace are drained from the system. Once the old name
+  // is drained from the system another transaction at timestamp S is
+  // executed to release the name for future use. The interval from T to S
+  // is called the name drain interval: If the T transaction is removing
+  // the name foo then, at timestamps above S, foo can no longer be resolved.
+  //
+  // Consider a transaction at T in which name B is dropped, a new name C is
+  // created. Name C is viable as soon as the transaction commits.
+  // When the transaction at S commits, the name B is released for reuse.
+  //
+  // The transaction at S runs through the schema changer, with the system
+  // returning a response to the client initiating transaction T only after
+  // transaction at S is committed. So effectively the SQL transaction once
+  // it returns can be followed by SQL transactions that do not observe
+  // old name mappings.
+  //
+  // Note: an exception to this is #19925 which needs to be fixed.
+  //
+  // In order for transaction at S to act properly the system.namespace
+  // table entry for an old name references the descriptor who was the
+  // prior owner of the name requiring draining.
+  //
+  // Before T:   B -> Desc B
+  //
+  // After T and before S: B -> Desc B, C -> Desc C
+  //
+  // After S: C -> Desc C
+  //
+  // Between T and S the name B is drained and the system is unable
+  // to assign it to another descriptor.
+  //
+  // BEGIN;
+  // RENAME foo TO bar;
+  // CREATE foo;
+  //
+  // will fail because CREATE foo is executed at T.
+  //
+  // RENAME foo TO bar;
+  // CREATE foo;
+  //
+  // will succeed because the RENAME returns after S and CREATE foo is
+  // executed after S.
+  //
+  // The above scheme suffers from the problem that a transaction can observe
+  // the partial effect of a committed transaction during the drain interval.
+  // For instance during the drain interval a transaction can see the correct
+  // assignment for C, and the old assignments for B.
+  //
+  message NameInfo {
     // The database that the table belonged to before the rename (tables can be
     // renamed from one db to another).
-    optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "OldParentID", (gogoproto.casttype) = "ID"];
-    optional string old_name = 2 [(gogoproto.nullable) = false];
+    optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+    optional string name = 2 [(gogoproto.nullable) = false];
   }
 
-  // This array is populated if the descriptor was renamed. If the descriptor is
-  // renamed multiple times before the schema chage is processed, there will be
-  // one element for each rename.
-  // When this is detected in a schema change, the records for the old names are
-  // deleted and this field is cleared.
-  repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
+  // A list of draining names. The draining name entries are drained from
+  // the cluster wide name caches by incrementing the version for this
+  // descriptor and ensuring that there are no leases on prior
+  // versions of the descriptor. This field is then cleared and the version
+  // of the descriptor incremented.
+  repeated NameInfo draining_names = 21 [(gogoproto.nullable) = false];
 
   // The TableDescriptor is used for views in addition to tables. Views
   // use mostly the same fields as tables, but need to track the actual
@@ -515,7 +754,7 @@ message TableDescriptor {
     // The ID of the relation that depends on this one.
     optional uint32 id = 1 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-    // If applicable, the ID of this table's index that is refenced by the
+    // If applicable, the ID of this table's index that is referenced by the
     // dependent relation.
     optional uint32 index_id = 2 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
@@ -530,6 +769,93 @@ message TableDescriptor {
   // they're still being referred to.
   repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "DependedOnBy"];
+
+  message MutationJob {
+    // The mutation id of this mutation job.
+    optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    optional int64 job_id = 2 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "JobID"];
+  }
+
+  // Mutation jobs queued for execution in a FIFO order. Remains synchronized
+  // with the mutations list.
+  repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  message SequenceOpts {
+    // How much to increment the sequence by when nextval() is called.
+    optional int64 increment = 1 [(gogoproto.nullable) = false];
+    // Minimum value of the sequence.
+    optional int64 min_value = 2 [(gogoproto.nullable) = false];
+    // Maximum value of the sequence.
+    optional int64 max_value = 3 [(gogoproto.nullable) = false];
+    // Start value of the sequence.
+    optional int64 start = 4 [(gogoproto.nullable) = false];
+    // Whether the sequence is virtual.
+    optional bool virtual = 5 [(gogoproto.nullable) = false];
+  }
+
+  // The presence of sequence_opts indicates that this descriptor is for a sequence.
+  optional SequenceOpts sequence_opts = 28;
+
+  // The drop time is set when a table is truncated or dropped,
+  // based on the current time in nanoseconds since the epoch.
+  // Use this timestamp + GC TTL to start deleting the table's
+  // contents.
+  //
+  // TODO(vivek): Replace with the ModificationTime. This has been
+  // added only for migration purposes.
+  optional int64 drop_time = 29 [(gogoproto.nullable) = false];
+
+  message Replacement {
+    optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
+  }
+
+  // ReplacementOf tracks prior IDs by which this table went -- e.g. when
+  // TRUNCATE creates a replacement of a table and swaps it in for the the old
+  // one, it should note on the new table the ID of the table it replaced. This
+  // can be used when trying to track a table's history across truncatations.
+  optional Replacement replacement_of = 30 [(gogoproto.nullable) = false];
+
+  // AuditMode indicates which auditing actions to take when this table is used.
+  enum AuditMode {
+    DISABLED = 0;
+    READWRITE = 1;
+  }
+  optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
+
+  // The job id for a drop job is the id in the system.jobs table of the
+  // dropping of this table.
+  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
+
+  message GCDescriptorMutation {
+    optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "IndexID"];
+
+    optional int64 drop_time = 2 [(gogoproto.nullable) = false];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    optional int64 job_id = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "JobID"];
+  }
+
+  // The schema elements that have been dropped and whose underlying
+  // data needs to be gc-ed. These schema elements have already transitioned
+  // through the drop state machine when they were in the above mutations
+  // list, and can be safely deleted. The names for these schema elements
+  // can be reused. This list is separate because mutations can
+  // lie in this list for a long time (gc deadline) and should not block
+  // the execution of other schema changes on the table.
+  //
+  // TODO(vivekmenezes): This is currently only used by the non-interleaved drop
+  // index case. Also use for dropped interleaved indexes and columns.
+  repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
+                                                  (gogoproto.customname) = "GCMutations"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

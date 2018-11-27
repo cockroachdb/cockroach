@@ -11,23 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf
 
 package server
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
 	"testing"
 
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// TODO(benesch): move this test to somewhere more specific than package server.
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -84,7 +83,7 @@ func TestIntentResolution(t *testing.T) {
 			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
-			storeKnobs.TestingEvalFilter =
+			storeKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
@@ -114,12 +113,16 @@ func TestIntentResolution(t *testing.T) {
 					}
 					return nil
 				}
+			// Prevent the merge queue from immediately discarding our splits.
+			storeKnobs.DisableMergeQueue = true
 
+			// TODO(benesch): starting a test server for every test case is needlessly
+			// inefficient.
 			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop(context.TODO())
 			// Split the Range. This should not have any asynchronous intents.
-			if err := kvDB.AdminSplit(context.TODO(), splitKey); err != nil {
+			if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
 				t.Fatal(err)
 			}
 

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
@@ -20,23 +18,25 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
-	p := makeTestPlanner()
-	scan := &scanNode{p: p}
-	scan.desc = *desc
-	// Note: scan.initDescDefaults only returns an error if its 2nd argument is not nil.
-	_ = scan.initDescDefaults(publicColumns, nil)
+func testInitDummySelectNode(t *testing.T, p *planner, desc *TableDescriptor) *renderNode {
+	scan := &scanNode{}
+	scan.desc = desc
+	if err := scan.initDescDefaults(p.curPlan.deps, publicColumnsCfg); err != nil {
+		t.Fatal(err)
+	}
 
-	sel := &renderNode{planner: p}
+	sel := &renderNode{}
 	sel.source.plan = scan
-	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
-	sel.source.info = newSourceInfoForSingleTable(testName, scan.Columns())
-	sel.sourceInfo = multiSourceInfo{sel.source.info}
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(scan.Columns()))
+	testName := tree.MakeTableName("test", tree.Name(desc.Name))
+	cols := planColumns(scan)
+	sel.source.info = sqlbase.NewSourceInfoForSingleTable(testName, cols)
+	sel.sourceInfo = sqlbase.MakeMultiSourceInfo(sel.source.info)
+	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, len(cols))
 
 	return sel
 }
@@ -52,18 +52,19 @@ func TestRetryResolveNames(t *testing.T) {
 	}
 
 	desc := testTableDesc()
-	s := testInitDummySelectNode(desc)
+	p := makeTestPlanner()
+	s := testInitDummySelectNode(t, p, desc)
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
 
 	for i := 0; i < 2; i++ {
-		newExpr, _, err := s.resolveNames(expr)
+		newExpr, _, _, err := p.resolveNamesForRender(expr, s)
 		if err != nil {
 			t.Fatal(err)
 		}
 		count := 0
-		for iv := 0; iv < len(s.sourceInfo[0].sourceColumns); iv++ {
+		for iv := 0; iv < len(s.sourceInfo[0].SourceColumns); iv++ {
 			if s.ivarHelper.IndexedVarUsed(iv) {
 				count++
 			}

@@ -11,24 +11,29 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
 
 package sql
 
 import (
 	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
-	"strconv"
-
-	"golang.org/x/net/context"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -36,12 +41,14 @@ type stmtKey struct {
 	stmt        string
 	failed      bool
 	distSQLUsed bool
+	optUsed     bool
 }
 
 // appStats holds per-application statistics.
 type appStats struct {
-	syncutil.Mutex
+	st *cluster.Settings
 
+	syncutil.Mutex
 	stmts map[stmtKey]*stmtStats
 }
 
@@ -52,18 +59,24 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
-// StmtStatsEnable determines whether to collect per-statement
+// stmtStatsEnable determines whether to collect per-statement
 // statistics.
-var StmtStatsEnable = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.enabled", "collect per-statement query statistics ", true,
+var stmtStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 )
 
-// SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
+// sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+var sqlStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"sql.metrics.statement_details.threshold",
-	"minmum execution time to cause statics to be collected",
+	"minimum execution time to cause statistics to be collected",
 	0,
+)
+
+var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.dump_to_logs",
+	"dump collected statement statistics to node logs when periodically cleared",
+	false,
 )
 
 func (s stmtKey) String() string {
@@ -78,46 +91,50 @@ func (s stmtKey) flags() string {
 	if s.distSQLUsed {
 		b.WriteByte('+')
 	}
+	if !s.optUsed {
+		b.WriteByte('-')
+	}
 	return b.String()
 }
 
 func (a *appStats) recordStatement(
-	stmt parser.Statement,
+	stmt Statement,
 	distSQLUsed bool,
+	optUsed bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
-	if a == nil || !StmtStatsEnable.Get() {
+	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
 		return
 	}
 
-	if t := SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
-		return
-	}
-
-	// Some statements like SET, SHOW etc are not useful to collect
-	// stats about. Ignore them.
-	if _, ok := stmt.(parser.HiddenFromStats); ok {
+	if t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
 
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
-	var buf bytes.Buffer
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optUsed}
 
-	parser.FormatNode(&buf, parser.FmtHideConstants, stmt)
+	if stmt.AnonymizedStr != "" {
+		// Use the cached anonymized string.
+		key.stmt = stmt.AnonymizedStr
+	} else {
+		key.stmt = anonymizeStmt(stmt)
+	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmtKey{stmt: buf.String(), failed: err != nil, distSQLUsed: distSQLUsed})
+	s := a.getStatsForStmt(key)
 
 	// Collect the per-statement statistics.
 	s.Lock()
 	s.data.Count++
 	if err != nil {
 		s.data.LastErr = err.Error()
+		s.data.LastErrRedacted = log.Redact(err)
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
@@ -147,24 +164,20 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 	return s
 }
 
-// sqlStats carries per-application statistics for all applications on
-// each node. It hangs off Executor.
-type sqlStats struct {
-	syncutil.Mutex
-
-	// apps is the container for all the per-application statistics
-	// objects.
-	apps map[string]*appStats
+func anonymizeStmt(stmt Statement) string {
+	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 
-// resetApplicationName initializes both Session.ApplicationName and
-// the cached pointer to per-application statistics. It is meant to be
-// used upon session initialization and upon SET APPLICATION_NAME.
-func (s *Session) resetApplicationName(appName string) {
-	s.ApplicationName = appName
-	if s.sqlStats != nil {
-		s.appStats = s.sqlStats.getStatsForApplication(appName)
-	}
+// sqlStats carries per-application statistics for all applications on
+// each node.
+type sqlStats struct {
+	st *cluster.Settings
+	syncutil.Mutex
+
+	// lastReset is the time at which the app containers were reset.
+	lastReset time.Time
+	// apps is the container for all the per-application statistics objects.
+	apps map[string]*appStats
 }
 
 func (s *sqlStats) getStatsForApplication(appName string) *appStats {
@@ -173,16 +186,10 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
 	s.apps[appName] = a
 	return a
 }
-
-var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.dump_to_logs",
-	"dump collected statement statistics to node logs when periodically cleared",
-	false,
-)
 
 // resetStats clears all the stored per-app and per-statement
 // statistics.
@@ -193,7 +200,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	// any ongoing open client session at the time of the reset has
 	// cached a pointer to its appStats struct and would thus continue
 	// to report its stats in an object now invisible to the other tools
-	// (virtual table, marshalling, etc.). It's a judgement call, but
+	// (virtual table, marshaling, etc.). It's a judgement call, but
 	// for now we prefer to see more data and thus not clear the map, at
 	// the risk of seeing the map grow unboundedly with the number of
 	// different application_names seen so far.
@@ -211,7 +218,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		if dumpStmtStatsToLogBeforeReset.Get() {
+		if dumpStmtStatsToLogBeforeReset.Get(&a.st.SV) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
@@ -220,7 +227,14 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.Unlock()
 	}
+	s.lastReset = timeutil.Now()
 	s.Unlock()
+}
+
+func (s *sqlStats) getLastReset() time.Time {
+	s.Lock()
+	defer s.Unlock()
+	return s.lastReset
 }
 
 // Save the existing data for an application to the info log.
@@ -243,7 +257,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 	log.Info(ctx, buf.String())
 }
 
-func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
+func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -251,65 +265,136 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	formatter := parser.FmtReformatTableNames(parser.FmtAnonymize,
-		func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
-			tn, err := t.Normalize()
-			if err != nil {
-				buf.WriteByte('_')
-				return
-			}
+	f := tree.NewFmtCtxWithBuf(tree.FmtAnonymize)
+	f.WithReformatTableNames(
+		func(ctx *tree.FmtCtx, tn *tree.TableName) {
 			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
-			// Virtual table: we want to keep the name.
-			tn.Format(buf, parser.FmtParsable)
+			// Virtual table: we want to keep the name; however
+			// we need to scrub the database name prefix.
+			newTn := *tn
+			newTn.CatalogName = "_"
+			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
+			keepNameCtx.WithReformatTableNames(nil)
+			keepNameCtx.FormatNode(&newTn)
 		})
-	return parser.AsStringWithFlags(stmt, formatter), true
+	f.FormatNode(stmt)
+	return f.CloseAndGetString(), true
 }
 
-// AppStatementStatistics is a map: for each app name (as set in sql sessions),
-// it maps statements to their collected statistics.
-type AppStatementStatistics map[string]map[string]roachpb.StatementStatistics
+func (s *sqlStats) getScrubbedStmtStats(
+	vt *VirtualSchemaHolder,
+) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, true /* scrub */)
+}
 
-// GetScrubbedStmtStats returns the statement statistics by app, with the
-// queries scrubbed of their identifiers. Any statements which cannot be
-// scrubbed will be omitted from the returned map.
-func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
-	ret := make(AppStatementStatistics)
-	vt := e.virtualSchemas
-	e.sqlStats.Lock()
-	for appName, a := range e.sqlStats.apps {
-		hashedApp := HashAppName(appName)
+func (s *sqlStats) getUnscrubbedStmtStats(
+	vt *VirtualSchemaHolder,
+) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, false /* scrub */)
+}
+
+// InternalAppNamePrefix designates that an application name is internal to
+// CockroachDB and therefore can be reported without scrubbing. (Note this only
+// applies to the application name itself. Query data is still scrubbed as
+// usual.)
+const InternalAppNamePrefix = "$ "
+
+func (s *sqlStats) getStmtStats(
+	vt *VirtualSchemaHolder, scrub bool,
+) []roachpb.CollectedStatementStatistics {
+	s.Lock()
+	defer s.Unlock()
+	var ret []roachpb.CollectedStatementStatistics
+	salt := ClusterSecret.Get(&s.st.SV)
+	for appName, a := range s.apps {
+		if cap(ret) == 0 {
+			// guesstimate that we'll need apps*(queries-per-app).
+			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
+		}
 		a.Lock()
-		m := make(map[string]roachpb.StatementStatistics)
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			maybeScrubbed := q.stmt
+			maybeHashedAppName := appName
+			ok := true
+			if scrub {
+				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
+				if !strings.HasPrefix(appName, InternalAppNamePrefix) {
+					maybeHashedAppName = HashForReporting(salt, appName)
+				}
+			}
 			if ok {
+				k := roachpb.StatementStatisticsKey{
+					Query:   maybeScrubbed,
+					DistSQL: q.distSQLUsed,
+					Opt:     q.optUsed,
+					Failed:  q.failed,
+					App:     maybeHashedAppName,
+				}
 				stats.Lock()
-				m[scrubbed] = stats.data
+				data := stats.data
 				stats.Unlock()
+
+				if data.LastErr != "" {
+					// We have a redacted version in lastErrRedacted -- this one is not ok
+					// to report as-in though.
+					data.LastErr = "scrubbed"
+				}
+
+				if scrub {
+					// Quantize the counts to avoid leaking information that way.
+					quantizeCounts(&data)
+				}
+
+				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}
 		}
-		ret[hashedApp] = m
 		a.Unlock()
 	}
-	e.sqlStats.Unlock()
 	return ret
 }
 
-// HashAppName 1-way hashes an application names for use in stat reporting.
-func HashAppName(appName string) string {
-	hash := fnv.New64a()
+// quantizeCounts ensures that the counts are bucketed into "simple" values.
+func quantizeCounts(d *roachpb.StatementStatistics) {
+	oldCount := d.Count
+	newCount := telemetry.Bucket10(oldCount)
+	d.Count = newCount
+	// The SquaredDiffs values are meant to enable computing the variance
+	// via the formula variance = squareddiffs / (count - 1).
+	// Since we're adjusting the count, we must re-compute a value
+	// for SquaredDiffs that keeps the same variance with the new count.
+	oldCountMinusOne := float64(oldCount - 1)
+	newCountMinusOne := float64(newCount - 1)
+	d.NumRows.SquaredDiffs = (d.NumRows.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ParseLat.SquaredDiffs = (d.ParseLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.PlanLat.SquaredDiffs = (d.PlanLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.RunLat.SquaredDiffs = (d.RunLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ServiceLat.SquaredDiffs = (d.ServiceLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.OverheadLat.SquaredDiffs = (d.OverheadLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
 
+	d.MaxRetries = telemetry.Bucket10(d.MaxRetries)
+
+	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
+}
+
+// FailedHashedValue is used as a default return value for when HashForReporting
+// cannot hash a value correctly.
+const FailedHashedValue = "unknown"
+
+// HashForReporting 1-way hashes values for use in stat reporting. The secret
+// should be the cluster.secret setting.
+func HashForReporting(secret, appName string) string {
+	// If no secret is provided, we cannot irreversibly hash the value, so return
+	// a default value.
+	if len(secret) == 0 {
+		return FailedHashedValue
+	}
+	hash := hmac.New(sha256.New, []byte(secret))
 	if _, err := hash.Write([]byte(appName)); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 	}
-	return strconv.Itoa(int(hash.Sum64()))
-}
-
-// ResetStatementStats resets the executor's collected statement statistics.
-func (e *Executor) ResetStatementStats(ctx context.Context) {
-	e.sqlStats.resetStats(ctx)
+	return hex.EncodeToString(hash.Sum(nil)[:4])
 }

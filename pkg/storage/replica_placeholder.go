@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Arjun Narayan (arjun@cockroachlabs.com)
 
 package storage
 
@@ -36,13 +34,13 @@ func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 	return &r.rangeDesc
 }
 
-func (r *ReplicaPlaceholder) endKey() roachpb.RKey {
-	return r.Desc().EndKey
+func (r *ReplicaPlaceholder) startKey() roachpb.RKey {
+	return r.Desc().StartKey
 }
 
 // Less implements the btree.Item interface.
 func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
-	return r.Desc().EndKey.Less(i.(rangeKeyItem).endKey())
+	return r.Desc().StartKey.Less(i.(rangeKeyItem).startKey())
 }
 
 func (r *ReplicaPlaceholder) String() string {

@@ -1,0 +1,37 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE t (a INT REFERENCES t)
+
+statement ok
+CREATE TABLE v ("'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s))
+
+query TTTT colnames
+SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
+----
+create_statement  create_nofks  alter_statements  validate_statements
+CREATE TABLE t (
+   a INT NULL,
+   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid),
+   INDEX t_auto_index_fk_a_ref_t (a ASC),
+   FAMILY "primary" (a, rowid)
+)  CREATE TABLE t (
+   a INT NULL,
+   INDEX t_auto_index_fk_a_ref_t (a ASC),
+   FAMILY "primary" (a, rowid)
+)  {"ALTER TABLE t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid)"}  {"ALTER TABLE t VALIDATE CONSTRAINT fk_a_ref_t"}
+CREATE TABLE v (
+   "'" INT NULL,
+   s STRING NULL,
+   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v (s),
+   UNIQUE INDEX v_s_key (s ASC),
+   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES t (rowid),
+   INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
+   FAMILY "primary" ("'", s, rowid)
+)  CREATE TABLE v (
+   "'" INT NULL,
+   s STRING NULL,
+   UNIQUE INDEX v_s_key (s ASC),
+   INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
+   FAMILY "primary" ("'", s, rowid)
+)  {"ALTER TABLE v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v (s)","ALTER TABLE v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES t (rowid)"}  {"ALTER TABLE v VALIDATE CONSTRAINT fk_s_ref_v","ALTER TABLE v VALIDATE CONSTRAINT \"fk_'_ref_t\""}

@@ -12,8 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Radu Berinde (radu@cockroachlabs.com)
-//
 // Data structures and basic infrastructure for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
 // All the concepts here are "physical plan" concepts.
@@ -22,12 +20,13 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
-import "cockroach/pkg/roachpb/api.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/roachpb/errors.proto";
-import "cockroach/pkg/sql/pgwire/pgerror/errors.proto";
-import "cockroach/pkg/sql/sqlbase/structured.proto";
-import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "roachpb/errors.proto";
+import "sql/pgwire/pgerror/errors.proto";
+import "sql/sqlbase/structured.proto";
+import "sql/sqlbase/encoded_datum.proto";
+import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
 // Error is a generic representation including a string message.
@@ -36,13 +35,17 @@ message Error {
 
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
-    roachpb.DistSQLRetryableTxnError retryableTxnError = 2;
+    roachpb.UnhandledRetryableError retryableTxnError = 2;
     // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
     // writes.
   }
 }
 
 message Expression {
+  // Don't generate a typedecl, so we can add the LocalExpr field.
+  option (gogoproto.typedecl) = false;
+  option (gogoproto.goproto_stringer) = false;
+
   // TODO(radu): TBD how this will be used
   optional string version = 1 [(gogoproto.nullable) = false];
 
@@ -54,7 +57,11 @@ message Expression {
 // Ordering defines an order - specifically a list of column indices and
 // directions. See sqlbase.ColumnOrdering.
 message Ordering {
+  option (gogoproto.equal) = true;
+
   message Column {
+    option (gogoproto.equal) = true;
+
     // The direction of the desired ordering for a column.
     enum Direction {
       ASC = 0;
@@ -94,8 +101,13 @@ message StreamEndpointSpec {
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "StreamID",
                                 (gogoproto.casttype) = "StreamID"];
-  // Serving address for the target host, only used for outgoing REMOTE streams.
-  optional string target_addr = 3 [(gogoproto.nullable) = false];
+  // Node ID of the target host, only used for outgoing REMOTE streams.
+  optional int32 target_node_id = 4 [(gogoproto.nullable) = false,
+                                     (gogoproto.customname) = "TargetNodeID",
+                                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Serving address for the target host. Used by 2.0 nodes instead of target_node_id.
+  // TODO(bdarnell): Remove after 2.1
+  optional string deprecated_target_addr = 3 [(gogoproto.nullable) = false];
 }
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how
@@ -131,8 +143,7 @@ message OutputRouterSpec {
     // the row (specified by the hash_columns field).
     BY_HASH = 2;
     // Each row is sent to one stream, chosen according to preset boundaries
-    // for the values of certain columns of the row. TODO(radu): an extra
-    // optional structure below for the range details.
+    // for the values of certain columns of the row.
     BY_RANGE = 3;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
@@ -141,6 +152,42 @@ message OutputRouterSpec {
   // Only used for the BY_HASH type; these are the indexes of the columns we are
   // hashing.
   repeated uint32 hash_columns = 3;
+
+  message RangeRouterSpec {
+    message ColumnEncoding {
+      // column is the index of a column to encode.
+      optional uint32 column = 1 [(gogoproto.nullable) = false];
+      // encoding specifies how a particular column is to be encoded for
+      // generating the sort key for a row. This needs to correspond to the way
+      // the Span.{start,end} keys have been generated.
+      optional sqlbase.DatumEncoding encoding = 2 [(gogoproto.nullable) = false];
+    }
+    // Span matches bytes in [start, end).
+    message Span {
+      optional bytes start = 1;
+      optional bytes end = 2;
+      // stream is the index of the destination stream.
+      optional int32 stream = 3 [(gogoproto.nullable) = false];
+    }
+
+    // spans is a slice of Span. Input matching a span will be routed to its
+    // specified stream.
+    repeated Span spans = 1 [(gogoproto.nullable) = false];
+    // default_dest, if not nil, is the index of the stream to send rows that do
+    // not match any span. If nil, a row that does not match a span will produce
+    // an error in the router.
+    optional int32 default_dest = 2;
+    // encodings is a slice of columns and encodings. Each will be appended to a
+    // []byte, which is used as input to the spans. Columns from the input rows
+    // potentially need to be recoded to match the encoding used for the spans.
+    repeated ColumnEncoding encodings = 3 [(gogoproto.nullable) = false];
+  }
+  optional RangeRouterSpec range_router_spec = 4 [(gogoproto.nullable) = false];
+
+  // disable_buffering disables output buffering. Generally buffering should be
+  // enabled to prevent deadlocks. However some plans are known not to deadlock,
+  // and so can set this flag to prevent unbounded buffering causing OOMs.
+  optional bool disable_buffering = 5 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
@@ -180,7 +227,8 @@ message ProducerMessage {
 
   // Typing information. There will be one DatumInfo for each element in a row.
   // This field has to be populated on, or before, a ProducerMessage with data
-  // in it, and can only be populated once.
+  // in it, and can only be populated once. It can be nil if only zero length
+  // rows will be sent.
   // TODO(andrei): It'd be nice if the typing information for streams would be
   // configured statically at plan creation time, instead of being discovered
   // dynamically through the first rows that flow.
@@ -197,8 +245,47 @@ message RemoteProducerMetadata {
   message RangeInfos {
     repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
   }
+  message TraceData {
+    repeated util.tracing.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
+  }
+  // RowNum is used to count the rows sent from a processor. It is used in tests
+  // to check that metadata is propagated correctly.
+  message RowNum {
+    // The ID of the processor that is producing rows.
+    optional string sender_id = 1 [(gogoproto.nullable) = false,
+                                   (gogoproto.customname) = "SenderID"];
+    // A running count of the number of rows emitted from the sender so far.
+    optional int32 row_num = 2 [(gogoproto.nullable) = false];
+    // When set, indicates that the row count contains the expected number of
+    // RowNum messages with this ID.
+    optional bool last_msg = 3 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
+    TraceData trace_data = 3;
+    roachpb.TxnCoordMeta txn_coord_meta = 4;
+    RowNum row_num = 5;
   }
+}
+
+// DistSQLVersionGossipInfo represents the DistSQL server version information
+// that gets gossiped for each node. This is used by planners to avoid planning
+// on nodes with incompatible version during rolling cluster updates.
+//
+// For the meaning of the fields, see the corresponding constants in
+// distsqlrun/server.go.
+message DistSQLVersionGossipInfo {
+  optional uint32 version = 1 [(gogoproto.nullable) = false,
+                               (gogoproto.casttype) = "DistSQLVersion"];
+
+  optional uint32 min_accepted_version = 2 [(gogoproto.nullable) = false,
+                                            (gogoproto.casttype) = "DistSQLVersion"];
+}
+
+// DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped
+// for each node. This is used by planners to avoid planning on nodes that are
+// known to be draining.
+message DistSQLDrainingInfo {
+  optional bool draining = 1 [(gogoproto.nullable) = false];
 }

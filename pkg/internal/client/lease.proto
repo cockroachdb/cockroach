@@ -16,7 +16,7 @@ syntax = "proto2";
 package cockroach.client;
 option go_package = "client";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 message LeaseVal {

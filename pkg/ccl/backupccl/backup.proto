@@ -1,0 +1,96 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.backupccl;
+option go_package = "backupccl";
+
+import "build/info.proto";
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "sql/sqlbase/structured.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+enum MVCCFilter {
+  Latest = 0;
+  All = 1;
+}
+
+// BackupDescriptor represents a consistent snapshot of ranges.
+//
+// Each range snapshot includes a path to data that is a diff of the data in
+// that key range between a start and end timestamp. The end timestamp of all
+// ranges in a backup is the same, but the start may vary (to allow individual
+// tables to be backed up on different schedules).
+message BackupDescriptor {
+  // BackupDescriptor_File represents a file that contains the diff for a key
+  // range between two timestamps.
+  message File {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    string path = 2;
+    reserved 3;
+    bytes sha512 = 4;
+    reserved 5;
+    roachpb.BulkOpSummary entry_counts = 6 [(gogoproto.nullable) = false];
+
+    // StartTime 0 is sometimes legitimately used, so it is only meaningful if
+    // EndTime is non-zero, otherwise both just inherit from containing backup.
+    util.hlc.Timestamp start_time = 7 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
+  }
+
+  message DescriptorRevision {
+    util.hlc.Timestamp time = 1 [(gogoproto.nullable) = false];
+    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    sql.sqlbase.Descriptor desc = 3;
+  }
+
+  util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];
+  // Even if StartTime is zero, we only get revisions since gc threshold, so
+  // do not allow AS OF SYSTEM TIME before revision_start_time.
+  util.hlc.Timestamp revision_start_time = 17 [(gogoproto.nullable) = false];
+
+  // Spans contains the spans requested for backup. The keyranges covered by
+  // `files` may be a subset of this if there were ranges with no changes since
+  // the last backup. For all tables in the backup descriptor, these spans must
+  // completely cover each table's span. For example, if a table with ID 51 were
+  // being backed up, then the span `/Table/5{1-2}` must be completely covered.
+  repeated roachpb.Span spans = 3 [(gogoproto.nullable) = false];
+
+  // IntroducedSpans are a subset of spans, set only when creating incremental
+  // backups that cover spans not included in a previous backup. Spans contained
+  // here are covered in the interval (0, startTime], which, in conjunction with
+  // the coverage from (startTime, endTime] implied for all spans in Spans,
+  // results in coverage from [0, endTime] for these spans.
+  repeated roachpb.Span introduced_spans = 15 [(gogoproto.nullable) = false];
+
+  repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];
+
+  repeated File files = 4 [(gogoproto.nullable) = false];
+  repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
+  // databases in descriptors that have all tables also in descriptors.
+  repeated uint32 complete_dbs = 14 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  reserved 6;
+  roachpb.BulkOpSummary entry_counts = 12 [(gogoproto.nullable) = false];
+
+  roachpb.ExportStorage dir = 7 [(gogoproto.nullable) = false];
+
+  uint32 format_version = 8;
+
+  bytes cluster_id = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // node_id and build_info of the gateway node (which writes the descriptor).
+  int32 node_id = 10 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  build.Info build_info = 11 [(gogoproto.nullable) = false];
+}

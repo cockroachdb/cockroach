@@ -1,0 +1,525 @@
+# LogicTest: local local-opt
+
+# Prepare a trace to be inspected below.
+
+statement ok
+SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off
+
+# Inspect the trace: we exclude messages containing newlines as these
+# may contain non-deterministic txn object descriptions.
+# This also checks that the span column properly reports separate
+# SQL transactions.
+# We replace the command position because the values depend on exactly
+# how many commands we ran in the session.
+query ITT
+SELECT
+  span, regexp_replace(message, 'pos:[0-9]*', 'pos:?'), operation
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
+----
+0  === SPAN START: session recording ===                session recording
+0  [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
+1  === SPAN START: sql txn ===                          sql txn
+1  [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+2  === SPAN START: consuming rows ===                   consuming rows
+1  [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+0  [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
+3  === SPAN START: sql txn ===                          sql txn
+3  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+4  === SPAN START: consuming rows ===                   consuming rows
+0  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
+
+# Check SHOW KV TRACE FOR SESSION.
+
+statement ok
+SET tracing = on,kv,results; CREATE DATABASE t; SET tracing = off
+
+# Check the KV trace; we need to remove the eventlog entry and
+# internal queries since the timestamp is non-deterministic.
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /System/"desc-idgen"
+dist sender send  r1: sending batch 1 Inc to (n1,s1):1
+sql txn           CPut /Table/2/1/0/"t"/3/1 -> 53
+sql txn           CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > >
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
+
+
+# More KV operations.
+statement ok
+SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT); SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(message, 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"test"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/52/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /System/"desc-idgen"
+dist sender send  r1: sending batch 1 Inc to (n1,s1):1
+sql txn           CPut /Table/2/1/53/"kv"/3/1 -> 54
+sql txn           CPut /Table/3/1/54/2/1 -> table:<name:"kv" id:54 parent_id:53 version:1 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:2 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:3 state:PUBLIC view_query:"" drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 >
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
+
+# We avoid using the full trace output, because that would make the
+# ensuing trace especially chatty, as it traces the index backfill at
+# the end of the implicit transaction. A chatty trace could be OK in
+# tests, however the backfill also incur job table traffic which has a
+# timestamp index, and we can't use (non-deterministic) timestamp
+# values in expected values.
+statement ok
+SET tracing = on,kv,results; CREATE UNIQUE INDEX woo ON t.kv(v); SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 parent_id:53 version:2 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC view_query:"" mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 >
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Put to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 9 QueryIntent to (n1,s1):1
+
+statement ok
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x89
+dist sender send  querying next range at /Table/54/1/1/0
+dist sender send  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 1
+
+
+statement error duplicate key value
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x89
+dist sender send  querying next range at /Table/54/1/1/0
+dist sender send  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+sql txn           execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
+dist sender send  querying next range at /Table/54/1/1/0
+dist sender send  r1: sending batch 1 EndTxn to (n1,s1):1
+
+statement error duplicate key value
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
+sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x8a
+dist sender send  querying next range at /Table/54/1/2/0
+dist sender send  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+sql txn           execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+dist sender send  querying next range at /Table/54/1/2/0
+dist sender send  r1: sending batch 1 EndTxn to (n1,s1):1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           Scan /Table/54/1/{2-3}
+dist sender send  querying next range at /Table/54/1/2
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3
+sql txn           InitPut /Table/54/2/3/0 -> /BYTES/0x8a
+dist sender send  querying next range at /Table/54/1/2/0
+dist sender send  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           Scan /Table/54/1/{1-2}
+dist sender send  querying next range at /Table/54/1/1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           fetched: /kv/primary/1/v -> /2
+sql txn           Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+dist sender send  querying next range at /Table/54/1/1/0
+dist sender send  r1: sending batch 1 Put, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 1
+
+statement error duplicate key value
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           Scan /Table/54/1/{2-3}
+dist sender send  querying next range at /Table/54/1/2
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           fetched: /kv/primary/2/v -> /3
+sql txn           Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
+sql txn           Del /Table/54/2/3/0
+sql txn           CPut /Table/54/2/2/0 -> /BYTES/0x8a
+dist sender send  querying next range at /Table/54/1/2/0
+dist sender send  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+sql txn           execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+dist sender send  querying next range at /Table/54/1/2/0
+dist sender send  r1: sending batch 1 EndTxn to (n1,s1):1
+
+statement ok
+SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 'wall_time:...'), '\d\d\d\d\d+', '...PK...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"test"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/52/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /System/"desc-idgen"
+dist sender send  r1: sending batch 1 Inc to (n1,s1):1
+sql txn           CPut /Table/2/1/53/"kv2"/3/1 -> 55
+sql txn           CPut /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 parent_id:53 version:1 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:2 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:3 state:PUBLIC view_query:"" drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 >
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           Scan /Table/54/{1-2}
+dist sender send  querying next range at /Table/54/1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           fetched: /kv/primary/1/v -> /2
+sql txn           CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
+sql txn           fetched: /kv/primary/2/v -> /3
+sql txn           CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 2 CPut, 1 EndTxn, 7 QueryIntent to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 2
+
+statement ok
+SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(message, '(\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.)?\d\d\d\d\d+', '...PK...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/55/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  r1: sending batch 1 EndTxn, 1 QueryIntent to (n1,s1):1
+sql txn           Scan /Table/55/{1-2}
+dist sender send  querying next range at /Table/55/1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           fetched: /kv2/primary/...PK.../k/v -> /1/2
+sql txn           Put /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+sql txn           fetched: /kv2/primary/...PK.../k/v -> /2/3
+sql txn           Put /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/5
+dist sender send  querying next range at /Table/55/1/...PK.../0
+dist sender send  r1: sending batch 2 Put, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 2
+
+statement ok
+SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           Scan /Table/55/{1-2}
+dist sender send  querying next range at /Table/55/1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           DelRange /Table/55/1 - /Table/55/2
+dist sender send  querying next range at /Table/55/1
+dist sender send  r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 2
+
+statement ok
+SET tracing = on,kv,results; DROP TABLE t.kv2; SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(regexp_replace(message, 'drop_job_id:[1-9]\d*', 'drop_job_id:...'), 'wall_time:\d+', 'wall_time:...'), 'drop_time:\d+', 'drop_time:...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/55/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/55/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/55/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/0/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           Put /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 parent_id:53 version:2 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:2 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:3 state:DROP draining_names:<parent_id:53 name:"kv2" > view_query:"" drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:... >
+dist sender send  querying next range at /Table/3/1/55/2/1
+dist sender send  r1: sending batch 1 Put to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 10 QueryIntent to (n1,s1):1
+
+statement ok
+SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn           Scan /Table/54/{1-2}
+dist sender send  querying next range at /Table/54/1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+sql txn           fetched: /kv/primary/1/v -> /2
+sql txn           Del /Table/54/2/2/0
+sql txn           Del /Table/54/1/1/0
+sql txn           fetched: /kv/primary/2/v -> /3
+sql txn           Del /Table/54/2/3/0
+sql txn           Del /Table/54/1/2/0
+dist sender send  querying next range at /Table/54/1/1/0
+dist sender send  r1: sending batch 4 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+sql txn           fast path completed
+sql txn           rows affected: 2
+
+statement ok
+SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE; SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/0/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 parent_id:53 version:5 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC view_query:"" mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 >
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Put to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 9 QueryIntent to (n1,s1):1
+
+statement ok
+SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'job_id:[1-9]\d*', 'job_id:...', 'g'), 'wall_time:\d+', 'wall_time:...'), 'drop_time:\d+', 'drop_time:...', 'g') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+----
+dist sender send  querying next range at /Table/2/1/0/"t"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/0/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+sql txn           Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 parent_id:53 version:8 modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:3 format_version:3 state:DROP draining_names:<parent_id:53 name:"kv" > view_query:"" drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:... gc_mutations:<index_id:2 drop_time:... job_id:... > >
+dist sender send  querying next range at /Table/3/1/54/2/1
+dist sender send  r1: sending batch 1 Put to (n1,s1):1
+sql txn           rows affected: 0
+dist sender send  querying next range at /Table/SystemConfigSpan/Start
+dist sender send  r1: sending batch 1 EndTxn, 14 QueryIntent to (n1,s1):1
+
+# Check that session tracing does not inhibit the fast path for inserts &
+# friends (the path resulting in 1PC transactions).
+
+subtest autocommit
+
+statement ok
+CREATE TABLE t.kv3(k INT PRIMARY KEY, v INT)
+
+statement ok
+SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
+
+# We look for rows containing a BeginTxn and an EndTxn, as proof that the
+# insertNode is committing the txn.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 BeginTxn, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
+----
+r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+1 CPut, 1 BeginTxn, 1 EndTxn
+
+## TODO(tschottdorf): re-enable
+# statement ok
+# CREATE TABLE t.enginestats(k INT PRIMARY KEY, v INT)
+#
+# statement ok
+# SHOW TRACE FOR SELECT * FROM t.enginestats
+#
+# query T
+# SELECT message FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%InternalDelete%'
+# ----
+# engine stats: {InternalDeleteSkippedCount:0 TimeBoundNumSSTs:0}
+
+# Check that we can run set tracing regardless of the current tracing state.
+# This is convenient; sometimes it's unclear, for example, if you previously
+# stopped tracing or not, so issuing a set tracing=off should just work.
+subtest idempotent
+
+statement ok
+SET tracing = on; SET tracing = on;
+
+statement ok
+SET tracing = off; SET tracing = off;
+
+# Check that we can run set tracing in the aborted state (this is implemented by
+# making set tracing an ObserverStmt). This is very convenient for clients that
+# start tracing, then might get an error, then want to stop tracing.
+subtest aborted_txn
+
+query error pq: foo
+BEGIN; SELECT crdb_internal.force_error('', 'foo')
+
+statement ok
+SET tracing = off
+
+statement ok
+ROLLBACK
+
+subtest replica
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+statement ok
+SET tracing = on; SELECT * FROM t; SET tracing = off
+
+query III colnames
+SELECT DISTINCT node_id, store_id, replica_id
+  FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION]
+----
+node_id  store_id  replica_id
+1        1         1

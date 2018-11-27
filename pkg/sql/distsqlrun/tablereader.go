@@ -11,20 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"fmt"
+	"context"
 	"sync"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -34,198 +34,289 @@ import (
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	flowCtx *FlowCtx
+	ProcessorBase
 
-	tableID   sqlbase.ID
 	spans     roachpb.Spans
 	limitHint int64
 
-	fetcher sqlbase.RowFetcher
+	ignoreMisplannedRanges bool
 
-	out procOutputHelper
+	// input is really the fetcher below, possibly wrapped in a stats generator.
+	input RowSource
+	// fetcher is the underlying Fetcher, should only be used for
+	// initialization, call input.Next() to retrieve rows once initialized.
+	fetcher row.Fetcher
+	alloc   sqlbase.DatumAlloc
 }
 
-var _ processor = &tableReader{}
+var _ Processor = &tableReader{}
+var _ RowSource = &tableReader{}
+
+const tableReaderProcName = "table reader"
+
+var trPool = sync.Pool{
+	New: func() interface{} {
+		return &tableReader{}
+	},
+}
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *TableReaderSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*tableReader, error) {
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
-	tr := &tableReader{
-		flowCtx: flowCtx,
-		tableID: spec.Table.ID,
-	}
 
-	// We ignore any limits that are higher than this value to avoid any
-	// overflows.
-	const overflowProtection = 1000000000
-	if post.Limit != 0 && post.Limit <= overflowProtection {
-		// In this case the procOutputHelper will tell us to stop once we emit
-		// enough rows.
-		tr.limitHint = int64(post.Limit)
-	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
-		// If it turns out that limiHint rows are sufficient for our consumer, we
-		// want to avoid asking for another batch. Currently, the only way for us to
-		// "stop" is if we block on sending rows and the consumer sets
-		// ConsumerDone() on the RowChannel while we block. So we want to block
-		// *after* sending all the rows in the limit hint; to do this, we request
-		// rowChannelBufSize + 1 more rows:
-		//  - rowChannelBufSize rows guarantee that we will fill the row channel
-		//    even after limitHint rows are consumed
-		//  - the extra row gives us chance to call Push again after we unblock,
-		//    which will notice that ConsumerDone() was called.
-		//
-		// This flimsy mechanism is only useful in the (optimistic) case that the
-		// processor that only needs this many rows is our direct, local consumer.
-		// If we have a chain of processors and RowChannels, or remote streams, this
-		// reasoning goes out the door.
-		//
-		// TODO(radu, andrei): work on a real mechanism for limits.
-		tr.limitHint = spec.LimitHint + rowChannelBufSize + 1
-	}
+	tr := trPool.Get().(*tableReader)
 
-	if post.Filter.Expr != "" {
-		// We have a filter so we will likely need to read more rows.
-		tr.limitHint *= 2
-	}
+	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
-	for i := range types {
-		types[i] = spec.Table.Columns[i].Type
+	numCols := len(spec.Table.Columns)
+	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	if returnMutations {
+		for i := range spec.Table.Mutations {
+			if spec.Table.Mutations[i].GetColumn() != nil {
+				numCols++
+			}
+		}
 	}
-	if err := tr.out.init(post, types, &flowCtx.evalCtx, output); err != nil {
-		return nil, err
-	}
-
-	desc := spec.Table
-	if _, _, err := initRowFetcher(
-		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, tr.out.neededColumns(),
+	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	tr.ignoreMisplannedRanges = flowCtx.local
+	if err := tr.Init(
+		tr,
+		post,
+		types,
+		flowCtx,
+		processorID,
+		output,
+		nil, /* memMonitor */
+		ProcStateOpts{
+			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
+			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
+			// doesn't trust that the adapter will do the right thing on a Next() call
+			// after it had previously returned an error.
+			InputsToDrain:        nil,
+			TrailingMetaCallback: tr.generateTrailingMeta,
+		},
 	); err != nil {
 		return nil, err
 	}
 
-	tr.spans = make(roachpb.Spans, len(spec.Spans))
+	neededColumns := tr.out.neededColumns()
+
+	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	if _, _, err := initRowFetcher(
+		&tr.fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
+	); err != nil {
+		return nil, err
+	}
+
+	nSpans := len(spec.Spans)
+	if cap(tr.spans) >= nSpans {
+		tr.spans = tr.spans[:nSpans]
+	} else {
+		tr.spans = make(roachpb.Spans, nSpans)
+	}
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
+	}
+	tr.input = &rowFetcherWrapper{Fetcher: &tr.fetcher}
+
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		tr.input = NewInputStatCollector(tr.input)
+		tr.finishTrace = tr.outputStatsToTrace
 	}
 
 	return tr, nil
 }
 
+// rowFetcherWrapper is used only by a tableReader to wrap calls to
+// Fetcher.NextRow() in a RowSource implementation.
+type rowFetcherWrapper struct {
+	ctx context.Context
+	*row.Fetcher
+}
+
+var _ RowSource = &rowFetcherWrapper{}
+
+// Start is part of the RowSource interface.
+func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
+	w.ctx = ctx
+	return ctx
+}
+
+// Next() calls NextRow() on the underlying Fetcher. If the returned
+// ProducerMetadata is not nil, only its Err field will be set.
+func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	row, _, _, err := w.NextRow(w.ctx)
+	if err != nil {
+		return row, &ProducerMetadata{Err: err}
+	}
+	return row, nil
+}
+func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
+func (w rowFetcherWrapper) ConsumerDone()                     {}
+func (w rowFetcherWrapper) ConsumerClosed()                   {}
+
 func initRowFetcher(
-	fetcher *sqlbase.RowFetcher,
+	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
+	colIdxMap map[sqlbase.ColumnID]int,
 	reverseScan bool,
-	valNeededForCol []bool,
+	valNeededForCol util.FastIntSet,
+	isCheck bool,
+	alloc *sqlbase.DatumAlloc,
+	scanVisibility ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
-	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
-	// secondary index.
-	if indexIdx < 0 || indexIdx > len(desc.Indexes) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	if err != nil {
+		return nil, false, err
 	}
 
-	if indexIdx > 0 {
-		index = &desc.Indexes[indexIdx-1]
-		isSecondaryIndex = true
-	} else {
-		index = &desc.PrimaryIndex
+	cols := desc.Columns
+	if scanVisibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+		if len(desc.Mutations) > 0 {
+			cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+			cols = append(cols, desc.Columns...)
+			for _, mutation := range desc.Mutations {
+				if c := mutation.GetColumn(); c != nil {
+					col := *c
+					// Even if the column is non-nullable it can be null in the
+					// middle of a schema change.
+					col.Nullable = true
+					cols = append(cols, col)
+				}
+			}
+		}
 	}
-
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(desc.Columns))
-	for i, c := range desc.Columns {
-		colIdxMap[c.ID] = i
+	tableArgs := row.FetcherTableArgs{
+		Desc:             desc,
+		Index:            index,
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: isSecondaryIndex,
+		Cols:             cols,
+		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
-		desc.Columns, valNeededForCol, true, /* returnRangeInfo */
+		reverseScan, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
+
 	return index, isSecondaryIndex, nil
 }
 
-// sendMisplannedRangesMetadata sends information about the non-local ranges
-// that were read by this tableReader. This should be called after the fetcher
-// was used to read everything this tableReader was supposed to read.
-func (tr *tableReader) sendMisplannedRangesMetadata(ctx context.Context) {
-	rangeInfos := tr.fetcher.GetRangeInfo()
-	var misplannedRanges []roachpb.RangeInfo
-	for _, ri := range rangeInfos {
-		if ri.Lease.Replica.NodeID != tr.flowCtx.nodeID {
-			misplannedRanges = append(misplannedRanges, ri)
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+	var trailingMeta []ProducerMetadata
+	if !tr.ignoreMisplannedRanges {
+		ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+		if ranges != nil {
+			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if len(misplannedRanges) != 0 {
-		var msg string
-		if len(misplannedRanges) < 3 {
-			msg = fmt.Sprintf("%+v", misplannedRanges[0].Desc)
-		} else {
-			msg = fmt.Sprintf("%+v...", misplannedRanges[:3])
-		}
-		log.VEventf(ctx, 2, "tableReader pushing metadata about misplanned ranges: %s",
-			msg)
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Ranges: misplannedRanges})
+	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
+	tr.InternalClose()
+	return trailingMeta
 }
 
-// Run is part of the processor interface.
-func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
+// Start is part of the RowSource interface.
+func (tr *tableReader) Start(ctx context.Context) context.Context {
+	if tr.flowCtx.txn == nil {
+		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
-	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableID))
-	ctx, span := tracing.ChildSpan(ctx, "table reader")
-	defer tracing.FinishSpan(span)
-
-	txn := tr.flowCtx.setupTxn()
-
-	log.VEventf(ctx, 1, "starting")
-	if log.V(1) {
-		defer log.Infof(ctx, "exiting")
+	// Like every processor, the tableReader will have a context with a log tag
+	// and a span. The underlying fetcher inherits the proc's span, but not the
+	// log tag.
+	fetcherCtx := ctx
+	ctx = tr.StartInternal(ctx, tableReaderProcName)
+	if procSpan := opentracing.SpanFromContext(ctx); procSpan != nil {
+		fetcherCtx = opentracing.ContextWithSpan(fetcherCtx, procSpan)
 	}
 
+	// This call doesn't do much; the real "starting" is below.
+	tr.input.Start(fetcherCtx)
 	if err := tr.fetcher.StartScan(
-		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint,
+		fetcherCtx, tr.flowCtx.txn, tr.spans,
+		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		tr.out.close()
+		tr.MoveToDraining(err)
+	}
+	return ctx
+}
+
+// Release releases this tableReader back to the pool.
+func (tr *tableReader) Release() {
+	tr.ProcessorBase.Reset()
+	tr.fetcher.Reset()
+	*tr = tableReader{
+		ProcessorBase: tr.ProcessorBase,
+		fetcher:       tr.fetcher,
+		spans:         tr.spans[:0],
+	}
+	trPool.Put(tr)
+}
+
+// Next is part of the RowSource interface.
+func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	for tr.State == StateRunning {
+		row, meta := tr.input.Next()
+
+		if meta != nil {
+			if meta.Err != nil {
+				tr.MoveToDraining(nil /* err */)
+			}
+			return nil, meta
+		}
+		if row == nil {
+			tr.MoveToDraining(nil /* err */)
+			break
+		}
+
+		if outRow := tr.ProcessRowHelper(row); outRow != nil {
+			return outRow, nil
+		}
+	}
+	return nil, tr.DrainHelper()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (tr *tableReader) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	tr.InternalClose()
+}
+
+var _ DistSQLSpanStats = &TableReaderStats{}
+
+const tableReaderTagPrefix = "tablereader."
+
+// Stats implements the SpanStats interface.
+func (trs *TableReaderStats) Stats() map[string]string {
+	return trs.InputStats.Stats(tableReaderTagPrefix)
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (trs *TableReaderStats) StatsForQueryPlan() []string {
+	return trs.InputStats.StatsForQueryPlan("" /* prefix */)
+}
+
+// outputStatsToTrace outputs the collected tableReader stats to the trace. Will
+// fail silently if the tableReader is not collecting stats.
+func (tr *tableReader) outputStatsToTrace() {
+	is, ok := getInputStats(tr.flowCtx, tr.input)
+	if !ok {
 		return
 	}
-
-	for {
-		fetcherRow, err := tr.fetcher.NextRow(ctx)
-		if err != nil || fetcherRow == nil {
-			if err != nil {
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			tr.sendMisplannedRangesMetadata(ctx)
-			tr.out.close()
-			return
-		}
-		// Emit the row; stop if no more rows are needed.
-		consumerStatus, err := tr.out.emitRow(ctx, fetcherRow)
-		if err != nil || consumerStatus != NeedMoreRows {
-			if err != nil {
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			tr.sendMisplannedRangesMetadata(ctx)
-			tr.out.close()
-			return
-		}
-		/*
-			 * TODO(radu): support limit in procOutputHelper
-			rowIdx++
-			if tr.hardLimit != 0 && rowIdx == tr.hardLimit {
-				// We sent tr.hardLimit rows.
-				tr.out.close(nil)
-				return
-			}
-		*/
+	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
+		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
 	}
 }

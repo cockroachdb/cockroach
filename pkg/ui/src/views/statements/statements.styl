@@ -1,0 +1,170 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+
+.statements-table
+  &__col-query-text
+    font-family monospace
+    white-space pre-wrap
+
+.statements
+  &__last-hour-note
+    margin-left 3px
+    font-style italic
+    color $body-color
+
+.back-link
+  text-decoration none
+  color $link-color
+
+.statement-count-title, .last-cleared-title
+  padding 12px 24px
+  color $body-color
+
+.last-cleared-tooltip, .numeric-stats-table
+  &__tooltip
+    width 36px  // Reserve space for 10px padding around centered 16px icon
+    height 16px
+    display inline-block
+
+    // Overrides to let the tooltip sit inside a table header.
+    text-transform none
+    font-weight normal
+    white-space normal
+    letter-spacing normal
+    font-size 14px
+
+  &__tooltip-hover-area
+    width 100%
+    padding 0px 10px
+
+  &__info-icon
+    width 16px
+    height 16px
+    border-radius 50%
+    border 1px solid $tooltip-color
+    font-size 12px
+    line-height 14px  // Visual tweak to vertically center the "i"
+    text-align center
+    color $tooltip-color
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $body-color
+    color $body-color
+
+.app-name
+  white-space nowrap
+
+  &__unset
+    color $tooltip-color
+    font-style italic
+
+.statements-table__col-time
+  text-align right
+  white-space nowrap
+
+.statements-table__col-count
+  .bar-chart
+    width 100px
+
+.statements-table__col-retries
+  .bar-chart
+    width 80px
+
+.numeric-stats-table
+  .bar-chart
+    width 200px
+
+.statements-table__col-rows, .statements-table__col-latency
+  .bar-chart
+    width 140px
+
+.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
+  .bar-chart
+    margin-left 3em
+
+    .label
+      left -3em
+      width 2.5em
+
+.bar-chart
+  height 14px
+  margin-left 5em
+  position relative
+
+  .label
+    position absolute
+    left -5em
+    width 4.5em
+    text-align right
+    top -2px
+
+  &__bar
+    display inline-block
+    height 14px
+
+    &--dev
+      position absolute
+      height 3px
+      top 6px
+
+  .count-first-try, .count-total
+    background-color $link-color
+
+  .count-retry, .count-max-retries
+    background-color $alert-color
+
+  .rows, .latency-parse, .latency-plan, .latency-run, .latency-overhead, .latency-overall
+    background-color $link-color
+
+  .rows-dev, .latency-parse-dev, .latency-plan-dev, .latency-run-dev, .latency-overhead-dev, .latency-overall-dev
+    background-color $warning-color
+
+.numeric-stats-table
+  @extend $table-base
+
+  &__row--summary
+    color black
+    font-weight bold
+
+.details-bar
+  margin 12px 0
+
+.numeric-stat-legend
+  white-space nowrap
+
+  th
+    position relative
+    padding-left 24px
+    padding-right 5px
+
+  td
+    text-align right
+
+  &__bar
+    position absolute
+    width 21px
+    left 0
+
+    &--mean
+      height 14px
+      top 2px
+      background-color $link-color
+
+    &--dev
+      height 3px
+      top 8px
+      background-color $warning-color

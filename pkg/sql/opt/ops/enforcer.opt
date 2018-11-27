@@ -1,0 +1,20 @@
+# enforcer.opt contains Optgen language definitions for "enforcer" operators
+# that ensure result sets provide requested physical properties like row sort
+# order and column naming. These operators are added by the optimizer on an
+# as-needed basis, in order to wrap input expressions that do not naturally
+# provide the desired properties.
+#
+# Tags
+#
+# Enforcer - All operators in this file are marked with the Enforcer tag, so
+#            they can be easily distinguished from Scalar and Relational
+#            operators.
+
+
+# Sort enforces the ordering of rows returned by its input expression. Rows can
+# be sorted by one or more of the input columns, each of which can be sorted in
+# either ascending or descending order. See the Ordering field in the
+# PhysicalProps struct.
+[Enforcer]
+define Sort {
+}

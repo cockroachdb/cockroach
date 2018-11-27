@@ -1,0 +1,27 @@
+# Have prometheus-operator run an AlertManager cluster
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+spec:
+  replicas: 3
+---
+# Create a Service to allow Prometheus to talk to AlertManager
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-cockroachdb
+  labels:
+    app: cockroachdb
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9093
+    protocol: TCP
+    targetPort: web
+  selector:
+    alertmanager: cockroachdb
+

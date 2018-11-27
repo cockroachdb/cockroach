@@ -11,17 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package sqlutils
 
 import (
 	"bytes"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestIntToEnglish(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		val int
 		exp string
@@ -43,8 +44,9 @@ func TestIntToEnglish(t *testing.T) {
 }
 
 func TestGenValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	var buf bytes.Buffer
-	genValues(&buf, 7, 11, ToRowFn(RowIdxFn, RowModuloFn(3), RowEnglishFn))
+	genValues(&buf, 7, 11, ToRowFn(RowIdxFn, RowModuloFn(3), RowEnglishFn), false /* shouldPrint */)
 	expected := `(7,1,'seven'),(8,2,'eight'),(9,0,'nine'),(10,1,'one-zero'),(11,2,'one-one')`
 	if buf.String() != expected {
 		t.Errorf("expected '%s', got '%s'", expected, buf.String())

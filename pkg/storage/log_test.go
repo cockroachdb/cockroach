@@ -11,20 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package storage_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -32,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,13 +40,15 @@ import (
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*server.TestServer)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	countSplits := func() int {
 		var count int
-		// TODO(mrtracy): this should be a parameterized query, but due to #3660
-		// it does not work. This should be changed when #3660 is fixed.
-		err := db.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit))).Scan(&count)
+		err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
+			storagepb.RangeLogEventType_split.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +66,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(context.TODO(), "splitkey"); err != nil {
+	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,8 +77,10 @@ func TestLogSplits(t *testing.T) {
 
 	// verify that RangeID always increases (a good way to see that the splits
 	// are logged correctly)
-	// TODO(mrtracy): Change to parameterized query when #3660 is fixed.
-	rows, err := db.Query(fmt.Sprintf(`SELECT rangeID, otherRangeID, info FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit)))
+	rows, err := db.QueryContext(ctx,
+		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
+		storagepb.RangeLogEventType_split.String(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,10 +102,7 @@ func TestLogSplits(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for split of range %d", rangeID)
 		}
-		var info struct {
-			UpdatedDesc roachpb.RangeDescriptor
-			NewDesc     roachpb.RangeDescriptor
-		}
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
 			continue
@@ -118,32 +118,141 @@ func TestLogSplits(t *testing.T) {
 		t.Fatal(rows.Err())
 	}
 
-	// This code assumes that there is only one TestServer, and thus that
-	// StoreID 1 is present on the testserver. If this assumption changes in the
-	// future, *any* store will work, but a new method will need to be added to
-	// Stores (or a creative usage of VisitStores could suffice).
-	store, pErr := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	minSplits := int64(initialSplits + 1)
-	// Verify that the minimimum number of splits has occurred. This is a min
+	// Verify that the minimum number of splits has occurred. This is a min
 	// instead of an exact number, because the number of splits seems to vary
 	// between different runs of this test.
 	if a := store.Metrics().RangeSplits.Count(); a < minSplits {
 		t.Errorf("splits = %d < min %d", a, minSplits)
+	}
+
+	{
+		// Verify that the uniqueIDs have non-zero node IDs. The "& 0x7fff" is
+		// using internal knowledge of the structure of uniqueIDs that the node ID
+		// is embedded in the lower 15 bits. See #17560.
+		var count int
+		err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM system.rangelog WHERE ("uniqueID" & 0x7fff) = 0`).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("found %d uniqueIDs with a zero node ID", count)
+		}
+	}
+}
+
+func TestLogMerges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableMergeQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.(*server.TestServer)
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	countRangeLogMerges := func() int {
+		var count int
+		err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
+			storagepb.RangeLogEventType_merge.String()).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	// No ranges should have merged immediately after startup.
+	if n := countRangeLogMerges(); n != 0 {
+		t.Fatalf("expected 0 initial merges, but got %d", n)
+	}
+	if n := store.Metrics().RangeMerges.Count(); n != 0 {
+		t.Errorf("expected 0 initial merges, but got %d", n)
+	}
+
+	// Create two ranges, then merge them.
+	if err := kvDB.AdminSplit(ctx, "a", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminSplit(ctx, "b", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminMerge(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := countRangeLogMerges(); n != 1 {
+		t.Fatalf("expected 1 merge, but got %d", n)
+	}
+	if n := store.Metrics().RangeMerges.Count(); n != 1 {
+		t.Errorf("expected 1 merge, but got %d", n)
+	}
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
+		storagepb.RangeLogEventType_merge.String(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var rangeID int64
+		var otherRangeID gosql.NullInt64
+		var infoStr gosql.NullString
+		if err := rows.Scan(&rangeID, &otherRangeID, &infoStr); err != nil {
+			t.Fatal(err)
+		}
+
+		if !otherRangeID.Valid {
+			t.Errorf("otherRangeID not recorded for merge of range %d", rangeID)
+		}
+		if otherRangeID.Int64 <= rangeID {
+			t.Errorf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+		}
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for merge of range %d", rangeID)
+		}
+		var info storagepb.RangeLogEvent_Info
+		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
+			t.Errorf("error unmarshalling info string for merge of range %d: %s", rangeID, err)
+			continue
+		}
+		if int64(info.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for merge of range %d", info.UpdatedDesc, rangeID)
+		}
+		if int64(info.RemovedDesc.RangeID) != otherRangeID.Int64 {
+			t.Errorf("recorded wrong new descriptor %s for merge of range %d", info.RemovedDesc, rangeID)
+		}
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
 	}
 }
 
 func TestLogRebalances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	// Use a client to get the RangeDescriptor for the first range. We will use
 	// this range's information to log fake rebalance events.
 	desc := &roachpb.RangeDescriptor{}
-	if err := db.GetProto(context.TODO(), keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
+	if err := db.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,9 +266,10 @@ func TestLogRebalances(t *testing.T) {
 	}
 
 	// Log several fake events using the store.
-	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc)
+	const details = "test"
+	logEvent := func(changeType roachpb.ReplicaChangeType, reason storagepb.RangeLogEventReason) {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc, reason, details)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -172,11 +282,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA)
+	logEvent(roachpb.REMOVE_REPLICA, storagepb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -190,9 +300,10 @@ func TestLogRebalances(t *testing.T) {
 	defer sqlDB.Close()
 
 	// verify that two add replica events have been logged.
-	// TODO(mrtracy): placeholders still appear to be broken, this query should
-	// be using a string placeholder for the eventType value.
-	rows, err := sqlDB.Query(`SELECT rangeID, info FROM system.rangelog WHERE eventType = 'add'`)
+	rows, err := sqlDB.QueryContext(ctx,
+		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
+		storagepb.RangeLogEventType_add.String(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,10 +323,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for add replica of range %d", rangeID)
 		}
-		var info struct {
-			AddReplica  roachpb.ReplicaDescriptor
-			UpdatedDesc roachpb.RangeDescriptor
-		}
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
 			continue
@@ -223,8 +331,16 @@ func TestLogRebalances(t *testing.T) {
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
 			t.Errorf("recorded wrong updated descriptor %s for add replica of range %d", info.UpdatedDesc, rangeID)
 		}
-		if a, e := info.AddReplica, desc.Replicas[0]; a != e {
+		if a, e := *info.AddedReplica, desc.Replicas[0]; a != e {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Reason, storagepb.ReasonRangeUnderReplicated; a != e {
+			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Details, details; a != e {
+			t.Errorf("recorded wrong details %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
 	}
@@ -236,7 +352,10 @@ func TestLogRebalances(t *testing.T) {
 	}
 
 	// verify that one remove replica event was logged.
-	rows, err = sqlDB.Query(`SELECT rangeID, info FROM system.rangelog WHERE eventType = 'remove'`)
+	rows, err = sqlDB.QueryContext(ctx,
+		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
+		storagepb.RangeLogEventType_remove.String(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,10 +375,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for remove replica of range %d", rangeID)
 		}
-		var info struct {
-			RemovedReplica roachpb.ReplicaDescriptor
-			UpdatedDesc    roachpb.RangeDescriptor
-		}
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for remove replica %d: %s", rangeID, err)
 			continue
@@ -267,8 +383,16 @@ func TestLogRebalances(t *testing.T) {
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
 			t.Errorf("recorded wrong updated descriptor %s for remove replica of range %d", info.UpdatedDesc, rangeID)
 		}
-		if a, e := info.RemovedReplica, desc.Replicas[0]; a != e {
+		if a, e := *info.RemovedReplica, desc.Replicas[0]; a != e {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Reason, storagepb.ReasonRangeOverReplicated; a != e {
+			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Details, details; a != e {
+			t.Errorf("recorded wrong details %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
 	}

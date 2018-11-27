@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt.r.tracy@gmail.com)
 
 package ts
 
@@ -29,28 +27,48 @@ func (r Resolution) String() string {
 	switch r {
 	case Resolution10s:
 		return "10s"
+	case Resolution30m:
+		return "30m"
 	case resolution1ns:
 		return "1ns"
+	case resolution50ns:
+		return "50ns"
+	case resolutionInvalid:
+		return "BAD"
 	}
 	return fmt.Sprintf("%d", r)
 }
 
 // Resolution enumeration values are directly serialized and persisted into
-// system keys; these values must never be altered or reordered.
+// system keys; these values must never be altered or reordered. If new rollup
+// resolutions are added, the IsRollup() method must be modified as well.
 const (
 	// Resolution10s stores data with a sample resolution of 10 seconds.
 	Resolution10s Resolution = 1
+	// Resolution30m stores roll-up data from a higher resolution at a sample
+	// resolution of 30 minutes.
+	Resolution30m Resolution = 2
 	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
 	// only for testing.
-	resolution1ns Resolution = 999
+	resolution1ns Resolution = 998
+	// resolution50ns stores roll-up data from the 1ns resolution at a sample
+	// resolution of 50 nanoseconds. Used for testing.
+	resolution50ns Resolution = 999
+	// resolutionInvalid is an invalid resolution used only for testing. It causes
+	// an error to be thrown in certain methods. It is invalid because its sample
+	// period is not a divisor of its slab period.
+	resolutionInvalid Resolution = 1000
 )
 
 // sampleDurationByResolution is a map used to retrieve the sample duration
 // corresponding to a Resolution value. Sample durations are expressed in
 // nanoseconds.
 var sampleDurationByResolution = map[Resolution]int64{
-	Resolution10s: int64(time.Second * 10),
-	resolution1ns: 1, // 1ns resolution only for tests.
+	Resolution10s:     int64(time.Second * 10),
+	Resolution30m:     int64(time.Minute * 30),
+	resolution1ns:     1,  // 1ns resolution only for tests.
+	resolution50ns:    50, // 50ns rollup only for tests.
+	resolutionInvalid: 10, // Invalid resolution.
 }
 
 // slabDurationByResolution is a map used to retrieve the slab duration
@@ -58,16 +76,11 @@ var sampleDurationByResolution = map[Resolution]int64{
 // samples are stored at a single Cockroach key/value. Slab durations are
 // expressed in nanoseconds.
 var slabDurationByResolution = map[Resolution]int64{
-	Resolution10s: int64(time.Hour),
-	resolution1ns: 10, // 1ns resolution only for tests.
-}
-
-// pruneAgeByResolution maintains a suggested maximum age per resolution; data
-// which is older than the given threshold for a resolution is considered
-// eligible for deletion. Thresholds are specified in nanoseconds.
-var pruneThresholdByResolution = map[Resolution]int64{
-	Resolution10s: (30 * 24 * time.Hour).Nanoseconds(),
-	resolution1ns: time.Second.Nanoseconds(),
+	Resolution10s:     int64(time.Hour),
+	Resolution30m:     int64(time.Hour * 24),
+	resolution1ns:     10,   // 1ns resolution only for tests.
+	resolution50ns:    1000, // 50ns rollup only for tests.
+	resolutionInvalid: 11,
 }
 
 // SampleDuration returns the sample duration corresponding to this resolution
@@ -91,13 +104,30 @@ func (r Resolution) SlabDuration() int64 {
 	return duration
 }
 
-// PruneThreshold returns the pruning threshold duration for this resolution,
-// expressed in nanoseconds. This duration determines how old time series data
-// must be before it is eligible for pruning.
-func (r Resolution) PruneThreshold() int64 {
-	threshold, ok := pruneThresholdByResolution[r]
-	if !ok {
-		panic(fmt.Sprintf("no prune threshold found for resolution value %v", r))
+// IsRollup returns true if this resolution contains rollup data: statistical
+// values about a large number of samples taken over a long period, such as
+// the min, max and sum.
+func (r Resolution) IsRollup() bool {
+	return r == Resolution30m || r == resolution50ns
+}
+
+// TargetRollupResolution returns a target resolution that data from this
+// resolution should be rolled up into in lieu of deletion. For example,
+// Resolution10s has a target rollup resolution of Resolution30m.
+func (r Resolution) TargetRollupResolution() (Resolution, bool) {
+	switch r {
+	case Resolution10s:
+		return Resolution30m, true
+	case resolution1ns:
+		return resolution50ns, true
 	}
-	return threshold
+	return r, false
+}
+
+func normalizeToPeriod(timestampNanos int64, period int64) int64 {
+	return timestampNanos - timestampNanos%period
+}
+
+func (r Resolution) normalizeToSlab(timestampNanos int64) int64 {
+	return normalizeToPeriod(timestampNanos, r.SlabDuration())
 }

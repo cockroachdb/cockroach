@@ -1,0 +1,11 @@
+create_table_stmt ::=
+	'CREATE' 'TABLE' table_name '(' column_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' table_name '(' index_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' table_name '(' family_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' table_name '(' table_constraint ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' table_name '('  ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' column_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' index_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' family_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_constraint ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '('  ')' opt_interleave opt_partition_by

@@ -1,0 +1,1073 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-metadata fakedist-opt
+
+subtest generate_series
+
+query I
+SELECT * FROM generate_series(1, NULL)
+----
+
+query I colnames
+SELECT * FROM generate_series(1, 3)
+----
+generate_series
+1
+2
+3
+
+query T colnames
+SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '1 hour')
+----
+generate_series
+2017-11-11 00:00:00 +0000 +0000
+2017-11-11 01:00:00 +0000 +0000
+2017-11-11 02:00:00 +0000 +0000
+2017-11-11 03:00:00 +0000 +0000
+
+query T colnames
+SELECT * FROM generate_series('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-11 00:00:00'::TIMESTAMP, '-1 hour')
+----
+generate_series
+2017-11-11 03:00:00 +0000 +0000
+2017-11-11 02:00:00 +0000 +0000
+2017-11-11 01:00:00 +0000 +0000
+2017-11-11 00:00:00 +0000 +0000
+
+query T colnames
+SELECT * FROM generate_series('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-15 00:00:00'::TIMESTAMP, '1 day')
+----
+generate_series
+2017-11-11 03:00:00 +0000 +0000
+2017-11-12 03:00:00 +0000 +0000
+2017-11-13 03:00:00 +0000 +0000
+2017-11-14 03:00:00 +0000 +0000
+
+query T colnames
+SELECT * FROM generate_series('2017-01-15 03:00:00'::TIMESTAMP, '2017-12-15 00:00:00'::TIMESTAMP, '1 month')
+----
+generate_series
+2017-01-15 03:00:00 +0000 +0000
+2017-02-15 03:00:00 +0000 +0000
+2017-03-15 03:00:00 +0000 +0000
+2017-04-15 03:00:00 +0000 +0000
+2017-05-15 03:00:00 +0000 +0000
+2017-06-15 03:00:00 +0000 +0000
+2017-07-15 03:00:00 +0000 +0000
+2017-08-15 03:00:00 +0000 +0000
+2017-09-15 03:00:00 +0000 +0000
+2017-10-15 03:00:00 +0000 +0000
+2017-11-15 03:00:00 +0000 +0000
+
+# Check what happens when we step through February in a leap year, starting on Jan 31.
+# This output is consistent with PostgreSQL 10.
+query T colnames
+SELECT * FROM generate_series('2016-01-31 03:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '1 month')
+----
+generate_series
+2016-01-31 03:00:00 +0000 +0000
+2016-02-29 03:00:00 +0000 +0000
+2016-03-29 03:00:00 +0000 +0000
+2016-04-29 03:00:00 +0000 +0000
+2016-05-29 03:00:00 +0000 +0000
+2016-06-29 03:00:00 +0000 +0000
+2016-07-29 03:00:00 +0000 +0000
+2016-08-29 03:00:00 +0000 +0000
+2016-09-29 03:00:00 +0000 +0000
+2016-10-29 03:00:00 +0000 +0000
+2016-11-29 03:00:00 +0000 +0000
+2016-12-29 03:00:00 +0000 +0000
+
+# Similar to the previous, but we don't hit a 30-day month until July.
+query T colnames
+SELECT * FROM generate_series('2016-01-31 03:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '2 month')
+----
+generate_series
+2016-01-31 03:00:00 +0000 +0000
+2016-03-31 03:00:00 +0000 +0000
+2016-05-31 03:00:00 +0000 +0000
+2016-07-31 03:00:00 +0000 +0000
+2016-09-30 03:00:00 +0000 +0000
+2016-11-30 03:00:00 +0000 +0000
+
+# Verify rollover when we're adding by months, days, and hours
+query T colnames
+SELECT * FROM generate_series('2016-01-30 22:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '1 month 1 day 1 hour')
+----
+generate_series
+2016-01-30 22:00:00 +0000 +0000
+2016-03-01 23:00:00 +0000 +0000
+2016-04-03 00:00:00 +0000 +0000
+2016-05-04 01:00:00 +0000 +0000
+2016-06-05 02:00:00 +0000 +0000
+2016-07-06 03:00:00 +0000 +0000
+2016-08-07 04:00:00 +0000 +0000
+2016-09-08 05:00:00 +0000 +0000
+2016-10-09 06:00:00 +0000 +0000
+2016-11-10 07:00:00 +0000 +0000
+2016-12-11 08:00:00 +0000 +0000
+
+query T colnames
+SELECT * FROM generate_series('1996-02-29 22:00:00'::TIMESTAMP, '2004-03-01 00:00:00'::TIMESTAMP, '4 year')
+----
+generate_series
+1996-02-29 22:00:00 +0000 +0000
+2000-02-29 22:00:00 +0000 +0000
+2004-02-29 22:00:00 +0000 +0000
+
+query T colnames
+SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '-1 hour')
+----
+generate_series
+
+query II colnames,rowsort
+SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+----
+generate_series  generate_series
+1                1
+1                2
+2                1
+2                2
+
+query I colnames
+SELECT * FROM generate_series(3, 1, -1)
+----
+generate_series
+3
+2
+1
+
+query I colnames
+SELECT * FROM generate_series(3, 1)
+----
+generate_series
+
+query error step cannot be 0
+SELECT * FROM generate_series(1, 3, 0)
+
+query I colnames
+SELECT * FROM PG_CATALOG.generate_series(1, 3)
+----
+generate_series
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_series(1, 1) AS c(x)
+----
+x
+1
+
+query II colnames
+SELECT * FROM generate_series(1, 1) WITH ORDINALITY
+----
+generate_series  ordinality
+1                1
+
+query II colnames
+SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
+----
+x y
+1 1
+
+query error generator functions are not allowed in LIMIT
+SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
+
+query I colnames
+SELECT generate_series(1, 2)
+----
+generate_series
+1
+2
+
+subtest multiple_SRFs
+
+query II colnames
+SELECT generate_series(1, 2), generate_series(3, 4)
+----
+generate_series             generate_series
+1                           3
+2                           4
+
+query II
+SELECT generate_series(1, 2), generate_series(3, 4)
+----
+1  3
+2  4
+
+statement ok
+CREATE TABLE t (a string)
+
+statement ok
+CREATE TABLE u (b string)
+
+statement ok
+INSERT INTO t VALUES ('cat')
+
+statement ok
+INSERT INTO u VALUES ('bird')
+
+query TTII colnames
+SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+----
+a    b     generate_series generate_series
+cat  bird  1               3
+cat  bird  2               4
+
+query TTII colnames,rowsort
+SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
+----
+a    b     a  b
+cat  bird  1  3
+cat  bird  1  4
+cat  bird  2  3
+cat  bird  2  4
+
+query I colnames
+SELECT 3 + x AS r FROM generate_series(1,2) AS a(x)
+----
+r
+4
+5
+
+query I colnames
+SELECT 3 + generate_series(1,2) AS r
+----
+r
+4
+5
+
+query I colnames
+SELECT 3 + (3 * generate_series(1,3)) AS r
+----
+r
+6
+9
+12
+
+subtest srf_ordering
+
+statement ok
+CREATE TABLE ordered_t(x INT PRIMARY KEY);
+  INSERT INTO ordered_t VALUES (0), (1)
+
+query II colnames
+SELECT x, generate_series(3, x, -1) FROM ordered_t ORDER BY 1, 2;
+----
+x  generate_series
+0  0
+0  1
+0  2
+0  3
+1  1
+1  2
+1  3
+
+subtest unnest
+
+statement error could not determine polymorphic type
+SELECT * FROM unnest(NULL)
+
+statement error could not determine polymorphic type
+SELECT unnest(NULL)
+
+query I colnames
+SELECT * from unnest(ARRAY[1,2])
+----
+unnest
+1
+2
+
+query IT
+SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
+----
+1  a
+2  b
+
+query I colnames
+SELECT unnest(ARRAY[3,4]) - 2 AS r
+----
+r
+1
+2
+
+query II colnames
+SELECT 1 + generate_series(0, 1) AS r, unnest(ARRAY[2, 4]) - 1 AS t
+----
+r t
+1 1
+2 3
+
+query II
+SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
+----
+1  1
+2  3
+
+query I colnames
+SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
+----
+ascii
+97
+98
+99
+
+subtest nested_SRF
+# See #20511
+
+query error unimplemented: nested set-returning functions
+SELECT generate_series(generate_series(1, 3), 3)
+
+query I
+SELECT generate_series(1, 3) + generate_series(1, 3)
+----
+2
+4
+6
+
+query error pq: column "generate_series" does not exist
+SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
+
+# Regressions for #15900: ensure that null parameters to generate_series don't
+# cause issues.
+
+query T colnames
+SELECT * from generate_series(1, (select * from generate_series(1, 0)))
+----
+generate_series
+
+# The following query is designed to produce a null array argument to unnest
+# in a way that the type system can't detect before evaluation.
+query T colnames
+SELECT unnest((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
+----
+unnest
+
+query T colnames
+SELECT information_schema._pg_expandarray((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
+----
+information_schema._pg_expandarray
+
+# Regression for #18021.
+query I colnames
+SELECT generate_series(9223372036854775807::int, -9223372036854775807::int, -9223372036854775807::int)
+----
+generate_series
+9223372036854775807
+0
+-9223372036854775807
+
+subtest pg_get_keywords
+
+# pg_get_keywords for compatibility (#10291)
+query TTT colnames
+SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
+----
+word     catcode catdesc
+alter    U       unreserved
+and      R       reserved
+between  C       unreserved (cannot be function or type name)
+cross    T       reserved (can be function or type name)
+
+# Postgres enables renaming both the source and the column name for
+# single-column generators, but not for multi-column generators.
+query IITTT colnames
+SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
+----
+a  b  word  catcode  catdesc
+
+# Beware of multi-valued SRFs in render position (#19149)
+query TTT colnames
+SELECT 'a' AS a, pg_get_keywords(), 'c' AS c LIMIT 1
+----
+a  pg_get_keywords             c
+a  ("abort","U","unreserved")  c
+
+query TTT colnames
+SELECT 'a' AS a, pg_get_keywords() AS b, 'c' AS c LIMIT 1
+----
+a  b                           c
+a  ("abort","U","unreserved")  c
+
+subtest unary_table
+
+query TTT colnames
+SELECT 'a' AS a, crdb_internal.unary_table() AS b, 'c' AS c LIMIT 1
+----
+a  b   c
+a  ()  c
+
+subtest upper
+
+# Regular scalar functions can be used as functions too. #22312
+query T colnames
+SELECT * FROM upper('abc')
+----
+upper
+ABC
+
+subtest current_schema
+
+query TI colnames
+SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
+----
+b      ordinality
+public 1
+
+subtest expandArray
+
+query error pq: unknown signature: information_schema._pg_expandarray()
+SELECT information_schema._pg_expandarray()
+
+query error pq: unknown signature: information_schema._pg_expandarray()
+SELECT * FROM information_schema._pg_expandarray()
+
+query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+SELECT information_schema._pg_expandarray(ARRAY[])
+
+query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+SELECT * FROM information_schema._pg_expandarray(ARRAY[])
+
+statement error could not determine polymorphic type
+SELECT * FROM information_schema._pg_expandarray(NULL)
+
+statement error could not determine polymorphic type
+SELECT information_schema._pg_expandarray(NULL)
+
+query I colnames
+SELECT information_schema._pg_expandarray(ARRAY[]:::int[])
+----
+information_schema._pg_expandarray
+
+query II colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY[]:::int[])
+----
+x  n
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY[100])
+----
+information_schema._pg_expandarray
+(100,1)
+
+query II colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY[100])
+----
+x   n
+100 1
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY[2, 1])
+----
+information_schema._pg_expandarray
+(2,1)
+(1,2)
+
+query II colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY[2, 1])
+----
+x n
+2 1
+1 2
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY[3, 2, 1])
+----
+information_schema._pg_expandarray
+(3,1)
+(2,2)
+(1,3)
+
+query II colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY[3, 2, 1])
+----
+x n
+3 1
+2 2
+1 3
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY['a'])
+----
+information_schema._pg_expandarray
+("a",1)
+
+query TI colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY['a'])
+----
+x n
+a 1
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
+----
+information_schema._pg_expandarray
+("b",1)
+("a",2)
+
+query TI colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
+----
+x n
+b 1
+a 2
+
+query T colnames
+SELECT information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
+----
+information_schema._pg_expandarray
+("c",1)
+("b",2)
+("a",3)
+
+query TI colnames
+SELECT * FROM information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
+----
+x n
+c 1
+b 2
+a 3
+
+subtest srf_accessor
+
+query error pq: type int is not composite
+SELECT (1).*
+
+query error pq: type int is not composite
+SELECT ((1)).*
+
+query error pq: type int is not composite
+SELECT (1).x
+
+query error pq: type int is not composite
+SELECT ((1)).x
+
+query error pq: type string is not composite
+SELECT ('a').*
+
+query error pq: type string is not composite
+SELECT (('a')).*
+
+query error pq: type string is not composite
+SELECT ('a').x
+
+query error pq: type string is not composite
+SELECT (('a')).x
+
+query error pq: unnest\(\): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+SELECT (unnest(ARRAY[])).*
+
+query error type int is not composite
+SELECT (unnest(ARRAY[]:::INT[])).*
+
+subtest multi_column
+
+query TI colnames
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
+----
+x  n
+c  1
+b  2
+a  3
+
+query T colnames
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
+----
+x
+c
+b
+a
+
+query I colnames
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).n
+----
+n
+1
+2
+3
+
+query error pq: could not identify column "other" in tuple{string AS x, int AS n}
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
+
+query T colnames
+SELECT temp.x from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x
+c
+b
+a
+
+query I colnames
+SELECT temp.n from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+n
+1
+2
+3
+
+query error pq: column "temp.other" does not exist
+SELECT temp.other from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+
+query TI colnames
+SELECT temp.* from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x n
+c 1
+b 2
+a 3
+
+query TI colnames
+SELECT * from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x n
+c 1
+b 2
+a 3
+
+query I colnames
+SELECT (i.keys).n FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
+----
+n
+1
+2
+3
+
+query II colnames
+SELECT (i.keys).* FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
+----
+x  n
+3  1
+2  2
+1  3
+
+query T
+SELECT ((i.keys).*, 123) FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
+----
+("(3,1)",123)
+("(2,2)",123)
+("(1,3)",123)
+
+subtest generate_subscripts
+
+# Basic use cases
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1])
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1)
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, false)
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, true)
+----
+generate_subscripts
+3
+2
+1
+
+query I colnames
+SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1) AS s
+----
+s
+1
+2
+3
+4
+
+query I colnames
+SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1, true) AS s
+----
+s
+4
+3
+2
+1
+
+# With a non-valid dimension (only 1 should return any rows)
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1, true)
+----
+generate_subscripts
+
+# With an empty array
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[])
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[], 1)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::string[], 1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::bool[], 1, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[], 0)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::string[], -1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::bool[], 2, true)
+----
+generate_subscripts
+
+# With an array with only one value
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[100])
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[100], 1)
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY['b'], 1, false)
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[true], 1, true)
+----
+generate_subscripts
+1
+
+subtest srf_errors
+
+query error generator functions are not allowed in ORDER BY
+SELECT * FROM t ORDER BY generate_series(1, 3)
+
+query error generator functions are not allowed in WHERE
+SELECT * FROM t WHERE generate_series(1, 3) < 3
+
+query error generator functions are not allowed in HAVING
+SELECT * FROM t HAVING generate_series(1, 3) < 3
+
+query error generator functions are not allowed in LIMIT
+SELECT * FROM t LIMIT generate_series(1, 3)
+
+query error generator functions are not allowed in OFFSET
+SELECT * FROM t OFFSET generate_series(1, 3)
+
+query error generator functions are not allowed in VALUES
+VALUES (generate_series(1,3))
+
+statement error generator functions are not allowed in DEFAULT
+CREATE TABLE uu (x INT DEFAULT generate_series(1, 3))
+
+statement error generator functions are not allowed in CHECK
+CREATE TABLE uu (x INT CHECK (generate_series(1, 3) < 3))
+
+statement error generator functions are not allowed in computed column
+CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)
+
+subtest correlated_srf
+
+statement ok
+CREATE TABLE vals (x INT, y INT, INDEX woo (x, y));
+   INSERT INTO vals VALUES (3, 4), (NULL, NULL), (5, 6);
+
+query III colnames
+SELECT x, generate_series(1,x), generate_series(1,2) FROM vals ORDER BY 1,2,3
+----
+x     generate_series  generate_series
+NULL  NULL             1
+NULL  NULL             2
+3     1                1
+3     2                2
+3     3                NULL
+5     1                1
+5     2                2
+5     3                NULL
+5     4                NULL
+5     5                NULL
+
+# Check that the expression is still valid if the dependent name
+# is not otherwise rendered (needed column elision).
+query I colnames,rowsort
+SELECT generate_series(1,x) FROM vals
+----
+generate_series
+1
+2
+3
+1
+2
+3
+4
+5
+
+# Check that the number of rows is still correct
+# even if the SRF is not needed.
+query I
+SELECT count(*) FROM (SELECT generate_series(1,x) FROM vals)
+----
+8
+
+query TI colnames
+SELECT relname, unnest(indkey) FROM pg_class, pg_index WHERE pg_class.oid = pg_index.indrelid ORDER BY relname, unnest
+----
+relname    unnest
+ordered_t  1
+t          2
+u          2
+vals       1
+vals       2
+vals       3
+
+query TT colnames
+SELECT relname, information_schema._pg_expandarray(indkey) FROM pg_class, pg_index WHERE pg_class.oid = pg_index.indrelid ORDER BY relname, x, n
+----
+relname    information_schema._pg_expandarray
+ordered_t  (1,1)
+t          (2,1)
+u          (2,1)
+vals       (1,1)
+vals       (2,2)
+vals       (3,1)
+
+# The following query needs indclass to become an oidvector.
+# See bug #26504.
+# query III
+# SELECT
+#     indexrelid,
+#     (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
+#     (information_schema._pg_expandarray(indclass)).n AS operator_argument_position
+# FROM
+#     pg_index
+# ----
+
+subtest correlated_json_object_keys
+
+statement ok
+CREATE TABLE j(x INT PRIMARY KEY, y JSON);
+  INSERT INTO j VALUES
+     (1, '{"a":123,"b":456}'),
+     (2, '{"c":111,"d":222}')
+
+query IT rowsort
+SELECT x, y->>json_object_keys(y) FROM j
+----
+1  123
+1  456
+2  111
+2  222
+
+subtest correlated_multi_column
+
+query TTI colnames
+SELECT tbl, idx, (i.keys).n
+  FROM (SELECT ct.relname AS tbl, ct2.relname AS idx, information_schema._pg_expandarray(indkey) AS keys
+          FROM pg_index ix
+          JOIN pg_class ct ON ix.indrelid = ct.oid AND ct.relname = 'vals'
+	  JOIN pg_class ct2 ON ix.indexrelid = ct2.oid) AS i
+ORDER BY 1,2,3
+----
+tbl   idx      n
+vals  primary  1
+vals  woo      1
+vals  woo      2
+
+subtest dbviz_example_query
+
+# DbVisualizer query from #24649 listed in #16971.
+query TTI
+SELECT   a.attname, a.atttypid, atttypmod
+    FROM pg_catalog.pg_class ct
+    JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
+    JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+    JOIN (
+      SELECT i.indexrelid, i.indrelid, i.indisprimary,
+             information_schema._pg_expandarray(i.indkey) AS keys
+        FROM pg_catalog.pg_index i
+        ) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
+   WHERE true
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
+     AND i.indisprimary
+ORDER BY a.attnum
+----
+x  20  -1
+
+subtest metabase_confluent_example_query
+
+# Test from metabase listed on #16971.
+# Also Kafka Confluent sink query from #25854.
+query TTTTIT
+SELECT NULL AS TABLE_CAT,
+       n.nspname AS TABLE_SCHEM,
+       ct.relname AS TABLE_NAME,
+       a.attname AS COLUMN_NAME,
+       (i.keys).n AS KEY_SEQ,
+       ci.relname AS PK_NAME
+    FROM pg_catalog.pg_class ct
+    JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
+    JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+    JOIN (SELECT i.indexrelid,
+                 i.indrelid,
+             i.indisprimary,
+             information_schema._pg_expandarray(i.indkey) AS keys
+        FROM pg_catalog.pg_index i) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
+    JOIN pg_catalog.pg_class ci ON (ci.oid = i.indexrelid)
+   WHERE true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY table_name, pk_name, key_seq
+----
+NULL  public  j  x  1  primary
+
+subtest liquibase_example_query
+
+# # Test from #24713 (Liquibase) listed on #16971.
+# # TODO(knz) Needs support for pg_get_indexdef with 3 arguments,
+# # see #26629.
+# query TTTBTTIITTTTT
+# SELECT NULL AS table_cat,
+#        n.nspname AS table_schem,
+#        ct.relname AS TABLE_NAME,
+#        NOT i.indisunique AS non_unique,
+#        NULL AS index_qualifier,
+#        ci.relname AS index_name,
+#        CASE i.indisclustered
+#          WHEN TRUE THEN 1
+#          ELSE CASE am.amname
+#            WHEN 'hash' THEN 2
+#            ELSE 3
+#          END
+#        END AS TYPE,
+#        (i.KEYS).n AS ordinal_position,
+#        trim(BOTH '"' FROM pg_catalog.pg_get_indexdef(ci.oid, (i.KEYS).n, FALSE)) AS COLUMN_NAME,
+#        CASE am.amcanorder
+#          WHEN TRUE THEN CASE i.indoption[(i.keys).n - 1] & 1
+#            WHEN 1 THEN 'D'
+#            ELSE 'A'
+#          END
+#          ELSE NULL
+#        END AS asc_or_desc,
+#        ci.reltuples AS CARDINALITY,
+#        ci.relpages AS pages,
+#        pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
+# FROM pg_catalog.pg_class ct
+# JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+# JOIN (
+#   SELECT i.indexrelid,
+#          i.indrelid,
+#          i.indoption,
+#          i.indisunique,
+#          i.indisclustered,
+#          i.indpred,
+#          i.indexprs,
+#          information_schema._pg_expandarray(i.indkey) AS KEYS
+#   FROM pg_catalog.pg_index i
+# ) i
+#   ON (ct.oid = i.indrelid)
+# JOIN pg_catalog.pg_class ci ON (ci.oid = i.indexrelid)
+# JOIN pg_catalog.pg_am am ON (ci.relam = am.oid)
+# WHERE TRUE
+#   AND n.nspname = 'public'
+#   AND ct.relname = 'j'
+# ORDER BY non_unique,
+#          TYPE,
+#          index_name,
+#          ordinal_position
+# ----
+
+subtest unnest_with_tuple_types
+
+query T colnames
+SELECT unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query error pq: type tuple{int, int} is not composite
+SELECT (unnest(ARRAY[(1,2),(3,4)])).*
+
+query T colnames
+SELECT * FROM unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query T colnames
+SELECT t.* FROM unnest(ARRAY[(1,2),(3,4)]) AS t
+----
+t
+(1,2)
+(3,4)

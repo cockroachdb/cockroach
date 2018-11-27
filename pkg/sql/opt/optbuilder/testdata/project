@@ -1,0 +1,281 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x INT, y FLOAT)
+----
+TABLE b
+ ├── x int
+ ├── y float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT 5 r
+----
+project
+ ├── columns: r:1(int!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 5 [type=int]
+
+build
+SELECT a.x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ └── scan a
+      └── columns: x:1(int!null) y:2(float)
+
+build
+SELECT a.x, a.y FROM a
+----
+scan a
+ └── columns: x:1(int!null) y:2(float)
+
+build
+SELECT a.y, a.x FROM a
+----
+scan a
+ └── columns: y:2(float) x:1(int!null)
+
+build
+SELECT * FROM a
+----
+scan a
+ └── columns: x:1(int!null) y:2(float)
+
+# Note that an explicit projection operator is added for table b (unlike for
+# table a) to avoid projecting the hidden rowid column.
+build
+SELECT * FROM b
+----
+project
+ ├── columns: x:1(int) y:2(float)
+ └── scan b
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+build
+SELECT (a.x + 3) AS "X", false AS "Y" FROM a
+----
+project
+ ├── columns: X:3(int) Y:4(bool!null)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: x [type=int]
+      │    └── const: 3 [type=int]
+      └── false [type=bool]
+
+build
+SELECT *, ((x < y) OR x > 1000) AS r FROM a
+----
+project
+ ├── columns: x:1(int!null) y:2(float) r:3(bool)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── projections
+      └── or [type=bool]
+           ├── lt [type=bool]
+           │    ├── variable: x [type=int]
+           │    └── variable: y [type=float]
+           └── gt [type=bool]
+                ├── variable: x [type=int]
+                └── const: 1000 [type=int]
+
+build
+SELECT a.*, true FROM a
+----
+project
+ ├── columns: x:1(int!null) y:2(float) bool:3(bool!null)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── projections
+      └── true [type=bool]
+
+build
+SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
+----
+project
+ ├── columns: r:5(int) s:6(float)
+ ├── project
+ │    ├── columns: t:3(int) u:4(float)
+ │    ├── scan a
+ │    │    └── columns: x:1(int!null) y:2(float)
+ │    └── projections
+ │         ├── plus [type=int]
+ │         │    ├── variable: x [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── plus [type=float]
+ │              ├── variable: y [type=float]
+ │              └── const: 1.0 [type=float]
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: t [type=int]
+      │    └── const: 1 [type=int]
+      └── plus [type=float]
+           ├── variable: u [type=float]
+           └── const: 1.0 [type=float]
+
+build
+SELECT rowid FROM b;
+----
+project
+ ├── columns: rowid:3(int!null)
+ └── scan b
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+build
+SELECT rowid FROM (SELECT * FROM b)
+----
+error (42703): column "rowid" does not exist
+
+build
+SELECT rowid FROM (SELECT rowid FROM b)
+----
+project
+ ├── columns: rowid:3(int!null)
+ └── scan b
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+build
+SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: r:3(int!null)
+ └── scan b
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+build
+SELECT r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: r:3(int!null)
+ └── scan b
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+exec-ddl
+CREATE TABLE c (x INT, y FLOAT)
+----
+TABLE c
+ ├── x int
+ ├── y float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT rowid FROM b, c
+----
+error (42702): column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
+
+build
+SELECT x, y, rowid FROM c WHERE rowid > 0
+----
+select
+ ├── columns: x:1(int) y:2(float) rowid:3(int!null)
+ ├── scan c
+ │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
+ └── filters
+      └── gt [type=bool]
+           ├── variable: rowid [type=int]
+           └── const: 0 [type=int]
+
+build
+SELECT r FROM (SELECT x, y, rowid AS r FROM c)
+----
+project
+ ├── columns: r:3(int!null)
+ └── scan c
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+
+build
+SELECT rowid::string FROM b
+----
+project
+ ├── columns: rowid:4(string)
+ ├── scan b
+ │    └── columns: x:1(int) y:2(float) b.rowid:3(int!null)
+ └── projections
+      └── cast: STRING [type=string]
+           └── variable: b.rowid [type=int]
+
+build
+SELECT (x, y)::timestamp FROM b
+----
+error (42846): invalid cast: tuple{int, float} -> TIMESTAMP
+
+build
+SELECT CAST(x AS int[]) FROM b
+----
+error (42846): invalid cast: int -> INT[]
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT c FROM (SELECT a FROM abc)
+----
+error (42703): column "c" does not exist
+
+build
+SELECT c FROM (SELECT a FROM abc ORDER BY c)
+----
+error (42703): column "c" does not exist
+
+build
+SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
+----
+error (42703): column "c" does not exist
+
+build fully-qualify-names
+SELECT t.kv.k FROM abc AS kv
+----
+error (42P01): no data source matches prefix: t.kv
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+build fully-qualify-names
+SELECT t.kv.k FROM kv
+----
+project
+ ├── columns: k:1(int!null)
+ └── scan kv
+      └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
+
+# Check that tuple type includes labels.
+build
+SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+project
+ ├── columns: x:3(tuple{int AS a, int AS b, int AS c})
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int)
+ └── projections
+      └── tuple [type=tuple{int AS a, int AS b, int AS c}]
+           ├── variable: v [type=int]
+           ├── variable: v [type=int]
+           └── variable: v [type=int]

@@ -11,30 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Kathy Spradlin (kathyspradlin@gmail.com)
 
 package rpc
 
 import (
+	"context"
 	"math"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
 )
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
-//
-// TODO(a-robinson): Better expose per-node latency for debugging purposes
-// in addition to this aggregated metric.
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
@@ -50,14 +45,23 @@ const avgLatencyMeasurementAge = 20.0
 
 var (
 	metaClockOffsetMeanNanos = metric.Metadata{
-		Name: "clock-offset.meannanos",
-		Help: "Mean clock offset with other nodes"}
+		Name:        "clock-offset.meannanos",
+		Help:        "Mean clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaClockOffsetStdDevNanos = metric.Metadata{
-		Name: "clock-offset.stddevnanos",
-		Help: "Stdddev clock offset with other nodes"}
+		Name:        "clock-offset.stddevnanos",
+		Help:        "Stddev clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaLatencyHistogramNanos = metric.Metadata{
-		Name: "round-trip-latency",
-		Help: "Distribution of round-trip latencies with other nodes"}
+		Name:        "round-trip-latency",
+		Help:        "Distribution of round-trip latencies with other nodes",
+		Measurement: "Roundtrip Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -67,7 +71,7 @@ type RemoteClockMonitor struct {
 	offsetTTL time.Duration
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		offsets        map[string]RemoteOffset
 		latenciesNanos map[string]ewma.MovingAverage
 	}
@@ -106,12 +110,25 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 // given node address. Returns true if the measurement is valid, or false if
 // we don't have enough samples to compute a reliable average.
 func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if avg, ok := r.mu.latenciesNanos[addr]; ok && avg.Value() != 0.0 {
 		return time.Duration(int64(avg.Value())), true
 	}
 	return 0, false
+}
+
+// AllLatencies returns a map of all currently valid latency measurements.
+func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]time.Duration)
+	for addr, avg := range r.mu.latenciesNanos {
+		if avg.Value() != 0.0 {
+			result[addr] = time.Duration(int64(avg.Value()))
+		}
+	}
+	return result
 }
 
 // UpdateOffset is a thread-safe way to update the remote clock and latency
@@ -175,10 +192,13 @@ func (r *RemoteClockMonitor) UpdateOffset(
 // return indicates that this node's clock is unreliable, and that the node
 // should terminate.
 func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
-	// By the contract of the hlc, if the value is 0, then safety checking
-	// of the max offset is disabled. However we may still want to
-	// propagate the information to a status node.
-	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
+	// By the contract of the hlc, if the value is 0, then safety checking of
+	// the max offset is disabled. However we may still want to propagate the
+	// information to a status node.
+	//
+	// TODO(tschottdorf): disallow maxOffset == 0 but probably lots of tests to
+	// fix.
+	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 && maxOffset != timeutil.ClocklessMaxOffset {
 		now := r.clock.PhysicalTime()
 
 		healthyOffsetCount := 0
@@ -212,10 +232,12 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
 
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
-			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
+			return errors.Errorf(
+				"clock synchronization error: this node is more than %s away from at least half of the known nodes (%d of %d are within the offset)",
+				maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Infof(ctx, "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 

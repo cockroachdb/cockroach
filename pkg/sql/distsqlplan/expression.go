@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 // This file contains helper code to populate distsqlrun.Expressions during
 // planning.
@@ -23,30 +21,41 @@ import (
 	"bytes"
 	"fmt"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// exprFmtFlagsBase are FmtFlags used for serializing expressions; a proper
-// IndexedVar formatting function needs to be added on.
-var exprFmtFlagsBase = parser.FmtStarDatumFormat(
-	parser.FmtParsable,
-	func(buf *bytes.Buffer, _ parser.FmtFlags) {
-		fmt.Fprintf(buf, "0")
-	},
-)
+// ExprContext is an interface containing objects necessary for creating
+// distsqlrun.Expressions.
+type ExprContext interface {
+	// EvalContext returns the tree.EvalContext for planning.
+	EvalContext() *tree.EvalContext
 
-// exprFmtFlagsNoMap are FmtFlags used for serializing expressions that don't
-// need to remap IndexedVars.
-var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
-	exprFmtFlagsBase,
-	func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-		fmt.Fprintf(buf, "@%d", idx+1)
-	},
-)
+	// IsLocal returns true if the current plan is local.
+	IsLocal() bool
+
+	// EvaluateSubqueries returns true if subqueries should be evaluated before
+	// creating the distsqlrun.Expression.
+	EvaluateSubqueries() bool
+}
+
+type ivarRemapper struct {
+	indexVarMap []int
+}
+
+func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		newIvar := *ivar
+		newIvar.Idx = v.indexVarMap[ivar.Idx]
+		return false, &newIvar
+	}
+	return true, expr
+}
+
+func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // MakeExpression creates a distsqlrun.Expression.
 //
@@ -56,31 +65,87 @@ var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
 // The expr uses IndexedVars to refer to columns. The caller can optionally
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
-func MakeExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Expression {
+func MakeExpression(
+	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
+) (distsqlrun.Expression, error) {
 	if expr == nil {
-		return distsqlrun.Expression{}
+		return distsqlrun.Expression{}, nil
 	}
 
-	// We format the expression using the IndexedVar and StarDatum formatting interceptors.
-	var f parser.FmtFlags
-	if indexVarMap == nil {
-		f = exprFmtFlagsNoMap
-	} else {
-		f = parser.FmtIndexedVarFormat(
-			exprFmtFlagsBase,
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+	if ctx.IsLocal() {
+		if indexVarMap != nil {
+			// Remap our indexed vars
+			v := &ivarRemapper{indexVarMap: indexVarMap}
+			newExpr, _ := tree.WalkExpr(v, expr)
+			expr = newExpr.(tree.TypedExpr)
+		}
+		return distsqlrun.Expression{LocalExpr: expr}, nil
+	}
+
+	evalCtx := ctx.EvalContext()
+	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
+		evalCtx: evalCtx,
+	}
+
+	outExpr := expr.(tree.Expr)
+	if ctx.EvaluateSubqueries() {
+		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
+		if subqueryVisitor.err != nil {
+			return distsqlrun.Expression{}, subqueryVisitor.err
+		}
+	}
+	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
+	var buf bytes.Buffer
+	fmtCtx := distsqlrun.ExprFmtCtxBase(&buf, evalCtx)
+	if indexVarMap != nil {
+		fmtCtx.WithIndexedVarFormat(
+			func(ctx *tree.FmtCtx, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
 				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
+				ctx.Printf("@%d", remappedIdx+1)
 			},
 		)
 	}
-	var buf bytes.Buffer
-	expr.Format(&buf, f)
+	fmtCtx.FormatNode(outExpr)
 	if log.V(1) {
-		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), parser.ExprDebugString(expr))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(outExpr))
 	}
-	return distsqlrun.Expression{Expr: buf.String()}
+	return distsqlrun.Expression{Expr: buf.String()}, nil
 }
+
+type evalAndReplaceSubqueryVisitor struct {
+	evalCtx *tree.EvalContext
+	err     error
+}
+
+var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
+
+func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	switch expr := expr.(type) {
+	case *tree.Subquery:
+		val, err := e.evalCtx.Planner.EvalSubquery(expr)
+		if err != nil {
+			e.err = err
+			return false, expr
+		}
+		var newExpr tree.Expr = val
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType() != types.Unknown {
+			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
+			if err != nil {
+				e.err = err
+				return false, expr
+			}
+			newExpr = &tree.CastExpr{
+				Expr: val,
+				Type: colType,
+			}
+		}
+		return false, newExpr
+	default:
+		return true, expr
+	}
+}
+
+func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }

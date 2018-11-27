@@ -11,17 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package rpc
 
 import (
 	"time"
 
-	"github.com/cenk/backoff"
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/facebookgo/clock"
-	"github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )

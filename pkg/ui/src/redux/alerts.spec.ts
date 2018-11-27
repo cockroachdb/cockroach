@@ -1,21 +1,39 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import { assert } from "chai";
-import fetchMock from "../util/fetch-mock";
+import fetchMock from "src/util/fetch-mock";
 import { Store } from "redux";
 import moment from "moment";
 
-import * as protos from "../js/protos";
-import { API_PREFIX } from "../util/api";
+import * as protos from "src/js/protos";
+import { API_PREFIX } from "src/util/api";
 import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
+  versionsSelector,
   staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
   disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
-import { VERSION_DISMISSED_KEY, setUIDataKey, isInFlight } from "./uiData";
 import {
-  versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  setUIDataKey, isInFlight,
+} from "./uiData";
+import {
+  livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
 
 describe("alerts", function() {
@@ -34,6 +52,55 @@ describe("alerts", function() {
   });
 
   describe("selectors", function() {
+    describe("versions", function() {
+      it("tolerates missing liveness data", function () {
+        dispatch(nodesReducerObj.receiveData([
+          {
+            build_info: {
+              tag: "0.1",
+            },
+          },
+          {
+            build_info: {
+              tag: "0.2",
+            },
+          },
+        ]));
+        const versions = versionsSelector(state());
+        assert.deepEqual(versions, ["0.1", "0.2"]);
+      });
+
+      it("ignores decommissioned nodes", function () {
+        dispatch(nodesReducerObj.receiveData([
+          {
+            build_info: {
+              tag: "0.1",
+            },
+          },
+          {
+            desc: {
+              node_id: 2,
+            },
+            build_info: {
+              tag: "0.2",
+            },
+          },
+        ]));
+
+        dispatch(livenessReducerObj.receiveData(
+          new protos.cockroach.server.serverpb.LivenessResponse({
+            livenesses: [{
+              node_id: 2,
+              decommissioning: true,
+            }],
+          }),
+        ));
+
+        const versions = versionsSelector(state());
+        assert.deepEqual(versions, ["0.1"]);
+      });
+    });
+
     describe("version mismatch warning", function () {
       it("requires versions to be loaded before displaying", function () {
         const alert = staggeredVersionWarningSelector(state());
@@ -60,11 +127,15 @@ describe("alerts", function() {
       it("displays when mismatch detected and not dismissed", function () {
         dispatch(nodesReducerObj.receiveData([
           {
+            // `desc` intentionally omitted (must not affect outcome).
             build_info: {
               tag: "0.1",
             },
           },
           {
+            desc: {
+              node_id: 1,
+            },
             build_info: {
               tag: "0.2",
             },
@@ -251,7 +322,7 @@ describe("alerts", function() {
         const alert = disconnectedAlertSelector(state());
         assert.isObject(alert);
         assert.equal(alert.level, AlertLevel.CRITICAL);
-        assert.equal(alert.title, "Connection to CockroachDB node lost.");
+        assert.equal(alert.title, "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.");
       });
 
       it("does not display if dismissed locally", function () {
@@ -357,6 +428,7 @@ describe("alerts", function() {
         cluster_id: "my-cluster",
       })));
       dispatch(setUIDataKey(VERSION_DISMISSED_KEY, "blank"));
+      dispatch(setUIDataKey(INSTRUCTIONS_BOX_COLLAPSED_KEY, false));
       dispatch(versionReducerObj.receiveData({
         details: [],
       }));

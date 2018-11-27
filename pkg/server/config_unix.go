@@ -17,9 +17,8 @@
 package server
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,16 +31,16 @@ type rlimit struct {
 	Cur, Max uint64
 }
 
-func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
+func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
 	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
 	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
 	var rLimit rlimit
 	if err := getRlimitNoFile(&rLimit); err != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
+			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", engine.RecommendedMaxOpenFiles, err)
 		}
-		return engine.DefaultMaxOpenFiles, nil
+		return engine.RecommendedMaxOpenFiles, nil
 	}
 
 	// The max open file descriptor limit is too low.
@@ -50,12 +49,6 @@ func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 			rLimit.Max,
 			minimumOpenFileLimit,
 			productionSettingsWebpage)
-	}
-
-	// If current open file descriptor limit is higher than the recommended
-	// value, we can just use the default value.
-	if rLimit.Cur > recommendedOpenFileLimit {
-		return engine.DefaultMaxOpenFiles, nil
 	}
 
 	// If the current limit is less than the recommended limit, set the current
@@ -93,31 +86,35 @@ func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 			productionSettingsWebpage)
 	}
 
-	// If we have the desired number, just use the default values.
-	if rLimit.Cur >= recommendedOpenFileLimit {
-		return engine.DefaultMaxOpenFiles, nil
+	if rLimit.Cur < recommendedOpenFileLimit {
+		// We're still below the recommended amount, we should always show a
+		// warning.
+		log.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+			rLimit.Cur,
+			recommendedOpenFileLimit,
+			productionSettingsWebpage)
 	}
 
-	// We're still below the recommended amount, we should always show a
-	// warning.
-	log.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
-		rLimit.Cur,
-		recommendedOpenFileLimit,
-		productionSettingsWebpage)
-
-	// if we have no physical stores, return 0.
+	// If we have no physical stores, return 0.
 	if physicalStoreCount == 0 {
 		return 0, nil
 	}
 
-	// If we have more than enough file descriptors to hit the recommend number
+	// If the current open file descriptor limit meets or exceeds the recommended
+	// value, we can divide up the current limit, less what we need for
+	// networking, between the stores.
+	if rLimit.Cur >= recommendedOpenFileLimit {
+		return (rLimit.Cur - recommendedNetworkFileDescriptors) / uint64(physicalStoreCount), nil
+	}
+
+	// If we have more than enough file descriptors to hit the recommended number
 	// for each store, than only constrain the network ones by giving the stores
 	// their full recommended number.
 	if rLimit.Cur >= networkConstrainedFileLimit {
-		return engine.DefaultMaxOpenFiles, nil
+		return engine.RecommendedMaxOpenFiles, nil
 	}
 
 	// Always sacrifice all but the minimum needed network descriptors to be
 	// used by the stores.
-	return int(rLimit.Cur-minimumNetworkFileDescriptors) / physicalStoreCount, nil
+	return (rLimit.Cur - minimumNetworkFileDescriptors) / uint64(physicalStoreCount), nil
 }

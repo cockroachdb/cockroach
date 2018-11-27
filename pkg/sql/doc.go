@@ -11,13 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter.mattis@gmail.com)
 
 /*
 Package sql provides the user-facing API for access to a Cockroach datastore. As
 the name suggests, the API is based around SQL, the same SQL you find in
-traditional RDMBS systems like Oracle, MySQL or Postgres. The core Cockroach
+traditional RDBMS systems like Oracle, MySQL or Postgres. The core Cockroach
 system implements a distributed, transactional, monolithic sorted key-value
 map. The sql package builds on top of this core system (provided by the storage
 and kv packages) adding parsing, query planning and query execution as well as
@@ -66,7 +64,7 @@ database/table name to ID and from ID to descriptor:
     "parentID" INT,
     "name"     CHAR,
     "id"       INT,
-    PRIMARY KEY (parentID, name)
+    PRIMARY KEY ("parentID", name)
   );
 
   Create TABLE system.descriptor (
@@ -79,7 +77,7 @@ databases reside. In order to look up the ID of a database given its name, the
 system runs the underlying key-value operations that correspond to the following
 query:
 
-  SELECT id FROM system.namespace WHERE parentID = 0 AND name = <database-name>
+  SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = <database-name>
 
 And given a database/table ID, the system looks up the descriptor using the
 following query:
@@ -141,7 +139,7 @@ corresponds to the primary index. The prefix for the inventory table looks like 
   /TableID/PrimaryIndexID/item_id/at_store
 
 Each column value is stored in a key with that prefix. Every column has a unique
-ID (local to the table). The values for every cell is stored at the key:
+ID (local to the table). The value for every cell is stored at the key:
 
   /TableID/PrimaryIndexID/item_id/at_store/ColumnID -> ColumnValue
 
@@ -155,7 +153,7 @@ from incrementing the value of the start key. As an efficiency, we do not store
 columns NULL values. Thus, all returned rows from the above scan give us enough
 information to construct the entire row. However, a row that has exclusively
 NULL values in non-primary key columns would have nothing stored at all. Thus,
-to note the existence of a row with only a primary key and remaining NULLs, ,
+to note the existence of a row with only a primary key and remaining NULLs,
 every row also has a sentinel key indicating its existence. The sentinel key is
 simply the primary index key, with an empty value:
 
@@ -221,7 +219,7 @@ addressing scheme is to ensure that the primary key is fully specified by the
 key-value pair, and that the key portion is unique. However, any lookup of a
 non-primary and non-index column requires two reads, first to decode the primary
 key, and then to read the full row for the primary key, which contains all the
-columns. For instance, to read the value of the "stock" column" in this table:
+columns. For instance, to read the value of the "stock" column in this table:
 
   SELECT stock FROM inventory WHERE name = "foo";
 
@@ -229,7 +227,7 @@ Looking this up by the index on "name" does not give us the value of the "stock"
 column. Instead, to process this query, Cockroach does two key-value reads,
 which are morally equivalent to the following two SQL queries:
 
-  SELECT (item_id, at_store) FROM inventory WHERE "name = "foo";
+  SELECT (item_id, at_store) FROM inventory WHERE name = "foo";
 
 Then we use the values for the primary key that we received from the first query
 to perform the lookup:
@@ -266,7 +264,7 @@ that we need, this is needlessly inefficient. Instead, the query planner
 attempts to take advantage of secondary indexes to limit the data retrieved by
 the leafs. Additionally, the query planner makes joins between tables faster by
 taking advantage of the different sort orders of various secondary indexes, and
-avoiding re-sorting or (or taking advantage of partial sorts to limit the amount
+avoiding re-sorting (or taking advantage of partial sorts to limit the amount
 of sorting done). As query planning is under active development, the details of
 how we implement this are in flux and will continue to be in flux for the
 foreseeable future. This section is intended to provide a high-level overview of

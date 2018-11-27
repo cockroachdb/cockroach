@@ -11,17 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package storage_test
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

@@ -1,0 +1,56 @@
+# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
+
+# Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate
+# equivilance. The use of sorts here force the planning of merge join.
+
+statement ok
+CREATE TABLE distsql_mj_test (k INT, v INT)
+
+statement ok
+INSERT INTO distsql_mj_test VALUES (0, NULL), (0, 1), (2, 4), (NULL, 4)
+
+# If SQL NULL semantics are not followed, NULL = NULL is truthy. This makes the rows with NULL also appear in the inner join.
+
+query IIII rowsort
+SELECT l.k, l.v, r.k, r.v FROM (SELECT * FROM distsql_mj_test ORDER BY k, v) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k, v) r ON l.k = r.k AND l.v = r.v
+----
+0  1  0  1
+2  4  2  4
+
+statement ok
+DELETE FROM distsql_mj_test WHERE TRUE;
+
+statement ok
+INSERT INTO distsql_mj_test VALUES (0, NULL), (1, NULL), (2, NULL)
+
+# We should not have any results for values with NULLs
+query IIII rowsort
+SELECT l.k, l.v, r.k, r.v FROM (SELECT * FROM distsql_mj_test ORDER BY k, v) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k, v) r ON l.k = r.k AND l.v = r.v
+----
+
+statement ok
+DELETE FROM distsql_mj_test WHERE TRUE;
+
+statement ok
+INSERT INTO distsql_mj_test VALUES (NULL)
+
+# We shouldn't expect a row of (NULL, NULL), otherwise NULL = NULL was joined.
+query II rowsort
+SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k
+----
+
+# Regression test for #23001.
+
+statement ok
+CREATE TABLE tab0(pk INTEGER PRIMARY KEY, a INTEGER, b INTEGER);
+
+statement ok
+INSERT INTO tab0 VALUES(0,1,2);
+
+statement ok
+CREATE INDEX on tab0 (a);
+
+query III
+SELECT pk, a, b FROM tab0 WHERE a < 10 AND b = 2 ORDER BY a DESC, pk;
+----
+0 1 2

@@ -33,9 +33,5 @@ import (
 // MainTest is an exported implementation of TestMain for use by other
 // packages.
 func MainTest(m *testing.M) {
-	if !*flagRemote {
-		fmt.Fprintln(os.Stderr, "not running with `acceptance` build tag or against remote cluster; skipping")
-		return
-	}
-	RunTests(m)
+	fmt.Fprintln(os.Stderr, "not running with `acceptance` build tag; skipping")
 }

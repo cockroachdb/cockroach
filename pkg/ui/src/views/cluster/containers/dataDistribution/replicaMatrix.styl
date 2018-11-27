@@ -1,0 +1,80 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+@require '~styl/base/palette.styl'
+
+.matrix
+  background-color white
+  border-collapse collapse
+  border-bottom 1px solid lightgrey
+  border-top 1px solid lightgrey
+
+  thead
+    border-bottom 1px solid black
+
+  th, td
+    padding 5px
+    border-left 1px solid lightgrey
+    border-right 1px solid lightgrey
+
+  td.value
+    text-align center
+
+  &__metric-label
+    font-style italic
+
+  &__row--internal-node
+    cursor pointer
+
+  &__row--internal-node:hover
+    background-color rgb(240, 240, 240)
+
+  &__row-header
+    text-align left
+
+  &__row-header--internal-node
+    font-weight bold
+
+  &__column-header
+    font-weight bold
+
+  &__column-header--internal-node
+    cursor pointer
+
+  &__column-header--internal-node:hover
+    background-color rgb(240, 240, 240)
+
+  &__cell-value
+    text-align right
+
+  &__dropped-schema-object
+    color $alert-color
+    margin-left 5px
+
+.table-label
+  &--dropped
+    color grey
+    font-style italic
+    text-decoration line-through
+
+.replica-matrix-key
+  width 400px
+  margin-top 10px
+  font-style italic
+  table-border-width 10px
+
+  td
+    vertical-align top
+
+  &__definition
+    padding-left 5px

@@ -11,12 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package gossip
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -24,8 +23,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -44,7 +42,7 @@ func newTestInfoStore() (*infoStore, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nc := &base.NodeIDContainer{}
 	nc.Set(context.TODO(), 1)
-	is := newInfoStore(log.AmbientContext{}, nc, emptyAddr, stopper)
+	is := newInfoStore(log.AmbientContext{Tracer: tracing.NewTracer()}, nc, emptyAddr, stopper)
 	return is, stopper
 }
 
@@ -189,6 +187,60 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 }
 
+func TestCombineInfosRatchetMonotonic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, local := range []bool{true, false} {
+		t.Run(fmt.Sprintf("local=%t", local), func(t *testing.T) {
+			is, stopper := newTestInfoStore()
+			defer stopper.Stop(context.Background())
+
+			// Generate an info with a timestamp in the future.
+			info := &Info{
+				NodeID:    is.nodeID.Get(),
+				TTLStamp:  math.MaxInt64,
+				OrigStamp: monotonicUnixNano() + int64(time.Hour),
+			}
+			if !local {
+				info.NodeID++
+			}
+
+			// Reset the monotonic clock.
+			monoTime.Lock()
+			monoTime.last = 0
+			monoTime.Unlock()
+
+			fresh, err := is.combine(map[string]*Info{"hello": info}, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fresh != 1 {
+				t.Fatalf("expected no infos to be added, but found %d", fresh)
+			}
+
+			// Verify the monotonic clock was ratcheted if the info was generated
+			// locally.
+			monoTime.Lock()
+			last := monoTime.last
+			monoTime.Unlock()
+			var expectedLast int64
+			if local {
+				expectedLast = info.OrigStamp
+				if now := monotonicUnixNano(); now <= last {
+					t.Fatalf("expected mono-time to increase: %d <= %d", now, last)
+				}
+			}
+			if expectedLast != last {
+				t.Fatalf("expected mono-time %d, but found %d", expectedLast, last)
+			}
+
+			if i := is.getInfo("hello"); i == nil {
+				t.Fatalf("expected to find info\n%v", is.Infos)
+			}
+		})
+	}
+}
+
 // Helper method creates an infostore with 10 infos.
 func createTestInfoStore(t *testing.T) *infoStore {
 	is, stopper := newTestInfoStore()
@@ -280,6 +332,8 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	}
 
 	// Add info from each address, with hop count equal to index+1.
+	var expectedNodeID roachpb.NodeID
+	var expectedHops uint32
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
 		inf.Hops = uint32(i + 1)
@@ -287,12 +341,16 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		if err := is.addInfo(MakeNodeIDKey(inf.NodeID), inf); err != nil {
 			t.Fatal(err)
 		}
-		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
-		if nodeID != inf.NodeID {
-			t.Errorf("%d: expected node %d; got %d", i, inf.NodeID, nodeID)
+		if inf.NodeID != 1 {
+			expectedNodeID = inf.NodeID
+			expectedHops = inf.Hops
 		}
-		if hops != inf.Hops {
-			t.Errorf("%d: expected node %d; got %d", i, inf.Hops, hops)
+		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
+		if expectedNodeID != nodeID {
+			t.Errorf("%d: expected n%d; got %d", i, expectedNodeID, nodeID)
+		}
+		if expectedHops != hops {
+			t.Errorf("%d: expected hops %d; got %d", i, expectedHops, hops)
 		}
 	}
 
@@ -301,15 +359,15 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	// it's the furthest node away.
 	filteredNode := nodes[len(nodes)-1]
 	expectedNode := nodes[len(nodes)-2]
-	expectedHops := expectedNode
+	expectedHops = uint32(expectedNode)
 	nodeID, hops := is.mostDistant(func(nodeID roachpb.NodeID) bool {
 		return nodeID == filteredNode
 	})
 	if nodeID != expectedNode {
-		t.Errorf("expected node %d; got %d", expectedNode, nodeID)
+		t.Errorf("expected n%d; got %d", expectedNode, nodeID)
 	}
-	if hops != uint32(expectedHops) {
-		t.Errorf("expected node %d; got %d", expectedHops, hops)
+	if hops != expectedHops {
+		t.Errorf("expected hops %d; got %d", expectedHops, hops)
 	}
 }
 
@@ -400,7 +458,7 @@ func TestCallbacks(t *testing.T) {
 
 	unregisterCB1 := is.registerCallback("key1", cb1.Add)
 	is.registerCallback("key2", cb2.Add)
-	is.registerCallback("key.*", cbAll.Add)
+	is.registerCallback("key.*", cbAll.Add, Redundant)
 
 	i1 := is.newInfo(nil, time.Second)
 	i2 := is.newInfo(nil, time.Second)
@@ -442,10 +500,13 @@ func TestCallbacks(t *testing.T) {
 		}
 	}
 
-	// Update an info.
-	{
+	// Update an info twice.
+	for i := 0; i < 2; i++ {
 		i1 := is.newInfo([]byte("a"), time.Second)
-		wg.Add(2)
+		// The first time both callbacks will fire because the value has
+		// changed. The second time cbAll (created with the Redundant option) will
+		// fire.
+		wg.Add(2 - i)
 		if err := is.addInfo("key1", i1); err != nil {
 			t.Error(err)
 		}
@@ -457,10 +518,10 @@ func TestCallbacks(t *testing.T) {
 		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
-		keys := cbAll.Keys()
-		if expKeys := []string{"key1", "key2", "key3", "key1"}; !reflect.DeepEqual(keys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, keys)
-		}
+	}
+
+	if expKeys := []string{"key1", "key2", "key3", "key1", "key1"}; !reflect.DeepEqual(cbAll.Keys(), expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
 	}
 
 	const numInfos = 3
@@ -481,7 +542,7 @@ func TestCallbacks(t *testing.T) {
 
 	// Unregister a callback and verify nothing is invoked on it.
 	unregisterCB1()
-	iNew := is.newInfo([]byte("a"), time.Second)
+	iNew := is.newInfo([]byte("b"), time.Second)
 	wg.Add(2) // for the two cbAll callbacks
 	if err := is.addInfo("key1", iNew); err != nil {
 		t.Error(err)

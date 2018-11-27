@@ -11,93 +11,96 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
 import (
-	"container/heap"
-	"fmt"
-	"sort"
+	"context"
 	"strconv"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type valuesNode struct {
-	n        *parser.ValuesClause
-	p        *planner
-	columns  sqlbase.ResultColumns
-	ordering sqlbase.ColumnOrdering
-	tuples   [][]parser.TypedExpr
-	rows     *sqlbase.RowContainer
+	columns sqlbase.ResultColumns
+	tuples  [][]tree.TypedExpr
+	// isConst is set if the valuesNode only contains constant expressions (no
+	// subqueries). In this case, rows will be evaluated during the first call
+	// to planNode.Start and memoized for future consumption. A valuesNode with
+	// isConst = true can serve its values multiple times. See valuesNode.Reset.
+	isConst bool
 
-	// rowsPopped is used for heaps, it indicates the number of rows that were
-	// "popped". These rows are still part of the underlying sqlbase.RowContainer, in the
-	// range [rows.Len()-n.rowsPopped, rows.Len).
-	rowsPopped int
+	// specifiedInQuery is set if the valuesNode represents a literal
+	// relational expression that was present in the original SQL text,
+	// as opposed to e.g. a valuesNode resulting from the expansion of
+	// a vtable value generator. This changes distsql physical planning.
+	specifiedInQuery bool
 
-	desiredTypes []parser.Type // This can be removed when we only type check once.
-
-	nextRow       int  // The index of the next row.
-	invertSorting bool // Inverts the sorting predicate.
+	valuesRun
 }
 
-func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
-	return &valuesNode{
-		p:       p,
-		columns: columns,
-		rows: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
-		),
-	}
-}
-
-func (p *planner) ValuesClause(
-	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
+// Values implements the VALUES clause.
+func (p *planner) Values(
+	ctx context.Context, origN tree.Statement, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
-		p:            p,
-		n:            n,
-		desiredTypes: desiredTypes,
+		specifiedInQuery: true,
+		isConst:          true,
 	}
-	if len(n.Tuples) == 0 {
+
+	// If we have names, extract them.
+	var n *tree.ValuesClause
+	switch t := origN.(type) {
+	case *tree.ValuesClauseWithNames:
+		n = &t.ValuesClause
+	case *tree.ValuesClause:
+		n = t
+	default:
+		return nil, pgerror.NewAssertionErrorf("unhandled case in values: %T %v", origN, origN)
+	}
+
+	if len(n.Rows) == 0 {
 		return v, nil
 	}
 
-	numCols := len(n.Tuples[0].Exprs)
+	numCols := len(n.Rows[0])
 
-	v.tuples = make([][]parser.TypedExpr, 0, len(n.Tuples))
-	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
+	v.tuples = make([][]tree.TypedExpr, 0, len(n.Rows))
+	tupleBuf := make([]tree.TypedExpr, len(n.Rows)*numCols)
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
-	for num, tuple := range n.Tuples {
-		if a, e := len(tuple.Exprs), numCols; a != e {
-			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
+	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
+
+	// Ensure there are no special functions in the clause.
+	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
+
+	for num, tuple := range n.Rows {
+		if a, e := len(tuple), numCols; a != e {
+			return nil, newValuesListLenErr(e, a)
 		}
 
 		// Chop off prefix of tupleBuf and limit its capacity.
 		tupleRow := tupleBuf[:numCols:numCols]
 		tupleBuf = tupleBuf[numCols:]
 
-		for i, expr := range tuple.Exprs {
-			if err := p.parser.AssertNoAggregationOrWindowing(
-				expr, "VALUES", p.session.SearchPath,
-			); err != nil {
-				return nil, err
-			}
-
-			desired := parser.TypeAny
+		for i, expr := range tuple {
+			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, false, "")
+
+			// Clear the properties so we can check them below.
+			typedExpr, err := p.analyzeExpr(ctx, expr, nil, tree.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
 			}
@@ -105,10 +108,11 @@ func (p *planner) ValuesClause(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == parser.TypeNull {
+			} else if v.columns[i].Typ == types.Unknown {
 				v.columns[i].Typ = typ
-			} else if typ != parser.TypeNull && !typ.Equivalent(v.columns[i].Typ) {
-				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
+			} else if typ != types.Unknown && !typ.Equivalent(v.columns[i].Typ) {
+				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
 			}
 
 			tupleRow[i] = typedExpr
@@ -116,38 +120,65 @@ func (p *planner) ValuesClause(
 		v.tuples = append(v.tuples, tupleRow)
 	}
 
+	// TODO(nvanbenschoten): if v.isConst, we should be able to evaluate n.rows
+	// ahead of time. This requires changing the contract for planNode.Close such
+	// that it must always be called unless an error is returned from a planNode
+	// constructor. This would simplify the Close contract, but would make some
+	// code (like in planner.SelectClause) more messy.
+	v.isConst = (len(p.curPlan.subqueryPlans) == lastKnownSubqueryIndex)
 	return v, nil
 }
 
-func (n *valuesNode) Start(ctx context.Context) error {
-	if n.n == nil {
+func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
+	return &valuesNode{
+		columns: columns,
+		isConst: true,
+		valuesRun: valuesRun{
+			rows: sqlbase.NewRowContainer(
+				p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+			),
+		},
+	}
+}
+
+// valuesRun is the run-time state of a valuesNode during local execution.
+type valuesRun struct {
+	rows    *sqlbase.RowContainer
+	nextRow int // The index of the next row.
+}
+
+func (n *valuesNode) startExec(params runParams) error {
+	if n.rows != nil {
+		if !n.isConst {
+			log.Fatalf(params.ctx, "valuesNode evaluated twice")
+		}
 		return nil
 	}
 
 	// This node is coming from a SQL query (as opposed to sortNode and
 	// others that create a valuesNode internally for storing results
-	// from other planNodes), so its expressions need evaluting.
+	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		n.p.session.TxnState.makeBoundAccount(),
+		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
-		len(n.n.Tuples),
+		len(n.tuples),
 	)
 
-	row := make([]parser.Datum, len(n.columns))
+	row := make([]tree.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
 			if n.columns[i].Omitted {
-				row[i] = parser.DNull
+				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(&n.p.evalCtx)
+				row[i], err = typedExpr.Eval(params.EvalContext())
 				if err != nil {
 					return err
 				}
 			}
 		}
-		if _, err := n.rows.AddRow(ctx, row); err != nil {
+		if _, err := n.rows.AddRow(params.ctx, row); err != nil {
 			return err
 		}
 	}
@@ -155,40 +186,26 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *valuesNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
-func (*valuesNode) Ordering() orderingInfo {
-	return orderingInfo{}
-}
-
-func (*valuesNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	return nil, nil, nil
-}
-
-func (n *valuesNode) Values() parser.Datums {
-	return n.rows.At(n.nextRow - 1)
-}
-
-func (*valuesNode) MarkDebug(_ explainMode) {}
-
-func (n *valuesNode) DebugValues() debugValues {
-	val := n.rows.At(n.nextRow - 1)
-	return debugValues{
-		rowIdx: n.nextRow - 1,
-		key:    fmt.Sprintf("%d", n.nextRow-1),
-		value:  val.String(),
-		output: debugValueRow,
+// Reset resets the valuesNode processing state without requiring recomputation
+// of the values tuples if the valuesNode is processed again. Reset can only
+// be called if valuesNode.isConst.
+func (n *valuesNode) Reset(ctx context.Context) {
+	if !n.isConst {
+		log.Fatalf(ctx, "valuesNode.Reset can only be called on constant valuesNodes")
 	}
+	n.nextRow = 0
 }
 
-func (n *valuesNode) Next(context.Context) (bool, error) {
+func (n *valuesNode) Next(runParams) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
 		return false, nil
 	}
 	n.nextRow++
 	return true, nil
+}
+
+func (n *valuesNode) Values() tree.Datums {
+	return n.rows.At(n.nextRow - 1)
 }
 
 func (n *valuesNode) Close(ctx context.Context) {
@@ -198,82 +215,9 @@ func (n *valuesNode) Close(ctx context.Context) {
 	}
 }
 
-func (n *valuesNode) Len() int {
-	return n.rows.Len() - n.rowsPopped
-}
-
-func (n *valuesNode) Less(i, j int) bool {
-	// TODO(pmattis): An alternative to this type of field-based comparison would
-	// be to construct a sort-key per row using encodeTableKey(). Using a
-	// sort-key approach would likely fit better with a disk-based sort.
-	ra, rb := n.rows.At(i), n.rows.At(j)
-	return n.invertSorting != n.ValuesLess(ra, rb)
-}
-
-// ValuesLess returns the comparison result between the two provided Datums slices
-// in the context of the valuesNode ordering.
-func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
-	return sqlbase.CompareDatums(n.ordering, &n.p.evalCtx, ra, rb) < 0
-}
-
-func (n *valuesNode) Swap(i, j int) {
-	n.rows.Swap(i, j)
-}
-
-var _ heap.Interface = (*valuesNode)(nil)
-
-// Push implements the heap.Interface interface.
-func (n *valuesNode) Push(x interface{}) {
-}
-
-// PushValues pushes the given Datums value into the heap representation
-// of the valuesNode.
-func (n *valuesNode) PushValues(ctx context.Context, values parser.Datums) error {
-	_, err := n.rows.AddRow(ctx, values)
-	heap.Push(n, nil)
-	return err
-}
-
-// Pop implements the heap.Interface interface.
-func (n *valuesNode) Pop() interface{} {
-	if n.rowsPopped >= n.rows.Len() {
-		panic("no more rows to pop")
-	}
-	n.rowsPopped++
-	// Returning a Datums as an interface{} involves an allocation. Luckily, the
-	// value of Pop is only used for the return value of heap.Pop, which we can
-	// avoid using.
-	return nil
-}
-
-// PopValues pops the top Datums value off the heap representation
-// of the valuesNode.
-func (n *valuesNode) PopValues() parser.Datums {
-	heap.Pop(n)
-	// Return the last popped row.
-	return n.rows.At(n.rows.Len() - n.rowsPopped)
-}
-
-// ResetLen resets the length to that of the underlying row container. This
-// resets the effect that popping values had on the valuesNode's visible length.
-func (n *valuesNode) ResetLen() {
-	n.rowsPopped = 0
-}
-
-// SortAll sorts all values in the valuesNode.rows slice.
-func (n *valuesNode) SortAll() {
-	n.invertSorting = false
-	sort.Sort(n)
-}
-
-// InitMaxHeap initializes the valuesNode.rows slice as a max-heap.
-func (n *valuesNode) InitMaxHeap() {
-	n.invertSorting = true
-	heap.Init(n)
-}
-
-// InitMinHeap initializes the valuesNode.rows slice as a min-heap.
-func (n *valuesNode) InitMinHeap() {
-	n.invertSorting = false
-	heap.Init(n)
+func newValuesListLenErr(exp, got int) error {
+	return pgerror.NewErrorf(
+		pgerror.CodeSyntaxError,
+		"VALUES lists must all be the same length, expected %d columns, found %d",
+		exp, got)
 }

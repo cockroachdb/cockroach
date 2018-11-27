@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package log
 
@@ -32,7 +30,8 @@ import (
 // test, and asserts that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir string
+	logDir  string
+	cleanup func()
 }
 
 // tShim is the part of testing.T used by TestLogScope.
@@ -53,7 +52,7 @@ var showLogs bool
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a logging
 // directory. The logging directory is named after the calling test. It also
-// disables logging to stderr for severity levels below ERROR.
+// disables logging to stderr.
 func Scope(t tShim) *TestLogScope {
 	if showLogs {
 		return (*TestLogScope)(nil)
@@ -74,20 +73,32 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}
-	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
+	undo, err := enableLogFileOutput(tempDir, Severity_NONE)
+	if err != nil {
+		undo()
 		t.Fatal(err)
 	}
 	t.Logf("test logs captured to: %s", tempDir)
-	return &TestLogScope{logDir: tempDir}
+	return &TestLogScope{logDir: tempDir, cleanup: undo}
 }
 
 // enableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
-func enableLogFileOutput(dir string, stderrSeverity Severity) error {
+func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
+	oldStderrThreshold := logging.stderrThreshold
+	oldNoStderrRedirect := logging.noStderrRedirect
+
+	undo := func() {
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
+		logging.stderrThreshold = oldStderrThreshold
+		logging.noStderrRedirect = oldNoStderrRedirect
+	}
 	logging.stderrThreshold = stderrSeverity
-	return logDir.Set(dir)
+	logging.noStderrRedirect = true
+	return undo, logging.logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -123,6 +134,8 @@ func (l *TestLogScope) Close(t tShim) {
 			}
 		}
 	}()
+	defer l.cleanup()
+
 	// Flush/Close the log files.
 	if err := dirTestOverride(l.logDir, ""); err != nil {
 		t.Fatal(err)
@@ -153,16 +166,16 @@ func dirTestOverride(expected, newDir string) error {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 
-	logDir.Lock()
+	logging.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if logDir.name != expected {
-		logDir.Unlock()
+	if logging.logDir.name != expected {
+		logging.logDir.Unlock()
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			logDir.name, expected)
+			logging.logDir.name, expected)
 	}
-	logDir.name = newDir
-	logDir.Unlock()
+	logging.logDir.name = newDir
+	logging.logDir.Unlock()
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on

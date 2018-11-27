@@ -1,0 +1,659 @@
+# LogicTest: local
+
+statement error syntax
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST ()
+
+statement error syntax
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) ()
+
+statement error syntax
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ()
+)
+
+# NB: This table gets the automatic, hidden unique_rowid PK.
+statement error declared partition columns \(a\) do not match first 1 columns in index being partitioned \(rowid\)
+CREATE TABLE t (a INT, b INT, c INT) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (0)
+)
+
+statement error declared partition columns \(a, b, c\) exceed the number of columns in index being partitioned \(a, b\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b, c) (
+    PARTITION p1 VALUES IN (0)
+)
+
+statement error declared partition columns \(b\) do not match first 1 columns in index being partitioned \(a\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (b) (
+    PARTITION p1 VALUES IN (0)
+)
+
+statement error declared partition columns \(c\) do not match first 1 columns in index being partitioned \(a\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (c) (
+    PARTITION p1 VALUES IN (0)
+)
+
+statement error declared partition columns \(a, a\) do not match first 2 columns in index being partitioned \(a, b\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (0) PARTITION BY LIST (a) (
+        PARTITION p1_1 VALUES IN (0)
+    )
+)
+
+statement error declared partition columns \(a, c\) do not match first 2 columns in index being partitioned \(a, b\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (0) PARTITION BY LIST (c) (
+        PARTITION p1_1 VALUES IN (0)
+    )
+)
+
+statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p1 VALUES IN (2)
+)
+
+statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (1) TO (2),
+    PARTITION p1 VALUES FROM (2) TO (3)
+)
+
+statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION P1 VALUES IN (2)
+)
+
+statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1) PARTITION BY LIST (b) (
+        PARTITION p1 VALUES IN (2)
+    )
+)
+
+statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1) PARTITION BY RANGE (b) (
+        PARTITION p1 VALUES FROM (1) TO (2)
+    )
+)
+
+statement error PARTITION p1: cannot subpartition a range partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (1) PARTITION BY LIST (b) (
+        PARTITION p2 VALUES IN (2)
+    )
+)
+
+statement ok
+CREATE TABLE interleave_root (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p0 VALUES IN (0)
+)
+
+statement ok
+CREATE TABLE interleave_child (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a)
+
+statement error cannot set a zone config for interleaved index primary; set it on the root of the interleaved hierarchy instead
+CREATE TABLE t (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a) PARTITION BY LIST (a) (
+    PARTITION p0 VALUES IN (0)
+)
+
+statement error PARTITION p1: partition has 1 columns but 2 values were supplied
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ((0, 1))
+)
+
+statement error PARTITION p1: partition has 2 columns but 1 values were supplied
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN (0)
+)
+
+statement error \(1\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (1)
+)
+
+statement error \(NULL\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1, NULL),
+    PARTITION p2 VALUES IN (2, NULL)
+)
+
+statement error \(DEFAULT\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (DEFAULT),
+    PARTITION p2 VALUES IN (DEFAULT)
+)
+
+statement error \(1, 2, DEFAULT\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a, b, c) (
+    PARTITION p1 VALUES IN ((1, 2, DEFAULT)),
+    PARTITION p2 VALUES IN ((1, 2, DEFAULT))
+)
+
+statement error \(1, DEFAULT, DEFAULT\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a, b, c) (
+    PARTITION p1 VALUES IN ((1, DEFAULT, DEFAULT)),
+    PARTITION p2 VALUES IN ((1, DEFAULT, DEFAULT))
+)
+
+statement error \(1.000\) cannot be present in more than one partition
+CREATE TABLE t (a DECIMAL PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1.0:::decimal),
+    PARTITION p2 VALUES IN (1.000:::decimal)
+)
+
+statement error PARTITION p1: non-DEFAULT value \(1\) not allowed after DEFAULT
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((DEFAULT, 1))
+)
+
+# Ensure this error takes precedence over the "cannot be present in more than
+# one partition" error.
+statement error PARTITION p1: non-DEFAULT value \(1\) not allowed after DEFAULT
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((DEFAULT, 1)),
+    PARTITION p2 VALUES IN ((DEFAULT, 1))
+)
+
+statement error PARTITION p1: empty range: lower bound \(0\) is equal to upper bound \(0\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (0)
+)
+
+statement error PARTITION p1: empty range: lower bound \(1.00\) is equal to upper bound \(1.000\)
+CREATE TABLE t (a DECIMAL PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (1.00:::decimal) TO (1.000::decimal)
+)
+
+statement error PARTITION p1: empty range: lower bound \(1, MAXVALUE\) is equal to upper bound \(2, MINVALUE\)
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+  PARTITION p1 VALUES FROM (1, MAXVALUE) TO (2, MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(MAXVALUE\) is greater than upper bound \(MINVALUE\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MAXVALUE) TO (MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(1\) is greater than upper bound \(0\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (1) TO (0)
+)
+
+statement error PARTITION p1: empty range: lower bound \(0\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (NULL)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(0\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (0)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(MINVALUE\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(MAXVALUE\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MAXVALUE) TO (NULL)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(MINVALUE\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(MAXVALUE\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MAXVALUE) TO (NULL)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (-3) TO (2),
+    PARTITION p2 VALUES FROM (1) TO (3)
+)
+
+statement error partitions p2 and p1 overlap
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY RANGE (a, b, c) (
+    PARTITION p2 VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (1, 2, MAXVALUE),
+    PARTITION p1 VALUES FROM (1, 2, 99) TO (MAXVALUE, MAXVALUE, MAXVALUE)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (0),
+    PARTITION p2 VALUES FROM (NULL) TO (1)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MAXVALUE),
+    PARTITION p2 VALUES FROM (1) TO (2)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MINVALUE) TO (NULL),
+    PARTITION p2 VALUES FROM (2) TO (1)
+)
+
+statement error partitions p2 and p1 overlap
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY RANGE (a, b, c) (
+    PARTITION p2 VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (1, MAXVALUE, MAXVALUE),
+    PARTITION p1 VALUES FROM (1, 999, 9999) TO (MAXVALUE, MAXVALUE, MAXVALUE)
+)
+
+statement error PARTITION p1: non-MAXVALUE value \(1\) not allowed after MAXVALUE
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (MAXVALUE, 1) TO (MAXVALUE, MAXVALUE)
+)
+
+statement error PARTITION p1: non-MAXVALUE value \(MINVALUE\) not allowed after MAXVALUE
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (MAXVALUE, MINVALUE) TO (MAXVALUE, MAXVALUE)
+)
+
+statement error PARTITION p1: non-MINVALUE value \(MAXVALUE\) not allowed after MINVALUE
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (MINVALUE, MAXVALUE) TO (MAXVALUE, MAXVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(e'\\u00FC' COLLATE da\) is greater than upper bound \('x' COLLATE da\)
+CREATE TABLE t (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ('ü' COLLATE da) TO ('x' COLLATE da)
+)
+
+statement ok
+CREATE TABLE collate_da (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ('x' COLLATE da) TO ('ü' COLLATE da)
+)
+
+statement error PARTITION p1: empty range: lower bound \('x' COLLATE de\) is greater than upper bound \(e'\\u00FC' COLLATE de\)
+CREATE TABLE t (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ('x' COLLATE de) TO ('ü' COLLATE de)
+)
+
+statement ok
+CREATE TABLE collate_de (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ('ü' COLLATE de) TO ('x' COLLATE de)
+)
+
+statement error expected partition expression to have type int, but '1.2' has type decimal
+CREATE TABLE foo (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1.2)
+)
+
+statement error expected partition expression to have type int, but '1.2' has type decimal
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (0) PARTITION BY LIST (b) (
+        PARTITION p1_1 VALUES IN (1.2)
+    )
+)
+
+statement error PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (MINVALUE)
+)
+
+statement error PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 1), (1, (MINVALUE)))
+)
+
+statement error PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (MAXVALUE)
+)
+
+statement error PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 1), (1, (MAXVALUE)))
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (DEFAULT) TO (0)
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (DEFAULT)
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ((DEFAULT)) TO (0)
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO ((DEFAULT))
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (0, (DEFAULT)) TO (0, 0)
+)
+
+statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (0, 0) TO (0, (DEFAULT))
+)
+
+statement error unimplemented: placeholders are not supported in PARTITION BY
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ($1)
+)
+
+statement error syntax error
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (SELECT 1)
+)
+
+statement error PARTITION p1: variable sub-expressions are not allowed in partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ((SELECT 1))
+)
+
+statement error PARTITION p1: now\(\): impure functions are not allowed in partition
+CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (now())
+)
+
+statement error PARTITION p1: uuid_v4\(\): impure functions are not allowed in partition
+CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (uuid_v4() || 'foo')
+)
+
+statement ok
+CREATE TABLE ok1 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+query TT
+SHOW CREATE TABLE ok1
+----
+ok1  CREATE TABLE ok1 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+)
+
+statement ok
+CREATE TABLE ok2 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ((1)),
+    PARTITION p2 VALUES IN (((2)))
+)
+
+query TT
+SHOW CREATE TABLE ok2
+----
+ok2  CREATE TABLE ok2 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+)
+
+statement ok
+CREATE TABLE ok3 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (DEFAULT)
+)
+
+query TT
+SHOW CREATE TABLE ok3
+----
+ok3  CREATE TABLE ok3 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((DEFAULT))
+)
+
+statement ok
+CREATE TABLE ok4 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 1)),
+    PARTITION p2 VALUES IN ((1, DEFAULT)),
+    PARTITION p3 VALUES IN ((2, 3)),
+    PARTITION p4 VALUES IN ((DEFAULT, DEFAULT))
+)
+
+query TT
+SHOW CREATE TABLE ok4
+----
+ok4  CREATE TABLE ok4 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a, b) (
+   PARTITION p1 VALUES IN ((1, 1)),
+   PARTITION p2 VALUES IN ((1, DEFAULT)),
+   PARTITION p3 VALUES IN ((2, 3)),
+   PARTITION p4 VALUES IN ((DEFAULT, DEFAULT))
+)
+
+statement ok
+CREATE TABLE ok5 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1) PARTITION BY LIST (b) (
+        PARTITION p1_1 VALUES IN (1),
+        PARTITION p1_2 VALUES IN (DEFAULT)
+    ),
+    PARTITION p2 VALUES IN (2) PARTITION BY LIST (b) (
+        PARTITION p2_1 VALUES IN (3)
+    ),
+    PARTITION p3 VALUES IN (DEFAULT)
+)
+
+query TT
+SHOW CREATE TABLE ok5
+----
+ok5  CREATE TABLE ok5 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
+     PARTITION p1_1 VALUES IN ((1)),
+     PARTITION p1_2 VALUES IN ((DEFAULT))
+   ),
+   PARTITION p2 VALUES IN ((2)) PARTITION BY LIST (b) (
+     PARTITION p2_1 VALUES IN ((3))
+   ),
+   PARTITION p3 VALUES IN ((DEFAULT))
+)
+
+statement ok
+CREATE TABLE ok6 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (1),
+    PARTITION p2 VALUES FROM (1) TO (2)
+)
+
+query TT
+SHOW CREATE TABLE ok6
+----
+ok6  CREATE TABLE ok6 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY RANGE (a) (
+   PARTITION p1 VALUES FROM (0) TO (1),
+   PARTITION p2 VALUES FROM (1) TO (2)
+)
+
+statement ok
+CREATE TABLE ok7 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ((0)) TO (((1)))
+)
+
+query TT
+SHOW CREATE TABLE ok7
+----
+ok7  CREATE TABLE ok7 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY RANGE (a) (
+   PARTITION p1 VALUES FROM (0) TO (1)
+)
+
+statement ok
+CREATE TABLE ok8 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+    PARTITION p2 VALUES FROM (1) TO (2),
+    PARTITION p3 VALUES FROM (2) TO (MAXVALUE)
+)
+
+query TT
+SHOW CREATE TABLE ok8
+----
+ok8  CREATE TABLE ok8 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY RANGE (a) (
+   PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+   PARTITION p2 VALUES FROM (1) TO (2),
+   PARTITION p3 VALUES FROM (2) TO (MAXVALUE)
+)
+
+statement ok
+CREATE TABLE ok9 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
+    PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
+    PARTITION p3 VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
+    PARTITION p4 VALUES FROM (3, MAXVALUE) TO (MAXVALUE, MAXVALUE)
+)
+
+query TT
+SHOW CREATE TABLE ok9
+----
+ok9  CREATE TABLE ok9 (
+     a INT NOT NULL,
+     b INT NOT NULL,
+     c INT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+     FAMILY "primary" (a, b, c)
+) PARTITION BY RANGE (a, b) (
+   PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
+   PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
+   PARTITION p3 VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
+   PARTITION p4 VALUES FROM (3, MAXVALUE) TO (MAXVALUE, MAXVALUE)
+)
+
+statement ok
+CREATE TABLE ok10 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
+    PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
+    PARTITION p3 VALUES FROM (1, MAXVALUE) TO (2, MAXVALUE),
+    PARTITION p4 VALUES FROM (2, MAXVALUE) TO (3, 4),
+    PARTITION p5 VALUES FROM (3, 4) TO (MAXVALUE, MAXVALUE)
+)
+
+query TT
+SHOW CREATE TABLE ok10
+----
+ok10  CREATE TABLE ok10 (
+      a INT NOT NULL,
+      b INT NOT NULL,
+      c INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+      FAMILY "primary" (a, b, c)
+) PARTITION BY RANGE (a, b) (
+   PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
+   PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
+   PARTITION p3 VALUES FROM (1, MAXVALUE) TO (2, MAXVALUE),
+   PARTITION p4 VALUES FROM (2, MAXVALUE) TO (3, 4),
+   PARTITION p5 VALUES FROM (3, 4) TO (MAXVALUE, MAXVALUE)
+)
+
+statement ok
+CREATE TABLE ok11 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1) PARTITION BY LIST (b) (
+        PARTITION p1_1 VALUES IN (3) PARTITION BY LIST (c) (
+            PARTITION p1_1_1 VALUES IN (8)
+        ),
+        PARTITION p1_2 VALUES IN (4)
+    ),
+    PARTITION p2 VALUES IN (6) PARTITION BY RANGE (b) (
+        PARTITION p2_1 VALUES FROM (7) TO (8)
+    )
+)
+
+query TT
+SHOW CREATE TABLE ok11
+----
+ok11  CREATE TABLE ok11 (
+      a INT NOT NULL,
+      b INT NOT NULL,
+      c INT NOT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC, c ASC),
+      FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
+     PARTITION p1_1 VALUES IN ((3)) PARTITION BY LIST (c) (
+       PARTITION p1_1_1 VALUES IN ((8))
+     ),
+     PARTITION p1_2 VALUES IN ((4))
+   ),
+   PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (b) (
+     PARTITION p2_1 VALUES FROM (7) TO (8)
+   )
+)
+
+statement ok
+CREATE TABLE IF NOT EXISTS ok12 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION pu VALUES IN (NULL),
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+
+query TT
+SHOW CREATE TABLE ok12
+----
+ok12  CREATE TABLE ok12 (
+      a INT NOT NULL,
+      b INT NOT NULL,
+      c INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+      FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION pu VALUES IN ((NULL)),
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+)
+
+# Verify that creating a partition that includes NULL does not change the
+# implicit NOT NULL contrainst of a primary key.
+statement error null value in column "a" violates not-null constraint
+INSERT INTO ok12 (a, b, c) VALUES (NULL, 2, 3)

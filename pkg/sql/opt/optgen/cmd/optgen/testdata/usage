@@ -1,0 +1,113 @@
+#
+# Test invalid flags.
+#
+optgen -unknown exprs
+----
+----
+flag provided but not defined: -unknown
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
+
+The sources can be file names and/or filepath.Glob patterns.
+
+Flags:
+  -out string
+    	output file name of generated code
+
+----
+----
+
+#
+# Test insufficient arguments.
+#
+optgen exprs
+----
+----
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
+
+The sources can be file names and/or filepath.Glob patterns.
+
+Flags:
+  -out string
+    	output file name of generated code
+
+ERROR: invalid number of arguments
+----
+----
+
+#
+# Test unknown command.
+#
+optgen unknown test.opt
+----
+----
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
+
+The sources can be file names and/or filepath.Glob patterns.
+
+Flags:
+  -out string
+    	output file name of generated code
+
+ERROR: unrecognized command
+----
+----
+
+#
+# Test invalid source.
+#
+optgen exprs invalid-source
+----
+ERROR: invalid source
+
+
+#
+# Test invalid filename.
+#
+optgen exprs test.opt not-found.opt
+----
+invalid filename

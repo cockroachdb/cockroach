@@ -11,13 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -33,16 +31,14 @@ import (
 //          err := se.AddRow(...)
 //          ...
 //       }
-//       msg := se.FormMessage(false, nil)
+//       msg := se.FormMessage(nil)
 //       // Send out message.
 //       ...
 //   }
-//   msg := se.FormMessage(true, nil)
-//   // Send out final message
-//   ...
 type StreamEncoder struct {
-	// infos is initialized when the first row is received.
-	infos []DatumInfo
+	// infos is fully initialized when the first row is received.
+	infos            []DatumInfo
+	infosInitialized bool
 
 	rowBuf       []byte
 	numEmptyRows int
@@ -66,6 +62,13 @@ func (se *StreamEncoder) setHeaderFields(flowID FlowID, streamID StreamID) {
 	se.msgHdr.StreamID = streamID
 }
 
+func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
+	se.infos = make([]DatumInfo, len(types))
+	for i := range types {
+		se.infos[i].Type = types[i]
+	}
+}
+
 // AddMetadata encodes a metadata message. Unlike AddRow(), it cannot fail. This
 // is important for the caller because a failure to encode a piece of metadata
 // (particularly one that contains an error) would not be recoverable.
@@ -82,6 +85,20 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 				RangeInfo: meta.Ranges,
 			},
 		}
+	} else if meta.TraceData != nil {
+		enc.Value = &RemoteProducerMetadata_TraceData_{
+			TraceData: &RemoteProducerMetadata_TraceData{
+				CollectedSpans: meta.TraceData,
+			},
+		}
+	} else if meta.TxnCoordMeta != nil {
+		enc.Value = &RemoteProducerMetadata_TxnCoordMeta{
+			TxnCoordMeta: meta.TxnCoordMeta,
+		}
+	} else if meta.RowNum != nil {
+		enc.Value = &RemoteProducerMetadata_RowNum_{
+			RowNum: meta.RowNum,
+		}
 	} else {
 		enc.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(meta.Err),
@@ -92,25 +109,28 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 
 // AddRow encodes a message.
 func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
-	if se.infos == nil && row != nil {
+	if se.infos == nil {
+		panic("init not called")
+	}
+	if len(se.infos) != len(row) {
+		return errors.Errorf("inconsistent row length: expected %d, got %d", len(se.infos), len(row))
+	}
+	if !se.infosInitialized {
 		// First row. Initialize encodings.
-		se.infos = make([]DatumInfo, len(row))
 		for i := range row {
 			enc, ok := row[i].Encoding()
 			if !ok {
 				enc = preferredEncoding
 			}
-			if enc != sqlbase.DatumEncoding_VALUE && sqlbase.HasCompositeKeyEncoding(row[i].Type.Kind) {
+			sType := se.infos[i].Type.SemanticType
+			if enc != sqlbase.DatumEncoding_VALUE &&
+				(sqlbase.HasCompositeKeyEncoding(sType) || sqlbase.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = sqlbase.DatumEncoding_VALUE
 			}
 			se.infos[i].Encoding = enc
-			se.infos[i].Type = row[i].Type
 		}
-	}
-	if len(se.infos) != len(row) {
-		return errors.Errorf("inconsistent row length: had %d, now %d",
-			len(se.infos), len(row))
+		se.infosInitialized = true
 	}
 	if len(row) == 0 {
 		se.numEmptyRows++
@@ -118,7 +138,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 	}
 	for i := range row {
 		var err error
-		se.rowBuf, err = row[i].Encode(&se.alloc, se.infos[i].Encoding, se.rowBuf)
+		se.rowBuf, err = row[i].Encode(&se.infos[i].Type, &se.alloc, se.infos[i].Encoding, se.rowBuf)
 		if err != nil {
 			return err
 		}
@@ -142,7 +162,7 @@ func (se *StreamEncoder) FormMessage(ctx context.Context) *ProducerMessage {
 		se.headerSent = true
 	}
 	if !se.typingSent {
-		if se.infos != nil {
+		if se.infosInitialized {
 			msg.Typing = se.infos
 			se.typingSent = true
 		}

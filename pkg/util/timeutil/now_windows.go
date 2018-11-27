@@ -17,9 +17,19 @@ package timeutil
 import (
 	"time"
 
+	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
 
+func init() {
+	if err := windows.LoadGetSystemTimePreciseAsFileTime(); err != nil {
+		panic(errors.Wrap(err, "CockroachDB requires Windows 8 or higher"))
+	}
+}
+
+// Now returns the current UTC time.
+//
 // This has a higher precision than time.Now in go1.8, but is much slower
 // (~2000x) and requires Windows 8+.
 //
@@ -28,8 +38,8 @@ import (
 // implementation will not support. The monotonic clock support may also
 // obviate the need for this, since we only need the higher precision when
 // subtracting `time.Time`s.
-func now() time.Time {
+func Now() time.Time {
 	var ft windows.Filetime
 	windows.GetSystemTimePreciseAsFileTime(&ft)
-	return time.Unix(0, ft.Nanoseconds())
+	return time.Unix(0, ft.Nanoseconds()).UTC()
 }

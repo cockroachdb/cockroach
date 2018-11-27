@@ -1,0 +1,132 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL, t TIME)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── d decimal
+ ├── t time
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# FoldPlusZero, FoldZeroPlus
+# --------------------------------------------------
+
+# Add columns to prevent NormalizeVar from swapping left and right.
+opt expect=(FoldPlusZero,FoldZeroPlus)
+SELECT
+    (a.i + a.i) + 0 AS r, 0 + (a.i + a.i) AS s,
+    (a.f + a.f) + 0 AS t, 0 + (a.f + a.f) AS u,
+    (a.d + a.d) + 0 AS v, 0 + (a.d + a.d) AS w
+FROM a
+----
+project
+ ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
+ ├── scan a
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ └── projections
+      ├── i + i [type=int, outer=(2)]
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      ├── f + f [type=float, outer=(3)]
+      ├── d + d [type=decimal, outer=(4)]
+      └── d + d [type=decimal, outer=(4)]
+
+# --------------------------------------------------
+# FoldMinusZero
+# --------------------------------------------------
+
+# Add columns to prevent NormalizeVar from swapping left and right.
+opt expect=FoldMinusZero
+SELECT
+    (a.i + a.i) - 0 AS r,
+    (a.f + a.f) - 0 AS s,
+    (a.d + a.d) - 0 AS t
+FROM a
+----
+project
+ ├── columns: r:6(int) s:7(float) t:8(decimal)
+ ├── scan a
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ └── projections
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      └── d + d [type=decimal, outer=(4)]
+
+# --------------------------------------------------
+# FoldMultOne, FoldOneMult
+# --------------------------------------------------
+
+# Add columns to prevent NormalizeVar from swapping left and right.
+opt expect=(FoldMultOne,FoldOneMult)
+SELECT
+    (a.i + a.i) * 1 AS r, 1 * (a.i + a.i) AS s,
+    (a.f + a.f) * 1 AS t, 1 * (a.f + a.f) AS u,
+    (a.d + a.d) * 1 AS v, 1 * (a.d + a.d) AS w
+FROM a
+----
+project
+ ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
+ ├── scan a
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ └── projections
+      ├── i + i [type=int, outer=(2)]
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      ├── f + f [type=float, outer=(3)]
+      ├── d + d [type=decimal, outer=(4)]
+      └── d + d [type=decimal, outer=(4)]
+
+# --------------------------------------------------
+# FoldDivOne
+# --------------------------------------------------
+
+opt expect=FoldDivOne
+SELECT
+    a.i / 1 AS r,
+    a.f / 1 AS s,
+    a.d / 1 AS t
+FROM a
+----
+project
+ ├── columns: r:6(decimal) s:7(float) t:8(decimal)
+ ├── scan a
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ └── projections
+      ├── variable: i [type=int, outer=(2)]
+      ├── variable: f [type=float, outer=(3)]
+      └── variable: d [type=decimal, outer=(4)]
+
+# --------------------------------------------------
+# InvertMinus
+# --------------------------------------------------
+opt expect=InvertMinus
+SELECT
+    -(a.f - a.f) AS r,
+    -(a.d - a.i) AS s,
+    -(a.t - a.t) AS t
+FROM a
+----
+project
+ ├── columns: r:6(float) s:7(decimal) t:8(interval)
+ ├── scan a
+ │    └── columns: i:2(int) f:3(float) d:4(decimal) a.t:5(time)
+ └── projections
+      ├── f - f [type=float, outer=(3)]
+      ├── i - d [type=decimal, outer=(2,4)]
+      └── a.t - a.t [type=interval, outer=(5)]
+
+# --------------------------------------------------
+# EliminateUnaryMinus
+# --------------------------------------------------
+opt expect=EliminateUnaryMinus
+SELECT -(-a.i::int) AS r FROM a
+----
+project
+ ├── columns: r:6(int)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── variable: i [type=int, outer=(2)]

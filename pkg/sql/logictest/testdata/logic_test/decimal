@@ -1,0 +1,343 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
+
+# The following tests have results equivalent to Postgres (differences
+# in string representation and number of decimals returned, but otherwise
+# the same). These do not pass using the inf package. The inf package
+# (http://gopkg.in/inf.v0) is what we used to use, but it had various problems
+# (for example, all the test cases below), and was replaced with apd.
+
+# inf returns 0
+query R
+SELECT (1.4238790346995263e-40::DECIMAL / 6.011482313728436e+41::DECIMAL)
+----
+2.3685988919035999994E-82
+
+# inf returns -108.4851126682386588
+query R
+SELECT ln(7.682705743584112e-48::DECIMAL)
+----
+-108.48511266823882051
+
+# inf returns 0
+query R
+SELECT sqrt(9.789765531128956e-34::DECIMAL)
+----
+3.1288601009199749773E-17
+
+# inf returns 0.1547300000000000
+query R
+SELECT pow(4.727998800941528e-14::DECIMAL, 0.06081860494226844::DECIMAL)
+----
+0.15472926640705911955
+
+# inf returns 0, 0
+query RR
+SELECT pow(sqrt(1e-10::DECIMAL), 2), sqrt(pow(1e-5::DECIMAL, 2))
+----
+1E-10  0.00001
+
+# inf returns 1e-16, 0, 2e-16
+query RRR
+SELECT 1e-16::DECIMAL / 2, 1e-16::DECIMAL / 3, 1e-16::DECIMAL / 2 * 2
+----
+5E-17  3.3333333333333333333E-17  1.0E-16
+
+# inf returns 1e-8, 0, 0, 0
+query RRRR
+SELECT pow(1e-4::DECIMAL, 2), pow(1e-5::DECIMAL, 2), pow(1e-8::DECIMAL, 2), pow(1e-9::DECIMAL, 2)
+----
+1E-8  1E-10  1E-16  1E-18
+
+# inf returns argument too large
+query R
+SELECT pow(1e-10::DECIMAL, 2)
+----
+1E-20
+
+# inf panics (#13051)
+query RR
+SELECT 'NaN'::FLOAT::DECIMAL, 'NaN'::DECIMAL
+----
+NaN NaN
+
+# Ensure trailing zeros are kept for decimal types with no listed scale,
+# and enforced when the scale is listed.
+
+statement ok
+CREATE TABLE t (d decimal, v decimal(3, 1))
+
+statement ok
+INSERT INTO t VALUES (0.000::decimal, 0.00::decimal), (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
+
+query RR
+SELECT * FROM t ORDER BY d
+----
+0.000  0.0
+1.00   1.0
+2.0    2.0
+3      3.0
+
+# Ensure trailing zeros are kept in an index.
+
+statement ok
+CREATE TABLE t2 (d decimal, v decimal(3, 1), primary key (d, v))
+
+statement ok
+INSERT INTO t2 VALUES
+  (1.00::decimal, 1.00::decimal),
+  (2.0::decimal, 2.0::decimal),
+  (3::decimal, 3::decimal),
+  ('NaN'::decimal, 'NaN'::decimal),
+  ('Inf'::decimal, 'Inf'::decimal),
+  ('-Inf'::decimal, '-Inf'::decimal),
+  ('-0.0000'::decimal, '-0.0000'::decimal)
+
+query RR
+SELECT * FROM t2 ORDER BY d
+----
+NaN        NaN
+-Infinity  -Infinity
+0.0000     0.0
+1.00       1.0
+2.0        2.0
+3          3.0
+Infinity   Infinity
+
+# Ensure uniqueness in PK columns with +/- NaN and 0.
+
+statement error duplicate key value
+INSERT INTO t2 VALUES ('-NaN'::decimal, '-NaN'::decimal)
+
+statement error duplicate key value
+INSERT INTO t2 VALUES (0, 0)
+
+# Ensure NaN cannot be signaling or negative.
+
+query RRRR
+SELECT 'NaN'::decimal, '-NaN'::decimal, 'sNaN'::decimal, '-sNaN'::decimal
+----
+NaN NaN NaN NaN
+
+query RR
+SELECT * FROM t2 WHERE d IS NaN and v IS NaN
+----
+NaN NaN
+
+query RR
+SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
+----
+Infinity Infinity
+
+query RR
+SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
+----
+-Infinity -Infinity
+
+# Ensure special values are handled correctly.
+
+statement ok
+CREATE TABLE s (d decimal null, index (d))
+
+statement ok
+INSERT INTO s VALUES
+  (null),
+  ('NaN'::decimal),
+  ('-NaN'::decimal),
+  ('Inf'::decimal),
+  ('-Inf'::decimal),
+  ('0'::decimal),
+  (1),
+  (-1)
+
+statement ok
+INSERT INTO s VALUES
+  ('-0'::decimal),
+  ('-0.0'::decimal),
+  ('-0.00'::decimal),
+  ('-0.00E-1'::decimal),
+  ('-0.0E-3'::decimal)
+
+query R rowsort
+SELECT * FROM s WHERE d = 0
+----
+0
+0
+0.0
+0.00
+0.000
+0.0000
+
+query R
+SELECT * FROM s WHERE d IS NAN
+----
+NaN
+NaN
+
+query R
+SELECT * FROM s WHERE d = 'inf'::decimal
+----
+Infinity
+
+query R
+SELECT * FROM s WHERE d = 'NaN'
+----
+NaN
+NaN
+
+# In the following tests, the various zero values all compare equal to
+# each other so we must use two ORDER BY clauses to obtain a stable result.
+
+# Check the ordering of decimal values.
+query R
+SELECT d FROM s ORDER BY d, d::TEXT
+----
+NULL
+NaN
+NaN
+-Infinity
+-1
+0
+0
+0.0
+0.00
+0.000
+0.0000
+1
+Infinity
+
+# Just test the NaN-ness of the values.
+query RBBB
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY d, d::TEXT
+----
+NULL       NULL   NULL   NULL
+NaN        true   true   true
+NaN        true   true   true
+-Infinity  false  false  false
+-1         false  false  false
+0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
+1          false  false  false
+Infinity   false  false  false
+
+# Just test the NaN-ness of the values in secondary index
+query RBBB
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY d, d::TEXT
+----
+NULL       NULL   NULL   NULL
+NaN        true   true   true
+NaN        true   true   true
+-Infinity  false  false  false
+-1         false  false  false
+0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
+1          false  false  false
+Infinity   false  false  false
+
+query RB
+select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d, d::TEXT
+----
+-Infinity  true
+-1         true
+0          true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
+1          true
+Infinity   true
+
+query RB
+select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d, d::TEXT
+----
+-Infinity  true
+-1         true
+0          true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
+1          true
+Infinity   true
+
+# Verify that decimals don't lose trailing 0s even when used for an index.
+statement ok
+CREATE INDEX idx ON s (d)
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 0
+----
+0
+0
+0.0
+0.00
+0.000
+0.0000
+
+statement ok
+INSERT INTO s VALUES
+  ('10'::decimal),
+  ('10.0'::decimal),
+  ('10.00'::decimal),
+  ('10.000'::decimal),
+  ('100000E-4'::decimal),
+  ('1000000E-5'::decimal),
+  ('1.0000000E+1'::decimal)
+
+query R rowsort
+SELECT * FROM s@primary WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000
+
+query R
+SELECT 1.00::decimal(6,4)
+----
+1.0000
+
+statement error value with precision 6, scale 4 must round to an absolute value less than 10\^2
+SELECT 101.00::decimal(6,4)
+
+statement error scale \(6\) must be between 0 and precision \(4\)
+SELECT 101.00::decimal(4,6)
+
+statement error value with precision 2, scale 2 must round to an absolute value less than 1
+SELECT 1::decimal(2, 2)
+
+# Regression test for #16081
+
+statement
+CREATE TABLE a (b DECIMAL)
+
+statement
+INSERT INTO a VALUES (142378208485490985369999605144727062141206925976498256305323716858805588894693616552055968571135475510700810219028167653516982373238641332965927953273383572708760984694356069974208844865675206339235758647159337463780100273189720943242182911961627806424621091859596571173867825568394327041453823674373002756096)
+
+query R
+SELECT * FROM a
+----
+142378208485490985369999605144727062141206925976498256305323716858805588894693616552055968571135475510700810219028167653516982373238641332965927953273383572708760984694356069974208844865675206339235758647159337463780100273189720943242182911961627806424621091859596571173867825568394327041453823674373002756096

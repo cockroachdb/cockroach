@@ -11,315 +11,637 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsqlrun
 
 import (
+	"context"
 	"math"
-	"sort"
-	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+type aggTestSpec struct {
+	// The name of the aggregate function.
+	fname    string
+	distinct bool
+	// The column indices of the arguments to the function.
+	colIdx       []uint32
+	filterColIdx *uint32
+}
+
+func aggregations(aggTestSpecs []aggTestSpec) []AggregatorSpec_Aggregation {
+	agg := make([]AggregatorSpec_Aggregation, len(aggTestSpecs))
+	for i, spec := range aggTestSpecs {
+		agg[i].Func = AggregatorSpec_Func(AggregatorSpec_Func_value[spec.fname])
+		agg[i].Distinct = spec.distinct
+		agg[i].ColIdx = spec.colIdx
+		agg[i].FilterColIdx = spec.filterColIdx
+	}
+	return agg
+}
 
 // TODO(irfansharif): Add tests to verify the following aggregation functions:
 //      AVG
 //      BOOL_AND
 //      BOOL_OR
 //      CONCAT_AGG
+//      JSON_AGG
+//      JSONB_AGG
 //      STDDEV
 //      VARIANCE
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
-	v := [15]sqlbase.EncDatum{}
-	null := sqlbase.EncDatum{Datum: parser.DNull}
-	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
-	}
+	var (
+		col0              = []uint32{0}
+		col1              = []uint32{1}
+		col2              = []uint32{2}
+		filterCol1 uint32 = 1
+		filterCol3 uint32 = 3
+	)
 
-	testCases := []struct {
-		spec     AggregatorSpec
-		input    sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
-	}{
+	testCases := []ProcessorTestCase{
 		{
-			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
-			// VARIANCE(@0) GROUP BY [] (no rows).
-			spec: AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_MIN,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_MAX,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_AVG,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_STDDEV,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_VARIANCE,
-						ColIdx: 0,
-					},
-				},
+			// SELECT min(@0), max(@0), count(@0), avg(@0), sum(@0), stddev(@0),
+			// variance(@0) GROUP BY [] (no rows).
+			Name: "MinMaxCountAvgSumStddevGroupByNoneNoRows",
+			Input: ProcessorTestCaseRows{
+				Rows:  [][]interface{}{},
+				Types: makeIntCols(1),
 			},
-			input: sqlbase.EncDatumRows{},
-			expected: sqlbase.EncDatumRows{
-				{null, null, v[0], null, null, null, null},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{nil, nil, 0, nil, nil, nil, nil},
+				},
+				Types: []sqlbase.ColumnType{intType, intType, intType, decType, decType, decType, decType},
+			},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "MIN", colIdx: col0},
+						{fname: "MAX", colIdx: col0},
+						{fname: "COUNT", colIdx: col0},
+						{fname: "AVG", colIdx: col0},
+						{fname: "SUM", colIdx: col0},
+						{fname: "STDDEV", colIdx: col0},
+						{fname: "VARIANCE", colIdx: col0},
+					}),
+				},
 			},
 		},
 		{
-			// SELECT @2, COUNT(@1), GROUP BY @2.
-			spec: AggregatorSpec{
-				GroupCols: []uint32{1},
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
-					},
-					{
-						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
-					},
+			// SELECT @2, count(@1), GROUP BY @2.
+			Name: "CountGroupByWithNull",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, nil},
+					{6, 2},
+					{7, 2},
+					{8, 4},
 				},
+				Types: makeIntCols(2),
 			},
-			input: sqlbase.EncDatumRows{
-				{v[1], v[2]},
-				{v[3], null},
-				{v[6], v[2]},
-				{v[7], v[2]},
-				{v[8], v[4]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{nil, 1},
+					{4, 1},
+					{2, 3},
+				},
+				Types: makeIntCols(2),
 			},
-			expected: sqlbase.EncDatumRows{
-				{null, v[1]},
-				{v[4], v[1]},
-				{v[2], v[3]},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					GroupCols: col1,
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col1},
+						{fname: "COUNT", colIdx: col0},
+					}),
+				},
 			},
 		},
 		{
-			// SELECT @2, COUNT(@1), GROUP BY @2.
-			spec: AggregatorSpec{
-				GroupCols: []uint32{1},
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
-					},
-					{
-						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
-					},
+			// SELECT @2, count(@1), GROUP BY @2.
+			Name: "CountGroupBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, 4},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{4, 2},
+					{2, 3},
+				},
+				Types: makeIntCols(2),
+			},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					GroupCols: col1,
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col1},
+						{fname: "COUNT", colIdx: col0},
+					}),
 				},
 			},
-			input: sqlbase.EncDatumRows{
-				{v[1], v[2]},
-				{v[3], v[4]},
-				{v[6], v[2]},
-				{v[7], v[2]},
-				{v[8], v[4]},
+		},
+		{
+			// SELECT @2, count(@1), GROUP BY @2 (ordering: @2+).
+			Name: "CountGroupByOrderBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{6, 2},
+					{7, 2},
+					{3, 4},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[4], v[2]},
-				{v[2], v[3]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 3},
+					{4, 2},
+				},
+				Types: makeIntCols(2),
 			},
-		}, {
-			// SELECT @2, SUM(@1), GROUP BY @2.
-			spec: AggregatorSpec{
-				GroupCols: []uint32{1},
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
-					},
-					{
-						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
-					},
+			DisableSort: true,
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					OrderedGroupCols: col1,
+					GroupCols:        col1,
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col1},
+						{fname: "COUNT", colIdx: col0},
+					}),
 				},
 			},
-			input: sqlbase.EncDatumRows{
-				{v[1], v[2]},
-				{v[3], v[4]},
-				{v[6], v[2]},
-				{v[7], v[2]},
-				{v[8], v[4]},
+		},
+		{
+			// SELECT @2, sum(@1), GROUP BY @2.
+			Name: "SumGroupBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, 4},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[2], v[14]},
-				{v[4], v[11]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 14},
+					{4, 11},
+				},
+				Types: []sqlbase.ColumnType{intType, decType},
 			},
-		}, {
-			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
-			spec: AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
-					},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					GroupCols: col1,
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col1},
+						{fname: "SUM", colIdx: col0},
+					}),
 				},
 			},
-			input: sqlbase.EncDatumRows{
-				{v[1], v[2]},
-				{v[1], v[4]},
-				{v[3], v[2]},
-				{v[4], v[2]},
-				{v[5], v[4]},
+		},
+		{
+			// SELECT @2, sum(@1), GROUP BY @2 (ordering: @2+).
+			Name: "SumGroupByOrderBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+					{3, 4},
+				},
+				Types: makeIntCols(2),
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[5], v[14]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 14},
+					{4, 11},
+				},
+				Types: []sqlbase.ColumnType{intType, decType},
+			},
+			DisableSort: true,
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					GroupCols:        col1,
+					OrderedGroupCols: col1,
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col1},
+						{fname: "SUM", colIdx: col0},
+					}),
+				},
+			},
+		},
+		{
+			// SELECT count(@1), sum(@1), GROUP BY [] (empty group key).
+			Name: "CountSumGroupByNone",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{1, 4},
+					{3, 2},
+					{4, 2},
+					{5, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{5, 14},
+				},
+				Types: []sqlbase.ColumnType{intType, decType},
+			},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "COUNT", colIdx: col0},
+						{fname: "SUM", colIdx: col0},
+					}),
+				},
 			},
 		},
 		{
 			// SELECT SUM DISTINCT (@1), GROUP BY [] (empty group key).
-			spec: AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:     AggregatorSpec_SUM,
-						Distinct: true,
-						ColIdx:   0,
-					},
+			Name: "SumdistinctGroupByNone",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2},
+					{4},
+					{2},
+					{2},
+					{4},
 				},
+				Types: makeIntCols(1),
 			},
-			input: sqlbase.EncDatumRows{
-				{v[2]},
-				{v[4]},
-				{v[2]},
-				{v[2]},
-				{v[4]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{6},
+				},
+				Types: makeIntCols(1),
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[6]},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "SUM", distinct: true, colIdx: col0},
+					}),
+				},
 			},
 		},
 		{
-			// SELECT @1, GROUP BY [] (empty group key).
-			spec: AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_IDENT,
-						ColIdx: 0,
-					},
+			// SELECT (@1), GROUP BY [] (empty group key).
+			Name: "GroupByNone",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1},
+					{1},
+					{1},
+				},
+				Types: makeIntCols(1),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1},
+				},
+				Types: makeIntCols(1),
+			},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: col0},
+					}),
 				},
 			},
-			input: sqlbase.EncDatumRows{
-				{v[1]},
-				{v[1]},
-				{v[1]},
+		},
+		{
+			Name: "MaxMinCountCountdistinctGroupByNone",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 2},
+					{1, 4},
+					{3, 2},
+					{4, 2},
+					{5, 4},
+				},
+				Types: makeIntCols(2),
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[1]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{5, 2, 5, 2},
+				},
+				Types: makeIntCols(4),
 			},
-		}, {
-			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
-			spec: AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
-					{
-						Func:   AggregatorSpec_MAX,
-						ColIdx: 0,
-					},
-					{
-						Func:   AggregatorSpec_MIN,
-						ColIdx: 1,
-					},
-					{
-						Func:   AggregatorSpec_COUNT,
-						ColIdx: 1,
-					},
-					{
-						Func:     AggregatorSpec_COUNT,
-						Distinct: true,
-						ColIdx:   1,
-					},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "MAX", colIdx: col0},
+						{fname: "MIN", colIdx: col1},
+						{fname: "COUNT", colIdx: col1},
+						{fname: "COUNT", distinct: true, colIdx: col1},
+					}),
 				},
 			},
-			input: sqlbase.EncDatumRows{
-				{v[2], v[2]},
-				{v[1], v[4]},
-				{v[3], v[2]},
-				{v[4], v[2]},
-				{v[5], v[4]},
+		},
+		{
+			Name: "MaxfilterCountfilterCountrowsfilter",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, true, 1, true},
+					{5, false, 1, false},
+					{2, true, 1, nil},
+					{3, nil, 1, true},
+					{2, true, 1, true},
+				},
+				Types: []sqlbase.ColumnType{intType, boolType, intType, boolType},
 			},
-			expected: sqlbase.EncDatumRows{
-				{v[5], v[2], v[5], v[2]},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 3, 3},
+				},
+				Types: makeIntCols(3),
+			},
+			ProcessorCore: ProcessorCoreUnion{
+				Aggregator: &AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "MAX", colIdx: col0, filterColIdx: &filterCol1},
+						{fname: "COUNT", colIdx: col2, filterColIdx: &filterCol3},
+						{fname: "COUNT_ROWS", filterColIdx: &filterCol3},
+					}),
+				},
 			},
 		},
 	}
 
-	for _, c := range testCases {
-		ags := c.spec
+	ctx := context.Background()
+	test := MakeProcessorTest(DefaultProcessorTestConfig())
+	test.RunTestCases(ctx, t, testCases)
+	test.Close(ctx)
+}
 
-		var types []sqlbase.ColumnType
-		if len(c.input) == 0 {
-			types = []sqlbase.ColumnType{columnTypeInt}
-		}
-		in := NewRowBuffer(types, c.input, RowBufferArgs{})
-		out := &RowBuffer{}
+func BenchmarkAggregation(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
 
-		monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{Mon: &monitor},
-		}
+	aggFuncs := []AggregatorSpec_Func{
+		AggregatorSpec_ANY_NOT_NULL,
+		AggregatorSpec_AVG,
+		AggregatorSpec_COUNT,
+		AggregatorSpec_MAX,
+		AggregatorSpec_MIN,
+		AggregatorSpec_STDDEV,
+		AggregatorSpec_SUM,
+		AggregatorSpec_SUM_INT,
+		AggregatorSpec_VARIANCE,
+		AggregatorSpec_XOR_AGG,
+	}
 
-		ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)
-		if err != nil {
-			t.Fatal(err)
-		}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
 
-		ag.Run(context.Background(), nil)
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
 
-		var expected []string
-		for _, row := range c.expected {
-			expected = append(expected, row.String())
-		}
-		sort.Strings(expected)
-		expStr := strings.Join(expected, "")
-
-		var rets []string
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+	for _, aggFunc := range aggFuncs {
+		b.Run(aggFunc.String(), func(b *testing.B) {
+			spec := &AggregatorSpec{
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   aggFunc,
+						ColIdx: []uint32{0},
+					},
+				},
 			}
-			if row == nil {
+			post := &PostProcessSpec{}
+			disposer := &RowDisposer{}
+			input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(context.TODO(), nil)
+				input.Reset()
+			}
+			b.StopTimer()
+		})
+	}
+}
+
+func BenchmarkCountRows(b *testing.B) {
+	spec := &AggregatorSpec{
+		Aggregations: []AggregatorSpec_Aggregation{
+			{
+				Func: AggregatorSpec_COUNT_ROWS,
+			},
+		},
+	}
+	post := &PostProcessSpec{}
+	disposer := &RowDisposer{}
+	const numCols = 1
+	const numRows = 100000
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+
+	b.SetBytes(int64(8 * numRows * numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(context.TODO(), nil)
+		input.Reset()
+	}
+}
+
+func BenchmarkGrouping(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+	spec := &AggregatorSpec{
+		GroupCols: []uint32{0},
+	}
+	post := &PostProcessSpec{}
+	disposer := &RowDisposer{}
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	b.SetBytes(int64(8 * numRows * numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(context.Background(), nil /* wg */)
+		input.Reset()
+	}
+	b.StopTimer()
+}
+
+func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
+	const numCols = 3
+	const groupSize = 10
+	var groupedCols = [2]int{0, 1}
+	var allOrderedGroupCols = [2]uint32{0, 1}
+
+	aggFuncs := []AggregatorSpec_Func{
+		AggregatorSpec_ANY_NOT_NULL,
+		AggregatorSpec_AVG,
+		AggregatorSpec_COUNT,
+		AggregatorSpec_MAX,
+		AggregatorSpec_MIN,
+		AggregatorSpec_STDDEV,
+		AggregatorSpec_SUM,
+		AggregatorSpec_SUM_INT,
+		AggregatorSpec_VARIANCE,
+		AggregatorSpec_XOR_AGG,
+	}
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+
+	for _, aggFunc := range aggFuncs {
+		b.Run(aggFunc.String(), func(b *testing.B) {
+			spec := &AggregatorSpec{
+				GroupCols: []uint32{0, 1},
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   aggFunc,
+						ColIdx: []uint32{2},
+					},
+				},
+			}
+			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
+			post := &PostProcessSpec{}
+			disposer := &RowDisposer{}
+			input := NewRepeatableRowSource(threeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
+
+			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(context.Background(), nil /* wg */)
+				input.Reset()
+			}
+			b.StopTimer()
+		})
+	}
+}
+
+func BenchmarkOrderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 2 /* numOrderedCols */)
+}
+
+func BenchmarkPartiallyOrderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 1 /* numOrderedCols */)
+}
+
+func BenchmarkUnorderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 0 /* numOrderedCols */)
+}
+
+func intPow(a, b int) int {
+	return int(math.Pow(float64(a), float64(b)))
+}
+
+// makeGroupedIntRows constructs a (groupSize**(len(groupedCols)+1)) x numCols
+// table, where columns in groupedCols are sorted in ascending order with column
+// priority defined by their position in groupedCols. If used in an aggregation
+// where groupedCols are the GROUP BY columns, each group will have a size of
+// groupSize. To make the input more interesting for aggregation, group columns
+// are repeated.
+//
+// Examples:
+// makeGroupedIntRows(2, 2, []int{1, 0}) ->
+// [0 0]
+// [0 0]
+// [1 0]
+// [1 0]
+// [0 1]
+// [0 1]
+// [1 1]
+// [1 1]
+func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) sqlbase.EncDatumRows {
+	numRows := intPow(groupSize, len(groupedCols)+1)
+	rows := make(sqlbase.EncDatumRows, numRows)
+
+	groupColSet := util.MakeFastIntSet(groupedCols...)
+	getGroupedColVal := func(rowIdx, colIdx int) int {
+		rank := -1
+		for i, c := range groupedCols {
+			if colIdx == c {
+				rank = len(groupedCols) - i
 				break
 			}
-			rets = append(rets, row.String())
 		}
-		sort.Strings(rets)
-		retStr := strings.Join(rets, "")
-
-		if expStr != retStr {
-			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-				expStr, retStr)
+		if rank == -1 {
+			panic("provided colIdx is not a group column")
 		}
-		monitor.Stop(context.Background())
+		return (rowIdx % intPow(groupSize, rank+1)) / intPow(groupSize, rank)
 	}
+
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			if groupColSet.Contains(j) {
+				rows[i][j] = sqlbase.DatumToEncDatum(
+					intType, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
+			} else {
+				rows[i][j] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i+j)))
+			}
+		}
+	}
+	return rows
 }

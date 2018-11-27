@@ -11,14 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -40,6 +38,8 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 	if err := dec.Decode(&expData); err != nil {
 		t.Fatal(err)
 	}
+	fmt.Printf("res: %+v\n", resData)
+	fmt.Printf("exp: %+v\n", expData)
 	if !reflect.DeepEqual(resData, expData) {
 		t.Errorf("\ngot:\n%s\nwant:\n%s", result, expected)
 	}
@@ -48,7 +48,7 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 func TestPlanDiagramIndexJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]FlowSpec)
+	flows := make(map[roachpb.NodeID]*FlowSpec)
 
 	desc := &sqlbase.TableDescriptor{
 		Name:    "Table",
@@ -59,7 +59,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		IndexIdx: 1,
 	}
 
-	flows[1] = FlowSpec{
+	flows[1] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -72,10 +72,12 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 					{StreamID: 0},
 				},
 			}},
+			StageID:     1,
+			ProcessorID: 0,
 		}},
 	}
 
-	flows[2] = FlowSpec{
+	flows[2] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -88,10 +90,12 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 					{StreamID: 1},
 				},
 			}},
+			StageID:     1,
+			ProcessorID: 1,
 		}},
 	}
 
-	flows[3] = FlowSpec{
+	flows[3] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
@@ -105,6 +109,8 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
+				StageID:     1,
+				ProcessorID: 2,
 			},
 			{
 				Input: []InputSyncSpec{{
@@ -125,11 +131,14 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-				}}},
+				}},
+				StageID:     2,
+				ProcessorID: 3,
+			},
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramWithURL(flows)
+	json, url, err := GeneratePlanDiagramURL(flows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,10 +147,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		{
 		  "nodeNames":["1","2","3"],
 		  "processors":[
-		    {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[]},
+			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/2","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
 		    {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 		  ],
 		  "edges":[
@@ -155,7 +164,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkk9L9DAQxu_vp3h5rptDm3jqKSehHlxZvWkOtRkk0CZlksLK0u8uTXHdyuKloMeZef78WnKCD5bum54iqmeUEJAQUDACA4eWYgw8nxZhbY-oCgHnhzHNayPQBiZUJySXOkKFp-a1owM1lhgCllLjuhz-GHqqvaWjzhII7MdU_del0BJmEghj-oydxEVh-duF8i8Lv3oCW2Ky6w4tdzDTFaq74Pw1qIFd3_D7GenWdYl4ptpp-TIWhWq1OqOqLT_mQHEIPtIK4HueESD7RsunxjBySw8c2vyulnGf1XlhKablqpah9vlUzliX5nKLWW4xqx_NNytzMZnp30cAAAD__-sRIow="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kjFr8zAQhvfvV3y8awS1pE6aNBXSoSlpt9aDah1B4EhGkiEl-L8XyyWJoSkpaUfd3XvP48N7-GDpwWwpQb2Ag0GAQaJm6GJoKKUQx9Y0uLQ7qIrB-a7PY7lmaEIkqD2yyy1B4dm8tbQmYyneVGCwlI1ry_qnsKWlt7TTZQgMqz6r_5ozLVAPDKHPx8Upmw1B8YGdwPnlcP7rcHE5XPwp_MgM0VIkO6dpsUA9fGF4H5z_FJTzSBfd1sT3g96dazPF0XChxWtfVbLR8qAtzzqLnxxsTakLPtFM5dzmavwgshuaDpBCHxt6jKEpf-T0XJVcKVhKeerK6bH0pVWOehrm14TFNWH5bfh2Fq6Gevj3EQAA__8R3DK5"
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, &url)
 	}
@@ -164,7 +173,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 func TestPlanDiagramJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]FlowSpec)
+	flows := make(map[roachpb.NodeID]*FlowSpec)
 
 	descA := &sqlbase.TableDescriptor{Name: "TableA"}
 	descB := &sqlbase.TableDescriptor{Name: "TableB"}
@@ -177,9 +186,10 @@ func TestPlanDiagramJoin(t *testing.T) {
 		LeftEqColumns:  []uint32{0, 2},
 		RightEqColumns: []uint32{2, 1},
 		OnExpr:         Expression{Expr: "@1+@2<@6"},
+		MergedColumns:  true,
 	}
 
-	flows[1] = FlowSpec{
+	flows[1] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -195,11 +205,12 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 12},
 					},
 				}},
+				ProcessorID: 0,
 			},
 		},
 	}
 
-	flows[2] = FlowSpec{
+	flows[2] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -215,6 +226,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 22},
 					},
 				}},
+				ProcessorID: 1,
 			},
 			{
 				Input: []InputSyncSpec{
@@ -245,6 +257,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 101},
 					},
 				}},
+				ProcessorID: 2,
 			},
 			{
 				Input: []InputSyncSpec{{
@@ -258,11 +271,13 @@ func TestPlanDiagramJoin(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-				}}},
+				}},
+				ProcessorID: 3,
+			},
 		},
 	}
 
-	flows[3] = FlowSpec{
+	flows[3] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -278,6 +293,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 32},
 					},
 				}},
+				ProcessorID: 4,
 			},
 			{
 				Core: ProcessorCoreUnion{TableReader: &trB},
@@ -293,6 +309,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 42},
 					},
 				}},
+				ProcessorID: 5,
 			},
 			{
 				Input: []InputSyncSpec{
@@ -319,11 +336,12 @@ func TestPlanDiagramJoin(t *testing.T) {
 						{StreamID: 101},
 					},
 				}},
+				ProcessorID: 6,
 			},
 		},
 	}
 
-	flows[4] = FlowSpec{
+	flows[4] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &trB},
 			Post: PostProcessSpec{
@@ -338,11 +356,16 @@ func TestPlanDiagramJoin(t *testing.T) {
 					{StreamID: 52},
 				},
 			}},
+			ProcessorID: 7,
 		}},
 	}
 
-	var buf bytes.Buffer
-	if err := GeneratePlanDiagram(flows, &buf); err != nil {
+	diagram, err := GeneratePlanDiagram(flows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _, err := diagram.ToURL()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -350,14 +373,14 @@ func TestPlanDiagramJoin(t *testing.T) {
 		{
 			"nodeNames":["1","2","3","4"],
 			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6"]},"outputs":[]},
-				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op/3","details":[]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/4","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/5","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2"]},"outputs":[]},
+				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader/7","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],
 			"edges":[
@@ -378,5 +401,5 @@ func TestPlanDiagramJoin(t *testing.T) {
 	  }
 	`
 
-	compareDiagrams(t, buf.String(), expected)
+	compareDiagrams(t, s, expected)
 }

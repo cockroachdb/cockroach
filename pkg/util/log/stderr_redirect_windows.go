@@ -20,11 +20,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var (
-	kernel32         = windows.MustLoadDLL("kernel32.dll")
-	procSetStdHandle = kernel32.MustFindProc("SetStdHandle")
-)
-
 func dupFD(fd uintptr) (uintptr, error) {
 	// Adapted from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
 	p, err := windows.GetCurrentProcess()

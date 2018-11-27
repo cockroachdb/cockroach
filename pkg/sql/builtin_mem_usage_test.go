@@ -11,22 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Justin Jaffray (justin@cockroachlabs.com)
 
 package sql
 
 import (
+	"context"
 	gosql "database/sql"
+	"fmt"
 	"testing"
 
-	"golang.org/x/net/context"
+	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/lib/pq"
 )
 
 // lowMemoryBudget is the memory budget used to test builtins are recording
@@ -57,7 +59,7 @@ CREATE TABLE d.t (a STRING)
 	}
 
 	for i := 0; i < numRows; i++ {
-		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (REPEAT('a', $1))`, rowSize); err != nil {
+		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (repeat('a', $1))`, rowSize); err != nil {
 			return err
 		}
 	}
@@ -65,15 +67,17 @@ CREATE TABLE d.t (a STRING)
 }
 
 // TestConcatAggMonitorsMemory verifies that the aggregates incrementally
-// record their memory usage as they builds up their result.
+// record their memory usage as they build up their result.
 func TestAggregatesMonitorMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// By selecting the LENGTH we prevent anything besides the aggregate itself
-	// from being able to catch the large memory usage.
+	// By avoiding printing the aggregate results we prevent anything
+	// besides the aggregate itself from being able to catch the
+	// large memory usage.
 	statements := []string{
-		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.t`,
-		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.t`,
+		`SELECT length(concat_agg(a)) FROM d.t`,
+		`SELECT array_length(array_agg(a), 1) FROM d.t`,
+		`SELECT json_typeof(json_agg(A)) FROM d.t`,
 	}
 
 	for _, statement := range statements {
@@ -90,5 +94,124 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
 		}
+	}
+}
+
+func TestBuiltinsAccountForMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, repeatFns := builtins.GetBuiltinProperties("repeat")
+	_, concatFns := builtins.GetBuiltinProperties("concat")
+	_, concatwsFns := builtins.GetBuiltinProperties("concat_ws")
+	_, lowerFns := builtins.GetBuiltinProperties("lower")
+
+	testData := []struct {
+		builtin            tree.Overload
+		args               tree.Datums
+		expectedAllocation int64
+	}{
+		{repeatFns[0],
+			tree.Datums{
+				tree.NewDString("abc"),
+				tree.NewDInt(123),
+			},
+			int64(3 * 123)},
+		{concatFns[0],
+			tree.Datums{
+				tree.NewDString("abc"),
+				tree.NewDString("abc"),
+			},
+			int64(3 + 3)},
+		{concatwsFns[0],
+			tree.Datums{
+				tree.NewDString("!"),
+				tree.NewDString("abc"),
+				tree.NewDString("abc"),
+			},
+			int64(3 + 1 + 3)},
+		{lowerFns[0],
+			tree.Datums{
+				tree.NewDString("ABC"),
+			},
+			int64(3)},
+	}
+
+	for _, test := range testData {
+		t.Run("", func(t *testing.T) {
+			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			defer evalCtx.Stop(context.Background())
+			defer evalCtx.ActiveMemAcc.Close(context.Background())
+			previouslyAllocated := evalCtx.ActiveMemAcc.Used()
+			_, err := test.builtin.Fn(evalCtx, test.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			deltaAllocated := evalCtx.ActiveMemAcc.Used() - previouslyAllocated
+			if deltaAllocated != test.expectedAllocation {
+				t.Errorf("Expected to allocate %d, actually allocated %d", test.expectedAllocation, deltaAllocated)
+			}
+		})
+	}
+}
+
+func TestEvaluatedMemoryIsChecked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// We select the LENGTH here and elsewhere because if we passed the result of
+	// REPEAT up as a result, the memory error would be caught there even if
+	// REPEAT was not doing its accounting.
+	testData := []string{
+		`SELECT length(repeat('abc', 300000))`,
+		`SELECT crdb_internal.no_constant_folding(length(repeat('abc', 300000)))`,
+	}
+
+	for _, statement := range testData {
+		t.Run("", func(t *testing.T) {
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+				SQLMemoryPoolSize: lowMemoryBudget,
+			})
+			defer s.Stopper().Stop(context.Background())
+
+			if _, err := sqlDB.Exec(
+				statement,
+			); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+				t.Errorf("Expected \"%s\" to OOM, but it didn't", statement)
+			}
+		})
+	}
+}
+
+func TestMemoryGetsFreedOnEachRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test verifies that the memory allocated during the computation of a
+	// row gets freed before moving on to subsequent rows.
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: lowMemoryBudget,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	stringLength := 300000
+	numRows := 100
+
+	// Check that if this string is allocated per-row, we don't OOM.
+	if _, err := sqlDB.Exec(
+		fmt.Sprintf(
+			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d))) FROM generate_series(1, %d)`,
+			stringLength,
+			numRows,
+		),
+	); err != nil {
+		t.Fatalf("Expected statement to run successfully, but got %s", err)
+	}
+
+	// Ensure that if this memory is all allocated at once, we OOM.
+	if _, err := sqlDB.Exec(
+		fmt.Sprintf(
+			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d * %d)))`,
+			stringLength,
+			numRows,
+		),
+	); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+		t.Fatalf("Expected statement to OOM, but it didn't")
 	}
 }

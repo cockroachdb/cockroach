@@ -1,0 +1,53 @@
+#
+# Ensure that rules have Normalize or Explore tag.
+#
+optgen compile test.opt
+define True {}
+
+[Name]
+(True) => (True)
+----
+test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
+
+#
+# Ensure that types are defined.
+#
+optgen compile test.opt
+define Not {
+    Input Node
+}
+----
+test.opt:2:5: Node is not registered as a valid type in metadata.go
+
+#
+# Ensure that there is only one private field in define, and that it is the
+# last field.
+#
+optgen compile test.opt
+define Op {
+    Private DatumType
+    Other   Node
+}
+
+define Op2 {
+    Private  DatumType
+    Private2 DatumType
+}
+----
+test.opt:2:5: private field 'Private' is not the last field in 'Op'
+test.opt:7:5: private field 'Private' is not the last field in 'Op2'
+
+#
+# Ensure that list match type exists.
+#
+optgen compile test.opt
+[Scalar]
+define And {
+    Left  ScalarExpr
+    Right ScalarExpr
+}
+
+[InvalidRule, Normalize]
+(And $left:* []) => $left
+----
+test.opt:8:14: list match operator cannot match field of type ScalarExpr

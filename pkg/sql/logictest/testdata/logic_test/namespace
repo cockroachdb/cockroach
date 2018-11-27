@@ -1,0 +1,112 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE a(a INT)
+
+statement ok
+CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
+
+# "public" with the current database designates the public schema
+query T
+SHOW TABLES FROM public
+----
+a
+
+# To access all tables in database "public", one must specify
+# its public schema explicitly.
+query T
+SHOW TABLES FROM public.public
+----
+t
+
+# Of course one can also list the tables in "public" by making it the
+# current database.
+statement ok
+SET database = public
+
+query T
+SHOW TABLES
+----
+t
+
+statement ok
+SET database = test; DROP DATABASE public
+
+# Unqualified pg_type resolves from pg_catalog.
+query T
+SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Override table and check name resolves properly.
+statement ok
+SET search_path=public,pg_catalog
+
+statement ok
+CREATE TABLE pg_type(x INT); INSERT INTO pg_type VALUES(42)
+
+query I
+SELECT x FROM pg_type
+----
+42
+
+# Leave database, check name resolves to default.
+# The expected error can only occur on the virtual pg_type, not the physical one.
+query error cannot access virtual schema in anonymous database
+SET database = ''; SELECT * FROM pg_type
+
+# Go to different database, check name still resolves to default.
+query T
+CREATE DATABASE foo; SET database = foo; SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Verify that pg_catalog at the beginning of the search path takes precedence.
+query T
+SET database = test; SET search_path = pg_catalog,public; SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Now set the search path to the testdb, placing pg_catalog explicitly
+# at the end.
+query I
+SET search_path = public,pg_catalog; SELECT x FROM pg_type
+----
+42
+
+statement ok
+DROP TABLE pg_type; RESET search_path; SET database = test
+
+# Unqualified index name resolution.
+statement ok
+ALTER INDEX "primary" RENAME TO a_pk
+
+# Schema-qualified index name resolution.
+statement ok
+ALTER INDEX public.a_pk RENAME TO a_pk2
+
+# DB-qualified index name resolution (CRDB 1.x compat).
+statement ok
+ALTER INDEX test.a_pk2 RENAME TO a_pk3
+
+statement ok
+CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
+
+# We can't see the DB "public" with DB-qualified index name resolution.
+statement error index "primary" does not exist
+ALTER INDEX public."primary" RENAME TO t_pk
+
+# But we can see it with sufficient qualification.
+statement ok
+ALTER INDEX public.public."primary" RENAME TO t_pk
+
+# If the search path is invalid, we get a special error.
+statement ok
+SET search_path = invalid
+
+statement error schema or database was not found while searching index: "a_pk3"
+ALTER INDEX a_pk3 RENAME TO a_pk4
+
+# But qualification resolves the problem.
+statement ok
+ALTER INDEX public.a_pk3 RENAME TO a_pk4

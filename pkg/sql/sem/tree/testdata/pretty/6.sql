@@ -1,0 +1,1 @@
+INSERT INTO kv2(k, v) VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g'), (ARRAY[NULL::INT]), (ARRAY[NULL::INT, 1]), (ARRAY[1, NULL::INT]), (ARRAY[NULL::INT, NULL::INT]), (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)

@@ -11,13 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package sqlbase
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -29,7 +27,7 @@ type ColumnOrderInfo struct {
 }
 
 // ColumnOrdering is used to describe a desired column ordering. For example,
-//     []ColumnOrderInfo{ {3, true}, {1, false} }
+//     []ColumnOrderInfo{ {3, encoding.Descending}, {1, encoding.Ascending} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
@@ -52,9 +50,7 @@ func (a ColumnOrdering) IsPrefixOf(b ColumnOrdering) bool {
 //  - 0 if lhs and rhs are equal on the ordering columns;
 //  - less than 0 if lhs comes first;
 //  - greater than 0 if rhs comes first.
-func CompareDatums(
-	ordering ColumnOrdering, evalCtx *parser.EvalContext, lhs, rhs parser.Datums,
-) int {
+func CompareDatums(ordering ColumnOrdering, evalCtx *tree.EvalContext, lhs, rhs tree.Datums) int {
 	for _, c := range ordering {
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
 		// not sure this always holds as `CASE` expressions can return different

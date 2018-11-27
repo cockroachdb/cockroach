@@ -11,12 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package gossip
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -24,13 +24,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // startGossip creates and starts a gossip instance.
@@ -50,10 +51,11 @@ func startGossip(
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	return rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.Config{Insecure: true},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
+		&cluster.MakeTestingClusterSettings().Version,
 	)
 }
 
@@ -136,13 +138,14 @@ func startFakeServerGossips(
 	rRPCContext := newInsecureRPCContext(stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
+	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote := newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
+
 	return local, remote
 }
 
@@ -182,7 +185,7 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	c := newClient(log.AmbientContext{}, remote.GetNodeAddr(), makeMetrics())
+	c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, remote.GetNodeAddr(), makeMetrics())
 
 	defer func() {
 		stopper.Stop(context.TODO())
@@ -229,7 +232,7 @@ func TestClientGossipMetrics(t *testing.T) {
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(log.AmbientContext{}, local.GetNodeAddr(), remote.nodeMetrics): remote,
+			newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), remote.nodeMetrics): remote,
 		},
 		func() error {
 			// Infos/Bytes Sent/Received should not be zero.
@@ -280,7 +283,7 @@ func TestClientNodeID(t *testing.T) {
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := newInsecureRPCContext(stopper)
-	c := newClient(log.AmbientContext{}, &remote.nodeAddr, makeMetrics())
+	c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, &remote.nodeAddr, makeMetrics())
 	disconnected <- c
 
 	defer func() {
@@ -311,8 +314,8 @@ func TestClientNodeID(t *testing.T) {
 }
 
 func verifyServerMaps(g *Gossip, expCount int) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return len(g.mu.nodeMap) == expCount
 }
 
@@ -351,28 +354,45 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
 	lAddr := local.mu.is.NodeAddr
-	local.startClientLocked(&rAddr)
-	remote.startClientLocked(&lAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
+
+	// Gossip a key on local and wait for it to show up on remote. This
+	// guarantees we have an active local to remote client connection.
+	if err := local.AddInfo("local-key", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		c := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() })
+		if c == nil {
+			// Restart the client connection in the loop. It might have failed due to
+			// a heartbeat time.
+			local.mu.Lock()
+			local.startClientLocked(&rAddr)
+			local.mu.Unlock()
+			return fmt.Errorf("unable to find local to remote client")
+		}
+		_, err := remote.GetInfo("local-key")
+		return err
+	})
+
+	// Start a remote to local client. This client will get removed as being
+	// redundant as there is already a connection between the two nodes.
+	remote.mu.Lock()
+	remote.startClientLocked(&lAddr)
+	remote.mu.Unlock()
+
 	testutils.SucceedsSoon(t, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
-		// We expect node 2 to disconnect; if both are still connected,
-		// it's possible that node 1 gossiped before node 2 connected, in
-		// which case we have to gossip from node 1 to trigger the
-		// disconnect redundant client code.
-		if ok1 && ok2 {
-			if err := local.AddInfo("local-key", nil, time.Second); err != nil {
-				t.Fatal(err)
-			}
-		} else if ok1 && !ok2 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
+		if ok1 && !ok2 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
 			return nil
 		}
-		return errors.New("local client to remote not yet closed as redundant")
+		return fmt.Errorf("remote to local client not yet closed as redundant: local=%t remote=%t",
+			ok1, ok2)
 	})
 }
 
@@ -426,6 +446,12 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		RPCContext := newInsecureRPCContext(stopper)
 
 		server := rpc.NewServer(RPCContext)
+		// node ID must be non-zero
+		gnode := NewTest(
+			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
+		)
+		g = append(g, gnode)
+
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {
 			t.Fatal(err)
@@ -442,11 +468,6 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 			t.Fatal(err)
 		}
 		resolvers = append(resolvers, resolver)
-		// node ID must be non-zero
-		gnode := NewTest(
-			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
-		)
-		g = append(g, gnode)
 		gnode.Start(ln.Addr(), resolvers)
 	}
 
@@ -456,7 +477,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
 		if a, e := len(g[0].mu.nodeMap), 2; a != e {
-			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
+			return errors.Errorf("expected %v to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
 		}
 		return nil
 	})
@@ -520,7 +541,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local := startGossip(nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
-	client := newClient(log.AmbientContext{}, addr, makeMetrics()) // never started
+	client := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, addr, makeMetrics()) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",

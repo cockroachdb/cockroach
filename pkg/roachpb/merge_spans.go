@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package roachpb
 
@@ -41,6 +39,7 @@ func (s sortedSpans) Len() int {
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
 // true iff all of the spans are distinct.
+// The input spans are not safe for re-use.
 func MergeSpans(spans []Span) ([]Span, bool) {
 	if len(spans) == 0 {
 		return spans, true

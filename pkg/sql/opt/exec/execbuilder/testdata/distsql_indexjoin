@@ -1,0 +1,49 @@
+# LogicTest: 5node-dist-opt
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split the index into 5 parts, as if numbers were in the range 1 to 100.
+statement ok
+ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)
+
+# Relocate the five parts to the five nodes.
+statement ok
+ALTER INDEX t@v EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
+
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM INDEX t@v
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /10      1         {1}       1
+/10        /20      2         {2}       2
+/20        /30      3         {3}       3
+/30        /40      4         {4}       4
+/40        NULL     5         {5}       5
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkLFKBDEYhHufIkylEDCr2KQ6QYRtVjmu0xQxGY7A3mZJsqAceXe5DbJYCJYzXzIz_GdM0XOwJ2boN3QwEnOKjjnHdLHag95_QiuJMM1LudhGwsVE6DNKKCOhcbAfI_e0nulWQcKz2DCusXMKJ5u-dgUSz2EsTFpc7-7E-6LUPUWntNb9cLgRj8PTBpx4-AEwVSIuZWvPxR4J3VX5_4V75jlOmb_G_ZWsqpGgP7JdIcclOb6m6NaaJl_Wf6vhmUujXRP91FA19eo7AAD__5Kmcow=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijInxcAmFS85rSBCL1XWvWkPsXksgW5TXl5BWfrfpQ2yrrCixzeT-WbIAX30VLs9JdgXGDQKA8eWUoo8S_lB5d9htULoh1FmuVFoIxPsARKkI1hs3VtHG3KeeKWh4Elc6BbswGHv-GMtUHgInRDb4nJdFq-j1jdUGG2trertVXFX3x-Ntrj9MtBMCnGUY3sStyNYM6m_L3yOLMQrczpuXV6fxZf_wW8oDbFPdII_R9ZTo0B-R_mTUxy5pSeO7VKTz8cltwiekmTX5KPqszUP_B42v4bLH-FmuvgMAAD__wIYpYk=
+
+# Here we care about ordering by v, but v is not otherwise used.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLw0AUhO_-imVOigvdTfGypwgi9NJK7U1zWLOPEkiz4e0LKCX_XZpFYoWKHt_MznzDHtHFQGt_oAT3AotKo-dYU0qRT1J-sArvcEaj6fpBTnKlUUcmuCOkkZbgsPNvLW3JB-KFgUYg8U071fbcHDx_lAKNx6YVYqeuy0K9DsYsSVnjnFutdzfqfv0wG7W6-zKgsRnEqbLQ5RLVqBEHmack8XuCs6P--9znyEK8sOdLS3s7sy6Civ-AtpT62CU6A11qNmOlQWFP-e9THLimJ471hMnnZspNQqAk2bX5WHXZOg38Hra_hosf4Wq8-gwAAP__myirDw==
+
+# The single join reader should be on node 5, and doesn't need to output v.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1rwzAQhvf-ivLOKrFsumjKmg5JCd2KB9U6gsHRCelcWoL_e7FVqF2I24z38byPOF3g2dHeninBvEJD4RG1QojcUEocx3Ze2rkPmEKh9aGXsV0rNBwJ5gJppSMY7PmBw6aEgiOxbTetDQrcyw-UxJ4IphrULFivB7_Yt46OZB3FTbGIx_tWoHDoxdxvNa7Z9C22J279t0wvZSG2Zxs_Z8rqqrJcKP-43JFSYJ_oX6crhlqB3Iny7yTuY0PPkZtJk8vDxE0NR0nytMrFzufR-MA5rFfhch0uV-HiF1wPd18BAAD__56h0KE=

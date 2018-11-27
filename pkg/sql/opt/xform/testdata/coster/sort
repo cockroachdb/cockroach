@@ -1,0 +1,42 @@
+exec-ddl
+CREATE TABLE t.a
+(
+    k INT,
+    f FLOAT,
+    z DECIMAL,
+    s STRING NOT NULL,
+    PRIMARY KEY (k, f DESC)
+)
+----
+TABLE a
+ ├── k int not null
+ ├── f float not null
+ ├── z decimal
+ ├── s string not null
+ └── INDEX primary
+      ├── k int not null
+      └── f float not null desc
+
+opt
+SELECT f FROM a ORDER BY f DESC
+----
+sort
+ ├── columns: f:2(float!null)
+ ├── stats: [rows=1000]
+ ├── cost: 1269.31569
+ ├── ordering: -2
+ └── scan a
+      ├── columns: f:2(float!null)
+      ├── stats: [rows=1000]
+      └── cost: 1050
+
+# Test sort on 0 rows.
+opt
+SELECT f FROM a WHERE k IN () ORDER BY f DESC
+----
+values
+ ├── columns: f:2(float)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(2)

@@ -4,33 +4,34 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
-// PrefixRewrite holds information for a single byte replacement of a prefix.
-type PrefixRewrite struct {
+// prefixRewrite holds information for a single []byte replacement of a prefix.
+type prefixRewrite struct {
 	OldPrefix []byte
 	NewPrefix []byte
 }
 
-// PrefixRewriter is a matcher for an ordered list of pairs of byte prefix
-// rewrite rules. For dependency reasons, the implementation of the matching
-// is here, but the interesting constructor is in sqlccl.
-type PrefixRewriter []PrefixRewrite
+// prefixRewriter is a matcher for an ordered list of pairs of byte prefix
+// rewrite rules.
+type prefixRewriter []prefixRewrite
 
 // RewriteKey modifies key using the first matching rule and returns
 // it. If no rules matched, returns false and the original input key.
-func (p PrefixRewriter) RewriteKey(key []byte) ([]byte, bool) {
+func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 	for _, rewrite := range p {
 		if bytes.HasPrefix(key, rewrite.OldPrefix) {
 			if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
@@ -51,18 +52,16 @@ func (p PrefixRewriter) RewriteKey(key []byte) ([]byte, bool) {
 // into interleaved keys, and is able to function on partial keys for spans
 // and splits.
 type KeyRewriter struct {
-	prefixes PrefixRewriter
+	prefixes prefixRewriter
 	descs    map[sqlbase.ID]*sqlbase.TableDescriptor
 }
 
-// MakeKeyRewriter creates a KeyRewriter from the Rekeys field of an
-// ImportRequest.
-func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	var prefixes PrefixRewriter
+// MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
+func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
 	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc sqlbase.Descriptor
-		if err := desc.Unmarshal(rekey.NewDesc); err != nil {
+		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
 		table := desc.GetTable()
@@ -71,6 +70,12 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 		}
 		descs[sqlbase.ID(rekey.OldID)] = table
 	}
+	return MakeKeyRewriter(descs)
+}
+
+// MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
+func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewriter, error) {
+	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a
@@ -81,7 +86,7 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.ID))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, PrefixRewrite{
+				prefixes = append(prefixes, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
 				})
@@ -93,7 +98,7 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 			newPrefix = newPrefix.PrefixEnd()
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, PrefixRewrite{
+				prefixes = append(prefixes, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
 				})
@@ -117,23 +122,20 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbas
 	return key
 }
 
-// RewriteKey modifies key similar to RewriteKey, but is also
-// able to account for interleaved tables. This function works by inspecting
-// the key for table and index IDs, then uses the corresponding table and
-// index descriptors to determine if interleaved data is present and if it
-// is, to find the next prefix of an interleaved child, then calls itself
-// recursively until all interleaved children have been rekeyed.
+// RewriteKey modifies key (possibly in place), changing all table IDs to
+// their new value, including any interleaved table children and prefix
+// ends. This function works by inspecting the key for table and index IDs,
+// then uses the corresponding table and index descriptors to determine if
+// interleaved data is present and if it is, to find the next prefix of an
+// interleaved child, then calls itself recursively until all interleaved
+// children have been rekeyed.
 func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
-	return kr.rewriteKey(0, key)
-}
-
-func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
 	_, tableID, _ := encoding.DecodeUvarintAscending(key)
 	// Rewrite the first table ID.
-	key, ok := kr.prefixes.RewriteKey(key)
+	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
 		return key, false, nil
 	}
@@ -163,20 +165,24 @@ func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error
 		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
 	}
 	colIDs, _ := idx.FullColumnIDs()
-	for i := 0; i < len(colIDs)-skipKeys; i++ {
+	var skipCols int
+	for _, ancestor := range idx.Interleave.Ancestors {
+		skipCols += int(ancestor.SharedPrefixLen)
+	}
+	for i := 0; i < len(colIDs)-skipCols; i++ {
 		n, err := encoding.PeekLength(k)
 		if err != nil {
 			return nil, false, err
 		}
 		k = k[n:]
 	}
-	// If we get a NotNULL, it's interleaved.
-	k, ok = encoding.DecodeIfNotNull(k)
+	// We might have an interleaved key.
+	k, ok = encoding.DecodeIfInterleavedSentinel(k)
 	if !ok {
 		return key, true, nil
 	}
 	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.rewriteKey(len(colIDs), k)
+	k, ok, err = kr.RewriteKey(k)
 	if err != nil {
 		return nil, false, err
 	}
@@ -186,4 +192,35 @@ func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error
 	}
 	key = append(prefix, k...)
 	return key, true, nil
+}
+
+// RewriteSpan returns a new span with both Key and EndKey rewritten using
+// RewriteKey. Span start keys for the primary index will be rewritten to
+// contain just the table ID. That is, /Table/51/1 -> /Table/51. An error
+// is returned if either was not matched for rewrite.
+func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
+	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
+	}
+	// Modify all spans that begin at the primary index to instead begin at the
+	// start of the table. That is, change a span start key from /Table/51/1 to
+	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
+	// will be created.
+	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
+	} else if idx == 1 && len(b) == 0 {
+		newKey = keys.MakeTablePrefix(uint32(id))
+	}
+	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.EndKey)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.EndKey)
+	}
+	return roachpb.Span{Key: newKey, EndKey: newEndKey}, nil
 }

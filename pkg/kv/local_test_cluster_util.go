@@ -11,24 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package kv
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -41,16 +38,19 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
+func (l *localTestClusterTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
-	l.Transport.SendNext(ctx, done)
+	return l.Transport.SendNext(ctx, ba)
 }
 
-// InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used
-// with LocalTestCluster.
-func InitSenderForLocalTestCluster(
+// InitFactoryForLocalTestCluster initializes a TxnCoordSenderFactory
+// that can be used with LocalTestCluster.
+func InitFactoryForLocalTestCluster(
+	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
@@ -58,35 +58,51 @@ func InitSenderForLocalTestCluster(
 	stores client.Sender,
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
-) client.Sender {
+) client.TxnSenderFactory {
+	return NewTxnCoordSenderFactory(
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+			Settings:   st,
+			Clock:      clock,
+			Stopper:    stopper,
+		},
+		NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip),
+	)
+}
+
+// NewDistSenderForLocalTestCluster creates a DistSender for a LocalTestCluster.
+func NewDistSenderForLocalTestCluster(
+	st *cluster.Settings,
+	nodeDesc *roachpb.NodeDescriptor,
+	tracer opentracing.Tracer,
+	clock *hlc.Clock,
+	latency time.Duration,
+	stores client.Sender,
+	stopper *stop.Stopper,
+	g *gossip.Gossip,
+) *DistSender {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	distSender := NewDistSender(DistSenderConfig{
+	return NewDistSender(DistSenderConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
+		Settings:        st,
 		Clock:           clock,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,
-		TransportFactory: func(
-			opts SendOptions,
-			rpcContext *rpc.Context,
-			replicas ReplicaSlice,
-			args roachpb.BatchRequest,
-		) (Transport, error) {
-			transport, err := senderTransportFactory(opts, rpcContext, replicas, args)
-			if err != nil {
-				return nil, err
-			}
-			return &localTestClusterTransport{transport, latency}, nil
+		NodeDialer:      nodedialer.New(nil, gossip.AddressResolver(g)),
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: func(
+				opts SendOptions,
+				nodeDialer *nodedialer.Dialer,
+				replicas ReplicaSlice,
+			) (Transport, error) {
+				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
+				if err != nil {
+					return nil, err
+				}
+				return &localTestClusterTransport{transport, latency}, nil
+			},
 		},
-	}, gossip)
-
-	ambient := log.AmbientContext{Tracer: tracer}
-	return NewTxnCoordSender(
-		ambient,
-		distSender,
-		clock,
-		false, /* !linearizable */
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
-	)
+	}, g)
 }

@@ -11,11 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-
 Package server implements the Cockroach storage node. A node
 corresponds to a single instance of the cockroach binary, running on a
 single physical machine, which exports the "Node" Go RPC service. Each

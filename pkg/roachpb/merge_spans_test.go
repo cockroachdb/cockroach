@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package roachpb
 
@@ -22,24 +20,25 @@ import (
 	"testing"
 )
 
-func TestMergeSpans(t *testing.T) {
-	makeSpan := func(s string) Span {
-		parts := strings.Split(s, "-")
-		if len(parts) == 2 {
-			return Span{Key: Key(parts[0]), EndKey: Key(parts[1])}
-		}
-		return Span{Key: Key(s)}
+func makeSpan(s string) Span {
+	parts := strings.Split(s, "-")
+	if len(parts) == 2 {
+		return Span{Key: Key(parts[0]), EndKey: Key(parts[1])}
 	}
-	makeSpans := func(s string) []Span {
-		var spans []Span
-		if len(s) > 0 {
-			for _, p := range strings.Split(s, ",") {
-				spans = append(spans, makeSpan(p))
-			}
-		}
-		return spans
-	}
+	return Span{Key: Key(s)}
+}
 
+func makeSpans(s string) []Span {
+	var spans []Span
+	if len(s) > 0 {
+		for _, p := range strings.Split(s, ",") {
+			spans = append(spans, makeSpan(p))
+		}
+	}
+	return spans
+}
+
+func TestMergeSpans(t *testing.T) {
 	testCases := []struct {
 		spans    string
 		expected string

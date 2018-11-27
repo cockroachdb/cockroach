@@ -1,0 +1,253 @@
+# Tests with a type that doesn't support Prev.
+index-constraints vars=(string) index=(@1)
+@1 > 'a' AND @1 < 'z'
+----
+[/e'a\x00' - /'z')
+
+index-constraints vars=(string, int) index=(@1, @2)
+@1 > 'a' AND @1 < 'z' AND @2 = 5
+----
+[/e'a\x00'/5 - /'z')
+Remaining filter: @2 = 5
+
+index-constraints vars=(string) index=(@1 desc)
+@1 > 'a' AND @1 < 'z'
+----
+(/'z' - /e'a\x00']
+
+index-constraints vars=(string, int) index=(@1 desc, @2)
+@1 > 'a' AND @1 < 'z' AND @2 = 5
+----
+(/'z' - /e'a\x00'/5]
+Remaining filter: @2 = 5
+
+# Tests with a type that doesn't support Next or Prev.
+index-constraints vars=(decimal) index=(@1)
+@1 > 1.5
+----
+(/1.5 - ]
+
+index-constraints vars=(decimal) index=(@1)
+@1 > 1.5 AND @1 < 2
+----
+(/1.5 - /2)
+
+index-constraints vars=(decimal, decimal) index=(@1 not null, @2 not null)
+@1 <= 1.5 AND @2 < 2.5
+----
+[ - /1.5/2.5)
+Remaining filter: @2 < 2.5
+
+# Tests with a type that supports Next/Prev but we have a maximal/minimal value.
+index-constraints vars=(bool) index=(@1)
+@1 > true
+----
+(/true - ]
+
+index-constraints vars=(bool) index=(@1)
+@1 < false
+----
+(/NULL - /false)
+
+# Note the difference here between decimal and int: we
+# can't extend the exclusive start key.
+index-constraints vars=(decimal, decimal) index=(@1, @2)
+@1 > 1.5 AND @2 > 2
+----
+(/1.5 - ]
+Remaining filter: @2 > 2
+
+index-constraints vars=(int) index=(@1)
+@1 IS NULL
+----
+[/NULL - /NULL]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT DISTINCT FROM 1
+----
+[/1 - /1]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@2 = @1
+----
+(/NULL - ]
+Remaining filter: @2 = @1
+
+index-constraints vars=(int, int) index=(@1, @2)
+@2 < @1
+----
+(/NULL - ]
+Remaining filter: @2 < @1
+
+index-constraints vars=(int, int) index=(@1 not null, @2)
+@1 = @2
+----
+[ - ]
+Remaining filter: @1 = @2
+
+# Tests with top-level OR.
+# TODO(radu): expression simplification is limited when dealing with ORs; some
+# of the remaining filters below are not necessary (or could be simplified
+# further).
+
+index-constraints vars=(int) index=(@1)
+@1 = 1 OR @1 = 2
+----
+[/1 - /2]
+
+index-constraints vars=(int) index=(@1)
+@1 IS NULL OR @1 = 1
+----
+[/NULL - /NULL]
+[/1 - /1]
+
+index-constraints vars=(int) index=(@1)
+(@1 >= 1 AND @1 <= 5) OR (@1 >= 2 AND @1 <= 8)
+----
+[/1 - /8]
+Remaining filter: (@1 <= 5) OR (@1 >= 2)
+
+index-constraints vars=(int) index=(@1)
+(@1 >= 1 AND @1 <= 3) OR (@1 >= 5 AND @1 <= 8)
+----
+[/1 - /3]
+[/5 - /8]
+Remaining filter: (@1 <= 3) OR (@1 >= 5)
+
+index-constraints vars=(int, int) index=(@1)
+(@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
+----
+[/1 - /2]
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
+
+index-constraints vars=(int, int) index=(@2)
+(@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
+----
+[/5 - /6]
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
+
+index-constraints vars=(int, int) index=(@2)
+@1 = 1 OR @2 = 2
+----
+[ - ]
+Remaining filter: (@1 = 1) OR (@2 = 2)
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 OR (@1, @2, @3) IN ((4, 5, 6), (7, 8, 9))
+----
+[/1 - /1]
+[/4/5/6 - /4/5/6]
+[/7/8/9 - /7/8/9]
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 OR (@1 = 2 AND (@2, @3) IN ((4, 5), (6, 7))) OR (@1 = 3)
+----
+[/1 - /1]
+[/2/4/5 - /2/4/5]
+[/2/6/7 - /2/6/7]
+[/3 - /3]
+Remaining filter: ((@1 = 1) OR ((@1 = 2) AND ((@2, @3) IN ((4, 5), (6, 7))))) OR (@1 = 3)
+
+# Tests with inner OR.
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND (@2 = 2 OR @2 = 3)
+----
+[/1/2 - /1/3]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@2 = 2 OR (@2 = 3 AND @3 = 4))
+----
+[/1/2 - /1/2]
+[/1/3/4 - /1/3/4]
+Remaining filter: (@2 = 2) OR ((@2 = 3) AND (@3 = 4))
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND (@2 = 2 OR @2 = 3)
+----
+[/1/2 - ]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@2 = 2 OR @2 = 3) AND (@3 >= 4)
+----
+[/1/2/4 - /1/2]
+[/1/3/4 - /1/3]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+----
+(/1/NULL - /1]
+Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 IS OF (INT)
+----
+[/1 - /1]
+
+# This testcase exposed an issue around extending spans. We don't normalize the
+# expression so we have a hierarchy of ANDs (which requires a more complex path
+# for calculating spans). As a side-effect of disabling normalization, an
+# unnecessary filter remains.
+index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4) nonormalize
+@1 = 1 AND @2 = 2 AND @3 = 3 AND @4 IN (4,5,6)
+----
+[/1/2/3/4 - /1/2/3/6]
+Remaining filter: true
+
+index-constraints vars=(int, int) index=(@1, @2)
+(@1 = 1) AND (@2 > 5) AND (@2 < 1)
+----
+
+# Verify that we ignore mixed-type comparisons (they would result in incorrect
+# encodings, see #4313). We don't have testcases for IN because those error
+# out early (during type-checking).
+index-constraints vars=(int) index=(@1)
+@1 = 1.5
+----
+(/NULL - ]
+Remaining filter: @1 = 1.5
+
+index-constraints vars=(int) index=(@1)
+@1 > 1.5
+----
+(/NULL - ]
+Remaining filter: @1 > 1.5
+
+index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) = (1, 2.5)
+----
+(/1/NULL - /1]
+Remaining filter: @2 = 2.5
+
+index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) >= (1, 2.5)
+----
+[/1 - ]
+Remaining filter: (@1, @2) >= (1, 2.5)
+
+# Verify that we ignore spans that become invalid after extension.
+index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND (@1, @2) < (1, 2) AND @2 = 5
+----
+
+index-constraints vars=(int, int) index=(@1, @2)
+(@1 >= 1 AND (@1, @2) < (1, 2) OR @1 > 3) AND @2 = 5
+----
+[/4/5 - ]
+Remaining filter: @2 = 5
+
+# Regression test for #3472.
+index-constraints vars=(int, int) index=(@1, @2)
+(@1,@2) IN ((1, 2)) AND @1 = 1
+----
+[/1/2 - /1/2]
+
+# Function call.
+index-constraints vars=(string) index=(@1)
+@1 > 'a' AND length(@1) = 2
+----
+[/e'a\x00' - ]
+Remaining filter: length(@1) = 2

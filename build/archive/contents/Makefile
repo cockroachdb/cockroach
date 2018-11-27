@@ -1,12 +1,6 @@
-prefix := /usr/local
-bindir := $(prefix)/bin
-INSTALL := install
+export GOPATH = $(CURDIR)
+export BUILDCHANNEL := source-archive
 
-.PHONY: all build buildoss test
-all build buildoss test:
+.PHONY: all build buildoss check clean install test
+all build buildoss check clean install test:
 	$(MAKE) -C src/github.com/cockroachdb/cockroach $@
-
-.PHONY: install
-install: build
-	$(INSTALL) -d -m 755 $(DESTDIR)$(bindir)
-	$(INSTALL) -m 755 src/github.com/cockroachdb/cockroach/cockroach $(DESTDIR)$(bindir)

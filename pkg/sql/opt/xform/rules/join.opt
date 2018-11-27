@@ -1,0 +1,70 @@
+# =============================================================================
+# join.opt contains exploration rules for the Join operator.
+# =============================================================================
+
+
+# CommuteJoin creates a Join with the left and right inputs swapped. This is
+# useful for other rules that convert joins to other operators (like merge
+# join).
+[CommuteJoin, Explore]
+(InnerJoin | FullJoin
+  $left:*
+  $right:*
+  $on:*
+)
+=>
+((OpName) $right $left $on)
+
+# CommuteLeftJoin creates a Join with the left and right inputs swapped.
+[CommuteLeftJoin, Explore]
+(LeftJoin
+  $left:*
+  $right:*
+  $on:*
+)
+=>
+(RightJoin $right $left $on)
+
+# CommuteRightJoin creates a Join with the left and right inputs swapped.
+[CommuteRightJoin, Explore]
+(RightJoin
+  $left:*
+  $right:*
+  $on:*
+)
+=>
+(LeftJoin $right $left $on)
+
+# GenerateMergeJoins creates MergeJoin operators for the join, using the
+# interesting orderings property.
+[GenerateMergeJoins, Explore]
+(JoinNonApply $left:* $right:* $on:*)
+=>
+(GenerateMergeJoins (OpName) $left $right $on)
+
+# GenerateLookupJoins creates LookupJoin operators for all indexes (of the Scan
+# table) which allow it (including non-covering indexes). See the
+# GenerateLookupJoins custom function for more details.
+[GenerateLookupJoins, Explore]
+(InnerJoin | LeftJoin
+    $left:*
+    (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+    $on:*
+)
+=>
+(GenerateLookupJoins (OpName) $left $scanPrivate $on)
+
+# GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
+# has a Select->Scan combination as its right input. The filter can get merged
+# with the ON condition (this is correct for both inner and left join).
+[GenerateLookupJoinsWithFilter, Explore]
+(InnerJoin | LeftJoin
+    $left:*
+    (Select
+        (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+        $filters:*
+    )
+    $on:*
+)
+=>
+(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters))

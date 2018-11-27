@@ -11,43 +11,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package roachpb
 
-// Summation returns the sum value for this sample.
-func (samp InternalTimeSeriesSample) Summation() float64 {
-	return samp.Sum
+// IsColumnar returns true if this InternalTimeSeriesData stores its samples
+// in columnar format.
+func (data *InternalTimeSeriesData) IsColumnar() bool {
+	return len(data.Offset) > 0
 }
 
-// Average returns the average value for this sample.
-func (samp InternalTimeSeriesSample) Average() float64 {
-	if samp.Count == 0 {
-		return 0
-	}
-	return samp.Sum / float64(samp.Count)
+// IsRollup returns true if this InternalTimeSeriesData is both in columnar
+// format and contains "rollup" data.
+func (data *InternalTimeSeriesData) IsRollup() bool {
+	return len(data.Count) > 0
 }
 
-// Maximum returns the maximum value encountered by this sample.
-func (samp InternalTimeSeriesSample) Maximum() float64 {
-	if samp.Count < 2 {
-		return samp.Sum
+// SampleCount returns the number of samples contained in this
+// InternalTimeSeriesData.
+func (data *InternalTimeSeriesData) SampleCount() int {
+	if data.IsColumnar() {
+		return len(data.Offset)
 	}
-	if samp.Max != nil {
-		return *samp.Max
-	}
-	return 0
+	return len(data.Samples)
 }
 
-// Minimum returns the minimum value encountered by this sample.
-func (samp InternalTimeSeriesSample) Minimum() float64 {
-	if samp.Count < 2 {
-		return samp.Sum
-	}
-	if samp.Min != nil {
-		return *samp.Min
-	}
-	return 0
+// OffsetForTimestamp returns the offset within this collection that would
+// represent the provided timestamp.
+func (data *InternalTimeSeriesData) OffsetForTimestamp(timestampNanos int64) int32 {
+	return int32((timestampNanos - data.StartTimestampNanos) / data.SampleDurationNanos)
+}
+
+// TimestampForOffset returns the timestamp that would represent the provided
+// offset in this collection.
+func (data *InternalTimeSeriesData) TimestampForOffset(offset int32) int64 {
+	return data.StartTimestampNanos + int64(offset)*data.SampleDurationNanos
 }

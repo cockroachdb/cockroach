@@ -1,0 +1,3 @@
+create_role_stmt ::=
+	'CREATE' 'ROLE' name
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name

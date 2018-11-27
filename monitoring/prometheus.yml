@@ -1,4 +1,5 @@
 # Prometheus configuration for cockroach clusters.
+# Requires prometheus 2.X
 #
 # Run with:
 # $ prometheus -config.file=prometheus.yml
@@ -7,18 +8,24 @@ global:
   evaluation_interval: 10s
 
 rule_files:
-- "rules/alerts.rules"
-- "rules/aggregation.rules"
+- "rules/alerts.rules.yml"
+- "rules/aggregation.rules.yml"
+
+# Alert manager running on the same host:
+alerting:
+  alertmanagers:
+  - path_prefix: "/alertmanager/"
+    static_configs:
+    - targets:
+      - localhost:9093
 
 scrape_configs:
-  - job_name: 'cockroach'
+  - job_name: 'cockroachdb'
     metrics_path: '/_status/vars'
-
     # Insecure mode:
     scheme: 'http'
     # Secure mode:
     # scheme: 'https'
-
     tls_config:
       insecure_skip_verify: true
 

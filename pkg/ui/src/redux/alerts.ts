@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 /**
  * Alerts is a collection of selectors which determine if there are any Alerts
  * to display based on the current redux state.
@@ -7,15 +21,18 @@ import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
 import { Store } from "redux";
+import { Dispatch } from "react-redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataSet,
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  saveUIData, loadUIData, isInFlight, UIDataState, UIDataStatus,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
-import { nodeStatusesSelector } from "./nodes";
+import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
 import { AdminUIState } from "./state";
+import * as docsURL from "src/util/docs";
 
 export enum AlertLevel {
   NOTIFICATION,
@@ -42,6 +59,53 @@ export interface Alert extends AlertInfo {
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
 
+// Clusterviz Instruction Box collapsed
+
+export const instructionsBoxCollapsedSetting = new LocalSetting(
+  INSTRUCTIONS_BOX_COLLAPSED_KEY, localSettingsSelector, false,
+);
+
+const instructionsBoxCollapsedPersistentLoadedSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY)
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID
+  ),
+);
+
+const instructionsBoxCollapsedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY)
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].data
+  ),
+);
+
+export const instructionsBoxCollapsedSelector = createSelector(
+  instructionsBoxCollapsedPersistentLoadedSelector,
+  instructionsBoxCollapsedPersistentSelector,
+  instructionsBoxCollapsedSetting.selector,
+  (persistentLoaded, persistentCollapsed, localSettingCollapsed): boolean => {
+    if (persistentLoaded) {
+      return persistentCollapsed;
+    }
+    return localSettingCollapsed;
+  },
+);
+
+export function setInstructionsBoxCollapsed(collapsed: boolean) {
+  return (dispatch: Dispatch<AdminUIState>) => {
+    dispatch(instructionsBoxCollapsedSetting.set(collapsed));
+    dispatch(saveUIData({
+      key: INSTRUCTIONS_BOX_COLLAPSED_KEY,
+      value: collapsed,
+    }));
+  };
+}
+
 ////////////////////////////////////////
 // Version mismatch.
 ////////////////////////////////////////
@@ -51,11 +115,24 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
 
 export const versionsSelector = createSelector(
   nodeStatusesSelector,
-  (nodeStatuses) => nodeStatuses && _.uniq(_.map(nodeStatuses, (status) => status.build_info && status.build_info.tag)),
+  livenessByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) =>
+    _.chain(nodeStatuses)
+      // Ignore nodes for which we don't have any build info.
+      .filter((status) => !!status.build_info )
+      // Exclude this node if it's known to be decommissioning.
+      .filter((status) => !status.desc ||
+                          !livenessStatusByNodeID[status.desc.node_id] ||
+                          !livenessStatusByNodeID[status.desc.node_id].decommissioning)
+      // Collect the surviving nodes' build tags.
+      .map((status) => status.build_info.tag)
+      .uniq()
+      .value(),
 );
 
 /**
  * Warning when multiple versions of CockroachDB are detected on the cluster.
+ * This excludes decommissioned nodes.
  */
 export const staggeredVersionWarningSelector = createSelector(
   versionsSelector,
@@ -139,7 +216,7 @@ export const newVersionNotificationSelector = createSelector(
       level: AlertLevel.NOTIFICATION,
       title: "New Version Available",
       text: "A new version of CockroachDB is available.",
-      link: "https://www.cockroachlabs.com/docs/install-cockroachdb.html",
+      link: docsURL.upgradeCockroachVersion,
       dismiss: (dispatch) => {
         const dismissedAt = moment();
         // Dismiss locally.
@@ -176,7 +253,7 @@ export const disconnectedAlertSelector = createSelector(
 
     return {
       level: AlertLevel.CRITICAL,
-      title: "Connection to CockroachDB node lost.",
+      title: "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
       dismiss: (dispatch) => {
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         return Promise.resolve();
@@ -234,7 +311,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
   // Memoizers to prevent unnecessary dispatches of alertDataSync if store
   // hasn't changed in an interesting way.
-  let lastUIData: UIDataSet;
+  let lastUIData: UIDataState;
 
   return () => {
     const state: AdminUIState = store.getState();
@@ -246,7 +323,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });

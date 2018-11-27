@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
 Package engine provides low-level storage. It interacts with storage
@@ -87,7 +85,7 @@ same key are rare in practice.
 However, we do allow inlining in order to use the MVCC interface to
 store non-versioned values. It turns out that not everything which
 Cockroach needs to store would be efficient or possible using MVCC.
-Examples include transaction records, response cache entries, stats
+Examples include transaction records, abort span entries, stats
 counters, time series data, and system-local config values. However,
 supporting a mix of encodings is problematic in terms of resulting
 complexity. So Cockroach treats an MVCC timestamp of zero to mean an

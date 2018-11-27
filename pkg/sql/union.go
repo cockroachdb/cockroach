@@ -11,90 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Dan Harrison (daniel.harrison@gmail.com)
 
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) UnionClause(
-	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type,
-) (planNode, error) {
-	var emitAll = false
-	var emit unionNodeEmit
-	switch n.Type {
-	case parser.UnionOp:
-		if n.All {
-			emitAll = true
-		} else {
-			emit = make(unionNodeEmitDistinct)
-		}
-	case parser.IntersectOp:
-		if n.All {
-			emit = make(intersectNodeEmitAll)
-		} else {
-			emit = make(intersectNodeEmitDistinct)
-		}
-	case parser.ExceptOp:
-		if n.All {
-			emit = make(exceptNodeEmitAll)
-		} else {
-			emit = make(exceptNodeEmitDistinct)
-		}
-	default:
-		return nil, errors.Errorf("%v is not supported", n.Type)
-	}
-
-	left, err := p.newPlan(ctx, n.Left, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-	right, err := p.newPlan(ctx, n.Right, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	leftColumns := left.Columns()
-	rightColumns := right.Columns()
-	if len(leftColumns) != len(rightColumns) {
-		return nil, fmt.Errorf("each %v query must have the same number of columns: %d vs %d", n.Type, len(left.Columns()), len(right.Columns()))
-	}
-	for i := 0; i < len(leftColumns); i++ {
-		l := leftColumns[i]
-		r := rightColumns[i]
-		// TODO(dan): This currently checks whether the types are exactly the same,
-		// but Postgres is more lenient:
-		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !l.Typ.Equivalent(r.Typ) {
-			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ, r.Typ)
-		}
-		if l.Hidden != r.Hidden {
-			return nil, fmt.Errorf("%v types cannot be matched", n.Type)
-		}
-	}
-
-	node := &unionNode{
-		right:     right,
-		left:      left,
-		rightDone: false,
-		leftDone:  false,
-		emitAll:   emitAll,
-		emit:      emit,
-		scratch:   make([]byte, 0),
-	}
-	return node, nil
-}
 
 // unionNode is a planNode whose rows are the result of one of three set
 // operations (UNION, INTERSECT, or EXCEPT) on left and right. There are two
@@ -107,10 +37,13 @@ func (p *planner) UnionClause(
 // state. Additionally, if the unionNode has an ordering then we can hint it
 // down to left and right and force the condition for this first optimization.
 //
-// All six of the operations can be completed without cacheing rows by iterating
-// one side then the other and keeping counts of unique rows in a map. Because
-// EXCEPT needs to iterate the right side first, and the other two don't care,
-// we always read right before left.
+// All six of the operations can be completed without cacheing rows by
+// iterating one side then the other and keeping counts of unique rows
+// in a map. The logic is common for all six. However, because EXCEPT
+// needs to iterate the right side first, the common code always reads
+// the right operand first. Meanwhile, we invert the operands for the
+// non-EXCEPT cases in order to preserve the appearance of the
+// original specified order.
 //
 // The emit logic for each op is represented by implementors of the
 // unionNodeEmit interface. The emitRight method is called for each row output
@@ -131,82 +64,186 @@ func (p *planner) UnionClause(
 //    decrement the entry. Otherwise, the row was on the right, but we've
 //    already emitted as many as were on the right, don't emit.
 type unionNode struct {
+	// right and left are the data source operands.
+	// right is read first, to populate the `emit` field.
 	right, left planNode
-	rightDone   bool
-	leftDone    bool
-	emitAll     bool // emitAll is a performance optimization for UNION ALL.
-	emit        unionNodeEmit
-	scratch     []byte
-	explain     explainMode
-	debugVals   debugValues
+	// columns contains the metadata for the results of this node.
+	columns sqlbase.ResultColumns
+	// inverted, when true, indicates that the right plan corresponds to
+	// the left operand in the input SQL syntax, and vice-versa.
+	inverted bool
+	// emitAll is a performance optimization for UNION ALL. When set
+	// the union logic avoids the `emit` logic entirely.
+	emitAll bool
+	// emit contains the rows seen on the right so far and performs the
+	// selection/filtering logic.
+	emit unionNodeEmit
+
+	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
+	unionType tree.UnionType
+	// all indicates if the operation is the ALL or DISTINCT version
+	all bool
+
+	run unionRun
 }
 
-func (n *unionNode) Columns() sqlbase.ResultColumns { return n.left.Columns() }
-func (n *unionNode) Ordering() orderingInfo         { return orderingInfo{} }
-
-func (n *unionNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	leftReads, leftWrites, err := n.left.Spans(ctx)
+// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
+func (p *planner) Union(
+	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
+) (planNode, error) {
+	left, err := p.newPlan(ctx, n.Left, desiredTypes)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	rightReads, rightWrites, err := n.right.Spans(ctx)
+	right, err := p.newPlan(ctx, n.Right, desiredTypes)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return append(leftReads, rightReads...), append(leftWrites, rightWrites...), nil
+
+	return p.newUnionNode(n.Type, n.All, left, right)
 }
 
-func (n *unionNode) Values() parser.Datums {
-	switch {
-	case !n.rightDone:
-		return n.right.Values()
-	case !n.leftDone:
-		return n.left.Values()
-	default:
-		return nil
-	}
-}
-
-func (n *unionNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.left.MarkDebug(mode)
-	n.right.MarkDebug(mode)
-}
-
-func (n *unionNode) DebugValues() debugValues {
-	return n.debugVals
-}
-
-func (n *unionNode) readRight(ctx context.Context) (bool, error) {
-	next, err := n.right.Next(ctx)
-	for ; next; next, err = n.right.Next(ctx) {
-		if n.explain == explainDebug {
-			n.debugVals = n.right.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Pass through any non-row debug info.
-				return true, nil
-			}
+func (p *planner) newUnionNode(
+	typ tree.UnionType, all bool, left, right planNode,
+) (planNode, error) {
+	var emitAll = false
+	var emit unionNodeEmit
+	switch typ {
+	case tree.UnionOp:
+		if all {
+			emitAll = true
+		} else {
+			emit = make(unionNodeEmitDistinct)
 		}
+	case tree.IntersectOp:
+		if all {
+			emit = make(intersectNodeEmitAll)
+		} else {
+			emit = make(intersectNodeEmitDistinct)
+		}
+	case tree.ExceptOp:
+		if all {
+			emit = make(exceptNodeEmitAll)
+		} else {
+			emit = make(exceptNodeEmitDistinct)
+		}
+	default:
+		return nil, errors.Errorf("%v is not supported", typ)
+	}
 
+	leftColumns := planColumns(left)
+	rightColumns := planColumns(right)
+	if len(leftColumns) != len(rightColumns) {
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeSyntaxError,
+			"each %v query must have the same number of columns: %d vs %d",
+			typ, len(leftColumns), len(rightColumns),
+		)
+	}
+	unionColumns := append(sqlbase.ResultColumns(nil), leftColumns...)
+	for i := 0; i < len(unionColumns); i++ {
+		l := leftColumns[i]
+		r := rightColumns[i]
+		// TODO(dan): This currently checks whether the types are exactly the same,
+		// but Postgres is more lenient:
+		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ == types.Unknown || r.Typ == types.Unknown) {
+			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
+		}
+		if l.Hidden != r.Hidden {
+			return nil, fmt.Errorf("%v types cannot be matched", typ)
+		}
+		if l.Typ == types.Unknown {
+			unionColumns[i].Typ = r.Typ
+		}
+	}
+
+	inverted := false
+	if typ != tree.ExceptOp {
+		// The logic below reads the rows from the right operand first,
+		// because for EXCEPT in particular this is what we need to match.
+		// However for the other operators (UNION, INTERSECT) it is
+		// actually confusing to see the right values come up first in the
+		// results. So invert this here, to reduce surprise by users.
+		left, right = right, left
+		inverted = true
+	}
+
+	node := &unionNode{
+		right:     right,
+		left:      left,
+		columns:   unionColumns,
+		inverted:  inverted,
+		emitAll:   emitAll,
+		emit:      emit,
+		unionType: typ,
+		all:       all,
+	}
+	return node, nil
+}
+
+// unionRun contains the run-time state of unionNode during local execution.
+type unionRun struct {
+	// scratch is a preallocated buffer for formatting the key of the
+	// current row on the right.
+	scratch []byte
+}
+
+func (n *unionNode) startExec(params runParams) error {
+	n.run.scratch = make([]byte, 0)
+	return nil
+}
+
+func (n *unionNode) Next(params runParams) (bool, error) {
+	if err := params.p.cancelChecker.Check(); err != nil {
+		return false, err
+	}
+	if n.right != nil {
+		return n.readRight(params)
+	}
+	if n.left != nil {
+		return n.readLeft(params)
+	}
+	return false, nil
+}
+
+func (n *unionNode) Values() tree.Datums {
+	if n.right != nil {
+		return n.right.Values()
+	}
+	if n.left != nil {
+		return n.left.Values()
+	}
+	return nil
+}
+
+func (n *unionNode) Close(ctx context.Context) {
+	if n.right != nil {
+		n.right.Close(ctx)
+		n.right = nil
+	}
+	if n.left != nil {
+		n.left.Close(ctx)
+		n.left = nil
+	}
+}
+
+func (n *unionNode) readRight(params runParams) (bool, error) {
+	next, err := n.right.Next(params)
+	for ; next; next, err = n.right.Next(params) {
 		if n.emitAll {
 			return true, nil
 		}
-		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.right.Values()); err != nil {
+		n.run.scratch = n.run.scratch[:0]
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.right.Values()); err != nil {
 			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
 		// use a lot of memory for big rows or big resultsets. Consider using a hash
 		// of the bytes instead.
-		if n.emit.emitRight(n.scratch) {
-			return true, nil
-		}
-		if n.explain == explainDebug {
-			// Mark the row as filtered out.
-			n.debugVals.output = debugValueFiltered
+		if n.emit.emitRight(n.run.scratch) {
 			return true, nil
 		}
 	}
@@ -214,71 +251,32 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	n.rightDone = true
-	n.right.Close(ctx)
-	return n.readLeft(ctx)
+	n.right.Close(params.ctx)
+	n.right = nil
+	return n.readLeft(params)
 }
 
-func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
-	next, err := n.left.Next(ctx)
-	for ; next; next, err = n.left.Next(ctx) {
-		if n.explain == explainDebug {
-			n.debugVals = n.left.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Pass through any non-row debug info.
-				return true, nil
-			}
-		}
-
+func (n *unionNode) readLeft(params runParams) (bool, error) {
+	next, err := n.left.Next(params)
+	for ; next; next, err = n.left.Next(params) {
 		if n.emitAll {
 			return true, nil
 		}
-		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.left.Values()); err != nil {
+		n.run.scratch = n.run.scratch[:0]
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.left.Values()); err != nil {
 			return false, err
 		}
-		if n.emit.emitLeft(n.scratch) {
-			return true, nil
-		}
-		if n.explain == explainDebug {
-			// Mark the row as filtered out.
-			n.debugVals.output = debugValueFiltered
+		if n.emit.emitLeft(n.run.scratch) {
 			return true, nil
 		}
 	}
 	if err != nil {
 		return false, err
 	}
-	n.leftDone = true
-	n.left.Close(ctx)
+	n.left.Close(params.ctx)
+	n.left = nil
 	return false, nil
-}
-
-func (n *unionNode) Start(ctx context.Context) error {
-	if err := n.right.Start(ctx); err != nil {
-		return err
-	}
-	return n.left.Start(ctx)
-}
-
-func (n *unionNode) Next(ctx context.Context) (bool, error) {
-	switch {
-	case !n.rightDone:
-		return n.readRight(ctx)
-	case !n.leftDone:
-		return n.readLeft(ctx)
-	default:
-		return false, nil
-	}
-}
-
-func (n *unionNode) Close(ctx context.Context) {
-	switch {
-	case !n.rightDone:
-		n.right.Close(ctx)
-	case !n.leftDone:
-		n.left.Close(ctx)
-	}
 }
 
 // unionNodeEmit represents the emitter logic for one of the six combinations of

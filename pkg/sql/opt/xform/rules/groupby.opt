@@ -1,0 +1,63 @@
+# =============================================================================
+# groupby.opt contains exploration rules for the groupby operators
+# =============================================================================
+
+
+# ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a
+# lower cost plan if the column min(x) is applied to is indexed.
+[ReplaceMinWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    [ (AggregationsItem (Min $variable:(Variable $col:*)) $aggPrivate:*) ]
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            [ (FiltersItem (IsNot $variable (Null (AnyType)))) ]
+        )
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Min $col)
+    )
+    [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
+    $groupingPrivate
+)
+
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule.
+# Due to limitations with OpName in exploration rules, the rule
+# had to be duplicated with minor modifications (we replace occurrences
+# of Min with Max)
+[ReplaceMaxWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    [ (AggregationsItem (Max $variable:(Variable $col:*)) $aggPrivate:*) ]
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            [ (FiltersItem (IsNot $variable (Null (AnyType)))) ]
+        )
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Max $col)
+    )
+    [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
+    $groupingPrivate
+)
+
+# GenerateStreamingGroupBy creates variants of a GroupBy or DistinctOn which
+# require more specific orderings on the grouping columns, using the interesting
+# orderings property. When we have orderings on grouping columns, we can execute
+# aggregations in a streaming fashion which is more efficient.
+[GenerateStreamingGroupBy, Explore]
+(GroupBy | DistinctOn
+    $input:*
+    $aggs:*
+    $private:* & (IsCanonicalGroupBy $private)
+)
+=>
+(GenerateStreamingGroupBy (OpName) $input $aggs $private)

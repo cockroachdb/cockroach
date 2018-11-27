@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: jqmp (jaqueramaphan@gmail.com)
 
 package security_test
 
@@ -28,6 +26,7 @@ import (
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	config, err := security.LoadServerTLSConfig(
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey))

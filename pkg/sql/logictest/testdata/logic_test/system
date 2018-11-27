@@ -1,0 +1,462 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+query T
+SHOW DATABASES
+----
+defaultdb
+postgres
+system
+test
+
+query T
+SHOW TABLES FROM system
+----
+descriptor
+eventlog
+jobs
+lease
+locations
+namespace
+rangelog
+role_members
+settings
+table_statistics
+ui
+users
+web_sessions
+zones
+
+query ITI rowsort
+SELECT * FROM system.namespace
+----
+0  defaultdb         50
+0  postgres          51
+0  system            1
+0  test              52
+1  descriptor        3
+1  eventlog          12
+1  jobs              15
+1  lease             11
+1  locations         21
+1  namespace         2
+1  rangelog          13
+1  role_members      23
+1  settings          6
+1  table_statistics  20
+1  ui                14
+1  users             4
+1  web_sessions      19
+1  zones             5
+
+query I rowsort
+SELECT id FROM system.descriptor
+----
+1
+2
+3
+4
+5
+6
+11
+12
+13
+14
+15
+19
+20
+21
+23
+50
+51
+52
+
+# Verify we can read "protobuf" columns.
+query I
+SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
+----
+0
+
+# Verify format of system tables.
+query TTBTTTB
+SHOW COLUMNS FROM system.namespace
+----
+parentID  INT     false  NULL  ·  {"primary"}  false
+name      STRING  false  NULL  ·  {"primary"}  false
+id        INT     true   NULL  ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.descriptor
+----
+id          INT    false  NULL  ·  {"primary"}  false
+descriptor  BYTES  true   NULL  ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.users
+----
+username        STRING  false  NULL   ·  {"primary"}  false
+hashedPassword  BYTES   true   NULL   ·  {}           false
+isRole          BOOL    false  false  ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.zones
+----
+id      INT    false  NULL  ·  {"primary"}  false
+config  BYTES  true   NULL  ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.lease
+----
+descID      INT        false  NULL  ·  {"primary"}  false
+version     INT        false  NULL  ·  {"primary"}  false
+nodeID      INT        false  NULL  ·  {"primary"}  false
+expiration  TIMESTAMP  false  NULL  ·  {"primary"}  false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.eventlog
+----
+timestamp    TIMESTAMP  false  NULL       ·  {"primary"}  false
+eventType    STRING     false  NULL       ·  {}           false
+targetID     INT        false  NULL       ·  {}           false
+reportingID  INT        false  NULL       ·  {}           false
+info         STRING     true   NULL       ·  {}           false
+uniqueID     BYTES      false  uuid_v4()  ·  {"primary"}  false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.rangelog
+----
+timestamp     TIMESTAMP  false  NULL            ·  {"primary"}  false
+rangeID       INT        false  NULL            ·  {}           false
+storeID       INT        false  NULL            ·  {}           false
+eventType     STRING     false  NULL            ·  {}           false
+otherRangeID  INT        true   NULL            ·  {}           false
+info          STRING     true   NULL            ·  {}           false
+uniqueID      INT        false  unique_rowid()  ·  {"primary"}  false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.ui
+----
+key          STRING     false  NULL  ·  {"primary"}  false
+value        BYTES      true   NULL  ·  {}           false
+lastUpdated  TIMESTAMP  false  NULL  ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.jobs
+----
+id        INT        false  unique_rowid()     ·  {"primary","jobs_status_created_idx"}  false
+status    STRING     false  NULL               ·  {"jobs_status_created_idx"}            false
+created   TIMESTAMP  false  now():::TIMESTAMP  ·  {"jobs_status_created_idx"}            false
+payload   BYTES      false  NULL               ·  {}                                     false
+progress  BYTES      true   NULL               ·  {}                                     false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.settings
+----
+name         STRING     false  NULL               ·  {"primary"}  false
+value        STRING     false  NULL               ·  {}           false
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}           false
+valueType    STRING     true   NULL               ·  {}           false
+
+query TTBTTTB
+SHOW COLUMNS FROM system.role_members
+----
+role     STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}  false
+member   STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}  false
+isAdmin  BOOL    false  NULL  ·  {}                                                             false
+
+
+# Verify default privileges on system tables.
+query TTTT
+SHOW GRANTS ON DATABASE system
+----
+system  crdb_internal       admin  GRANT
+system  crdb_internal       admin  SELECT
+system  crdb_internal       root   GRANT
+system  crdb_internal       root   SELECT
+system  information_schema  admin  GRANT
+system  information_schema  admin  SELECT
+system  information_schema  root   GRANT
+system  information_schema  root   SELECT
+system  pg_catalog          admin  GRANT
+system  pg_catalog          admin  SELECT
+system  pg_catalog          root   GRANT
+system  pg_catalog          root   SELECT
+system  public              admin  GRANT
+system  public              admin  SELECT
+system  public              root   GRANT
+system  public              root   SELECT
+
+query TTTTT
+SHOW GRANTS ON system.*
+----
+system  public  descriptor        admin  GRANT
+system  public  descriptor        admin  SELECT
+system  public  descriptor        root   GRANT
+system  public  descriptor        root   SELECT
+system  public  eventlog          admin  DELETE
+system  public  eventlog          admin  GRANT
+system  public  eventlog          admin  INSERT
+system  public  eventlog          admin  SELECT
+system  public  eventlog          admin  UPDATE
+system  public  eventlog          root   DELETE
+system  public  eventlog          root   GRANT
+system  public  eventlog          root   INSERT
+system  public  eventlog          root   SELECT
+system  public  eventlog          root   UPDATE
+system  public  jobs              admin  DELETE
+system  public  jobs              admin  GRANT
+system  public  jobs              admin  INSERT
+system  public  jobs              admin  SELECT
+system  public  jobs              admin  UPDATE
+system  public  jobs              root   DELETE
+system  public  jobs              root   GRANT
+system  public  jobs              root   INSERT
+system  public  jobs              root   SELECT
+system  public  jobs              root   UPDATE
+system  public  lease             admin  DELETE
+system  public  lease             admin  GRANT
+system  public  lease             admin  INSERT
+system  public  lease             admin  SELECT
+system  public  lease             admin  UPDATE
+system  public  lease             root   DELETE
+system  public  lease             root   GRANT
+system  public  lease             root   INSERT
+system  public  lease             root   SELECT
+system  public  lease             root   UPDATE
+system  public  locations         admin  DELETE
+system  public  locations         admin  GRANT
+system  public  locations         admin  INSERT
+system  public  locations         admin  SELECT
+system  public  locations         admin  UPDATE
+system  public  locations         root   DELETE
+system  public  locations         root   GRANT
+system  public  locations         root   INSERT
+system  public  locations         root   SELECT
+system  public  locations         root   UPDATE
+system  public  namespace         admin  GRANT
+system  public  namespace         admin  SELECT
+system  public  namespace         root   GRANT
+system  public  namespace         root   SELECT
+system  public  rangelog          admin  DELETE
+system  public  rangelog          admin  GRANT
+system  public  rangelog          admin  INSERT
+system  public  rangelog          admin  SELECT
+system  public  rangelog          admin  UPDATE
+system  public  rangelog          root   DELETE
+system  public  rangelog          root   GRANT
+system  public  rangelog          root   INSERT
+system  public  rangelog          root   SELECT
+system  public  rangelog          root   UPDATE
+system  public  role_members      admin  DELETE
+system  public  role_members      admin  GRANT
+system  public  role_members      admin  INSERT
+system  public  role_members      admin  SELECT
+system  public  role_members      admin  UPDATE
+system  public  role_members      root   DELETE
+system  public  role_members      root   GRANT
+system  public  role_members      root   INSERT
+system  public  role_members      root   SELECT
+system  public  role_members      root   UPDATE
+system  public  settings          admin  DELETE
+system  public  settings          admin  GRANT
+system  public  settings          admin  INSERT
+system  public  settings          admin  SELECT
+system  public  settings          admin  UPDATE
+system  public  settings          root   DELETE
+system  public  settings          root   GRANT
+system  public  settings          root   INSERT
+system  public  settings          root   SELECT
+system  public  settings          root   UPDATE
+system  public  table_statistics  admin  DELETE
+system  public  table_statistics  admin  GRANT
+system  public  table_statistics  admin  INSERT
+system  public  table_statistics  admin  SELECT
+system  public  table_statistics  admin  UPDATE
+system  public  table_statistics  root   DELETE
+system  public  table_statistics  root   GRANT
+system  public  table_statistics  root   INSERT
+system  public  table_statistics  root   SELECT
+system  public  table_statistics  root   UPDATE
+system  public  ui                admin  DELETE
+system  public  ui                admin  GRANT
+system  public  ui                admin  INSERT
+system  public  ui                admin  SELECT
+system  public  ui                admin  UPDATE
+system  public  ui                root   DELETE
+system  public  ui                root   GRANT
+system  public  ui                root   INSERT
+system  public  ui                root   SELECT
+system  public  ui                root   UPDATE
+system  public  users             admin  DELETE
+system  public  users             admin  GRANT
+system  public  users             admin  INSERT
+system  public  users             admin  SELECT
+system  public  users             admin  UPDATE
+system  public  users             root   DELETE
+system  public  users             root   GRANT
+system  public  users             root   INSERT
+system  public  users             root   SELECT
+system  public  users             root   UPDATE
+system  public  web_sessions      admin  DELETE
+system  public  web_sessions      admin  GRANT
+system  public  web_sessions      admin  INSERT
+system  public  web_sessions      admin  SELECT
+system  public  web_sessions      admin  UPDATE
+system  public  web_sessions      root   DELETE
+system  public  web_sessions      root   GRANT
+system  public  web_sessions      root   INSERT
+system  public  web_sessions      root   SELECT
+system  public  web_sessions      root   UPDATE
+system  public  zones             admin  DELETE
+system  public  zones             admin  GRANT
+system  public  zones             admin  INSERT
+system  public  zones             admin  SELECT
+system  public  zones             admin  UPDATE
+system  public  zones             root   DELETE
+system  public  zones             root   GRANT
+system  public  zones             root   INSERT
+system  public  zones             root   SELECT
+system  public  zones             root   UPDATE
+
+statement error user root does not have DROP privilege on database system
+ALTER DATABASE system RENAME TO not_system
+
+statement error user root does not have DROP privilege on database system
+DROP DATABASE system
+
+# Users cannot exceed allowed privileges on system objects.
+statement error user testuser must not have ALL privileges on system object with ID=.*
+GRANT ALL ON DATABASE system TO testuser
+
+statement error user testuser must not have INSERT privileges on system object with ID=.*
+GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
+
+statement ok
+GRANT GRANT, SELECT ON DATABASE system TO testuser
+
+statement error user testuser must not have ALL privileges on system object with ID=.*
+GRANT ALL ON system.namespace TO testuser
+
+statement error user testuser must not have INSERT privileges on system object with ID=.*
+GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
+
+statement ok
+GRANT GRANT, SELECT ON system.namespace TO testuser
+
+statement ok
+GRANT SELECT ON system.descriptor TO testuser
+
+# Superusers must have exactly the allowed privileges.
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON DATABASE system TO root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT DELETE, INSERT ON DATABASE system TO root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON system.namespace TO root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT DELETE, INSERT ON system.descriptor TO root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON system.descriptor TO root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON DATABASE system FROM root
+
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON system.namespace FROM root
+
+statement error user root does not have privileges
+REVOKE ALL ON system.namespace FROM root
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON DATABASE system TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT DELETE, INSERT ON DATABASE system TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON system.namespace TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT DELETE, INSERT ON system.descriptor TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+GRANT ALL ON system.descriptor TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON DATABASE system FROM admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON system.namespace FROM admin
+
+statement error user admin does not have privileges
+REVOKE ALL ON system.namespace FROM admin
+
+# Some tables (we test system.lease here) used to allow multiple privilege sets for
+# backwards compatibility, and superusers were allowed very wide privileges.
+# We make sure this is no longer the case.
+statement error user testuser must not have ALL privileges on system object with ID=.*
+GRANT ALL ON system.lease TO testuser
+
+statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+GRANT CREATE on system.lease to root
+
+statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+GRANT CREATE on system.lease to admin
+
+statement error user testuser must not have CREATE privileges on system object with ID=.*
+GRANT CREATE on system.lease to testuser
+
+statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+GRANT ALL ON system.lease TO root
+
+statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+GRANT ALL ON system.lease TO admin
+
+statement error user testuser must not have ALL privileges on system object with ID=.*
+GRANT ALL ON system.lease TO testuser
+
+# NB: the "order by" is necessary or this test is flaky under DistSQL.
+# This is somewhat surprising.
+query T
+SELECT name
+FROM system.settings
+WHERE name != 'sql.defaults.distsql'
+ORDER BY name
+----
+cluster.secret
+diagnostics.reporting.enabled
+kv.range_merge.queue_enabled
+trace.debug.enable
+version
+
+statement ok
+INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
+
+query TT
+SELECT name, value
+FROM system.settings
+WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
+ORDER BY name
+----
+diagnostics.reporting.enabled  true
+kv.range_merge.queue_enabled   false
+somesetting                    somevalue
+trace.debug.enable             false
+
+user testuser
+
+statement error user testuser does not have SELECT privilege on relation settings
+select name from system.settings
+
+statement error user testuser does not have INSERT privilege on relation settings
+UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother')
+
+user root
+
+query TTB
+SELECT * from system.role_members
+----
+admin  root  true

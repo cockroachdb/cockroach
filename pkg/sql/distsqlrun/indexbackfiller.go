@@ -11,164 +11,157 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // indexBackfiller is a processor that backfills new indexes.
 type indexBackfiller struct {
 	backfiller
 
-	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
-	colIdxMap map[sqlbase.ColumnID]int
-
-	rowVals parser.Datums
-	da      sqlbase.DatumAlloc
+	backfill.IndexBackfiller
 }
 
-var _ processor = &indexBackfiller{}
+var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
-// IndexMutationFilter is a filter that allows mutations that add indexes.
-func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
-	return m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD
-}
-
 func newIndexBackfiller(
-	flowCtx *FlowCtx, spec BackfillerSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec BackfillerSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
 		backfiller: backfiller{
-			name:    "Index",
-			filter:  IndexMutationFilter,
-			flowCtx: flowCtx,
-			output:  output,
-			spec:    spec,
+			name:        "Index",
+			filter:      backfill.IndexMutationFilter,
+			flowCtx:     flowCtx,
+			processorID: processorID,
+			output:      output,
+			spec:        spec,
 		},
 	}
 	ib.backfiller.chunkBackfiller = ib
 
-	if err := ib.init(); err != nil {
+	if err := ib.IndexBackfiller.Init(ib.spec.Table); err != nil {
 		return nil, err
 	}
 
 	return ib, nil
 }
 
-func (ib *indexBackfiller) init() error {
-	desc := ib.spec.Table
-	numCols := len(desc.Columns)
-
-	cols := desc.Columns
-	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
-		cols = append(cols, desc.Columns...)
-		for _, m := range desc.Mutations {
-			if column := m.GetColumn(); column != nil {
-				cols = append(cols, *column)
-			}
-		}
-	}
-
-	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
-	for i, c := range cols {
-		ib.colIdxMap[c.ID] = i
-	}
-
-	valNeededForCol := make([]bool, len(cols))
-	mutationID := desc.Mutations[0].MutationID
-	for _, m := range desc.Mutations {
-		if m.MutationID != mutationID {
-			break
-		}
-		if IndexMutationFilter(m) {
-			idx := m.GetIndex()
-			for i, col := range cols {
-				valNeededForCol[i] = valNeededForCol[i] || idx.ContainsColumnID(col.ID)
-			}
-		}
-	}
-
-	return ib.fetcher.Init(
-		&desc, ib.colIdxMap, &desc.PrimaryIndex, false, false, cols, valNeededForCol, false,
-	)
-}
-
 func (ib *indexBackfiller) runChunk(
-	ctx context.Context, mutations []sqlbase.DescriptorMutation, sp roachpb.Span, chunkSize int64,
+	tctx context.Context,
+	mutations []sqlbase.DescriptorMutation,
+	sp roachpb.Span,
+	chunkSize int64,
+	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
-	added := make([]sqlbase.IndexDescriptor, len(mutations))
-	for i, m := range mutations {
-		added[i] = *m.GetIndex()
+	if ib.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
+		if err := ib.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
+			return nil, err
+		}
 	}
-	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(mutations))
-	err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		if ib.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
-			if err := ib.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
-				return err
-			}
-		}
-		if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
-			defer ib.flowCtx.testingKnobs.RunAfterBackfillChunk()
-		}
+	if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
+		defer ib.flowCtx.testingKnobs.RunAfterBackfillChunk()
+	}
 
-		// Get the next set of rows.
-		//
-		// Running the scan and applying the changes in many transactions
-		// is fine because the schema change is in the correct state to
-		// handle intermediate OLTP commands which delete and add values
-		// during the scan. Index entries in the new index are being
-		// populated and deleted by the OLTP commands but not otherwise
-		// read or used
-		if err := ib.fetcher.StartScan(
-			ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
-		); err != nil {
-			log.Errorf(ctx, "scan error: %s", err)
+	ctx, traceSpan := tracing.ChildSpan(tctx, "chunk")
+	defer tracing.FinishSpan(traceSpan)
+
+	var key roachpb.Key
+	transactionalChunk := func(ctx context.Context) error {
+		return ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// TODO(knz): do KV tracing in DistSQL processors.
+			var err error
+			key, err = ib.RunIndexBackfillChunk(
+				ctx, txn, ib.spec.Table, sp, chunkSize, true /*alsoCommit*/, false /*traceKV*/)
+			return err
+		})
+	}
+
+	// TODO(jordan): enable this once IsMigrated is a real implementation.
+	/*
+		if !util.IsMigrated() {
+			// If we're running a mixed cluster, some of the nodes will have an old
+			// implementation of InitPut that doesn't take into account the expected
+			// timetsamp. In that case, we have to run our chunk transactionally at the
+			// current time.
+			err := transactionalChunk(ctx)
+			return ib.fetcher.Key(), err
+		}
+	*/
+
+	var entries []sqlbase.IndexEntry
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, readAsOf)
+
+		// TODO(knz): do KV tracing in DistSQL processors.
+		var err error
+		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.spec.Table, sp, chunkSize, false /*traceKV*/)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	retried := false
+	// Write the new index values.
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		batch := txn.NewBatch()
+
+		for _, entry := range entries {
+			// Since we're not regenerating the index entries here, if the
+			// transaction restarts the values might already have their checksums
+			// set which is invalid - clear them.
+			if retried {
+				// Reset the value slice. This is necessary because gRPC may still be
+				// holding onto the underlying slice here. See #17348 for more details.
+				// We only need to reset RawBytes because neither entry nor entry.Value
+				// are pointer types.
+				rawBytes := entry.Value.RawBytes
+				entry.Value.RawBytes = make([]byte, len(rawBytes))
+				copy(entry.Value.RawBytes, rawBytes)
+				entry.Value.ClearChecksum()
+			}
+			batch.InitPut(entry.Key, &entry.Value, true /* failOnTombstones */)
+		}
+		retried = true
+		if err := txn.CommitInBatch(ctx, batch); err != nil {
+			if _, ok := batch.MustPErr().GetDetail().(*roachpb.ConditionFailedError); ok {
+				return pgerror.NewError(pgerror.CodeUniqueViolationError, "")
+			}
 			return err
 		}
-
-		b := txn.NewBatch()
-		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.fetcher.NextRow(ctx)
-			if err != nil {
-				return err
-			}
-			if encRow == nil {
-				break
-			}
-			if len(ib.rowVals) == 0 {
-				ib.rowVals = make(parser.Datums, len(encRow))
-			}
-			if err := sqlbase.EncDatumRowToDatums(ib.rowVals, encRow, &ib.da); err != nil {
-				return err
-			}
-			if err := sqlbase.EncodeSecondaryIndexes(
-				&ib.spec.Table, added, ib.colIdxMap,
-				ib.rowVals, secondaryIndexEntries); err != nil {
-				return err
-			}
-			for _, secondaryIndexEntry := range secondaryIndexEntries {
-				log.VEventf(ctx, 3, "InitPut %s -> %v", secondaryIndexEntry.Key,
-					secondaryIndexEntry.Value)
-				b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
-			}
-		}
-		// Write the new index values.
-		if err := txn.CommitInBatch(ctx, b); err != nil {
-			return ConvertBackfillError(&ib.spec.Table, b)
-		}
 		return nil
-	})
-	return ib.fetcher.Key(), err
+	}); err != nil {
+		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			log.VEventf(ctx, 2, "failed write. retrying transactionally: %v", err)
+			// Someone wrote a value above one of our new index entries. Since we did
+			// a historical read, we didn't have the most up-to-date value for the
+			// row we were backfilling so we can't just blindly write it to the
+			// index. Instead, we retry the transaction at the present timestamp.
+			if err := transactionalChunk(ctx); err != nil {
+				log.VEventf(ctx, 2, "failed transactional write: %v", err)
+				return nil, err
+			}
+		} else {
+			log.VEventf(ctx, 2, "failed write due to other error, not retrying: %v", err)
+			return nil, err
+		}
+	}
+
+	return key, nil
 }

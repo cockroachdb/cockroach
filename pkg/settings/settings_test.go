@@ -15,30 +15,129 @@
 package settings_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
+type dummy struct {
+	msg1       string
+	growsbyone string
+}
+
+func (d *dummy) Unmarshal(data []byte) error {
+	s := string(data)
+	parts := strings.Split(s, ".")
+	if len(parts) != 2 {
+		return errors.Errorf("expected two parts, not %v", parts)
+	}
+	*d = dummy{
+		msg1: parts[0], growsbyone: parts[1],
+	}
+	return nil
+}
+
+func (d *dummy) Marshal() ([]byte, error) {
+	if c := d.msg1 + d.growsbyone; strings.Contains(c, ".") {
+		return nil, errors.New("must not contain dots: " + c)
+	}
+	return []byte(d.msg1 + "." + d.growsbyone), nil
+}
+
+func (d *dummy) MarshalTo(data []byte) (int, error) {
+	encoded, err := d.Marshal()
+	if err != nil {
+		return 0, err
+	}
+	return copy(data, encoded), nil
+}
+
+func (d *dummy) Size() int {
+	encoded, _ := d.Marshal()
+	return len(encoded)
+}
+
+// implement the protoutil.Message interface
+func (d *dummy) ProtoMessage() {}
+func (d *dummy) Reset()        { *d = dummy{} }
+func (d *dummy) String() string {
+	return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone)
+}
+
+var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]byte, interface{}, error) {
+	var oldD dummy
+
+	// If no old value supplied, fill in the default.
+	if old == nil {
+		oldD.msg1 = "default"
+		oldD.growsbyone = "-"
+		var err error
+		old, err = oldD.Marshal()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := protoutil.Unmarshal(old, &oldD); err != nil {
+		return nil, nil, err
+	}
+
+	if update == nil {
+		// Round-trip the existing value, but only if it passes sanity checks.
+		b, err := oldD.Marshal()
+		if err != nil {
+			return nil, nil, err
+		}
+		return b, &oldD, err
+	}
+
+	// We have a new proposed update to the value, validate it.
+	if len(*update) != len(oldD.growsbyone)+1 {
+		return nil, nil, errors.New("dashes component must grow by exactly one")
+	}
+	newD := oldD
+	newD.growsbyone = *update
+	b, err := newD.Marshal()
+	return b, &newD, err
+}
+
 const mb = int64(1024 * 1024)
 
-var boolTA = settings.RegisterBoolSetting("bool.t", "", true)
-var boolFA = settings.RegisterBoolSetting("bool.f", "", false)
-var strFooA = settings.RegisterStringSetting("str.foo", "", "")
-var strBarA = settings.RegisterStringSetting("str.bar", "", "bar")
-var i1A = settings.RegisterIntSetting("i.1", "", 0)
-var i2A = settings.RegisterIntSetting("i.2", "", 5)
-var fA = settings.RegisterFloatSetting("f", "", 5.4)
-var dA = settings.RegisterDurationSetting("d", "", time.Second)
-var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb)
-var _ = settings.RegisterBoolSetting("sekretz", "", false)
+var changes = struct {
+	boolTA   int
+	strFooA  int
+	i1A      int
+	fA       int
+	dA       int
+	eA       int
+	byteSize int
+	mA       int
+}{}
+
+var boolTA = settings.RegisterBoolSetting("bool.t", "desc", true)
+var boolFA = settings.RegisterBoolSetting("bool.f", "desc", false)
+var strFooA = settings.RegisterStringSetting("str.foo", "desc", "")
+var strBarA = settings.RegisterStringSetting("str.bar", "desc", "bar")
+var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
+var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
+var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
+var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
+var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
+var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
+var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer)
+
+func init() {
+	settings.RegisterBoolSetting("sekretz", "desc", false).Hide()
+}
+
 var strVal = settings.RegisterValidatedStringSetting(
-	"str.val", "", "", func(v string) error {
+	"str.val", "desc", "", func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
 				return errors.Errorf("not all runes of %s are letters: %c", v, c)
@@ -46,113 +145,173 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
-var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "", 5.4)
+var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "desc", time.Second)
+var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "desc", 5.4)
 var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
-	"byteSize.Val", "", mb, func(v int64) error {
+	"byteSize.Val", "desc", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
 		}
 		return nil
 	})
 var iVal = settings.RegisterValidatedIntSetting(
-	"i.Val", "", 0, func(v int64) error {
+	"i.Val", "desc", 0, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
 		}
 		return nil
 	})
 
-func init() {
-	settings.Hide("sekretz")
-}
-
 func TestCache(t *testing.T) {
+	sv := &settings.Values{}
+	sv.Init(settings.TestOpaque)
+
+	boolTA.SetOnChange(sv, func() { changes.boolTA++ })
+	strFooA.SetOnChange(sv, func() { changes.strFooA++ })
+	i1A.SetOnChange(sv, func() { changes.i1A++ })
+	fA.SetOnChange(sv, func() { changes.fA++ })
+	dA.SetOnChange(sv, func() { changes.dA++ })
+	eA.SetOnChange(sv, func() { changes.eA++ })
+	byteSize.SetOnChange(sv, func() { changes.byteSize++ })
+	mA.SetOnChange(sv, func() { changes.mA++ })
+
+	t.Run("StateMachineSetting", func(t *testing.T) {
+		mB := settings.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
+		if exp, act := "&{default -}", mB.String(sv); exp != act {
+			t.Fatalf("wanted %q, got %q", exp, act)
+		}
+		growsTooFast := "grows too fast"
+		if _, _, err := mB.Validate(sv, nil, &growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
+			t.Fatal(err)
+		}
+		hasDots := "a."
+		if _, _, err := mB.Validate(sv, nil, &hasDots); !testutils.IsError(err, "must not contain dots") {
+			t.Fatal(err)
+		}
+		ab := "ab"
+		if _, _, err := mB.Validate(sv, nil, &ab); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &ab); !testutils.IsError(err, "must grow by exactly one") {
+			t.Fatal(err)
+		}
+		precedenceX := "precedencex"
+		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &precedenceX); err != nil {
+			t.Fatal(err)
+		}
+		u := settings.NewUpdater(sv)
+		if err := u.Set("local.m", "default.XX", "m"); err != nil {
+			t.Fatal(err)
+		}
+		u.ResetRemaining()
+		if exp, act := "&{default XX}", mB.String(sv); exp != act {
+			t.Fatalf("wanted %q, got %q", exp, act)
+		}
+	})
+
 	t.Run("defaults", func(t *testing.T) {
-		if expected, actual := false, boolFA.Get(); expected != actual {
+		if expected, actual := false, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, boolTA.Get(); expected != actual {
+		if expected, actual := true, boolTA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "", strFooA.Get(); expected != actual {
+		if expected, actual := "", strFooA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "bar", strBarA.Get(); expected != actual {
+		if expected, actual := "bar", strBarA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "", strVal.Get(); expected != actual {
+		if expected, actual := "", strVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(0), i1A.Get(); expected != actual {
+		if expected, actual := int64(0), i1A.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(5), i2A.Get(); expected != actual {
+		if expected, actual := int64(5), i2A.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(0), iVal.Get(); expected != actual {
+		if expected, actual := int64(0), iVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5.4, fA.Get(); expected != actual {
+		if expected, actual := 5.4, fA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5.4, fVal.Get(); expected != actual {
+		if expected, actual := 5.4, fVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := time.Second, dA.Get(); expected != actual {
+		if expected, actual := time.Second, dA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := time.Second, dVal.Get(); expected != actual {
+		if expected, actual := time.Second, dVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := mb, byteSize.Get(); expected != actual {
+		if expected, actual := mb, byteSize.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := mb, byteSizeVal.Get(); expected != actual {
+		if expected, actual := mb, byteSizeVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(1), eA.Get(); expected != actual {
+		if expected, actual := int64(1), eA.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "default.-", mA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
 
 	t.Run("lookup", func(t *testing.T) {
-		if actual, _, ok := settings.Lookup("i.1"); !ok || i1A != actual {
+		if actual, ok := settings.Lookup("i.1"); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
+		if actual, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", iVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("f"); !ok || fA != actual {
+		if actual, ok := settings.Lookup("f"); !ok || fA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("fVal"); !ok || fVal != actual {
+		if actual, ok := settings.Lookup("fVal"); !ok || fVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("d"); !ok || dA != actual {
+		if actual, ok := settings.Lookup("d"); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("dVal"); !ok || dVal != actual {
+		if actual, ok := settings.Lookup("dVal"); !ok || dVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("e"); !ok || eA != actual {
+		if actual, ok := settings.Lookup("e"); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("dne"); ok {
+		if actual, ok := settings.Lookup("statemachine"); !ok || mA != actual {
+			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
+		}
+		if actual, ok := settings.Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
 		}
 	})
 
 	t.Run("read and write each type", func(t *testing.T) {
-		u := settings.MakeUpdater()
+		u := settings.NewUpdater(sv)
+		if expected, actual := 0, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("bool.t", settings.EncodeBool(false), "b"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.strFooA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("str.foo", "baz", "s"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.strFooA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("str.val", "valid", "s"); err != nil {
 			t.Fatal(err)
@@ -160,84 +319,126 @@ func TestCache(t *testing.T) {
 		if err := u.Set("i.2", settings.EncodeInt(3), "i"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.fA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("f", settings.EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.fA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("fVal", settings.EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.dA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.dA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("dVal", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.byteSize; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("zzz", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.byteSize; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.mA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		if err := u.Set("statemachine", "default.AB", "m"); err != nil {
+			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.mA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		if expected, actual := 0, changes.eA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("e", settings.EncodeInt(2), "e"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.eA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
 			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
-		u.Done()
+		u.ResetRemaining()
 
-		if expected, actual := false, boolTA.Get(); expected != actual {
+		if expected, actual := false, boolTA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, boolFA.Get(); expected != actual {
+		if expected, actual := true, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "baz", strFooA.Get(); expected != actual {
+		if expected, actual := "baz", strFooA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "valid", strVal.Get(); expected != actual {
+		if expected, actual := "valid", strVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(3), i2A.Get(); expected != actual {
+		if expected, actual := int64(3), i2A.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3.1, fA.Get(); expected != actual {
+		if expected, actual := 3.1, fA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3.1, fVal.Get(); expected != actual {
+		if expected, actual := 3.1, fVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2*time.Hour, dA.Get(); expected != actual {
+		if expected, actual := 2*time.Hour, dA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2*time.Hour, dVal.Get(); expected != actual {
+		if expected, actual := 2*time.Hour, dVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(2), eA.Get(); expected != actual {
+		if expected, actual := int64(2), eA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := mb*5, byteSize.Get(); expected != actual {
+		if expected, actual := mb*5, byteSize.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := mb*5, byteSizeVal.Get(); expected != actual {
+		if expected, actual := mb*5, byteSizeVal.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "default.AB", mA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
 		// We didn't change this one, so should still see the default.
-		if expected, actual := "bar", strBarA.Get(); expected != actual {
+		if expected, actual := "bar", strBarA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
 
 	t.Run("any setting not included in an Updater reverts to default", func(t *testing.T) {
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
+			if expected, actual := 0, changes.i1A; expected != actual {
+				t.Fatalf("expected %d, got %d", expected, actual)
+			}
 			if err := u.Set("i.1", settings.EncodeInt(1), "i"); err != nil {
 				t.Fatal(err)
+			}
+			if expected, actual := 1, changes.i1A; expected != actual {
+				t.Fatalf("expected %d, got %d", expected, actual)
 			}
 			if err := u.Set("i.2", settings.EncodeInt(7), "i"); err != nil {
 				t.Fatal(err)
@@ -245,218 +446,162 @@ func TestCache(t *testing.T) {
 			if err := u.Set("i.Val", settings.EncodeInt(1), "i"); err != nil {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
-		if expected, actual := true, boolFA.Get(); expected != actual {
+		if expected, actual := true, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
 		// Doneing it from the cache.
-		settings.MakeUpdater().Done()
+		settings.NewUpdater(sv).ResetRemaining()
 
-		if expected, actual := false, boolFA.Get(); expected != actual {
+		if expected, actual := 2, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+
+		if expected, actual := 2, changes.i1A; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+
+		if expected, actual := false, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		if expected, actual := false, boolFA.Get(); expected != actual {
+		if expected, actual := false, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
 
 	t.Run("an invalid update to a given setting preserves its previously set value", func(t *testing.T) {
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("i.2", settings.EncodeInt(9), "i"); err != nil {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		before := i2A.Get()
+		before := i2A.Get(sv)
 
 		// Doneing after attempting to set with wrong type preserves the current
 		// value.
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("i.2", settings.EncodeBool(false), "b"); !testutils.IsError(err,
 				"setting 'i.2' defined as type i, not b",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
-		if expected, actual := before, i2A.Get(); expected != actual {
+		if expected, actual := before, i2A.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
 		// Doneing after attempting to set with the wrong type preserves the
 		// current value.
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("i.2", settings.EncodeBool(false), "i"); !testutils.IsError(err,
 				"strconv.Atoi: parsing \"false\": invalid syntax",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
-		if expected, actual := before, i2A.Get(); expected != actual {
+		if expected, actual := before, i2A.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
 		// Doneing after attempting to set with invalid value preserves the
 		// current value.
-		beforestrVal := strVal.Get()
+		beforestrVal := strVal.Get(sv)
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("str.val", "abc2def", "s"); !testutils.IsError(err,
 				"not all runes of abc2def are letters: 2",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		if expected, actual := beforestrVal, strVal.Get(); expected != actual {
+		if expected, actual := beforestrVal, strVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		beforeDVal := dVal.Get()
+		beforeDVal := dVal.Get(sv)
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("dVal", settings.EncodeDuration(-time.Hour), "d"); !testutils.IsError(err,
 				"cannot set dVal to a negative duration: -1h0m0s",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		if expected, actual := beforeDVal, dVal.Get(); expected != actual {
+		if expected, actual := beforeDVal, dVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		beforeByteSizeVal := byteSizeVal.Get()
+		beforeByteSizeVal := byteSizeVal.Get(sv)
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("byteSize.Val", settings.EncodeInt(-mb), "z"); !testutils.IsError(err,
 				"bytesize cannot be negative",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		if expected, actual := beforeByteSizeVal, byteSizeVal.Get(); expected != actual {
+		if expected, actual := beforeByteSizeVal, byteSizeVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		beforeFVal := fVal.Get()
+		beforeFVal := fVal.Get(sv)
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("fVal", settings.EncodeFloat(-1.1), "f"); !testutils.IsError(err,
 				"cannot set fVal to a negative value: -1.1",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		if expected, actual := beforeFVal, fVal.Get(); expected != actual {
+		if expected, actual := beforeFVal, fVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
-		beforeIVal := iVal.Get()
+		beforeIVal := iVal.Get(sv)
 		{
-			u := settings.MakeUpdater()
+			u := settings.NewUpdater(sv)
 			if err := u.Set("i.Val", settings.EncodeInt(-1), "i"); !testutils.IsError(err,
 				"int cannot be negative",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
-		if expected, actual := beforeIVal, iVal.Get(); expected != actual {
+		if expected, actual := beforeIVal, iVal.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+
+		beforeMarsh := mA.Get(sv)
+		{
+			u := settings.NewUpdater(sv)
+			if err := u.Set("statemachine", "too.many.dots", "m"); !testutils.IsError(err,
+				"expected two parts",
+			) {
+				t.Fatal(err)
+			}
+			u.ResetRemaining()
+		}
+		if expected, actual := beforeMarsh, mA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
 
-	t.Run("mocks", func(t *testing.T) {
-		{
-			f := settings.TestingSetBool(&boolFA, true)
-			if expected, actual := true, boolFA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := false, boolFA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetString(&strBarA, "override")
-			if expected, actual := "override", strBarA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := "bar", strBarA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetInt(&i1A, 64)
-			if expected, actual := int64(64), i1A.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := int64(0), i1A.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetFloat(&fA, 6.7)
-			if expected, actual := 6.7, fA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := 5.4, fA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetDuration(&dA, 10*time.Hour)
-			if expected, actual := 10*time.Hour, dA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := time.Second, dA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetEnum(&eA, 3)
-			if expected, actual := int64(3), eA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := int64(1), eA.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-
-		{
-			f := settings.TestingSetByteSize(&byteSize, mb*7)
-			if expected, actual := mb*7, byteSize.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-			f()
-			if expected, actual := mb, byteSize.Get(); expected != actual {
-				t.Fatalf("expected %v, got %v", expected, actual)
-			}
-		}
-	})
 }
 
 func TestHide(t *testing.T) {

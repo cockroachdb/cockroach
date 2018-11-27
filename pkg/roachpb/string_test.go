@@ -11,13 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package roachpb_test
 
 import (
-	"strings"
+	"fmt"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -39,7 +36,7 @@ func TestTransactionString(t *testing.T) {
 		TxnMeta: enginepb.TxnMeta{
 			Isolation: enginepb.SERIALIZABLE,
 			Key:       roachpb.Key("foo"),
-			ID:        &txnID,
+			ID:        txnID,
 			Epoch:     2,
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 21},
 			Priority:  957356782,
@@ -57,29 +54,31 @@ func TestTransactionString(t *testing.T) {
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
 	}
-
-	var txnEmpty roachpb.Transaction
-	_ = txnEmpty.String() // prevent regression of NPE
-
-	cmd := storagebase.RaftCommand{
-		BatchRequest: &roachpb.BatchRequest{},
-	}
-	cmd.BatchRequest.Txn = &txn
-	if actStr, idStr := cmd.String(), txnID.String(); !strings.Contains(actStr, idStr) {
-		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
-	}
 }
 
 func TestBatchRequestString(t *testing.T) {
 	br := roachpb.BatchRequest{}
-	br.Txn = new(roachpb.Transaction)
+	txn := roachpb.MakeTransaction(
+		"test",
+		nil, /* baseKey */
+		roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		hlc.Timestamp{}, // now
+		0,               // maxOffsetNs
+	)
+	br.Txn = &txn
 	for i := 0; i < 100; i++ {
-		br.Requests = append(br.Requests, roachpb.RequestUnion{Get: &roachpb.GetRequest{}})
+		var ru roachpb.RequestUnion
+		ru.MustSetInner(&roachpb.GetRequest{})
+		br.Requests = append(br.Requests, ru)
 	}
-	br.Requests = append(br.Requests, roachpb.RequestUnion{EndTransaction: &roachpb.EndTransactionRequest{}})
+	var ru roachpb.RequestUnion
+	ru.MustSetInner(&roachpb.EndTransactionRequest{})
+	br.Requests = append(br.Requests, ru)
 
-	e := `[txn: <nil>], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`
+	e := fmt.Sprintf(`[txn: %s], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction(commit:false) [/Min]`,
+		br.Txn.Short())
 	if e != br.String() {
-		t.Fatalf("e = %s, v = %s", e, br.String())
+		t.Fatalf("e = %s\nv = %s", e, br.String())
 	}
 }

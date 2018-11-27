@@ -14,12 +14,14 @@
 
 package testutils
 
-import "github.com/cockroachdb/cockroach/pkg/util/envutil"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
 
-var stress = envutil.EnvOrDefaultBool("COCKROACH_STRESS", false)
+var stress = envutil.EnvOrDefaultBool("COCKROACH_NIGHTLY_STRESS", false)
 
-// Stress returns true iff the process is running as part of CockroachDB's
+// NightlyStress returns true iff the process is running as part of CockroachDB's
 // nightly stress tests.
-func Stress() bool {
+func NightlyStress() bool {
 	return stress
 }

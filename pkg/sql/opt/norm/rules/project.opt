@@ -1,0 +1,31 @@
+# =============================================================================
+# project.opt contains normalization rules for the Project operator.
+# =============================================================================
+
+
+# EliminateProject discards a Project operator which is not adding or removing
+# columns.
+[EliminateProject, Normalize]
+(Project
+    $input:*
+    $projections:[]
+    $passthrough:* & (ColsAreEqual $passthrough (OutputCols $input))
+)
+=>
+$input
+
+# MergeProjects merges an outer Project operator with an inner Project operator
+# if there are no references to the inner synthesized columns. This has the
+# side effect of pruning unused synthesized columns of the inner Project.
+[MergeProjects, Normalize]
+(Project
+    $input:(Project $innerInput:* $innerProjections:*)
+    $projections:* & (CanMergeProjections $projections $innerProjections)
+    $passthrough:*
+)
+=>
+(Project
+    $innerInput
+    (MergeProjections $projections $innerProjections $passthrough)
+    (DifferenceCols $passthrough (ProjectionCols $innerProjections))
+)

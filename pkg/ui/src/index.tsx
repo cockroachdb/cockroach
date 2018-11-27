@@ -1,131 +1,204 @@
-/// <reference path="../node_modules/protobufjs/stub-node.d.ts" />
-
-/**
- * UI/NEXT TODO LIST
- *
- * ! = Potentially difficult to implement
- *
- * - All Pages / Shared Components
- *    - "Last Updated"
- *    - Dropdowns
- *      - Fix 1px offset bug
- *    - Tables
- *      - CSS Match to design
- *      - Management of column widths
- * - Cluster Page
- *    - Alert notifications
- *      - Mismatched/Out-of-date Version
- *      - Help us
- *    - Right-side Summary Section
- *      - Link to Nodes page
- *      - Events?
- *    - Graphs
- *      - Tooltip when hover over title
- *    - Code block syntax highlighting
- *      - Choose keywords correctly
- *      - Fix bug on direct page load
- * - Databases Page
- *    - Last Updated Column
- *      - Retrieve/Filter events
- *    - Single database page
- *       - Table component row limit
- *       - Route to single database
- *    - Schema Change
- *      - Retrieve information from backend
- *      - Display in table list column
- *      - Display alert on table details page
- *    - Table details page
- *      - Schema Change notification
- *      - Fill out summary stats
- *      - Back Button
- *      - Column widths for grants table
- * - Nodes page
- *  - Table Style
- *  - Add Summary Section
- *  - Remove Link from Navigation Bar
- * - Helpus Page
- *  - New Navigation Bar Icon
- *  - Header links
- *  - New form field Appearance
- *
- * NICE TO HAVE:
- *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing
- *  different components to access nodes data.
- *
- *  - Commonize code between different graph types (LineGraph and
- *  StackedAreaGraph). This can likely be done by converting them into stateless
- *  functions, that return an underlying "Common" graph component. The props of
- *  the Common graph component would include the part of `initGraph` and
- *  `drawGraph` that are different for these two chart types.
- *
- */
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
-import "../styl/app.styl";
-import "./js/sim/style.css";
+import "styl/app.styl";
 
-import * as protobuf from "protobufjs/minimal";
-import Long from "long";
+import "src/polyfills";
+import "src/protobufInit";
 
-protobuf.util.Long = Long as any;
-protobuf.configure();
-
-import * as React from "react";
+import React from "react";
 import * as ReactDOM from "react-dom";
 import { Provider } from "react-redux";
-import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
+import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr,
-} from "./util/constants";
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr,
+} from "src/util/constants";
 
-import { store, history } from "./redux/state";
-import Layout from "./containers/layout";
-import { DatabaseTablesList, DatabaseGrantsList } from "./containers/databases/databases";
-import TableDetails from "./containers/databases/tableDetails";
-import Nodes from "./containers/nodes";
-import NodesOverview from "./containers/nodesOverview";
-import NodeOverview from "./containers/nodeOverview";
-import NodeGraphs from "./containers/nodeGraphs";
-import NodeLogs from "./containers/nodeLogs";
-import { EventPage } from "./containers/events";
-import Raft from "./containers/raft";
-import RaftRanges from "./containers/raftRanges";
-import ClusterViz from "./containers/clusterViz";
-import { alertDataSync } from "./redux/alerts";
+import { alertDataSync } from "src/redux/alerts";
+import "src/redux/analytics";
+import { store, history } from "src/redux/state";
 
+import loginRoutes from "src/routes/login";
+import visualizationRoutes from "src/routes/visualization";
+
+import NotFound from "src/views/app/components/NotFound";
+import Layout from "src/views/app/containers/layout";
+import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
+import TableDetails from "src/views/databases/containers/tableDetails";
+import { EventPage } from "src/views/cluster/containers/events";
+import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
+import Raft from "src/views/devtools/containers/raft";
+import RaftRanges from "src/views/devtools/containers/raftRanges";
+import RaftMessages from "src/views/devtools/containers/raftMessages";
+import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
+import NodeOverview from "src/views/cluster/containers/nodeOverview";
+import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import JobsPage from "src/views/jobs";
+import Certificates from "src/views/reports/containers/certificates";
+import CommandQueue from "src/views/reports/containers/commandQueue";
+import CustomChart from "src/views/reports/containers/customChart";
+import Debug from "src/views/reports/containers/debug";
+import EnqueueRange from "src/views/reports/containers/enqueueRange";
+import ProblemRanges from "src/views/reports/containers/problemRanges";
+import Localities from "src/views/reports/containers/localities";
+import Network from "src/views/reports/containers/network";
+import Nodes from "src/views/reports/containers/nodes";
+import ReduxDebug from "src/views/reports/containers/redux";
+import Range from "src/views/reports/containers/range";
+import Settings from "src/views/reports/containers/settings";
+import Stores from "src/views/reports/containers/stores";
+import StatementsPage from "src/views/statements/statementsPage";
+import StatementDetails from "src/views/statements/statementDetails";
+
+// NOTE: If you are adding a new path to the router, and that path contains any
+// components that are personally identifying information, you MUST update the
+// redactions list in src/redux/analytics.ts.
+//
+// Examples of PII: Database names, Table names, IP addresses; Any value that
+// could identify a specific user.
+//
+// Serial numeric values, such as NodeIDs or Descriptor IDs, are not PII and do
+// not need to be redacted.
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
+      { /* login */}
+      { loginRoutes(store) }
+
       <Route path="/" component={Layout}>
-        <IndexRedirect to="cluster" />
-        <Route path="cluster" component={ Nodes }>
-          <IndexRedirect to="all/overview" />
-          <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
-          <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
-        </Route>
-        <Route path="cluster">
-          <Route path="nodes">
-            <IndexRoute component={NodesOverview} />
-            <Route path={`:${nodeIDAttr}`}>
-              <IndexRoute component={NodeOverview} />
-              <Route path="logs" component={ NodeLogs } />
+        <IndexRedirect to="overview" />
+
+        { /* overview page */ }
+        { visualizationRoutes() }
+
+        { /* time series metrics */ }
+        <Route path="metrics">
+          <IndexRedirect to="overview/cluster" />
+          <Route path={ `:${dashboardNameAttr}` }>
+            <IndexRedirect to="cluster" />
+            <Route path="cluster" component={ NodeGraphs } />
+            <Route path="node">
+              <IndexRedirect to={ `/metrics/:${dashboardNameAttr}/cluster` } />
+              <Route path={ `:${nodeIDAttr}` } component={ NodeGraphs } />
             </Route>
           </Route>
-          <Route path="events" component={ EventPage } />
         </Route>
+
+        { /* node details */ }
+        <Route path="node">
+          <IndexRedirect to="/overview/list" />
+          <Route path={ `:${nodeIDAttr}` }>
+            <IndexRoute component={ NodeOverview } />
+            <Route path="logs" component={ NodeLogs } />
+          </Route>
+        </Route>
+
+        { /* events & jobs */ }
+        <Route path="events" component={ EventPage } />
+        <Route path="jobs" component={ JobsPage } />
+
+        { /* databases */ }
         <Route path="databases">
           <IndexRedirect to="tables" />
           <Route path="tables" component={ DatabaseTablesList } />
           <Route path="grants" component={ DatabaseGrantsList } />
-          <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
+          <Redirect
+            from={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+            to={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+          />
+        </Route>
+        <Route path="database">
+          <IndexRedirect to="/databases" />
+          <Route path={ `:${databaseNameAttr}` }>
+            <IndexRedirect to="/databases" />
+            <Route path="table">
+              <IndexRedirect to="/databases" />
+              <Route path={ `:${tableNameAttr}` } component={ TableDetails } />
+            </Route>
+          </Route>
+        </Route>
+
+        { /* data distribution */ }
+        <Route path="data-distribution" component={ DataDistributionPage } />
+
+        { /* statement statistics */ }
+        <Route path="statements">
+          <IndexRoute component={ StatementsPage } />
+          <Route path={ `:${appAttr}` } component={ StatementsPage } />
+          <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+        </Route>
+        <Route path="statement">
+          <IndexRedirect to="/statements" />
+          <Route path={ `:${statementAttr}` } component={ StatementDetails } />
+        </Route>
+
+        { /* debug pages */ }
+        <Route path="debug">
+          <IndexRoute component={Debug} />
+          <Route path="redux" component={ ReduxDebug } />
+          <Route path="chart" component={ CustomChart } />
+          <Route path="enqueue_range" component={ EnqueueRange } />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
+          <Route path="messages/all" component={ RaftMessages } />
+          <Route path={`messages/node/:${nodeIDAttr}`} component={ RaftMessages } />
         </Route>
-        <Route path="clusterviz" component={ ClusterViz } />
+        <Route path="reports">
+          <Route path="problemranges" component={ ProblemRanges }>
+            <Route path={`:${nodeIDAttr}`} component={ ProblemRanges }/>
+          </Route>
+          <Route path="localities" component={ Localities } />
+          <Route path="network" component={ Network } />
+          <Route path="nodes" component={ Nodes } />
+          <Route path="settings" component={ Settings } />
+          <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
+          <Route path={`range/:${rangeIDAttr}`} component={ Range } />
+          <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
+          <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
+        </Route>
+
+        { /* old route redirects */ }
+        <Route path="cluster">
+          <IndexRedirect to="/metrics/overview/cluster" />
+          <Redirect
+            from={`all/:${dashboardNameAttr}`}
+            to={ `/metrics/:${dashboardNameAttr}/cluster` }
+          />
+          <Redirect
+            from={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` }
+            to={ `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}` }
+          />
+          <Route path="nodes">
+            <IndexRedirect to="/overview/list" />
+            <Route path={`:${nodeIDAttr}`}>
+              <IndexRedirect to={ `/node/:${nodeIDAttr}` } />
+              <Redirect from="logs" to={ `/node/:${nodeIDAttr}/logs` } />
+            </Route>
+          </Route>
+          <Redirect from="events" to="/events" />
+        </Route>
+        <Route path="nodes">
+          <IndexRedirect to="/overview/list" />
+        </Route>
+
+        { /* 404 */ }
+        <Route path="*" component={ NotFound } />
       </Route>
     </Router>
   </Provider>,

@@ -1,0 +1,67 @@
+# LogicTest: local local-opt
+
+statement error unrecognized configuration parameter "foo"
+RESET FOO
+
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+foo
+
+statement ok
+RESET SEARCH_PATH
+
+query T
+SHOW SEARCH_PATH
+----
+public
+
+statement error parameter "server_version" cannot be changed
+RESET SERVER_VERSION
+
+statement error parameter "server_version_num" cannot be changed
+RESET SERVER_VERSION_NUM
+
+# Lower case
+
+statement ok
+SET search_path = foo
+
+query T
+SHOW search_path
+----
+foo
+
+statement ok
+RESET search_path
+
+query T
+SHOW search_path
+----
+public
+
+statement ok
+RESET client_encoding; RESET NAMES
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
+----
+Europe/Amsterdam
+
+query T
+RESET timezone; SHOW TIMEZONE
+----
+UTC
+
+query T
+SET time zone 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+query T
+RESET time zone; SHOW TIME ZONE
+----
+UTC

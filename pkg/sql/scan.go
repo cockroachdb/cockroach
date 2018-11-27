@@ -11,31 +11,37 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
 import (
-	"bytes"
+	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+var scanNodePool = sync.Pool{
+	New: func() interface{} {
+		return &scanNode{}
+	},
+}
+
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	p     *planner
-	desc  sqlbase.TableDescriptor
+	desc  *sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -43,13 +49,12 @@ type scanNode struct {
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
+	colCfg scanColumnsConfig
 	// The table columns, possibly including ones currently in schema changes.
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
-	// Contains values for the current row. There is a 1-1 correspondence
-	// between resultColumns and values in row.
-	row parser.Datums
+
 	// For each column in resultColumns, indicates if the value is
 	// needed (used as an optimization when the upper layer doesn't need
 	// all values).
@@ -59,27 +64,29 @@ type scanNode struct {
 	// tables with wide rows) by reading only certain columns from KV
 	// using point lookups instead of a single range lookup for the
 	// entire row.
-	valNeededForCol []bool
+	valNeededForCol util.FastIntSet
 
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	spans            []roachpb.Span
-	isSecondaryIndex bool
-	reverse          bool
-	ordering         orderingInfo
+	// The number of backfill columns among cols. These backfill
+	// columns are always the last columns within cols.
+	numBackfillColumns int
 
-	explain   explainMode
-	rowIndex  int // the index of the current row
-	debugVals debugValues
+	spans   []roachpb.Span
+	reverse bool
+	props   physicalProps
 
 	// filter that can be evaluated using only this table/index; it contains
-	// parser.IndexedVar leaves generated using filterVars.
-	filter     parser.TypedExpr
-	filterVars parser.IndexedVarHelper
+	// tree.IndexedVar leaves generated using filterVars.
+	filter     tree.TypedExpr
+	filterVars tree.IndexedVarHelper
 
-	scanInitialized bool
-	fetcher         sqlbase.RowFetcher
+	// origFilter is the original filtering expression, which might have gotten
+	// simplified during index selection. For example "k > 0" is converted to a
+	// span and the filter is nil. But we still want to deduce not-null columns
+	// from the original filter.
+	origFilter tree.TypedExpr
 
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
@@ -92,43 +99,152 @@ type scanNode struct {
 
 	disableBatchLimits bool
 
-	scanVisibility scanVisibility
+	run scanRun
+
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
 	noCopy util.NoCopy
+
+	// Set when the scanNode is crated via the exec factory.
+	createdByOpt bool
+
+	// Indicates if this scan is the source for a delete node.
+	isDeleteSource bool
 }
+
+// scanVisibility represents which table columns should be included in a scan.
+type scanVisibility int8
+
+const (
+	publicColumns scanVisibility = 0
+	// Use this to request mutation columns that are currently being
+	// backfilled. These columns are needed to correctly update/delete
+	// a row by correctly constructing ColumnFamilies and Indexes.
+	publicAndNonPublicColumns scanVisibility = 1
+)
+
+func (s scanVisibility) toDistSQLScanVisibility() distsqlrun.ScanVisibility {
+	switch s {
+	case publicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC
+	case publicAndNonPublicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	default:
+		panic(fmt.Sprintf("Unknown visibility %+v", s))
+	}
+}
+
+// scanColumnsConfig controls the "schema" of a scan node. The zero value is the
+// default: all "public" columns.
+// Note that not all columns in the schema are read and decoded; that is further
+// controlled by scanNode.valNeededForCol.
+type scanColumnsConfig struct {
+	// If set, only these columns are part of the scan node schema, in this order
+	// (with the caveat that the flags below can add more columns).
+	wantedColumns []tree.ColumnID
+
+	// When set, the columns that are not in the wantedColumns list are added to
+	// the list of columns as hidden columns. Only useful in conjunction with
+	// wantedColumns.
+	addUnwantedAsHidden bool
+
+	// If visibility is set to publicAndNonPublicColumns, mutation columns are
+	// added to the list of columns.
+	visibility scanVisibility
+}
+
+var publicColumnsCfg = scanColumnsConfig{}
 
 func (p *planner) Scan() *scanNode {
-	return &scanNode{p: p}
+	n := scanNodePool.Get().(*scanNode)
+	return n
 }
 
-func (n *scanNode) Columns() sqlbase.ResultColumns {
-	return n.resultColumns
+// scanNode implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &scanNode{}
+
+func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	return n.run.row[idx].Eval(ctx)
 }
 
-func (n *scanNode) Ordering() orderingInfo {
-	return n.ordering
+func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
+	return n.resultColumns[idx].Typ
 }
 
-func (n *scanNode) Values() parser.Datums {
-	return n.row
+func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return (*tree.Name)(&n.resultColumns[idx].Name)
 }
 
-func (n *scanNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
+// scanRun contains the run-time state of scanNode during local execution.
+type scanRun struct {
+	// Contains values for the current row. There is a 1-1 correspondence
+	// between resultColumns and values in row.
+	row tree.Datums
+
+	// the index of the current row.
+	rowIndex int64
+
+	scanInitialized  bool
+	isSecondaryIndex bool
+
+	// Indicates if this scanNode will do a physical data check. This is
+	// only true when running SCRUB commands.
+	isCheck bool
+
+	fetcher row.Fetcher
+}
+
+func (n *scanNode) startExec(params runParams) error {
+	tableArgs := row.FetcherTableArgs{
+		Desc:             n.desc,
+		Index:            n.index,
+		ColIdxMap:        n.colIdxMap,
+		IsSecondaryIndex: n.run.isSecondaryIndex,
+		Cols:             n.cols,
+		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	n.explain = mode
+	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
+		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
-func (n *scanNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
+func (n *scanNode) Close(context.Context) {
+	*n = scanNode{}
+	scanNodePool.Put(n)
+}
+
+func (n *scanNode) Next(params runParams) (bool, error) {
+	tracing.AnnotateTrace()
+	if !n.run.scanInitialized {
+		if err := n.initScan(params); err != nil {
+			return false, err
+		}
 	}
-	return n.debugVals
+
+	// We fetch one row at a time until we find one that passes the filter.
+	for n.hardLimit == 0 || n.run.rowIndex < n.hardLimit {
+		var err error
+		n.run.row, _, _, err = n.run.fetcher.NextRowDecoded(params.ctx)
+		if err != nil || n.run.row == nil {
+			return false, err
+		}
+		params.extendedEvalCtx.IVarContainer = n
+		passesFilter, err := sqlbase.RunFilter(n.filter, params.EvalContext())
+		if err != nil {
+			return false, err
+		}
+		if passesFilter {
+			n.run.rowIndex++
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (n *scanNode) Values() tree.Datums {
+	return n.run.row
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
@@ -139,20 +255,20 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) Start(context.Context) error {
-	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
-		n.valNeededForCol, false /* returnRangeInfo */)
-}
-
-func (n *scanNode) Close(context.Context) {}
-
 // initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan(ctx context.Context) error {
+func (n *scanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
-	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
+	if err := n.run.fetcher.StartScan(
+		params.ctx,
+		params.p.txn,
+		n.spans,
+		!n.disableBatchLimits,
+		limitHint,
+		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	); err != nil {
 		return err
 	}
-	n.scanInitialized = true
+	n.run.scanInitialized = true
 	return nil
 }
 
@@ -174,196 +290,108 @@ func (n *scanNode) limitHint() int64 {
 	return limitHint
 }
 
-// debugNext is a helper function used by Next() when in explainDebug mode.
-func (n *scanNode) debugNext(ctx context.Context) (bool, error) {
-	// In debug mode, we output a set of debug values for each key.
-	n.debugVals.rowIdx = n.rowIndex
-	var err error
-	var encRow sqlbase.EncDatumRow
-	n.debugVals.key, n.debugVals.value, encRow, err = n.fetcher.NextKeyDebug(ctx)
-	if err != nil || n.debugVals.key == "" {
-		return false, err
-	}
-	if encRow == nil {
-		n.row = nil
-		n.debugVals.output = debugValuePartial
-		return true, nil
-	}
-	datums := make(parser.Datums, len(encRow))
-	var da sqlbase.DatumAlloc
-
-	if err := sqlbase.EncDatumRowToDatums(datums, encRow, &da); err != nil {
-		return false, errors.Errorf("Could not decode row: %v", err)
-	}
-	n.row = datums
-	passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
-	if err != nil {
-		return false, err
-	}
-	if passesFilter {
-		n.debugVals.output = debugValueRow
-	} else {
-		n.debugVals.output = debugValueFiltered
-	}
-	n.rowIndex++
-	return true, nil
-}
-
-func (n *scanNode) Next(ctx context.Context) (bool, error) {
-	tracing.AnnotateTrace()
-	if !n.scanInitialized {
-		if err := n.initScan(ctx); err != nil {
-			return false, err
-		}
-	}
-
-	if n.explain == explainDebug {
-		return n.debugNext(ctx)
-	}
-
-	// We fetch one row at a time until we find one that passes the filter.
-	for {
-		var err error
-		n.row, err = n.fetcher.NextRowDecoded(ctx)
-		if err != nil || n.row == nil {
-			return false, err
-		}
-		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
-		if err != nil {
-			return false, err
-		}
-		if passesFilter {
-			return true, nil
-		}
-	}
-}
-
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
+	ctx context.Context,
 	p *planner,
 	desc *sqlbase.TableDescriptor,
-	indexHints *parser.IndexHints,
-	scanVisibility scanVisibility,
-	wantedColumns []parser.ColumnID,
+	indexFlags *tree.IndexFlags,
+	colCfg scanColumnsConfig,
 ) error {
-	n.desc = *desc
+	n.desc = desc
 
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(&n.desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}
 
-	if indexHints != nil {
-		if err := n.lookupSpecifiedIndex(indexHints); err != nil {
+	if indexFlags != nil {
+		if err := n.lookupSpecifiedIndex(indexFlags); err != nil {
 			return err
 		}
 	}
-	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(scanVisibility, wantedColumns)
+
+	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
+	return n.initDescDefaults(p.curPlan.deps, colCfg)
 }
 
-func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
-	if indexHints.Index != "" {
+func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
+	if indexFlags.Index != "" {
 		// Search index by name.
-		indexName := indexHints.Index.Normalize()
-		if indexName == parser.ReNormalizeName(n.desc.PrimaryIndex.Name) {
+		indexName := string(indexFlags.Index)
+		if indexName == n.desc.PrimaryIndex.Name {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if indexName == parser.ReNormalizeName(n.desc.Indexes[i].Name) {
+				if indexName == n.desc.Indexes[i].Name {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index \"%s\" not found", indexName)
+			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
-	} else if indexHints.IndexID != 0 {
+	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexHints.IndexID) {
+		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexFlags.IndexID) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexHints.IndexID) {
+				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexFlags.IndexID) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %d not found", indexHints.IndexID)
+			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
 	}
 	return nil
 }
 
-// Either pick all columns or just those selected.
-func filterColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
-) ([]sqlbase.ColumnDescriptor, error) {
-	if wantedColumns == nil {
-		dst = append(dst, src...)
+// initCols initializes n.cols and n.numBackfillColumns according to n.desc and n.colCfg.
+func (n *scanNode) initCols() error {
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	if n.colCfg.wantedColumns == nil {
+		n.cols = append(n.cols, n.desc.Columns...)
 	} else {
-		for _, wc := range wantedColumns {
+		for _, wc := range n.colCfg.wantedColumns {
 			found := false
-			for _, c := range src {
+			for _, c := range n.desc.Columns {
 				if c.ID == sqlbase.ColumnID(wc) {
-					dst = append(dst, c)
+					n.cols = append(n.cols, c)
 					found = true
 					break
 				}
 			}
 			if !found {
-				return nil, errors.Errorf("column %d does not exist", wc)
+				return errors.Errorf("column [%d] does not exist", wc)
 			}
 		}
-		dst = appendUnselectedColumns(dst, wantedColumns, src)
-	}
-	return dst, nil
-}
 
-// appendUnselectedColumns adds into dst all the column descriptors
-// from src that are not already listed in wantedColumns. The added
-// columns, if any, are marked "hidden".
-func appendUnselectedColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
-) []sqlbase.ColumnDescriptor {
-	for _, c := range src {
-		found := false
-		for _, wc := range wantedColumns {
-			if sqlbase.ColumnID(wc) == c.ID {
-				found = true
-				break
+		if n.colCfg.addUnwantedAsHidden {
+			for _, c := range n.desc.Columns {
+				found := false
+				for _, wc := range n.colCfg.wantedColumns {
+					if sqlbase.ColumnID(wc) == c.ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					col := c
+					col.Hidden = true
+					n.cols = append(n.cols, col)
+				}
 			}
 		}
-		if !found {
-			col := c
-			col.Hidden = true
-			dst = append(dst, col)
-		}
 	}
-	return dst
-}
 
-// Initializes the column structures.
-// An error may be returned only if wantedColumns is set.
-func (n *scanNode) initDescDefaults(
-	scanVisibility scanVisibility, wantedColumns []parser.ColumnID,
-) error {
-	n.scanVisibility = scanVisibility
-	n.index = &n.desc.PrimaryIndex
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
-	var err error
-	n.cols, err = filterColumns(n.cols, wantedColumns, n.desc.Columns)
-	if err != nil {
-		return err
-	}
-	switch scanVisibility {
-	case publicColumns:
-		// Mutations are invisible.
-	case publicAndNonPublicColumns:
+	n.numBackfillColumns = 0
+	if n.colCfg.visibility == publicAndNonPublicColumns {
 		for _, mutation := range n.desc.Mutations {
 			if c := mutation.GetColumn(); c != nil {
 				col := *c
@@ -371,86 +399,104 @@ func (n *scanNode) initDescDefaults(
 				// middle of a schema change.
 				col.Nullable = true
 				n.cols = append(n.cols, col)
+				n.numBackfillColumns++
 			}
 		}
 	}
+	return nil
+}
+
+// Initializes the column structures.
+func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumnsConfig) error {
+	n.colCfg = colCfg
+	n.index = &n.desc.PrimaryIndex
+
+	if err := n.initCols(); err != nil {
+		return err
+	}
+
+	// Register the dependency to the planner, if requested.
+	if planDeps != nil {
+		indexID := sqlbase.IndexID(0)
+		if n.specifiedIndex != nil {
+			indexID = n.specifiedIndex.ID
+		}
+		usedColumns := make([]sqlbase.ColumnID, len(n.cols))
+		for i := range n.cols {
+			usedColumns[i] = n.cols[i].ID
+		}
+		deps := planDeps[n.desc.ID]
+		deps.desc = n.desc
+		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
+			IndexID:   indexID,
+			ColumnIDs: usedColumns,
+		})
+		planDeps[n.desc.ID] = deps
+	}
+
+	// Set up the rest of the scanNode.
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(n.cols))
-	for i := range n.cols {
-		n.valNeededForCol[i] = true
+	n.valNeededForCol = util.FastIntSet{}
+	if len(n.cols) > 0 {
+		n.valNeededForCol.AddRange(0, len(n.cols)-1)
 	}
-	n.row = make([]parser.Datum, len(n.cols))
-	n.filterVars = parser.MakeIndexedVarHelper(n, len(n.cols))
+	n.run.row = make([]tree.Datum, len(n.cols))
+	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
 }
 
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
-func (n *scanNode) initOrdering(exactPrefix int) {
+func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
 	if n.index == nil {
 		return
 	}
-	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
+	n.props = n.computePhysicalProps(n.index, exactPrefix, n.reverse, evalCtx)
 }
 
-// computeOrdering calculates ordering information for table columns assuming that:
-//    - we scan a given index (potentially in reverse order), and
-//    - the first `exactPrefix` columns of the index each have an exact (single value) match
-//      (see orderingInfo).
-func (n *scanNode) computeOrdering(
-	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
-) orderingInfo {
-	var ordering orderingInfo
+// computePhysicalProps calculates ordering information for table columns
+// assuming that:
+//   - we scan a given index (potentially in reverse order), and
+//   - the first `exactPrefix` columns of the index each have a constant value
+//     (see physicalProps).
+func (n *scanNode) computePhysicalProps(
+	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
+) physicalProps {
+	var pp physicalProps
 
 	columnIDs, dirs := index.FullColumnIDs()
 
+	var keySet util.FastIntSet
 	for i, colID := range columnIDs {
 		idx, ok := n.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
 		if i < exactPrefix {
-			ordering.addExactMatchColumn(idx)
+			pp.addConstantColumn(idx)
 		} else {
-			dir := dirs[i]
+			dir, err := dirs[i].ToEncodingDirection()
+			if err != nil {
+				panic(err)
+			}
 			if reverse {
 				dir = dir.Reverse()
 			}
-			ordering.addColumn(idx, dir)
+			pp.addOrderColumn(idx, dir)
 		}
+		if !n.cols[idx].Nullable {
+			pp.addNotNullColumn(idx)
+		}
+		keySet.Add(idx)
 	}
-	// We included any implicit columns, so the results are unique.
-	ordering.unique = true
-	return ordering
+
+	// We included any implicit columns, so the columns form a (possibly weak)
+	// key.
+	pp.addWeakKey(keySet)
+	pp.applyExpr(evalCtx, n.origFilter)
+	return pp
 }
-
-func (n *scanNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return n.spans, nil, nil
-}
-
-// scanNode implements parser.IndexedVarContainer.
-var _ parser.IndexedVarContainer = &scanNode{}
-
-func (n *scanNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	return n.row[idx].Eval(ctx)
-}
-
-func (n *scanNode) IndexedVarResolvedType(idx int) parser.Type {
-	return n.resultColumns[idx].Typ
-}
-
-func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
-	buf.WriteString(n.resultColumns[idx].Name)
-}
-
-// scanVisibility represents which table columns should be included in a scan.
-type scanVisibility int
-
-const (
-	publicColumns             scanVisibility = 0
-	publicAndNonPublicColumns scanVisibility = 1
-)

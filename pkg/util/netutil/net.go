@@ -11,13 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package netutil
 
 import (
+	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,7 +26,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cmux"
@@ -36,7 +35,7 @@ import (
 )
 
 // ListenAndServeGRPC creates a listener and serves the specified grpc Server
-// on it, closing the listener when signalled by the stopper.
+// on it, closing the listener when signaled by the stopper.
 func ListenAndServeGRPC(
 	stopper *stop.Stopper, server *grpc.Server, addr net.Addr,
 ) (net.Listener, error) {
@@ -68,7 +67,7 @@ type Server struct {
 }
 
 // MakeServer constructs a Server that tracks active connections, closing them
-// when signalled by stopper.
+// when signaled by stopper.
 func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})
@@ -159,5 +158,23 @@ func IsClosedConnection(err error) bool {
 func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) {
 		log.Fatal(context.TODO(), err)
+	}
+}
+
+// InitialHeartbeatFailedError indicates that while attempting a GRPC
+// connection to a node, we aren't successful and have never seen a
+// heartbeat over that connection before.
+type InitialHeartbeatFailedError struct {
+	WrappedErr error
+}
+
+func (e InitialHeartbeatFailedError) Error() string {
+	return fmt.Sprintf("initial connection heartbeat failed: %s", e.WrappedErr)
+}
+
+// NewInitialHeartBeatFailedError creates a new InitialHeartbeatFailedError.
+func NewInitialHeartBeatFailedError(cause error) *InitialHeartbeatFailedError {
+	return &InitialHeartbeatFailedError{
+		WrappedErr: cause,
 	}
 }

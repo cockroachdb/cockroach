@@ -11,15 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,7 +26,7 @@ import (
 // subquery returns an error.
 func TestStartSubqueriesReturnsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sql := "SELECT 1 WHERE (SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL) > 0)"
+	sql := "SELECT 1 WHERE (SELECT crdb_internal.force_error('xxx', 'forced') > 0)"
 	p := makeTestPlanner()
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
@@ -39,11 +36,12 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(context.TODO(), stmt)
-	if err != nil {
+	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.startSubqueryPlans(context.TODO(), plan); !testutils.IsError(err, `forced by crdb_internal\.force_retry\(\)`) {
-		t.Fatalf("expected error from force_retry(), got: %v", err)
+	params := runParams{ctx: context.TODO(), p: p, extendedEvalCtx: &p.extendedEvalCtx}
+	if err := p.curPlan.start(params); !testutils.IsError(err, `forced`) {
+		t.Fatalf("expected error from force_error(), got: %v", err)
 	}
+	p.curPlan.close(context.TODO())
 }

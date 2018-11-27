@@ -1,0 +1,2 @@
+export_stmt ::=
+	'EXPORT' 'INTO' import_format file_location opt_with_options 'FROM' (| 'select_stmt' | 'TABLE' 'table_name')

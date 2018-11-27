@@ -1,0 +1,138 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement error pgcode 42P01 relation "t" does not exist
+EXPERIMENTAL SCRUB TABLE t
+-----
+
+statement ok
+CREATE TABLE t (
+  id int PRIMARY KEY,
+  name STRING,
+  data INT DEFAULT 2,
+  CONSTRAINT abc CHECK (name > 'he'),
+  INDEX name_idx (name)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 'hello'), (2, 'help'), (0, 'heeee')
+
+# Test scrub against a table with some data and with various different options.
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t
+-----
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL
+-----
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
+------
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
+-----
+
+statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT ALL
+-----
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (abc)
+-----
+
+statement error pq: constraint "xyz" of relation "t" does not exist
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (xyz)
+
+# test that scrub cannot be used with views
+
+statement ok
+CREATE VIEW v1 AS select id, name from t
+
+statement error "v1" is not a table
+EXPERIMENTAL SCRUB TABLE v1
+
+# scrub database will skip views so it does not raise an error
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB DATABASE test
+-----
+
+# make sure there are no errors when values in the index are NULL
+
+statement ok
+CREATE TABLE test.xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+INSERT INTO test.xyz (x, y) VALUES (8, 2), (9, 2);
+
+query TTTTTTBT
+EXPERIMENTAL SCRUB TABLE xyz WITH OPTIONS INDEX ALL
+-----
+
+# Test that scrub checks work when a table has an implicit rowid primary key.
+
+statement ok
+CREATE TABLE test.xz (
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+EXPERIMENTAL SCRUB TABLE xz
+
+# make sure there are no false positives when there are NULL values in foreign key values
+
+statement ok
+CREATE TABLE test.fk_child (id INT PRIMARY KEY, v INT, UNIQUE INDEX (id, v))
+
+statement ok
+CREATE TABLE test.fk_parent (id INT PRIMARY KEY, k INT, INDEX (id, k), CONSTRAINT fkey FOREIGN KEY (id, k) REFERENCES test.fk_child (id, v))
+
+statement ok
+INSERT INTO test.fk_child VALUES (1,1), (2,1), (3,NULL)
+
+statement ok
+INSERT INTO test.fk_parent VALUES (1,1), (2,1), (3,NULL)
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
+-----
+
+# Test AS OF SYSTEM TIME
+
+statement error pgcode 42P01 relation "xz" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
+
+statement error pgcode 42P01 relation "xz" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
+
+statement error pgcode 42P01 relation "xz" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
+
+# Test scrubbing sequences.
+
+statement ok
+CREATE DATABASE seq_db
+
+statement ok
+CREATE SEQUENCE seq_db.my_seq
+
+statement ok
+CREATE TABLE seq_db.my_tbl (id INT PRIMARY KEY DEFAULT nextval('seq_db.my_seq'))
+
+statement ok
+EXPERIMENTAL SCRUB DATABASE seq_db
+
+statement error pq: "seq_db.public.my_seq" is not a table
+EXPERIMENTAL SCRUB TABLE seq_db.my_seq

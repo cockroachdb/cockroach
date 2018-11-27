@@ -1,0 +1,46 @@
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": 1, "b": 2}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"a": 1, "b": 2}'
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": {"b": 1}, "c": 2}'
+----
+[/'{"a": {"b": 1}}' - /'{"a": {"b": 1}}']
+Remaining filter: @1 @> '{"a": {"b": 1}, "c": 2}'
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": {}, "c": 2}'
+----
+[/'{"c": 2}' - /'{"c": 2}']
+Remaining filter: @1 @> '{"a": {}, "c": 2}'
+
+index-constraints vars=(jsonb) inverted-index=@1
+'{"a": 1}' <@ @1
+----
+[/'{"a": 1}' - /'{"a": 1}']
+
+# Currently we only generate spans from one of the @> expressions.
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"b": 1}'
+
+index-constraints vars=(jsonb) inverted-index=@1
+'{"a": 1}' <@ @1 AND '{"b": 1}' <@ @1
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"b": 1}'
+
+index-constraints vars=(jsonb, int) inverted-index=@1
+@2 = 1 AND @1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')

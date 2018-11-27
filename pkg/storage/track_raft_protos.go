@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package storage
 
@@ -22,9 +20,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -33,8 +35,8 @@ func funcName(f interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 }
 
-// TrackRaftProtos instruments proto marshalling to track protos which are
-// marshalled downstream of raft. It returns a function that removes the
+// TrackRaftProtos instruments proto marshaling to track protos which are
+// marshaled downstream of raft. It returns a function that removes the
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
 	// Grab the name of the function that roots all raft operations.
@@ -47,7 +49,14 @@ func TrackRaftProtos() func() []reflect.Type {
 		funcName((*gossip.Gossip).AddInfoProto),
 		// Replica destroyed errors are written to disk, but they are
 		// deliberately per-replica values.
-		funcName((replicaStateLoader).setReplicaDestroyedError),
+		funcName((stateloader.StateLoader).SetReplicaDestroyedError),
+		// Compactions are suggested below Raft, but they are local to a store and
+		// thus not subject to Raft consistency requirements.
+		funcName((*compactor.Compactor).Suggest),
+		// Range merges destroy replicas beneath Raft and write replica tombstones,
+		// but tombstones are unreplicated and thus not subject to the strict
+		// consistency requirements.
+		funcName((*Replica).setTombstoneKey),
 	}
 
 	belowRaftProtos := struct {
@@ -57,8 +66,23 @@ func TrackRaftProtos() func() []reflect.Type {
 		inner: make(map[reflect.Type]struct{}),
 	}
 
-	protoutil.Interceptor = func(pb proto.Message) {
+	// Hard-coded protos for which we don't want to change the encoding. These
+	// are not "below raft" in the normal sense, but instead are used as part of
+	// conditional put operations.
+	belowRaftProtos.Lock()
+	belowRaftProtos.inner[reflect.TypeOf(&roachpb.RangeDescriptor{})] = struct{}{}
+	belowRaftProtos.inner[reflect.TypeOf(&storagepb.Liveness{})] = struct{}{}
+	belowRaftProtos.Unlock()
+
+	protoutil.Interceptor = func(pb protoutil.Message) {
 		t := reflect.TypeOf(pb)
+
+		// Special handling for MVCCMetadata: we expect MVCCMetadata to be
+		// marshaled below raft, but MVCCMetadata.Txn should always be nil in such
+		// cases.
+		if meta, ok := pb.(*enginepb.MVCCMetadata); ok && meta.Txn != nil {
+			protoutil.Interceptor(meta.Txn)
+		}
 
 		belowRaftProtos.Lock()
 		_, ok := belowRaftProtos.inner[t]
@@ -67,7 +91,7 @@ func TrackRaftProtos() func() []reflect.Type {
 			return
 		}
 
-		var pcs [100]uintptr
+		var pcs [256]uintptr
 		if numCallers := runtime.Callers(0, pcs[:]); numCallers == len(pcs) {
 			panic(fmt.Sprintf("number of callers %d might have exceeded slice size %d", numCallers, len(pcs)))
 		}
@@ -99,7 +123,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	}
 
 	return func() []reflect.Type {
-		protoutil.Interceptor = func(_ proto.Message) {}
+		protoutil.Interceptor = func(_ protoutil.Message) {}
 
 		belowRaftProtos.Lock()
 		types := make([]reflect.Type, 0, len(belowRaftProtos.inner))

@@ -1,0 +1,29 @@
+# =============================================================================
+# select.opt contains exploration rules for the Select operator.
+# =============================================================================
+
+
+# GenerateConstrainedScans generates a set of constrained Scan expressions, one
+# for each matching index on the scanned table. The expressions consist of
+# either a standalone Scan operator (if no remaining filter), or else a Scan
+# wrapped by a Select (with a remaining filter). Or, if a secondary index cannot
+# provide all the output columns, an IndexJoin is introduced to supply them. See
+# the comment for the GenerateConstrainedScans custom method for more details
+# and examples.
+[GenerateConstrainedScans, Explore]
+(Select
+  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+  $filters:*
+)
+=>
+(GenerateConstrainedScans $scanPrivate $filters)
+
+# GenerateInvertedIndexScans creates alternate expressions for filters that can
+# be serviced by an inverted index.
+[GenerateInvertedIndexScans, Explore]
+(Select
+  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+  $filters:*
+)
+=>
+(GenerateInvertedIndexScans $scanPrivate $filters)

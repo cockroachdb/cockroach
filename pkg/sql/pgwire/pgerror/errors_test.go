@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package pgerror
 
@@ -46,12 +44,15 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := NewError(code, msg).(*Error)
+	pErr := NewError(code, msg)
 	checkErr(pErr, msg)
+
+	pErr = NewError(code, "bad%format")
+	checkErr(pErr, "bad%format")
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = NewErrorf(code, "%s: %s", prefix, msg).(*Error)
+	pErr = NewErrorf(code, "%s: %s", prefix, msg)
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
 	checkErr(pErr, expected)
 

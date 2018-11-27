@@ -11,12 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package gossip_test
 
 import (
+	"context"
 	"reflect"
 	"sort"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -266,7 +264,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 			}
 			for _, addr := range p.Info().Addresses {
 				if addr.String() == invalidAddr {
-					return errors.Errorf("node %d still needs bootstrap cleanup", i)
+					return errors.Errorf("n%d still needs bootstrap cleanup", i)
 				}
 			}
 		}

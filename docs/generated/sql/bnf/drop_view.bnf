@@ -1,0 +1,7 @@
+drop_view_stmt ::=
+	'DROP' 'VIEW' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'VIEW' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'VIEW' table_name ( ( ',' table_name ) )* 
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 

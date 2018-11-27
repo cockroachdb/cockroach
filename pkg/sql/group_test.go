@@ -11,16 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,30 +33,48 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		expr     string
 		ordering sqlbase.ColumnOrdering
 	}{
-		{`a`, nil},
-		{`MIN(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
-		{`MAX(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
-		{`(MIN(a), MAX(a))`, nil},
-		{`(MIN(a), AVG(a))`, nil},
-		{`(MIN(a), COUNT(a))`, nil},
-		{`(MIN(a), SUM(a))`, nil},
-		// TODO(pmattis): This could/should return []int{1} (or perhaps []int{2}),
-		// since both aggregations are for the same function and the same column.
-		{`(MIN(a), MIN(a))`, nil},
-		{`(MIN(a+1), MIN(a))`, nil},
-		{`(COUNT(a), MIN(a))`, nil},
-		{`(MIN(a+1))`, nil},
+		{`min(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`max(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
+		{`min(a+1)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`(min(a), max(a))`, nil},
+		{`(min(a), avg(a))`, nil},
+		{`(min(a), count(a))`, nil},
+		{`(min(a), sum(a))`, nil},
+		{`(min(a), min(a))`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`(min(a+1), min(a))`, nil},
+		{`(count(a), min(a))`, nil},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		evalCtx := &parser.EvalContext{}
-		sel := makeSelectNode(t)
-		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-		group := &groupNode{planner: p}
-		(extractAggregatesVisitor{n: group}).extract(expr)
-		ordering := desiredAggregateOrdering(group.funcs, evalCtx)
-		if !reflect.DeepEqual(d.ordering, ordering) {
-			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
+			defer p.extendedEvalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
+			group := &groupNode{}
+			render := &renderNode{}
+			postRender := &renderNode{}
+			postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
+			v := extractAggregatesVisitor{
+				ctx:        context.TODO(),
+				groupNode:  group,
+				preRender:  render,
+				ivarHelper: &postRender.ivarHelper,
+				planner:    p,
+			}
+			if _, err := v.extract(expr); err != nil {
+				t.Fatal(err)
+			}
+			ordering := group.desiredAggregateOrdering(p.EvalContext())
+			if !reflect.DeepEqual(d.ordering, ordering) {
+				t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
+			}
+			// Verify we never have a desired ordering if there is a GROUP BY.
+			group.groupCols = []int{0}
+			ordering = group.desiredAggregateOrdering(p.EvalContext())
+			if len(ordering) > 0 {
+				t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
+			}
+		})
 	}
 }

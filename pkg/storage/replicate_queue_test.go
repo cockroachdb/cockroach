@@ -11,22 +11,23 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis
 
 package storage_test
 
 import (
+	"context"
+	gosql "database/sql"
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -44,23 +45,34 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		t.Skip("short flag")
 	}
 
-	// Set the gossip stores interval lower to speed up rebalancing. With the
-	// default of 5s we have to wait ~5s for the rebalancing to start.
-	defer func(v time.Duration) {
-		gossip.GossipStoresInterval = v
-	}(gossip.GossipStoresInterval)
-	gossip.GossipStoresInterval = 100 * time.Millisecond
-
 	const numNodes = 5
 	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.TODO())
 
+	for _, server := range tc.Servers {
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
+	}
+
 	const newRanges = 5
 	for i := 0; i < newRanges; i++ {
-		tableID := keys.MaxReservedDescID + i + 1
-		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
+		tableID := keys.MinUserDescID + i
+		splitKey := keys.MakeTablePrefix(uint32(tableID))
 		if _, _, err := tc.SplitRange(splitKey); err != nil {
 			t.Fatal(err)
 		}
@@ -93,13 +105,82 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		counts := countReplicas()
 		for _, c := range counts {
 			if c < minReplicas {
-				err := errors.Errorf("not balanced: %d", counts)
+				err := errors.Errorf(
+					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
 				log.Info(context.Background(), err)
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// Test that up-replication only proceeds if there are a good number of
+// candidates to up-replicate to. Specifically, we won't up-replicate to an
+// even number of replicas unless there is an additional candidate that will
+// allow a subsequent up-replication to an odd number.
+func TestReplicateQueueUpReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const replicaCount = 3
+
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	testKey := keys.MetaMin
+	desc, err := tc.LookupRange(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(desc.Replicas) != 1 {
+		t.Fatalf("replica count, want 1, current %d", len(desc.Replicas))
+	}
+
+	tc.AddServer(t, base.TestServerArgs{})
+
+	testutils.SucceedsSoon(t, func() error {
+		// After the initial splits have been performed, all of the resulting ranges
+		// should be present in replicate queue purgatory (because we only have a
+		// single store in the test and thus replication cannot succeed).
+		expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+		if err != nil {
+			return err
+		}
+
+		var store *storage.Store
+		_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			store = s
+			return nil
+		})
+
+		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
+		}
+		return nil
+	})
+
+	tc.AddServer(t, base.TestServerArgs{})
+
+	// Now wait until the replicas have been up-replicated to the
+	// desired number.
+	testutils.SucceedsSoon(t, func() error {
+		desc, err := tc.LookupRange(testKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(desc.Replicas) != replicaCount {
+			return errors.Errorf("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+		}
+		return nil
+	})
+
+	if err := verifyRangeLog(
+		tc.Conns[0], storagepb.RangeLogEventType_add, storagepb.ReasonRangeUnderReplicated,
+	); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestReplicateQueueDownReplicate verifies that the replication queue will
@@ -112,7 +193,19 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	// using the replicate queue, and to ensure that's the case, the test
 	// cluster needs to be kept in auto replication mode.
 	tc := testcluster.StartTestCluster(t, replicaCount+2,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.Background())
 
@@ -167,4 +260,46 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		}
 		return nil
 	})
+
+	if err := verifyRangeLog(
+		tc.Conns[0], storagepb.RangeLogEventType_remove, storagepb.ReasonRangeOverReplicated,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func verifyRangeLog(
+	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
+) error {
+	rows, err := conn.Query(
+		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var numEntries int
+	for rows.Next() {
+		numEntries++
+		var infoStr string
+		if err := rows.Scan(&infoStr); err != nil {
+			return err
+		}
+		var info storagepb.RangeLogEvent_Info
+		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
+			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
+		}
+		if a, e := info.Reason, reason; a != e {
+			return errors.Errorf("expected range log event reason %s, got %s from info %v", e, a, info)
+		}
+		if info.Details == "" {
+			return errors.Errorf("got empty range log event details: %v", info)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if numEntries == 0 {
+		return errors.New("no range log entries found for up-replication events")
+	}
+	return nil
 }

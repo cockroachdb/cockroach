@@ -11,48 +11,80 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package storage
 
 import (
+	"context"
 	"fmt"
-	"reflect"
+	"math"
+	"strings"
 	"testing"
-
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft"
 )
+
+func TestShouldTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		truncatableIndexes uint64
+		raftLogSize        int64
+		expected           bool
+	}{
+		{RaftLogQueueStaleThreshold - 1, 0, false},
+		{RaftLogQueueStaleThreshold, 0, true},
+		{0, RaftLogQueueStaleSize, false},
+		{1, RaftLogQueueStaleSize - 1, false},
+		{1, RaftLogQueueStaleSize, true},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var d truncateDecision
+			d.Input.LogSize = c.raftLogSize
+			d.Input.FirstIndex = 123
+			d.NewFirstIndex = d.Input.FirstIndex + c.truncatableIndexes
+			v := d.ShouldTruncate()
+			if c.expected != v {
+				t.Fatalf("expected %v, but found %v", c.expected, v)
+			}
+		})
+	}
+}
 
 func TestGetQuorumIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		progress             []uint64
-		pendingSnapshotIndex uint64
-		expected             uint64
+		progress []uint64
+		expected uint64
 	}{
 		// Basic cases.
-		{[]uint64{1}, 0, 1},
-		{[]uint64{2}, 1, 1},
-		{[]uint64{1, 2}, 0, 1},
-		{[]uint64{2, 3}, 1, 2},
-		{[]uint64{1, 2, 3}, 0, 2},
-		{[]uint64{2, 3, 4}, 1, 2},
-		{[]uint64{1, 2, 3, 4}, 0, 2},
-		{[]uint64{2, 3, 4, 5}, 1, 3},
-		{[]uint64{1, 2, 3, 4, 5}, 0, 3},
-		{[]uint64{2, 3, 4, 5, 6}, 1, 3},
+		{[]uint64{1}, 1},
+		{[]uint64{2}, 2},
+		{[]uint64{1, 2}, 1},
+		{[]uint64{2, 3}, 2},
+		{[]uint64{1, 2, 3}, 2},
+		{[]uint64{2, 3, 4}, 3},
+		{[]uint64{1, 2, 3, 4}, 2},
+		{[]uint64{2, 3, 4, 5}, 3},
+		{[]uint64{1, 2, 3, 4, 5}, 3},
+		{[]uint64{2, 3, 4, 5, 6}, 4},
 		// Sorting.
-		{[]uint64{5, 4, 3, 2, 1}, 0, 3},
+		{[]uint64{5, 4, 3, 2, 1}, 3},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -61,14 +93,14 @@ func TestGetQuorumIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		quorumMatchedIndex := getQuorumIndex(status, c.pendingSnapshotIndex)
+		quorumMatchedIndex := getQuorumIndex(status)
 		if c.expected != quorumMatchedIndex {
 			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
 		}
 	}
 }
 
-func TestComputeTruncatableIndex(t *testing.T) {
+func TestComputeTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const targetSize = 1000
@@ -79,27 +111,91 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		firstIndex      uint64
 		lastIndex       uint64
 		pendingSnapshot uint64
-		expected        uint64
+		exp             string
 	}{
-		{[]uint64{1, 2}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 5, 5}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 5, 5}, 100, 2, 2, 0, 2},
-		{[]uint64{5, 5, 5}, 100, 2, 5, 0, 5},
-		{[]uint64{5, 5, 5}, 100, 2, 2, 1, 2},
-		{[]uint64{5, 5, 5}, 100, 2, 3, 3, 3},
-		{[]uint64{1, 2, 3, 4}, 100, 1, 1, 0, 1},
-		{[]uint64{1, 2, 3, 4}, 100, 2, 2, 0, 2},
-		// If over targetSize, should truncate to quorum committed index.
-		{[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0, 3},
-		{[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0, 3},
-		{[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0, 3},
+		{
+			// Nothing to truncate.
+			[]uint64{1, 2}, 100, 1, 1, 0,
+			"truncate 0 entries to first index 1 (chosen via: quorum)"},
+		{
+			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
+			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
+			// own log asynchronously.
+			[]uint64{1, 5, 5}, 100, 1, 1, 0,
+			"truncate 0 entries to first index 1 (chosen via: followers)",
+		},
+		{
+			// We're not truncating anything, but one follower is already cut off. There's no pending
+			// snapshot so we shouldn't be causing any additional snapshots.
+			[]uint64{1, 5, 5}, 100, 2, 2, 0,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		{
+			// The happy case.
+			[]uint64{5, 5, 5}, 100, 2, 5, 0,
+			"truncate 3 entries to first index 5 (chosen via: quorum)",
+		},
+		{
+			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
+			// it was already obsolete before. (This example is also not one you could manufacture in
+			// a real system).
+			[]uint64{5, 5, 5}, 100, 2, 2, 1,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		{
+			// Respecting the pending snapshot.
+			[]uint64{5, 5, 5}, 100, 2, 5, 3,
+			"truncate 1 entries to first index 3 (chosen via: pending snapshot)",
+		},
+		{
+			// Log is below target size, so respecting the slowest follower.
+			[]uint64{1, 2, 3, 4}, 100, 1, 5, 0,
+			"truncate 0 entries to first index 1 (chosen via: followers)",
+		},
+		{
+			// Truncating since local log starts at 2. One follower is already cut off without a pending
+			// snapshot.
+			[]uint64{1, 2, 3, 4}, 100, 2, 2, 0,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		},
+		// If over targetSize, should truncate to quorum committed index. Minority will need snapshots.
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
+			"truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
+		},
+		// Don't truncate away pending snapshot, even when log too large.
+		{
+			[]uint64{100, 100}, 2000, 1, 100, 50,
+			"truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
+		},
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			"truncate 1 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+		},
+		{
+			[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
+			"truncate 0 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+		},
 		// The pending snapshot index affects the quorum commit index.
-		{[]uint64{4}, 2000, 1, 1, 1, 1},
+		{
+			[]uint64{4}, 2000, 1, 7, 1,
+			"truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
+		},
 		// Never truncate past the quorum commit index.
-		{[]uint64{3, 3, 6}, 100, 4, 4, 0, 3},
+		{
+			[]uint64{3, 3, 6}, 100, 2, 7, 0,
+			"truncate 1 entries to first index 3 (chosen via: quorum)",
+		},
 		// Never truncate past the last index.
-		{[]uint64{5}, 100, 1, 3, 0, 3},
-	}
+		{
+			[]uint64{5}, 100, 1, 3, 0,
+			"truncate 2 entries to first index 3 (chosen via: last index)",
+		},
+		// Never truncate "before the first index".
+		{
+			[]uint64{5}, 100, 2, 3, 1,
+			"truncate 0 entries to first index 2 (chosen via: first index)",
+		}}
 	for i, c := range testCases {
 		status := &raft.Status{
 			Progress: make(map[uint64]raft.Progress),
@@ -107,17 +203,159 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		out := computeTruncatableIndex(status, c.raftLogSize, targetSize,
-			c.firstIndex, c.lastIndex, c.pendingSnapshot)
-		if !reflect.DeepEqual(c.expected, out) {
-			t.Errorf("%d: computeTruncatableIndex(...) expected %d, but got %d", i, c.expected, out)
+		decision := computeTruncateDecision(truncateDecisionInput{
+			RaftStatus:                     status,
+			LogSize:                        c.raftLogSize,
+			MaxLogSize:                     targetSize,
+			FirstIndex:                     c.firstIndex,
+			LastIndex:                      c.lastIndex,
+			PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+		})
+		if act, exp := decision.String(), c.exp; act != exp {
+			t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
 		}
 	}
 }
 
-// TestGetTruncatableIndexes verifies that old raft log entries are correctly
+// TestComputeTruncateDecisionProgressStatusProbe verifies that when a follower
+// is marked as active and is being probed for its log index, we don't truncate
+// the log out from under it.
+func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	exp := map[bool]map[bool]string{ // (tooLarge, active)
+		false: {
+			true:  "truncate 0 entries to first index 10 (chosen via: probing follower)",
+			false: "truncate 90 entries to first index 100 (chosen via: followers)",
+		},
+		true: {
+			true:  "truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)",
+			false: "truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 2 Raft snapshots",
+		},
+	}
+
+	testutils.RunTrueAndFalse(t, "tooLarge", func(t *testing.T, tooLarge bool) {
+		testutils.RunTrueAndFalse(t, "active", func(t *testing.T, active bool) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			for j, v := range []uint64{500, 400, 300, 200, 100} {
+				pr := raft.Progress{
+					Match:        v,
+					RecentActive: true,
+					State:        raft.ProgressStateReplicate,
+				}
+				if v == 300 {
+					pr.RecentActive = active
+					pr.State = raft.ProgressStateProbe
+				}
+				status.Progress[uint64(j)] = pr
+			}
+
+			input := truncateDecisionInput{
+				RaftStatus: status,
+				MaxLogSize: 1024,
+				FirstIndex: 10,
+				LastIndex:  500,
+			}
+			if tooLarge {
+				input.LogSize += 2 * input.MaxLogSize
+			}
+
+			decision := computeTruncateDecision(input)
+			if s, exp := decision.String(), exp[tooLarge][active]; s != exp {
+				t.Errorf("expected %q, got %q", exp, s)
+			}
+		})
+	})
+}
+
+func verifyLogSizeInSync(t *testing.T, r *Replica) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	raftLogSize := r.mu.raftLogSize
+	r.mu.Unlock()
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 1))
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, math.MaxUint64))
+
+	var ms enginepb.MVCCStats
+	iter := r.store.engine.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	defer iter.Close()
+	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualRaftLogSize := ms.SysBytes
+	if actualRaftLogSize != raftLogSize {
+		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
+	}
+}
+
+func TestUpdateRaftStatusActivity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCase struct {
+		prs        []raft.Progress
+		replicas   []roachpb.ReplicaDescriptor
+		lastUpdate lastUpdateTimesMap
+		now        time.Time
+
+		exp []raft.Progress
+	}
+
+	now := timeutil.Now()
+
+	tcs := []testCase{
+		// No data, no crash.
+		{},
+		// No knowledge = no update.
+		{prs: []raft.Progress{{RecentActive: true}}, exp: []raft.Progress{{RecentActive: true}}},
+		{prs: []raft.Progress{{RecentActive: false}}, exp: []raft.Progress{{RecentActive: false}}},
+		// See replica in descriptor but then don't find it in the map. Assumes the follower is not
+		// active.
+		{
+			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}},
+			prs:      []raft.Progress{{RecentActive: true}},
+			exp:      []raft.Progress{{RecentActive: false}},
+		},
+		// Three replicas in descriptor. The first one responded recently, the second didn't,
+		// the third did but it doesn't have a Progress.
+		{
+			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}},
+			prs:      []raft.Progress{{RecentActive: false}, {RecentActive: true}},
+			lastUpdate: map[roachpb.ReplicaID]time.Time{
+				1: now.Add(-1 * MaxQuotaReplicaLivenessDuration / 2),
+				2: now.Add(-1 - MaxQuotaReplicaLivenessDuration),
+				3: now,
+			},
+			now: now,
+
+			exp: []raft.Progress{{RecentActive: true}, {RecentActive: false}},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tcs {
+		t.Run("", func(t *testing.T) {
+			prs := make(map[uint64]raft.Progress)
+			for i, pr := range tc.prs {
+				prs[uint64(i+1)] = pr
+			}
+			expPRs := make(map[uint64]raft.Progress)
+			for i, pr := range tc.exp {
+				expPRs[uint64(i+1)] = pr
+			}
+			updateRaftProgressFromActivity(ctx, prs, tc.replicas, tc.lastUpdate, tc.now)
+			assert.Equal(t, expPRs, prs)
+		})
+	}
+}
+
+// TestNewTruncateDecision verifies that old raft log entries are correctly
 // removed.
-func TestGetTruncatableIndexes(t *testing.T) {
+func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -129,18 +367,12 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	getIndexes := func() (uint64, uint64, uint64, error) {
-		r.mu.Lock()
-		firstIndex, err := r.FirstIndex()
-		r.mu.Unlock()
+	getIndexes := func() (uint64, int, uint64, error) {
+		d, err := newTruncateDecision(context.Background(), r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.Background(), r)
-		if err != nil {
-			return 0, 0, 0, err
-		}
-		return firstIndex, truncatableIndexes, oldestIndex, nil
+		return d.Input.FirstIndex, d.NumTruncatableIndexes(), d.NewFirstIndex, nil
 	}
 
 	aFirst, aTruncatable, aOldest, err := getIndexes()
@@ -155,7 +387,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(context.Background(), store.testSender(), &args); err != nil {
+		if _, err := client.SendWrapped(context.Background(), store.TestSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -165,13 +397,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if aFirst != bFirst {
-		t.Errorf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
+		t.Fatalf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
 	}
 	if aTruncatable >= bTruncatable {
-		t.Errorf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
+		t.Fatalf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
 	}
 	if aOldest >= bOldest {
-		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
+		t.Fatalf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
 	}
 
 	// Enable the raft log scanner and and force a truncation.
@@ -181,10 +413,11 @@ func TestGetTruncatableIndexes(t *testing.T) {
 
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
-	var cFirst, cTruncatable, cOldest uint64
+	var cFirst, cOldest uint64
+	var numTruncatable int
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		cFirst, cTruncatable, cOldest, err = getIndexes()
+		cFirst, numTruncatable, cOldest, err = getIndexes()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,12 +426,14 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 		return nil
 	})
-	if bTruncatable < cTruncatable {
-		t.Errorf("expected truncatableIndexes to decrease, instead it changed from %d -> %d", bTruncatable, cTruncatable)
+	if bTruncatable < numTruncatable {
+		t.Errorf("expected numTruncatable to decrease, instead it changed from %d -> %d", bTruncatable, numTruncatable)
 	}
 	if bOldest >= cOldest {
 		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
 	}
+
+	verifyLogSizeInSync(t, r)
 
 	// Again, enable the raft log scanner and and force a truncation. This time
 	// we expect no truncation to occur.
@@ -209,7 +444,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// Unlike the last iteration, where we expect a truncation and can wait on
 	// it with succeedsSoon, we can't do that here. This check is fragile in
 	// that the truncation triggered here may lose the race against the call to
-	// GetFirstIndex or getTruncatableIndexes, giving a false negative. Fixing
+	// GetFirstIndex or newTruncateDecision, giving a false negative. Fixing
 	// this requires additional instrumentation of the queues, which was deemed
 	// to require too much work at the time of this writing.
 	dFirst, dTruncatable, dOldest, err := getIndexes()
@@ -219,8 +454,8 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	if cFirst != dFirst {
 		t.Errorf("truncation should not have occurred, but firstIndex changed from %d -> %d", cFirst, dFirst)
 	}
-	if cTruncatable != dTruncatable {
-		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", cTruncatable, dTruncatable)
+	if numTruncatable != dTruncatable {
+		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", numTruncatable, dTruncatable)
 	}
 	if cOldest != dOldest {
 		t.Errorf("truncation should not have occurred, but oldestIndex changed from %d -> %d", cOldest, dOldest)
@@ -233,47 +468,120 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t, stopper)
 
-	// Note that turning off the replica scanner does not prevent the queues
-	// from processing entries (in this case specifically the raftLogQueue),
-	// just that the scanner will not try to push all replicas onto the queues.
-	store.SetReplicaScannerActive(false)
-
-	r, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		count     int
+		valueSize int
+	}{
+		// Lots of small KVs.
+		{RaftLogQueueStaleSize / 100, 5},
+		// One big KV.
+		{1, RaftLogQueueStaleSize},
 	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			store, _ := createTestStore(t, stopper)
 
-	oldFirstIndex, err := r.GetFirstIndex()
-	if err != nil {
-		t.Fatal(err)
+			// Note that turning off the replica scanner does not prevent the queues
+			// from processing entries (in this case specifically the raftLogQueue),
+			// just that the scanner will not try to push all replicas onto the queues.
+			store.SetReplicaScannerActive(false)
+
+			r, err := store.GetReplica(1)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			oldFirstIndex, err := r.GetFirstIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for i := 0; i < c.count; i++ {
+				key := roachpb.Key(fmt.Sprintf("key%02d", i))
+				args := putArgs(key, []byte(fmt.Sprintf("%s%02d", strings.Repeat("v", c.valueSize), i)))
+				if _, err := client.SendWrapped(ctx, store.TestSender(), &args); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Log truncation is an asynchronous process and while it will usually occur
+			// fairly quickly, there is a slight race between this check and the
+			// truncation, especially when under stress.
+			testutils.SucceedsSoon(t, func() error {
+				newFirstIndex, err := r.GetFirstIndex()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if newFirstIndex <= oldFirstIndex {
+					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
+						oldFirstIndex, newFirstIndex)
+				}
+				return nil
+			})
+		})
 	}
+}
 
-	// Write a few keys to the range. While writing these keys, the raft log
-	// should be proactively truncated.
-	for i := 0; i < RaftLogQueueStaleThreshold+raftLogCheckFrequency; i++ {
-		key := roachpb.Key(fmt.Sprintf("key%02d", i))
-		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(ctx, store.testSender(), &args); err != nil {
-			t.Fatal(err)
+func TestSnapshotLogTruncationConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	r := &Replica{}
+	id1, id2 := uuid.MakeV4(), uuid.MakeV4()
+	const (
+		index1 = 50
+		index2 = 60
+	)
+
+	// Add first constraint.
+	r.addSnapshotLogTruncationConstraintLocked(ctx, id1, index1)
+	exp1 := map[uuid.UUID]snapTruncationInfo{id1: {index: index1}}
+
+	// Make sure it registered.
+	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
+
+	// Add another constraint with the same id. Extremely unlikely in practice
+	// but we want to make sure it doesn't blow anything up. Collisions are
+	// handled by ignoring the colliding update.
+	r.addSnapshotLogTruncationConstraintLocked(ctx, id1, index2)
+	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
+
+	// Helper that grabs the min constraint index (which can trigger GC as a
+	// byproduct) and asserts.
+	assertMin := func(exp uint64, now time.Time) {
+		t.Helper()
+		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now); maxIndex != exp {
+			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
 
-	// Log truncation is an asynchronous process and while it will usually occur
-	// fairly quickly, there is a slight race between this check and the
-	// truncation, especially when under stress.
-	testutils.SucceedsSoon(t, func() error {
-		newFirstIndex, err := r.GetFirstIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if newFirstIndex <= oldFirstIndex {
-			return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
-				oldFirstIndex, newFirstIndex)
-		}
-		return nil
-	})
+	// Queue should be told index1 is the highest pending one. Note that the
+	// colliding update at index2 is not represented.
+	assertMin(index1, time.Time{})
+
+	// Add another, higher, index. We're not going to notice it's around
+	// until the lower one disappears.
+	r.addSnapshotLogTruncationConstraintLocked(ctx, id2, index2)
+
+	now := timeutil.Now()
+	// The colliding snapshot comes back. Or the original, we can't tell.
+	r.completeSnapshotLogTruncationConstraint(ctx, id1, now)
+	// The index should show up when its deadline isn't hit.
+	assertMin(index1, now)
+	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
+	// Once we're over deadline, the index returned so far disappears.
+	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod+1))
+	assertMin(index2, time.Time{})
+	assertMin(index2, now.Add(10*raftLogQueuePendingSnapshotGracePeriod))
+
+	r.completeSnapshotLogTruncationConstraint(ctx, id2, now)
+	assertMin(index2, now)
+	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(0, now.Add(2*raftLogQueuePendingSnapshotGracePeriod))
+
+	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, map[uuid.UUID]snapTruncationInfo(nil))
 }

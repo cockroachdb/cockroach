@@ -11,40 +11,45 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"bytes"
 	"fmt"
+	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 type testVarContainer struct{}
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) parser.Type {
-	return parser.TypeInt
+func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
+	return types.Int
 }
 
-func (d testVarContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+func (d testVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return nil, nil
 }
 
-func (d testVarContainer) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
-	fmt.Fprintf(buf, "var%d", idx)
+func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	n := tree.Name(fmt.Sprintf("var%d", idx))
+	return &n
 }
 
 func TestProcessExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
-	h := parser.MakeIndexedVarHelper(testVarContainer{}, 4)
-	expr, err := processExpression(e, &h)
+
+	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(false)
+	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,5 +63,29 @@ func TestProcessExpression(t *testing.T) {
 	expectedStr := "(var0 * (var1 + var2)) + var0"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+}
+
+// Test that processExpression evaluates constant exprs into datums.
+func TestProcessExpressionConstantEval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	e := Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
+
+	h := tree.MakeIndexedVarHelper(nil, 0)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(false)
+	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := &tree.DArray{
+		ParamTyp: types.Int,
+		Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
+	}
+	if !reflect.DeepEqual(expr, expected) {
+		t.Errorf("invalid expr '%v', expected '%v'", expr, expected)
 	}
 }

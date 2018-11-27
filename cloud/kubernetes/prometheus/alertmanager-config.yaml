@@ -1,0 +1,14 @@
+global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'webhook'
+receivers:
+# Note that this is a dummy configuration just to allow AlertManager to start
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://alertmanagerwh:30500/'
+

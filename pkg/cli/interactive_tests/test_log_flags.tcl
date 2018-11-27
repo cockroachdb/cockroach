@@ -12,7 +12,7 @@ eexpect ":/# "
 # errors when parsing flags in that context cause the (test) process
 # to exit entirely (it has errorHandling set to ExitOnError).
 
-# Check that log files are created by default in the store directory.
+start_test "Check that log files are created by default in the store directory."
 send "$argv start --insecure --store=path=logs/mystore\r"
 eexpect "node starting"
 interrupt
@@ -20,8 +20,9 @@ eexpect ":/# "
 send "ls logs/mystore/logs\r"
 eexpect "cockroach.log"
 eexpect ":/# "
+end_test
 
-# Check that an empty `-log-dir` disables file logging.
+start_test "Check that an empty -log-dir disables file logging."
 send "$argv start --insecure --store=path=logs/mystore2 --log-dir=\r"
 eexpect "node starting"
 interrupt
@@ -29,19 +30,22 @@ eexpect ":/# "
 send "ls logs/mystore2/logs 2>/dev/null | wc -l\r"
 eexpect "0"
 eexpect ":/# "
+end_test
 
-# Check that leading tildes are properly rejected.
+start_test "Check that leading tildes are properly rejected."
 send "$argv start --insecure -s=path=logs/db --log-dir=\~/blah\r"
 eexpect "log directory cannot start with '~'"
 eexpect ":/# "
+end_test
 
-# Check that the user can override.
+start_test "Check that the user can override."
 send "$argv start --insecure -s=path=logs/db --log-dir=logs/blah/\~/blah\r"
 eexpect "logs: *blah/~/blah"
 interrupt
 eexpect ":/# "
+end_test
 
-# Check that TRUE and FALSE are valid values for the severity flags.
+start_test "Check that TRUE and FALSE are valid values for the severity flags."
 send "$argv start --insecure -s=path=logs/db --logtostderr=false\r"
 eexpect "node starting"
 interrupt
@@ -57,6 +61,7 @@ eexpect ":/# "
 send "$argv start --insecure -s=path=logs/db --logtostderr=cantparse\r"
 eexpect "parsing \"cantparse\": invalid syntax"
 eexpect ":/# "
+end_test
 
 send "exit 0\r"
 eexpect eof

@@ -1,0 +1,308 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+query OO
+SELECT 3::OID, '3'::OID
+----
+3  3
+
+query O
+SELECT 3::OID::INT::OID
+----
+3
+
+query OOOOOO
+SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGTYPE
+----
+1  1  1  1  1  1
+
+query OOOOO
+SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGTYPE
+----
+1  1  1  1  1
+
+query TTT
+SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGTYPE)
+----
+regproc  regprocedure  regtype
+
+query TTT
+SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('public'::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof('bool'::REGTYPE)
+----
+regproc  regprocedure  regtype
+
+query OO
+SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query error pgcode 42P01 relation "foo.pg_constraint" does not exist
+SELECT 'foo.pg_constraint'::REGCLASS
+
+query OO
+SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
+----
+pg_constraint  139623798
+
+query O
+SELECT 4061301040::REGCLASS
+----
+4061301040
+
+query OOIOT
+SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid::regclass::text
+FROM pg_class
+WHERE relname = 'pg_constraint'
+----
+139623798  pg_constraint  139623798  pg_constraint  pg_constraint
+
+query OOOO
+SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
+----
+upper  upper  upper  2896429946
+
+query error invalid function name
+SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
+
+query OOO
+SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
+----
+upper  upper  2896429946
+
+query error unknown function: blah\(\)
+SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
+
+query error unknown function: blah\(\)
+SELECT ' blah ( ignored , ignored ) '::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah ()'::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah( )'::REGPROC
+
+query error unknown function: blah\(, \)\(\)
+SELECT 'blah(, )'::REGPROC
+
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
+
+query OOOO
+SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
+----
+array_in  array_in  array_in  array_in
+
+query OOOO
+SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
+----
+array_in  array_in  array_in  array_in
+
+query OO
+SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
+----
+public  2397796629
+
+query OO
+SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
+----
+boolean  16
+
+query OO
+SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
+----
+numeric  numeric
+
+query error type 'foo.' does not exist
+SELECT 'foo.'::REGTYPE
+
+query error pgcode 42P01 relation "blah" does not exist
+SELECT 'blah'::REGCLASS
+
+query error unknown function: blah\(\)
+SELECT 'blah'::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah'::REGPROCEDURE
+
+query error namespace 'blah' does not exist
+SELECT 'blah'::REGNAMESPACE
+
+query error type 'blah' does not exist
+SELECT 'blah'::REGTYPE
+
+## Test other cast syntaxes
+
+query O
+SELECT CAST ('pg_constraint' AS REGCLASS)
+----
+pg_constraint
+
+# This forces the b_expr form of the cast syntax.
+query OO
+SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
+----
+pg_constraint  139623798
+
+## Test visibility of pg_* via oid casts.
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+## Regression for #16767 - ensure regclass casts use normalized table names
+
+statement ok
+CREATE TABLE hasCase (id INT PRIMARY KEY)
+
+query T
+SELECT relname from pg_class where oid='hasCase'::regclass
+----
+hascase
+
+statement ok
+CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
+
+query error pgcode 42P01 relation "quotedcase" does not exist
+SELECT relname from pg_class where oid='quotedCase'::regclass
+
+query T
+SELECT relname from pg_class where oid='"quotedCase"'::regclass
+----
+quotedCase
+
+# a non-root user with sufficient permissions can get the OID of a table from
+# the current database
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser
+
+statement ok
+GRANT SELECT ON test.* TO testuser
+
+user testuser
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+user root
+
+statement ok
+CREATE DATABASE otherdb
+
+## a non-root user can't get the OID of a table from a different database
+
+user testuser
+
+statement ok
+SET DATABASE = otherdb
+
+query error pgcode 42P01 relation "a" does not exist
+SELECT 'a'::regclass
+
+user root
+
+statement ok
+SET DATABASE = otherdb
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY, foo STRING)
+
+## There is now a table named 'a' in both the database 'otherdb' and the
+## database 'test'. The following query shows that the root user can still
+## determine the OID of the table 'a' by using a regclass cast, despite the
+## fact that the root user has visibility into both of the tables. The 'a' that
+## gets selected should be the 'a' that exists in the current database.
+## See https://github.com/cockroachdb/cockroach/issues/13695
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  2
+
+statement ok
+SET DATABASE = test
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  1
+
+statement ok
+CREATE DATABASE thirddb
+
+statement ok
+SET DATABASE = thirddb
+
+# Ensure that if the table is not in the current database, but it
+# still exists in another database, the query does fail (regclass
+# does not automatically search in other dbs, even for the root user).
+
+query error pgcode 42P01 relation "a" does not exist
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+
+statement ok
+CREATE TABLE o (a OID PRIMARY KEY)
+
+statement ok
+INSERT INTO o VALUES (1), (4)
+
+query O
+SELECT * FROM o WHERE a < 3
+----
+1
+
+query O rowsort
+SELECT * FROM o WHERE a <= 4
+----
+1
+4
+
+# Regression test for #23652.
+
+query B
+SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE proretset=false LIMIT 1
+----
+false
+
+query TTTTT
+SELECT crdb_internal.create_regtype(10, 'foo'), crdb_internal.create_regclass(10, 'foo'), crdb_internal.create_regproc(10, 'foo'), crdb_internal.create_regprocedure(10, 'foo'), crdb_internal.create_regnamespace(10, 'foo')
+----
+foo foo foo foo foo
+
+query OOOOO
+SELECT crdb_internal.create_regtype(10, 'foo')::oid, crdb_internal.create_regclass(10, 'foo')::oid, crdb_internal.create_regproc(10, 'foo')::oid, crdb_internal.create_regprocedure(10, 'foo')::oid, crdb_internal.create_regnamespace(10, 'foo')::oid
+----
+10 10 10 10 10
+
+# Regression test for #32422: ensure that VALUES nodes properly retain special
+# OID properties.
+
+query OO
+VALUES ('pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS)
+----
+pg_constraint  pg_constraint

@@ -16,13 +16,13 @@ package server
 
 import (
 	"bytes"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,11 +31,11 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable
+	tbl := &sqlbase.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
 	settingsTablePrefix := keys.MakeTablePrefix(uint32(tbl.ID))
-	colIdxMap := sqlbase.ColIDtoRowIndexFromCols(tbl.Columns)
+	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
 		if !bytes.HasPrefix(kv.Key, settingsTablePrefix) {
@@ -45,18 +45,19 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			nameRow := []sqlbase.EncDatum{{Type: tbl.Columns[0].Type}}
-			_, matches, err := sqlbase.DecodeIndexKey(a, &tbl, tbl.PrimaryIndex.ID, nameRow, nil, kv.Key)
+			types := []sqlbase.ColumnType{tbl.Columns[0].Type}
+			nameRow := make([]sqlbase.EncDatum, 1)
+			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}
 			if !matches {
 				return errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
 			}
-			if err := nameRow[0].EnsureDecoded(a); err != nil {
+			if err := nameRow[0].EnsureDecoded(&types[0], a); err != nil {
 				return err
 			}
-			k = string(parser.MustBeDString(nameRow[0].Datum))
+			k = string(tree.MustBeDString(nameRow[0].Datum))
 		}
 
 		// The rest of the columns are stored as a family, packed with diff-encoded
@@ -70,7 +71,7 @@ func (s *Server) refreshSettings() {
 			}
 			var colIDDiff uint32
 			var lastColID sqlbase.ColumnID
-			var res parser.Datum
+			var res tree.Datum
 			for len(bytes) > 0 {
 				_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 				if err != nil {
@@ -85,9 +86,9 @@ func (s *Server) refreshSettings() {
 					}
 					switch colID {
 					case tbl.Columns[1].ID: // value
-						v = string(parser.MustBeDString(res))
+						v = string(tree.MustBeDString(res))
 					case tbl.Columns[3].ID: // valueType
-						t = string(parser.MustBeDString(res))
+						t = string(tree.MustBeDString(res))
 					case tbl.Columns[2].ID: // lastUpdated
 						// TODO(dt): we could decode just the len and then seek `bytes` past
 						// it, without allocating/decoding the unused timestamp.
@@ -99,7 +100,7 @@ func (s *Server) refreshSettings() {
 		}
 
 		if err := u.Set(k, v, t); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "setting %q to %q failed: %+v", k, v, err)
 		}
 		return nil
 	}
@@ -108,12 +109,11 @@ func (s *Server) refreshSettings() {
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
-		settings.Freeze()
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := s.gossip.GetSystemConfig()
-				u := settings.MakeUpdater()
+				cfg := s.gossip.GetSystemConfig()
+				u := s.st.MakeUpdater()
 				ok := true
 				for _, kv := range cfg.Values {
 					if err := processKV(ctx, kv, u); err != nil {
@@ -125,7 +125,7 @@ func (s *Server) refreshSettings() {
 					}
 				}
 				if ok {
-					u.Done()
+					u.ResetRemaining()
 				}
 			case <-s.stopper.ShouldStop():
 				return

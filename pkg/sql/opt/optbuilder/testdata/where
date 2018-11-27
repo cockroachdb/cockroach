@@ -1,0 +1,278 @@
+# tests adapted from logictest -- where
+
+exec-ddl
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE kvString (
+  k STRING PRIMARY KEY,
+  v STRING
+)
+----
+TABLE kvstring
+ ├── k string not null
+ ├── v string
+ └── INDEX primary
+      └── k string not null
+
+build
+SELECT * FROM kv WHERE k IN (1, 3)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int)
+ └── filters
+      └── in [type=bool]
+           ├── variable: k [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 3 [type=int]
+
+build
+SELECT * FROM kv WHERE v IN (6)
+----
+select
+ ├── columns: k:1(int!null) v:2(int!null)
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int)
+ └── filters
+      └── in [type=bool]
+           ├── variable: v [type=int]
+           └── tuple [type=tuple{int}]
+                └── const: 6 [type=int]
+
+build
+SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan kv
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: kv.k:3(int!null)
+           │    └── scan kv
+           │         └── columns: kv.k:3(int!null) kv.v:4(int)
+           └── variable: kv.k [type=int]
+
+build
+SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan kv
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: column5:5(tuple{int, int})
+           │    ├── scan kv
+           │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
+           │    └── projections
+           │         └── tuple [type=tuple{int, int}]
+           │              ├── variable: kv.k [type=int]
+           │              └── variable: kv.v [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── variable: kv.k [type=int]
+                └── variable: kv.v [type=int]
+
+build
+SELECT * FROM kv WHERE nonexistent = 1
+----
+error (42703): column "nonexistent" does not exist
+
+build
+SELECT 'hello' LIKE v AS r FROM kvString WHERE k LIKE 'like%' ORDER BY k
+----
+project
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1(string!null) v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1(string!null) v:2(string)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── like [type=bool]
+ │              ├── variable: k [type=string]
+ │              └── const: 'like%' [type=string]
+ └── projections
+      └── like [type=bool]
+           ├── const: 'hello' [type=string]
+           └── variable: v [type=string]
+
+build
+SELECT 'hello' SIMILAR TO v AS r FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1(string!null) v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1(string!null) v:2(string)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── similar-to [type=bool]
+ │              ├── variable: k [type=string]
+ │              └── const: 'like[1-2]' [type=string]
+ └── projections
+      └── similar-to [type=bool]
+           ├── const: 'hello' [type=string]
+           └── variable: v [type=string]
+
+build
+SELECT 'hello' ~ replace(v, '%', '.*') AS r FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1(string!null) v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1(string!null) v:2(string)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── reg-match [type=bool]
+ │              ├── variable: k [type=string]
+ │              └── const: 'like[1-2]' [type=string]
+ └── projections
+      └── reg-match [type=bool]
+           ├── const: 'hello' [type=string]
+           └── function: replace [type=string]
+                ├── variable: v [type=string]
+                ├── const: '%' [type=string]
+                └── const: '.*' [type=string]
+
+# Test mixed type tuple comparison.
+
+build
+SELECT * FROM kv WHERE k IN (1, 5.0, 9)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int)
+ └── filters
+      └── in [type=bool]
+           ├── variable: k [type=int]
+           └── tuple [type=tuple{int, int, int}]
+                ├── const: 1 [type=int]
+                ├── const: 5 [type=int]
+                └── const: 9 [type=int]
+
+# Regression tests for #22670.
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+TABLE ab
+ ├── a int
+ ├── b int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4)
+----
+project
+ ├── columns: a:1(int!null) b:2(int)
+ └── select
+      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
+      ├── scan ab
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      └── filters
+           └── in [type=bool]
+                ├── variable: a [type=int]
+                └── tuple [type=tuple{int, int, int}]
+                     ├── const: 1 [type=int]
+                     ├── const: 3 [type=int]
+                     └── const: 4 [type=int]
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
+----
+project
+ ├── columns: a:1(int!null) b:2(int)
+ └── select
+      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
+      ├── scan ab
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      └── filters
+           └── in [type=bool]
+                ├── variable: a [type=int]
+                └── tuple [type=tuple{int, int, int, int}]
+                     ├── const: 1 [type=int]
+                     ├── const: 3 [type=int]
+                     ├── const: 4 [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null)
+ └── select
+      ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
+      ├── scan ab
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      └── filters
+           └── in [type=bool]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── variable: a [type=int]
+                │    └── variable: b [type=int]
+                └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                     ├── tuple [type=tuple{int, int}]
+                     │    ├── const: 1 [type=int]
+                     │    └── const: 10 [type=int]
+                     ├── tuple [type=tuple{int, int}]
+                     │    ├── const: 3 [type=int]
+                     │    └── const: 30 [type=int]
+                     └── tuple [type=tuple{int, int}]
+                          ├── const: 4 [type=int]
+                          └── const: 40 [type=int]
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null)
+ └── select
+      ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
+      ├── scan ab
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      └── filters
+           └── in [type=bool]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── variable: a [type=int]
+                │    └── variable: b [type=int]
+                └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                     ├── tuple [type=tuple{int, int}]
+                     │    ├── const: 1 [type=int]
+                     │    └── const: 10 [type=int]
+                     ├── tuple [type=tuple{int, int}]
+                     │    ├── const: 4 [type=int]
+                     │    └── null [type=unknown]
+                     └── tuple [type=tuple{int, int}]
+                          ├── null [type=unknown]
+                          └── const: 50 [type=int]
+
+# Where clause must be type bool.
+build
+SELECT * FROM ab WHERE a
+----
+error (42804): argument of WHERE must be type bool, not type int

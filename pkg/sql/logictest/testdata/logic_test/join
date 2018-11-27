@@ -1,0 +1,1080 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
+
+# The join condition logic is tricky to get right with NULL
+# values. Simple implementations can deal well with NULLs on the first
+# or last row but fail to handle them in the middle. So the test table
+# must contain at least 3 rows with a null in the middle. This test
+# table also contains the pair 44/42 so that a test with a non-trivial
+# ON condition can be written.
+statement ok
+CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
+
+query II colnames,rowsort
+SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
+----
+   x     y
+  44    44
+  44  NULL
+  44    42
+NULL    44
+NULL  NULL
+NULL    42
+  42    44
+  42  NULL
+  42    42
+
+# Check that name resolution chokes on ambiguity when it needs to.
+query error column reference "x" is ambiguous \(candidates: a.x, b.x\)
+SELECT x FROM onecolumn AS a, onecolumn AS b
+
+query II colnames,rowsort
+SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
+----
+ x  y
+44 44
+42 42
+
+query I colnames
+SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
+----
+ x
+42
+44
+
+query I colnames,rowsort
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
+----
+ x
+44
+42
+
+query II colnames,rowsort
+SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+NULL  NULL
+  42    42
+
+query I colnames
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+   x
+NULL
+  42
+  44
+
+# Check that ORDER BY chokes on ambiguity if no table less columns
+# were introduced by USING. (#12239)
+query error ORDER BY "x" is ambiguous
+SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
+
+query I colnames,rowsort
+SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
+----
+   x
+  44
+NULL
+  42
+
+query II colnames,rowsort
+SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+   x     y
+  44    44
+  42    42
+NULL  NULL
+
+query I colnames
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+   x
+NULL
+  42
+  44
+
+query I colnames,rowsort
+SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
+----
+   x
+  44
+  42
+NULL
+
+statement ok
+CREATE TABLE onecolumn_w(w INT); INSERT INTO onecolumn_w(w) VALUES (42),(43)
+
+query II colnames,rowsort
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
+----
+   x  w
+  44  42
+  44  43
+NULL  42
+NULL  43
+  42  42
+  42  43
+
+statement ok
+CREATE TABLE othercolumn (x INT); INSERT INTO othercolumn(x) VALUES (43),(42),(16)
+
+query II colnames
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
+----
+x    x
+NULL NULL
+NULL 16
+NULL 43
+42   42
+44   NULL
+
+query I colnames
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
+----
+x
+NULL
+16
+42
+43
+44
+
+# Check that the source columns can be selected separately from the
+# USING column (#12033).
+query III colnames
+SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
+----
+   s      x      x
+NULL   NULL   NULL
+  16   NULL     16
+  42     42     42
+  43   NULL     43
+  44     44   NULL
+
+query I colnames
+SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
+----
+x
+NULL
+16
+42
+43
+44
+
+# Check that a limit on the JOIN's result do not cause rows from the
+# JOIN operands to become invisible to the JOIN.
+query I colnames
+SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+----
+x
+42
+
+statement ok
+CREATE TABLE empty (x INT)
+
+query II
+SELECT * FROM onecolumn AS a(x) CROSS JOIN empty AS b(y)
+----
+
+query II
+SELECT * FROM empty AS a CROSS JOIN onecolumn AS b
+----
+
+query II
+SELECT * FROM onecolumn AS a(x) JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM onecolumn AS a JOIN empty AS b USING(x)
+----
+
+query II
+SELECT * FROM empty AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a JOIN onecolumn AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
+----
+x     y
+NULL  NULL
+42    NULL
+44    NULL
+
+query I colnames
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
+----
+x
+NULL
+42
+44
+
+query II
+SELECT * FROM empty AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM empty AS a LEFT OUTER JOIN onecolumn AS b USING(x)
+----
+
+query II
+SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+
+query I
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN empty AS b USING(x)
+----
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+----
+x     y
+NULL  NULL
+NULL  42
+NULL  44
+
+query I colnames
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+x
+NULL
+42
+44
+
+query II colnames
+SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
+----
+x     y
+NULL  NULL
+42    NULL
+44    NULL
+
+query I colnames
+SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
+----
+x
+NULL
+42
+44
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+----
+x     y
+NULL  NULL
+NULL  42
+NULL  44
+
+query I colnames
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+x
+NULL
+42
+44
+
+statement ok
+CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51), (NULL,52), (42,53), (45,45)
+
+# Natural joins with partial match
+query II colnames,rowsort
+SELECT * FROM onecolumn NATURAL JOIN twocolumn
+----
+x    y
+44   51
+42   53
+
+query IIII rowsort
+SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
+----
+45  45  44    51
+45  45  NULL  52
+45  45  42    53
+45  45  45    45
+
+# Inner join with filter predicate
+query II
+SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+42   53
+
+# Outer joins with filter predicate
+query II rowsort
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+44   NULL
+NULL NULL
+42   53
+
+query II rowsort
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44)
+----
+44   51
+NULL NULL
+42   NULL
+
+query II rowsort
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44)
+----
+44   51
+NULL NULL
+42   NULL
+
+# Computed columns with NATURAL FULL JOIN.
+query III rowsort
+SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
+----
+NULL  NULL  53
+NULL  2     NULL
+45    NULL  46
+44    2     52
+42    2     54
+
+## Simple test cases for inner, left, right, and outer joins
+
+statement ok
+CREATE TABLE a (i int); INSERT INTO a VALUES (1), (2), (3)
+
+statement ok
+CREATE TABLE b (i int, b bool); INSERT INTO b VALUES (2, true), (3, true), (4, false)
+
+query IIB rowsort
+SELECT * FROM a INNER JOIN b ON a.i = b.i
+----
+2 2 true
+3 3 true
+
+query IIB rowsort
+SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
+----
+1 NULL NULL
+2 2    true
+3 3    true
+
+query IIB rowsort
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i
+----
+2    2    true
+3    3    true
+NULL 4    false
+
+query IIB rowsort
+SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i
+----
+1    NULL NULL
+2    2    true
+3    3    true
+NULL 4    false
+
+# Full outer join with filter predicate
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
+----
+NULL 2    true
+NULL 4    false
+1    NULL NULL
+2    NULL NULL
+3    3    true
+
+# Duplicate right matches for a single left row
+statement ok
+INSERT INTO b VALUES (3, false)
+
+query IIB
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
+----
+2    2 true
+3    3 false
+3    3 true
+NULL 4 false
+
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
+----
+1    NULL NULL
+2    2    true
+3    3    false
+3    3    true
+NULL 4    false
+
+
+# Check column orders and names.
+query IIIIII colnames
+SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
+----
+x  x  y  b  d  e
+42 42 53 42 42 53
+
+# Check sub-queries in ON conditions.
+query III colnames
+SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
+----
+x    x    y
+42   42   53
+
+# Check sub-queries as data sources.
+query I colnames
+SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
+----
+x
+42
+
+query I colnames
+SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
+----
+x
+44
+
+# Check that a single column can have multiple table aliases.
+query IIII colnames
+SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
+----
+x  y  y  y
+42 53 53 53
+
+query IIIIII colnames
+SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
+----
+ s   x   x   y   y   y
+ 42  42  42  53  53  53
+ 44  44  44  51  51  51
+ 45  45  45  45  45  45
+
+query error pgcode 42703 column "y" specified in USING clause does not exist
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
+
+query error pgcode 42701 column "x" appears more than once in USING clause
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
+
+statement ok
+CREATE TABLE othertype (x TEXT)
+
+query error pgcode 42804 JOIN/USING types.*cannot be matched
+SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
+
+query error pgcode 42712 source name "onecolumn" specified more than once \(missing AS clause\)
+SELECT * FROM (onecolumn JOIN onecolumn USING(x))
+
+query error pgcode 42712 source name "onecolumn" specified more than once \(missing AS clause\)
+SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
+
+# Check that star expansion works across anonymous sources.
+query II rowsort
+SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+----
+  42     42
+  42     44
+  42   NULL
+  44     42
+  44     44
+  44   NULL
+NULL     42
+NULL     44
+NULL   NULL
+
+# Check that anonymous sources are properly looked up without ambiguity.
+query I
+SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
+----
+42
+
+# Check that multiple anonymous sources cause proper ambiguity errors.
+query error column reference "x" is ambiguous \(candidates: <anonymous>\.x\)
+SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+
+query error column reference "x" is ambiguous \(candidates: a\.x, b\.x\)
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
+
+query error column "a.y" does not exist
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
+
+statement ok
+CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)
+
+# Ensure that large cross-joins are optimized somehow (#10633)
+statement ok
+CREATE TABLE customers(id INT PRIMARY KEY NOT NULL); CREATE TABLE orders(id INT, cust INT REFERENCES customers(id))
+
+query TTTTTTTTIIITTI
+SELECT     NULL::text  AS pktable_cat,
+       pkn.nspname AS pktable_schem,
+       pkc.relname AS pktable_name,
+       pka.attname AS pkcolumn_name,
+       NULL::text  AS fktable_cat,
+       fkn.nspname AS fktable_schem,
+       fkc.relname AS fktable_name,
+       fka.attname AS fkcolumn_name,
+       pos.n       AS key_seq,
+       CASE con.confupdtype
+            WHEN 'c' THEN 0
+            WHEN 'n' THEN 2
+            WHEN 'd' THEN 4
+            WHEN 'r' THEN 1
+            WHEN 'a' THEN 3
+            ELSE NULL
+       END AS update_rule,
+       CASE con.confdeltype
+            WHEN 'c' THEN 0
+            WHEN 'n' THEN 2
+            WHEN 'd' THEN 4
+            WHEN 'r' THEN 1
+            WHEN 'a' THEN 3
+            ELSE NULL
+       END          AS delete_rule,
+       con.conname  AS fk_name,
+       pkic.relname AS pk_name,
+       CASE
+            WHEN con.condeferrable
+            AND      con.condeferred THEN 5
+            WHEN con.condeferrable THEN 6
+            ELSE 7
+       END AS deferrability
+  FROM     pg_catalog.pg_namespace pkn,
+       pg_catalog.pg_class pkc,
+       pg_catalog.pg_attribute pka,
+       pg_catalog.pg_namespace fkn,
+       pg_catalog.pg_class fkc,
+       pg_catalog.pg_attribute fka,
+       pg_catalog.pg_constraint con,
+       pg_catalog.generate_series(1, 32) pos(n),
+       pg_catalog.pg_depend dep,
+       pg_catalog.pg_class pkic
+  WHERE    pkn.oid = pkc.relnamespace
+  AND      pkc.oid = pka.attrelid
+  AND      pka.attnum = con.confkey[pos.n]
+  AND      con.confrelid = pkc.oid
+  AND      fkn.oid = fkc.relnamespace
+  AND      fkc.oid = fka.attrelid
+  AND      fka.attnum = con.conkey[pos.n]
+  AND      con.conrelid = fkc.oid
+  AND      con.contype = 'f'
+  AND      con.oid = dep.objid
+  AND      pkic.oid = dep.refobjid
+  AND      pkic.relkind = 'i'
+  AND      dep.classid = 'pg_constraint'::regclass::oid
+  AND      dep.refclassid = 'pg_class'::regclass::oid
+  AND      fkn.nspname = 'public'
+  AND      fkc.relname = 'orders'
+  ORDER BY pkn.nspname,
+       pkc.relname,
+       con.conname,
+       pos.n
+----
+NULL  public  customers  id  NULL  public  orders  cust  1  3  3  fk_cust_ref_customers  primary  7
+
+
+# Tests for filter propagation through joins.
+
+statement ok
+CREATE TABLE square (n INT PRIMARY KEY, sq INT)
+
+statement ok
+INSERT INTO square VALUES (1,1), (2,4), (3,9), (4,16), (5,25), (6,36)
+
+statement ok
+CREATE TABLE pairs (a INT, b INT)
+
+statement ok
+INSERT INTO pairs VALUES (1,1), (1,2), (1,3), (1,4), (1,5), (1,6), (2,3), (2,4), (2,5), (2,6), (3,4), (3,5), (3,6), (4,5), (4,6)
+
+query IIII rowsort
+SELECT * FROM pairs, square WHERE pairs.b = square.n
+----
+1  1  1  1
+1  2  2  4
+1  3  3  9
+1  4  4  16
+1  5  5  25
+1  6  6  36
+2  3  3  9
+2  4  4  16
+2  5  5  25
+2  6  6  36
+3  4  4  16
+3  5  5  25
+3  6  6  36
+4  5  5  25
+4  6  6  36
+
+query IIII rowsort
+SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
+----
+1  3  2  4
+3  6  3  9
+4  5  3  9
+
+query IIII rowsort
+SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
+----
+2  4  2  4
+3  6  3  9
+1  2  1  1
+
+query IIII rowsort
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
+----
+1     1     NULL  NULL
+1     2     NULL  NULL
+1     3     2     4
+1     4     NULL  NULL
+1     5     NULL  NULL
+1     6     NULL  NULL
+2     3     NULL  NULL
+2     4     NULL  NULL
+2     5     NULL  NULL
+2     6     NULL  NULL
+3     4     NULL  NULL
+3     5     NULL  NULL
+3     6     3     9
+4     5     3     9
+4     6     NULL  NULL
+NULL  NULL  1     1
+NULL  NULL  4     16
+NULL  NULL  5     25
+NULL  NULL  6     36
+
+query IIII rowsort
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
+----
+1     3     2     4
+3     6     3     9
+
+# Filter propagation through outer joins.
+
+query IIII rowsort
+SELECT *
+  FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6)
+ WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
+----
+1  2  NULL  NULL
+1  3  NULL  NULL
+1  4  NULL  NULL
+1  5  NULL  NULL
+1  6  NULL  NULL
+2  3  NULL  NULL
+2  4  2     4
+2  5  NULL  NULL
+2  6  NULL  NULL
+3  4  2     4
+3  5  NULL  NULL
+3  6  NULL  NULL
+4  5  NULL  NULL
+4  6  NULL  NULL
+
+query IIII rowsort
+SELECT *
+  FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6)
+ WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
+----
+3     4     2  4
+NULL  NULL  3  9
+NULL  NULL  4  16
+NULL  NULL  5  25
+NULL  NULL  6  36
+
+
+statement ok
+CREATE TABLE t1 (col1 INT, x INT, col2 INT, y INT)
+
+statement ok
+CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
+
+statement ok
+INSERT INTO t1 VALUES (10, 1, 11, 1), (20, 2, 21, 1), (30, 3, 31, 1)
+
+statement ok
+INSERT INTO t2 VALUES (100, 1, 1, 101), (200, 1, 201, 2), (400, 1, 401, 4)
+
+query IIIIIII
+SELECT * FROM t1 JOIN t2 USING(x)
+----
+1    10    11    1    100    1    101
+
+query IIIIII
+SELECT * FROM t1 NATURAL JOIN t2
+----
+1    1    10    11    100    101
+
+query IIIIIIII
+SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
+----
+10    1    11    1    100    1    1    101
+
+query IIIIIII rowsort
+SELECT * FROM t1 FULL OUTER JOIN t2 USING(x)
+----
+   1      10      11       1     100       1     101
+   2      20      21       1    NULL    NULL    NULL
+   3      30      31       1    NULL    NULL    NULL
+ 201    NULL    NULL    NULL     200       1       2
+ 401    NULL    NULL    NULL     400       1       4
+
+query IIIIII rowsort
+SELECT * FROM t1 NATURAL FULL OUTER JOIN t2
+----
+  1    1      10      11     100     101
+  2    1      20      21    NULL    NULL
+  3    1      30      31    NULL    NULL
+201    1    NULL    NULL     200       2
+401    1    NULL    NULL     400       4
+
+query IIIIIIII rowsort
+SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x=t2.x
+----
+  10       1      11       1     100       1       1     101
+  20       2      21       1    NULL    NULL    NULL    NULL
+  30       3      31       1    NULL    NULL    NULL    NULL
+NULL    NULL    NULL    NULL     200       1     201       2
+NULL    NULL    NULL    NULL     400       1     401       4
+
+query III
+SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
+----
+1    1    1
+
+query III rowsort
+SELECT t2.x, t1.x, x FROM t1 FULL OUTER JOIN t2 USING(x)
+----
+   1       1      1
+NULL       2      2
+NULL       3      3
+ 201    NULL    201
+ 401    NULL    401
+
+# Test for #19536.
+query I
+SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
+----
+1
+
+# Tests for merge join ordering information.
+statement ok
+CREATE TABLE pkBA (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a))
+
+statement ok
+CREATE TABLE pkBC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,c))
+
+statement ok
+CREATE TABLE pkBAC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,c))
+
+statement ok
+CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
+
+# Tests with joins with merged columns of collated string type.
+statement ok
+CREATE TABLE str1 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
+
+statement ok
+INSERT INTO str1 VALUES (1, 'a' COLLATE en_u_ks_level1), (2, 'A' COLLATE en_u_ks_level1), (3, 'c' COLLATE en_u_ks_level1), (4, 'D' COLLATE en_u_ks_level1)
+
+statement ok
+CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
+
+statement ok
+INSERT INTO str2 VALUES (1, 'A' COLLATE en_u_ks_level1), (2, 'B' COLLATE en_u_ks_level1), (3, 'C' COLLATE en_u_ks_level1), (4, 'E' COLLATE en_u_ks_level1)
+
+query TTT rowsort
+SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
+----
+a  a  A
+A  A  A
+c  c  C
+
+query TTT rowsort
+SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
+----
+a  a  A
+A  A  A
+c  c  C
+D  D  NULL
+
+query TTT rowsort
+SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
+----
+a  a     A
+A  A     A
+c  c     C
+B  NULL  B
+E  NULL  E
+
+query TTT rowsort
+SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
+----
+a  a     A
+A  A     A
+c  c     C
+D  D     NULL
+E  NULL  E
+B  NULL  B
+
+
+statement ok
+CREATE TABLE xyu (x INT, y INT, u INT, PRIMARY KEY(x,y,u))
+
+statement ok
+INSERT INTO xyu VALUES (0, 0, 0), (1, 1, 1), (3, 1, 31), (3, 2, 32), (4, 4, 44)
+
+statement ok
+CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
+
+statement ok
+INSERT INTO xyv VALUES (1, 1, 1), (2, 2, 2), (3, 1, 31), (3, 3, 33), (5, 5, 55)
+
+query IIII
+SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
+----
+3  1  31  31
+
+query IIII rowsort
+SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+3  1  31  31
+3  2  32  NULL
+4  4  44  NULL
+
+query IIII rowsort
+SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  3  NULL  33
+5  5  NULL  55
+
+query IIII rowsort
+SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  2  32    NULL
+4  4  44    NULL
+3  3  NULL  33
+5  5  NULL  55
+
+query IIIIII
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
+----
+1  1  1  1  1  1
+
+query IIIIII
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+1  1  1  1  1  1
+
+query IIIIII rowsort
+SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0  0  0   NULL  NULL  NULL
+1  1  1   1     1     1
+3  1  31  NULL  NULL  NULL
+3  2  32  NULL  NULL  NULL
+4  4  44  NULL  NULL  NULL
+
+query IIIIII rowsort
+SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+1     1     1     1  1  1
+NULL  NULL  NULL  3  1  31
+NULL  NULL  NULL  3  3  33
+NULL  NULL  NULL  5  5  55
+NULL  NULL  NULL  2  2  2
+
+
+# Test OUTER joins that are run in the distSQL merge joiner
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31  31
+3  2  32  NULL
+4  4  44  NULL
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  3  NULL  33
+5  5  NULL  55
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  2  32    NULL
+4  4  44    NULL
+3  3  NULL  33
+5  5  NULL  55
+
+query IIIIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0  0  0   NULL  NULL  NULL
+1  1  1   1     1     1
+3  1  31  NULL  NULL  NULL
+3  2  32  NULL  NULL  NULL
+4  4  44  NULL  NULL  NULL
+
+query IIIIII rowsort
+SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+1     1     1     1  1  1
+NULL  NULL  NULL  3  1  31
+NULL  NULL  NULL  3  3  33
+NULL  NULL  NULL  5  5  55
+NULL  NULL  NULL  2  2  2
+
+
+# Regression test for #20858.
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO l VALUES (1), (2), (3)
+
+statement ok
+INSERT INTO r VALUES (2), (3), (4)
+
+query I
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
+----
+1
+
+query I
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
+----
+2
+
+query I
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
+----
+3
+
+query I
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 4
+----
+4
+
+
+# Regression tests for mixed-type equality columns (#22514).
+statement ok
+CREATE TABLE foo (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+)
+
+statement ok
+INSERT INTO foo VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+statement ok
+CREATE TABLE bar (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+)
+
+statement ok
+INSERT INTO bar VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+query IIRR rowsort
+SELECT * FROM foo NATURAL JOIN bar
+----
+1  1  1  1
+2  2  2  2
+3  3  3  3
+
+query IIRRIRI rowsort
+SELECT * FROM foo JOIN bar USING (b)
+----
+1  1  1  1  1  1  1
+2  2  2  2  2  2  2
+3  3  3  3  3  3  3
+
+query IIRRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b)
+----
+1  1  1  1  1  1
+2  2  2  2  2  2
+3  3  3  3  3  3
+
+query IIRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b, c)
+----
+1  1  1  1  1
+2  2  2  2  2
+3  3  3  3  3
+
+query IIRRIRRI rowsort
+SELECT * FROM foo JOIN bar ON foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+query IIRRIRRI rowsort
+SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+query IIRRIRRI rowsort
+SELECT * FROM foo, bar WHERE foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+query IIRRIRRI rowsort
+SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+query IIRRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
+----
+1  1  1  1  1  1
+2  2  2  2  2  2
+3  3  3  3  3  3
+
+# Regression test for 23664.
+query III rowsort
+SELECT * FROM onecolumn AS a(x) RIGHT JOIN twocolumn ON false
+----
+NULL  44    51
+NULL  NULL  52
+NULL  42    53
+NULL  45    45
+
+# Regression test for #23609: make sure that the type of the merged column
+# is int (not unknown).
+query II rowsort
+SELECT column1, column1+1
+FROM
+  (SELECT * FROM
+    (VALUES (NULL, NULL)) AS t
+      NATURAL FULL OUTER JOIN
+    (VALUES (1, 1)) AS u)
+----
+1     2
+NULL  NULL
+
+# Regression test for #28817. Do not allow special functions in ON clause.
+query error generator functions are not allowed in ON
+SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
+
+query error aggregate functions are not allowed in ON
+SELECT * FROM foo JOIN bar ON max(foo.c) < 2

@@ -1,0 +1,153 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+query I
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series LIMIT 5;
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST 5 ROWS ONLY;
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST ROW ONLY;
+----
+1
+
+query I
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series OFFSET 3 ROWS FETCH NEXT ROW ONLY;
+----
+4
+
+statement error syntax error
+SELECT generate_series FROM generate_series(1, 100) FETCH NEXT ROW ONLY LIMIT 3;
+
+statement error syntax error
+SELECT generate_series FROM generate_series(1, 100) LIMIT 3 FETCH NEXT ROW ONLY;
+
+statement error syntax error
+SELECT generate_series FROM generate_series(1, 100) FETCH NEXT 1 + 1 ROWS ONLY;
+
+query I
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST (1 + 1) ROWS ONLY;
+----
+1
+2
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 125), (6, -36, 216)
+
+# Verify we don't incorrectly impose a hard limit at the index scan level.
+query III
+SELECT * FROM t WHERE v > -20 AND w > 30 ORDER BY v LIMIT 2
+----
+4  -16  94
+5  25   125
+
+query II
+SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+1  1
+2  -4
+3  9
+4  -16
+5  25
+
+query II
+SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+6  -36
+
+query II
+SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
+----
+4  -16
+2  -4
+1  1
+3  9
+5  25
+
+query II
+SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
+----
+3  9
+1  1
+2  -4
+4  -16
+6  -36
+
+query R
+SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+125
+27
+1
+8
+94
+216
+
+query I
+SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
+----
+6
+4
+2
+1
+
+query I
+SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
+----
+6
+4
+2
+1
+
+# Use expression for LIMIT/OFFSET value.
+query II
+SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123))
+----
+1  1
+2  -4
+3  9
+
+query II
+SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123)) OFFSET length(pg_typeof(123))-2
+----
+2  -4
+3  9
+4  -16
+
+query II
+SELECT k, v FROM t ORDER BY k OFFSET (SELECT count(*)-3 FROM t)
+----
+4  -16
+5  25
+6  -36
+
+query II
+SELECT k, v FROM t ORDER BY k LIMIT (SELECT count(*)-3 FROM t) OFFSET (SELECT count(*)-5 FROM t)
+----
+2  -4
+3  9
+4  -16
+
+# Test sort node with both filter and limit. (https://github.com/cockroachdb/cockroach/issues/31163)
+statement ok
+SET TRACING = ON; SELECT 1; SET TRACING = OFF
+
+query I
+SELECT SPAN FROM [SHOW TRACE FOR SESSION] WHERE span = 1 LIMIT 1
+----
+1

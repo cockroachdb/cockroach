@@ -12,9 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Radu Berinde (radu@cockroachlabs.com)
-// Author: Andrei Matei (andreimatei1@gmail.com)
-//
 // This file provides generic interfaces that allow tests to set up test
 // clusters without importing the testcluster (and indirectly server) package
 // (avoiding circular dependencies). To be used, the binary needs to call
@@ -95,6 +92,10 @@ type TestClusterInterface interface {
 
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget
+
+	// ReplicationMode returns the ReplicationMode that the test cluster was
+	// configured with.
+	ReplicationMode() base.TestClusterReplicationMode
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

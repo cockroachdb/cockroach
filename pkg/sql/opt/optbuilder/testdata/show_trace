@@ -1,0 +1,23 @@
+build
+SHOW TRACE FOR SESSION
+----
+show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]}
+ └── columns: timestamp:1(timestamptz) age:2(interval) message:3(string) tag:4(string) location:5(string) operation:6(string) span:7(int)
+
+build
+SHOW COMPACT TRACE FOR SESSION
+----
+show-trace-for-session &{TRACE true [1 2 3 4]}
+ └── columns: age:1(interval) message:2(string) tag:3(string) operation:4(string)
+
+build
+SHOW KV TRACE FOR SESSION
+----
+show-trace-for-session &{KV TRACE false [1 2 3 4 5 6 7]}
+ └── columns: timestamp:1(timestamptz) age:2(interval) message:3(string) tag:4(string) location:5(string) operation:6(string) span:7(int)
+
+build
+SHOW COMPACT KV TRACE FOR SESSION
+----
+show-trace-for-session &{KV TRACE true [1 2 3 4]}
+ └── columns: age:1(interval) message:2(string) tag:3(string) operation:4(string)

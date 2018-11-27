@@ -1,7 +1,0 @@
-# LogicTest: default distsql
-
-query error unknown statement type
-BACKUP DATABASE foo TO '/bar' INCREMENTAL FROM '/baz'
-
-query error unknown statement type
-RESTORE DATABASE foo FROM '/bar'

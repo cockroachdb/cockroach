@@ -1,0 +1,322 @@
+# tests adapted from logictest -- limit
+
+exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
+----
+TABLE t
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX secondary
+      ├── v int
+      └── k int not null
+
+build
+SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    ├── ordering: +1
+ │    └── scan t
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── ordering: +1
+ └── const: 5 [type=int]
+
+build
+SELECT k, v FROM t ORDER BY v FETCH FIRST 5 ROWS ONLY
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: k:1(int!null) v:2(int)
+ │         └── scan t
+ │              └── columns: k:1(int!null) v:2(int) w:3(int)
+ └── const: 5 [type=int]
+
+build
+SELECT k, v FROM t LIMIT (1+2)
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan t
+ │         └── columns: k:1(int!null) v:2(int) w:3(int)
+ └── const: 3 [type=int]
+
+build
+SELECT k FROM t ORDER BY k FETCH FIRST ROW ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: k:1(int!null)
+ │    ├── ordering: +1
+ │    └── scan t
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT k FROM t ORDER BY k OFFSET 3 ROWS FETCH NEXT ROW ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: k:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── ordering: +1
+ │    ├── project
+ │    │    ├── columns: k:1(int!null)
+ │    │    ├── ordering: +1
+ │    │    └── scan t
+ │    │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │    │         └── ordering: +1
+ │    └── const: 3 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+offset
+ ├── columns: k:1(int!null) v:2(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    ├── ordering: +1
+ │    └── scan t
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── ordering: +1
+ └── const: 5 [type=int]
+
+build
+SELECT k FROM t ORDER BY k FETCH FIRST (1+1) ROWS ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: k:1(int!null)
+ │    ├── ordering: +1
+ │    └── scan t
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── ordering: +1
+ └── const: 2 [type=int]
+
+build
+SELECT k FROM T LIMIT k
+----
+error (42703): column "k" does not exist
+
+build
+SELECT k FROM T LIMIT v
+----
+error (42703): column "v" does not exist
+
+build
+SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+limit
+ ├── columns: sum:4(decimal)  [hidden: v:2(int)]
+ ├── internal-ordering: -2
+ ├── ordering: -2
+ ├── project
+ │    ├── columns: v:2(int) sum:4(decimal)
+ │    ├── ordering: -2
+ │    └── group-by
+ │         ├── columns: k:1(int!null) v:2(int) sum:4(decimal)
+ │         ├── grouping columns: k:1(int!null) v:2(int)
+ │         ├── ordering: -2
+ │         ├── sort
+ │         │    ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         │    ├── ordering: -2
+ │         │    └── scan t
+ │         │         └── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── aggregations
+ │              └── sum [type=decimal]
+ │                   └── variable: w [type=int]
+ └── const: 10 [type=int]
+
+build
+SELECT DISTINCT v FROM T ORDER BY v LIMIT 10
+----
+limit
+ ├── columns: v:2(int)
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: v:2(int)
+ │    ├── ordering: +2
+ │    └── distinct-on
+ │         ├── columns: v:2(int)
+ │         ├── grouping columns: v:2(int)
+ │         └── project
+ │              ├── columns: v:2(int)
+ │              └── scan t
+ │                   └── columns: k:1(int!null) v:2(int) w:3(int)
+ └── const: 10 [type=int]
+
+build
+VALUES (1,1), (2,2) ORDER BY 1 LIMIT 1
+----
+limit
+ ├── columns: column1:1(int) column2:2(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── ordering: +1
+ │    └── values
+ │         ├── columns: column1:1(int) column2:2(int)
+ │         ├── tuple [type=tuple{int, int}]
+ │         │    ├── const: 1 [type=int]
+ │         │    └── const: 1 [type=int]
+ │         └── tuple [type=tuple{int, int}]
+ │              ├── const: 2 [type=int]
+ │              └── const: 2 [type=int]
+ └── const: 1 [type=int]
+
+build
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3(int)
+ ├── internal-ordering: -3
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: column1:3(int)
+ │    ├── ordering: -3
+ │    └── union-all
+ │         ├── columns: column1:3(int)
+ │         ├── left columns: column1:1(int)
+ │         ├── right columns: column1:2(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int)
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 2 [type=int]
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 2 [type=int]
+ │         └── values
+ │              ├── columns: column1:2(int)
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 1 [type=int]
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 3 [type=int]
+ │              └── tuple [type=tuple{int}]
+ │                   └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3(int)
+ ├── internal-ordering: -3
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: column1:3(int)
+ │    ├── ordering: -3
+ │    └── union-all
+ │         ├── columns: column1:3(int)
+ │         ├── left columns: column1:1(int)
+ │         ├── right columns: column1:2(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int)
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 2 [type=int]
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 2 [type=int]
+ │         └── values
+ │              ├── columns: column1:2(int)
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 1 [type=int]
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 3 [type=int]
+ │              └── tuple [type=tuple{int}]
+ │                   └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build
+SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 10)
+----
+project
+ ├── columns: k:1(int!null)
+ └── limit
+      ├── columns: k:1(int!null) v:2(int)
+      ├── internal-ordering: +2
+      ├── sort
+      │    ├── columns: k:1(int!null) v:2(int)
+      │    ├── ordering: +2
+      │    └── project
+      │         ├── columns: k:1(int!null) v:2(int)
+      │         └── scan t
+      │              └── columns: k:1(int!null) v:2(int) w:3(int)
+      └── const: 10 [type=int]
+
+# This kind of query can be used to work around memory usage limits. We need to
+# choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
+# limit we will only store 100 rows in the sort node). See #19677.
+build
+SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
+----
+limit
+ ├── columns: w:3(int)
+ ├── internal-ordering: +3
+ ├── ordering: +3
+ ├── distinct-on
+ │    ├── columns: w:3(int)
+ │    ├── grouping columns: w:3(int)
+ │    ├── ordering: +3
+ │    └── limit
+ │         ├── columns: w:3(int)
+ │         ├── internal-ordering: +3
+ │         ├── ordering: +3
+ │         ├── sort
+ │         │    ├── columns: w:3(int)
+ │         │    ├── ordering: +3
+ │         │    └── project
+ │         │         ├── columns: w:3(int)
+ │         │         └── scan t
+ │         │              └── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── const: 100 [type=int]
+ └── const: 25 [type=int]
+
+build
+SELECT * FROM t LIMIT @1
+----
+error (42703): column reference @1 not allowed in this context
+
+build
+SELECT * FROM t OFFSET @1
+----
+error (42703): column reference @1 not allowed in this context

@@ -11,30 +11,27 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -45,7 +42,7 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
 
@@ -103,15 +100,15 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
-// benchmarkSingleRoundtripWithLatency runs a number of transactions writing to
-// the same key back to back in a single round-trip. Latency is simulated
+// BenchmarkSingleRoundtripWithLatency runs a number of transactions writing
+// to the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 	for _, latency := range []time.Duration{0, 10 * time.Millisecond} {
-		b.Run(latency.String(), func(b *testing.B) {
+		b.Run(fmt.Sprintf("latency=%s", latency), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
 			s.Latency = latency
-			s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+			s.Start(b, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 			defer s.Stop()
 			defer b.StopTimer()
 			key := roachpb.Key("key")
@@ -134,7 +131,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 // the transaction, not the forwarded timestamp.
 func TestSnapshotIsolationIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	var key = roachpb.Key("a")
@@ -166,13 +163,13 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if txn.Proto().Epoch == 0 {
+		if txn.Epoch() == 0 {
 			close(start) // let someone write into our future
 			// When they're done writing, increment.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto().Epoch > 1 {
+		} else if txn.Epoch() > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -186,19 +183,21 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		// before anything else happened in the concurrent writer
 		// goroutine). The second iteration of the txn should read the
 		// correct value and commit.
-		if txn.Proto().Epoch == 0 && !txn.Proto().OrigTimestamp.Less(txn.Proto().Timestamp) {
-			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto())
+		proto := txn.Serialize()
+		if txn.Epoch() == 0 && !proto.OrigTimestamp.Less(proto.Timestamp) {
+			t.Fatalf("expected orig timestamp less than timestamp: %s", proto)
 		}
 		ir, err := txn.Inc(ctx, key, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if vi := ir.ValueInt(); vi != int64(txn.Proto().Epoch+1) {
-			t.Errorf("expected %d; got %d", txn.Proto().Epoch+1, vi)
+		proto = txn.Serialize()
+		if vi := ir.ValueInt(); vi != int64(proto.Epoch+1) {
+			t.Errorf("expected %d; got %d", proto.Epoch+1, vi)
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
-			t.Fatalf("expected write too old=%t; got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
+		if (txn.Epoch() == 0) != proto.WriteTooOld {
+			t.Fatalf("expected write too old=%t; got %t", (proto.Epoch == 0), proto.WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -215,7 +214,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 //   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 	var key = roachpb.Key("a")
 
@@ -238,13 +237,13 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if txn.Proto().Epoch == 0 {
+		if txn.Epoch() == 0 {
 			close(start) // let someone write into our future
 			// When they're done, write based on what we read.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto().Epoch > 1 {
+		} else if txn.Epoch() > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -258,8 +257,9 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 			}
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
-			t.Fatalf("expected write too old set (%t): got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
+		proto := txn.Serialize()
+		if (txn.Epoch() == 0) != proto.WriteTooOld {
+			t.Fatalf("expected write too old set (%t): got %t", (txn.Epoch() == 0), proto.WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -284,7 +284,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 // concurrent reader pushes an intent.
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
@@ -330,7 +330,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 				if iteration == 1 {
 					// Verify our priority has ratcheted to one less than the pusher's priority
 					expPri := int32(roachpb.MaxTxnPriority - 1)
-					if pri := txn.Proto().Priority; pri != expPri {
+					if pri := txn.Serialize().Priority; pri != expPri {
 						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 					}
 					return nil
@@ -361,166 +361,13 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	}
 }
 
-// disableOwnNodeCertain is used in tests which want to verify uncertainty
-// related logic on single-node installations. In regular operation, trans-
-// actional requests automatically have the "own" NodeID marked as free from
-// uncertainty, which interferes with the tests. The feature is disabled simply
-// by poisoning the gossip NodeID; this may break other functionality which
-// is usually not relevant in uncertainty tests.
-func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) error {
-	distSender := tc.Sender.(*TxnCoordSender).wrapped.(*DistSender)
-	desc := distSender.getNodeDescriptor()
-	desc.NodeID = 999
-	distSender.gossip.NodeID.Reset(desc.NodeID)
-	return distSender.gossip.SetNodeDescriptor(desc)
-}
-
-// TestUncertaintyRestart verifies that a transaction which finds a write in
-// its near future will restart exactly once, meaning that it's made a note of
-// that node's clock for its new timestamp.
-func TestUncertaintyRestart(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const maxOffset = 250 * time.Millisecond
-	dbCtx := client.DefaultDBContext()
-	s := &localtestcluster.LocalTestCluster{
-		Clock:     hlc.NewClock(hlc.UnixNano, maxOffset),
-		DBContext: &dbCtx,
-	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
-	defer s.Stop()
-	if err := disableOwnNodeCertain(s); err != nil {
-		t.Fatal(err)
-	}
-	s.Manual.Increment(s.Clock.MaxOffset().Nanoseconds() + 1)
-
-	var key = roachpb.Key("a")
-
-	errChan := make(chan error)
-	start := make(chan struct{})
-	go func() {
-		<-start
-		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			return txn.Put(ctx, key, "hi")
-		})
-	}()
-
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		if txn.Proto().Epoch > 2 {
-			t.Fatal("expected only one restart")
-		}
-		// Issue a read to pick a timestamp.
-		if _, err := txn.Get(ctx, key.Next()); err != nil {
-			t.Fatal(err)
-		}
-		if txn.Proto().Epoch == 0 {
-			close(start) // let someone write into our future
-			// when they're done, try to read
-			if err := <-errChan; err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := txn.Get(ctx, key.Next()); err != nil {
-			if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
-				t.Fatalf("unexpected error: %T: %s", err, err)
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestUncertaintyObservedTimestampForwarding checks that when receiving an
-// uncertainty restart on a node, the next attempt to read (at the increased
-// timestamp) is free from uncertainty. See roachpb.Transaction for details.
-func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dbCtx := client.DefaultDBContext()
-	s := &localtestcluster.LocalTestCluster{
-		// Large offset so that any value in the future is an uncertain read. Also
-		// makes sure that the values we write in the future below don't actually
-		// wind up in the past.
-		Clock:     hlc.NewClock(hlc.UnixNano, 50*time.Second),
-		DBContext: &dbCtx,
-	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
-	defer s.Stop()
-	if err := disableOwnNodeCertain(s); err != nil {
-		t.Fatal(err)
-	}
-
-	offsetNS := int64(100)
-	keySlow := roachpb.Key("slow")
-	keyFast := roachpb.Key("fast")
-	valSlow := []byte("wols")
-	valFast := []byte("tsaf")
-
-	// Write keySlow at now+offset, keyFast at now+2*offset
-	futureTS := s.Clock.Now()
-	futureTS.WallTime += offsetNS
-	val := roachpb.MakeValueFromBytes(valSlow)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
-		t.Fatal(err)
-	}
-	futureTS.WallTime += offsetNS
-	val.SetBytes(valFast)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	i := 0
-	if tErr := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		i++
-		// The first command serves to start a Txn, fixing the timestamps.
-		// There will be a restart, but this is idempotent.
-		if _, err := txn.Scan(ctx, "t", roachpb.Key("t").Next(), 0); err != nil {
-			t.Fatal(err)
-		}
-		// This is a bit of a hack for the sake of this test: By visiting the
-		// node above, we've made a note of its clock, which allows us to
-		// prevent the restart. But we want to catch the restart, so reset the
-		// observed timestamps.
-		txn.Proto().ResetObservedTimestamps()
-
-		// The server's clock suddenly jumps ahead of keyFast's timestamp.
-		s.Manual.Increment(2*offsetNS + 1)
-
-		// Now read slowKey first. It should read at 0, catch an uncertainty error,
-		// and get keySlow's timestamp in that error, but upgrade it to the larger
-		// node clock (which is ahead of keyFast as well). If the last part does
-		// not happen, the read of keyFast should fail (i.e. read nothing).
-		// There will be exactly one restart here.
-		if gr, err := txn.Get(ctx, keySlow); err != nil {
-			if i != 1 {
-				t.Fatalf("unexpected transaction error: %s", err)
-			}
-			return err
-		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valSlow) {
-			t.Fatalf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
-		}
-
-		// The node should already be certain, so we expect no restart here
-		// and to read the correct key.
-		if gr, err := txn.Get(ctx, keyFast); err != nil {
-			t.Fatalf("second Get failed with %s", err)
-		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
-			t.Fatalf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
-		}
-		return nil
-	}); tErr != nil {
-		t.Fatal(tErr)
-	}
-}
-
 // TestTxnTimestampRegression verifies that if a transaction's
 // timestamp is pushed forward by a concurrent read, it may still
 // commit. A bug in the EndTransaction implementation used to compare
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
@@ -546,10 +393,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Write now to keyB, which will get a higher timestamp than keyB was written at.
-		if err := txn.Put(ctx, keyB, "value2"); err != nil {
-			return err
-		}
-		return nil
+		return txn.Put(ctx, keyB, "value2")
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -562,7 +406,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -591,7 +435,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 	// Delay for longer than the cache window.
-	s.Manual.Increment((storage.MinTSCacheWindow + time.Second).Nanoseconds())
+	s.Manual.Increment((tscache.MinRetentionWindow + time.Second).Nanoseconds())
 	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -631,7 +475,11 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -674,7 +522,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		s.Manual.Increment(time.Second.Nanoseconds())
 		// Split range by keyB.
-		if err := s.DB.AdminSplit(context.TODO(), splitKey); err != nil {
+		if err := s.DB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.
@@ -716,7 +564,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
@@ -736,7 +584,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
-			if count <= 2 {
+			if count <= 1 {
 				// Notify concurrent getter to push txnA on get(a).
 				ch <- struct{}{}
 				// Wait for txnB notify us to commit.
@@ -759,21 +607,99 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	}
 	// Notify txnA to commit.
 	ch <- struct{}{}
-	// Wait for txnA to restart.
-	<-ch
-	// Notify txnA to commit.
-	ch <- struct{}{}
 
 	// Wait for txnA to finish.
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
-	// We expect one restart (so a count of two). The transaction continues
+	// We expect no restarts (so a count of one). The transaction continues
 	// despite the push and timestamp forwarding in order to lay down all
 	// intents in the first pass. On the first EndTransaction, the difference
-	// in timestamps causes the serializable transaction to retry.
-	const expCount = 2
+	// in timestamps would cause the serializable transaction to update spans,
+	// but only writes occurred during the transaction, so the commit succeeds.
+	const expCount = 1
 	if count != expCount {
 		t.Fatalf("expected %d restarts, but got %d", expCount, count)
+	}
+}
+
+// TestTxnResolveIntentsFromMultipleEpochs verifies that that intents
+// from earlier epochs are cleaned up on transaction commit.
+func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	writeSkewKey := "write-skew"
+	keys := []string{"a", "b", "c"}
+	ch := make(chan struct{})
+	errChan := make(chan error, 1)
+	// Launch goroutine to write the three keys on three successive epochs.
+	go func() {
+		var count int
+		errChan <- s.DB.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+			// Read the write skew key, which will be written by another goroutine
+			// to ensure transaction restarts.
+			if _, err := txn.Get(ctx, writeSkewKey); err != nil {
+				return err
+			}
+			// Signal that the transaction has (re)started.
+			ch <- struct{}{}
+			// Wait for concurrent writer to write key.
+			<-ch
+			// Now write our version over the top (will get a pushed timestamp).
+			if err := txn.Put(ctx, keys[count], "txn"); err != nil {
+				return err
+			}
+			count++
+			return nil
+		})
+	}()
+
+	step := func(key string, causeWriteSkew bool) {
+		// Wait for transaction to start.
+		<-ch
+		if causeWriteSkew {
+			// Write to the write skew key to ensure a restart.
+			if err := s.DB.Put(context.Background(), writeSkewKey, "skew-"+key); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Read key to push txn's timestamp forward on its write.
+		if _, err := s.DB.Get(context.Background(), key); err != nil {
+			t.Fatal(err)
+		}
+		// Signal the transaction to continue.
+		ch <- struct{}{}
+	}
+
+	// Step 1 causes a restart.
+	step(keys[0], true)
+	// Step 2 causes a restart.
+	step(keys[1], true)
+	// Step 3 does not result in a restart.
+	step(keys[2], false)
+
+	// Wait for txn to finish.
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
+	}
+
+	// Read values for three keys. The first two should be empty, the last should be "txn".
+	for i, k := range keys {
+		v, err := s.DB.Get(context.TODO(), k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		str := string(v.ValueBytes())
+		if i < len(keys)-1 {
+			if str != "" {
+				t.Errorf("key %s expected \"\"; got %s", k, str)
+			}
+		} else {
+			if str != "txn" {
+				t.Errorf("key %s expected \"txn\"; got %s", k, str)
+			}
+		}
 	}
 }

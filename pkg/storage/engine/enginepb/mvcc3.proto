@@ -1,0 +1,208 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.storage.engine.enginepb;
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
+// either).
+enum IsolationType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  SERIALIZABLE = 0;
+  SNAPSHOT = 1;
+}
+
+// TxnMeta is the metadata of a Transaction record.
+message TxnMeta {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // id is a unique UUID value which identifies the transaction.
+  // This field is always filled in.
+  bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false];
+  IsolationType isolation = 2;
+  // key is the key which anchors the transaction. This is typically
+  // the first key read or written during the transaction and
+  // determines which range in the cluster will hold the transaction
+  // record.
+  bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
+  // Incremented on txn retry.
+  uint32 epoch = 4;
+  // The proposed timestamp for the transaction. This starts as the
+  // current wall time on the txn coordinator. This is the timestamp
+  // at which all of the transaction's writes are performed: even if
+  // intents have been laid down at different timestamps, the process
+  // of resolving them (e.g. when the txn commits) will bump them to
+  // this timestamp. SERIALIZABLE transactions only commit when
+  // timestamp == orig_timestamp. SNAPSHOT transactions can commit
+  // even when they've performed their reads (at orig_timestamp) at a
+  // different timestamp than their writes (at timestamp).
+  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  int32 priority = 6;
+  // A one-indexed sequence number which is increased on each request
+  // sent as part of the transaction. When set in the header of a batch
+  // of requests, the value will correspond to the sequence number of the
+  // last request. Used to prevent replay and out-of-order application
+  // protection (by means of a transaction retry).
+  int32 sequence = 7;
+  // A zero-indexed sequence number indicating the index of a command
+  // within a batch. This disambiguate Raft replays of a batch from
+  // multiple commands in a batch which modify the same key. The field
+  // has now been deprecated because each request in a batch is now
+  // given its own sequence number.
+  //
+  // TODO(nvanbenschoten): Remove this field and its uses entirely
+  // in 2.2. This is safe because the field is only set on pending
+  // intents by transactions with 2.0 coordinators. 2.1 nodes need
+  // to be able to handle the field so they can interop with 2.0 nodes.
+  // However, 2.2 nodes will not, because all transactions started by
+  // 2.0 nodes will necessarily be abandoned for 2.2 nodes to join a
+  // cluster.
+  int32 deprecated_batch_index = 8;
+}
+
+// MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
+// encodings for most fields that make it more efficient to store negative
+// values. This makes the encodings incompatible.
+message MVCCStatsDelta {
+  option (gogoproto.equal) = true;
+
+  // TODO(nvanbenschoten): now that we've split MVCCPersistentStats
+  // from this MVCCStatsDelta type, we can turn contains_estimates 
+  // into a three-valued type ('UNCHANGED', 'NO', and 'YES').
+  bool contains_estimates = 14;
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  sint64 live_bytes = 4;
+  sint64 live_count = 5;
+  sint64 key_bytes = 6;
+  sint64 key_count = 7;
+  sint64 val_bytes = 8;
+  sint64 val_count = 9;
+  sint64 intent_bytes = 10;
+  sint64 intent_count = 11;
+  sint64 sys_bytes = 12;
+  sint64 sys_count = 13;
+}
+
+// MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
+// width encodings for most fields that make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+message MVCCPersistentStats {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  bool contains_estimates = 14;
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  int64 live_bytes = 4;
+  int64 live_count = 5;
+  int64 key_bytes = 6;
+  int64 key_count = 7;
+  int64 val_bytes = 8;
+  int64 val_count = 9;
+  int64 intent_bytes = 10;
+  int64 intent_count = 11;
+  int64 sys_bytes = 12;
+  int64 sys_count = 13;
+}
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+message RangeAppliedState {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // raft_applied_index is the highest (and last) index applied to the Raft
+  // state machine.
+  uint64 raft_applied_index = 1;
+  // lease_applied_index is the highest (and last) lease index applied to the
+  // Raft state machine.
+  uint64 lease_applied_index = 2;
+  // range_stats is the set of mvcc stats that accounts for the current value
+  // of the Raft state machine.
+  MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+}
+
+// MVCCWriteValueOp corresponds to a value being written outside of a
+// transaction.
+message MVCCWriteValueOp {
+  bytes key = 1;
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bytes value = 3;
+}
+
+// MVCCUpdateIntentOp corresponds to an intent being written for a given
+// transaction.
+message MVCCWriteIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes txn_key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+// MVCCUpdateIntentOp corresponds to an intent being updates at a larger
+// timestamp for a given transaction.
+message MVCCUpdateIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+// MVCCCommitIntentOp corresponds to an intent being committed for a given
+// transaction.
+message MVCCCommitIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  bytes value = 4;
+}
+
+// MVCCAbortIntentOp corresponds to an intent being aborted for a given
+// transaction.
+message MVCCAbortIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+}
+
+// MVCCLogicalOp is a union of all logical MVCC operation types.
+message MVCCLogicalOp {
+  option (gogoproto.onlyone) = true;
+
+  MVCCWriteValueOp   write_value   = 1;
+  MVCCWriteIntentOp  write_intent  = 2;
+  MVCCUpdateIntentOp update_intent = 3;
+  MVCCCommitIntentOp commit_intent = 4;
+  MVCCAbortIntentOp  abort_intent  = 5;
+}

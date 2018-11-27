@@ -11,74 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package kv
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
-	prevMatchIndex := len(attrs)
-	for i, replica := range replicas {
-		matchIndex := -1
-
-		for j, attr := range attrs {
-			if j >= len(replica.attrs()) || replica.attrs()[j] != attr {
-				break
-			}
-			matchIndex = j
-		}
-		if matchIndex != -1 && matchIndex > prevMatchIndex {
-			return false
-		}
-		if i == 0 && matchIndex+1 != prefixLen {
-			return false
-		}
-		prevMatchIndex = matchIndex
-	}
-	return true
-}
-
-func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	replicaAttrs := [][]string{
-		{"us-west-1a", "gpu"},
-		{"us-east-1a", "pdu1", "gpu"},
-		{"us-east-1a", "pdu1", "fio"},
-		{"breaker", "us-east-1a", "pdu1", "fio"},
-		{""},
-		{"us-west-1a", "pdu1", "fio"},
-		{"us-west-1a", "pdu1", "fio", "aux"},
-	}
-	attrs := [][]string{
-		{"us-carl"},
-		{"us-west-1a", "pdu1", "fio"},
-		{"us-west-1a"},
-		{"", "pdu1", "fio"},
-	}
-
-	for i, attr := range attrs {
-		rs := ReplicaSlice{}
-		for _, c := range replicaAttrs {
-			rs = append(rs, ReplicaInfo{
-				NodeDesc: &roachpb.NodeDescriptor{
-					Attrs: roachpb.Attributes{Attrs: c},
-				},
-			})
-		}
-		prefixLen := rs.SortByCommonAttributePrefix(attr)
-		if !verifyOrdering(attr, rs, prefixLen) {
-			t.Errorf("%d: attributes not ordered by %s or prefix length %d incorrect:\n%v", i, attr, prefixLen, rs)
-		}
-	}
-}
 
 func getStores(rs ReplicaSlice) (r []roachpb.StoreID) {
 	for i := range rs {
@@ -95,7 +41,7 @@ func createReplicaSlice() ReplicaSlice {
 	return rs
 }
 
-func TestReplicaSetMoveToFront(t *testing.T) {
+func TestReplicaSliceMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rs := createReplicaSlice()
 	rs.MoveToFront(0)
@@ -115,56 +61,118 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 	}
 }
 
-// TestMoveLocalReplicaToFront verifies that OptimizeReplicaOrder correctly
-// move the local replica to the front.
-func TestMoveLocalReplicaToFront(t *testing.T) {
+func desc(nid roachpb.NodeID, sid roachpb.StoreID) roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{NodeID: nid, StoreID: sid}
+}
+
+func addr(nid roachpb.NodeID, sid roachpb.StoreID) util.UnresolvedAddr {
+	return util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:%d", nid, sid))
+}
+
+func locality(t *testing.T, locStrs []string) roachpb.Locality {
+	var locality roachpb.Locality
+	for _, l := range locStrs {
+		idx := strings.IndexByte(l, '=')
+		if idx == -1 {
+			t.Fatalf("locality %s not specified as <key>=<value>", l)
+		}
+		tier := roachpb.Tier{
+			Key:   l[:idx],
+			Value: l[idx+1:],
+		}
+		locality.Tiers = append(locality.Tiers, tier)
+	}
+	return locality
+}
+
+func nodeDesc(
+	t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string,
+) *roachpb.NodeDescriptor {
+	return &roachpb.NodeDescriptor{
+		Locality: locality(t, locStrs),
+		Address:  addr(nid, sid),
+	}
+}
+
+func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
+	return ReplicaInfo{
+		ReplicaDescriptor: desc(nid, sid),
+		NodeDesc:          nodeDesc(t, nid, sid, locStrs),
+	}
+}
+
+func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCase := []struct {
-		slice         ReplicaSlice
-		localNodeDesc roachpb.NodeDescriptor
+	testCases := []struct {
+		name       string
+		node       *roachpb.NodeDescriptor
+		latencies  map[string]time.Duration
+		slice      ReplicaSlice
+		expOrdered ReplicaSlice
 	}{
 		{
-			// No attribute prefix
+			name: "order by locality matching",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1},
-				},
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
 			},
-			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1},
+			expOrdered: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
 		},
 		{
-			// Sort replicas by attribute
+			name: "order by locality matching, put node first",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 2, Attrs: roachpb.Attributes{Attrs: []string{"ad"}}},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 3, Attrs: roachpb.Attributes{Attrs: []string{"ab", "c"}}},
-				},
-				ReplicaInfo{
-					ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-					NodeDesc:          &roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
-				},
+				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
 			},
-			localNodeDesc: roachpb.NodeDescriptor{NodeID: 1, Attrs: roachpb.Attributes{Attrs: []string{"ab"}}},
+			expOrdered: ReplicaSlice{
+				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
+		},
+		{
+			name: "order by latency",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			latencies: map[string]time.Duration{
+				"2:2": time.Hour,
+				"3:3": time.Minute,
+				"4:4": time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
+			expOrdered: ReplicaSlice{
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+			},
 		},
 	}
-	for _, test := range testCase {
-		test.slice.OptimizeReplicaOrder(&test.localNodeDesc)
-		if s := test.slice[0]; s.NodeID != test.localNodeDesc.NodeID {
-			t.Errorf("unexpected header, wanted nodeid = %d, got %d", test.localNodeDesc.NodeID, s.NodeID)
-		}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			var latencyFn LatencyFunc
+			if test.latencies != nil {
+				latencyFn = func(addr string) (time.Duration, bool) {
+					lat, ok := test.latencies[addr]
+					return lat, ok
+				}
+			}
+			test.slice.OptimizeReplicaOrder(test.node, latencyFn)
+			if !reflect.DeepEqual(test.slice, test.expOrdered) {
+				t.Errorf("expected order %+v; got %+v", test.expOrdered, test.slice)
+			}
+		})
 	}
-
 }

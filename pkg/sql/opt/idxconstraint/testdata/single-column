@@ -1,0 +1,265 @@
+index-constraints vars=(int) index=(@1)
+NULL
+----
+
+index-constraints vars=(int) index=(@1)
+false
+----
+
+index-constraints vars=(int) index=(@1)
+true
+----
+[ - ]
+
+index-constraints vars=(int) index=(@1)
+@1
+----
+[ - ]
+Remaining filter: @1
+
+index-constraints vars=(int) index=(@1)
+@1 > 2
+----
+[/3 - ]
+
+index-constraints vars=(int) index=(@1)
+NOT (@1 <= 2)
+----
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 > 2
+----
+[ - /3]
+
+index-constraints vars=(int) index=(@1)
+@1 >= 2
+----
+[/2 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 >= 2
+----
+[ - /2]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 != 2
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+NOT (@1 = 2)
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 != 2
+----
+[ - /3]
+[/1 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 < 2
+----
+[ - /1]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 < 2
+----
+[/1 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1)
+@1 != 2
+----
+(/NULL - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 != 2
+----
+[ - /3]
+[/1 - /NULL)
+
+index-constraints vars=(int) index=(@1)
+@1 < 2
+----
+(/NULL - /1]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 < 2
+----
+[/1 - /NULL)
+
+index-constraints vars=(int) index=(@1)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1)
+NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 > NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 < NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 = NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 != NULL
+----
+
+index-constraints vars=(bool) index=(@1)
+@1
+----
+[/true - /true]
+
+index-constraints vars=(bool) index=(@1)
+NOT @1
+----
+[/false - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 != true
+----
+(/NULL - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 != false
+----
+[/true - ]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS TRUE
+----
+[/true - /true]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS FALSE
+----
+[/false - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS NOT TRUE
+----
+[ - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS NOT FALSE
+----
+[ - /false)
+[/true - ]
+
+index-constraints vars=(int) index=(@1)
+@1 IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+index-constraints vars=(int) index=(@1)
+@1 IS DISTINCT FROM 5
+----
+[ - /4]
+[/6 - ]
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 != true
+----
+[/false - /NULL)
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 != false
+----
+[ - /true]
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 IS TRUE
+----
+[/true - /true]
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 IS FALSE
+----
+[/false - /false]
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 IS NOT TRUE
+----
+[/false - ]
+
+index-constraints vars=(bool) index=(@1 desc)
+@1 IS NOT FALSE
+----
+[ - /true]
+(/false - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+index-constraints vars=(int) index=(@1)
+@1 = -1
+----
+[/-1 - /-1]
+
+index-constraints vars=(decimal) index=(@1)
+@1 = -2.0
+----
+[/-2.0 - /-2.0]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 IS DISTINCT FROM 5
+----
+[ - /6]
+[/4 - ]
+
+index-constraints vars=(bool) index=(@1 not null)
+@1 IS NOT TRUE
+----
+[ - /false]
+
+index-constraints vars=(bool) index=(@1 not null)
+@1 IS NOT FALSE
+----
+[/true - ]
+
+index-constraints vars=(bool) index=(@1 desc not null)
+@1 IS NOT TRUE
+----
+[/false - ]
+
+index-constraints vars=(bool) index=(@1 desc not null)
+@1 IS NOT FALSE
+----
+[ - /true]

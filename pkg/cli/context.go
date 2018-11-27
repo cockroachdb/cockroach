@@ -11,253 +11,317 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package cli
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
+	"context"
+	"net/url"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/mattn/go-isatty"
 )
 
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
+// serverCfg is used as the client-side copy of default server
+// parameters for CLI utilities (other than `cockroach start`, which
+// constructs a proper server.Config for the newly created server).
+var serverCfg = func() server.Config {
+	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	settings.SetCanonicalValuesContainer(&st.SV)
 
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
+	s := server.MakeConfig(context.Background(), st)
+	s.SQLAuditLogDirName = &sqlAuditLogDir
+	return s
+}()
+
+var sqlAuditLogDir log.DirName
+
+// GetServerCfgStores provides direct public access to the StoreSpecList inside
+// serverCfg. This is used by CCL code to populate some fields.
+//
+// WARNING: consider very carefully whether you should be using this.
+func GetServerCfgStores() base.StoreSpecList {
+	return serverCfg.Stores
 }
 
-func (s *statementsValue) Type() string {
-	return "statementsValue"
+var baseCfg = serverCfg.Config
+
+// initCLIDefaults serves as the single point of truth for
+// configuration defaults. It is suitable for calling between tests of
+// the CLI utilities inside a single testing process.
+func initCLIDefaults() {
+	// We don't reset the pointers (because they are tied into the
+	// flags), but instead overwrite the existing structs' values.
+	baseCfg.InitDefaults()
+
+	// isInteractive is only set to `true` by `cockroach sql` -- all
+	// other client commands are non-interactive, regardless of whether
+	// the standard input is a terminal.
+	cliCtx.isInteractive = false
+	// See also setCLIDefaultForTests() in cli_test.go.
+	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+	if cliCtx.terminalOutput {
+		// See also setCLIDefaultForTests() in cli_test.go.
+		cliCtx.tableDisplayFormat = tableDisplayTable
+	}
+	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.clientConnHost = ""
+	cliCtx.clientConnPort = base.DefaultPort
+	cliCtx.sqlConnURL = ""
+	cliCtx.sqlConnUser = ""
+	cliCtx.sqlConnPasswd = ""
+	cliCtx.sqlConnDBName = ""
+	cliCtx.extraConnURLOptions = nil
+
+	sqlCtx.setStmts = nil
+	sqlCtx.execStmts = nil
+	sqlCtx.safeUpdates = false
+	sqlCtx.showTimes = false
+	sqlCtx.debugMode = false
+	sqlCtx.echo = false
+
+	dumpCtx.dumpMode = dumpBoth
+	dumpCtx.asOf = ""
+
+	debugCtx.startKey = engine.NilKey
+	debugCtx.endKey = engine.MVCCKeyMax
+	debugCtx.values = false
+	debugCtx.sizes = false
+	debugCtx.replicated = false
+	debugCtx.inputFile = ""
+	debugCtx.printSystemConfig = false
+	debugCtx.maxResults = 1000
+	debugCtx.ballastSize = base.SizeSpec{}
+
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
+
+	serverCfg.ReadyFn = nil
+	serverCfg.DelayedBootstrapFn = nil
+	serverCfg.SocketFile = ""
+	startCtx.serverInsecure = baseCfg.Insecure
+	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.serverListenAddr = ""
+	startCtx.tempDir = ""
+	startCtx.externalIODir = ""
+	startCtx.listeningURLFile = ""
+	startCtx.pidFile = ""
+	startCtx.inBackground = false
+
+	quitCtx.serverDecommission = false
+
+	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.statusShowRanges = false
+	nodeCtx.statusShowStats = false
+	nodeCtx.statusShowAll = false
+	nodeCtx.statusShowDecommission = false
+
+	cfg := tree.DefaultPrettyCfg()
+	sqlfmtCtx.len = cfg.LineWidth
+	sqlfmtCtx.useSpaces = !cfg.UseTabs
+	sqlfmtCtx.tabWidth = cfg.TabWidth
+	sqlfmtCtx.noSimplify = !cfg.Simplify
+	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
+	sqlfmtCtx.execStmts = nil
+
+	systemBenchCtx.concurrency = 1
+	systemBenchCtx.duration = 60 * time.Second
+	systemBenchCtx.tempDir = "."
+	systemBenchCtx.writeSize = 32 << 10
+	systemBenchCtx.syncInterval = 512 << 10
+
+	initPreFlagsDefaults()
+
+	// Clear the "Changed" state of all the registered command-line flags.
+	clearFlagChanges(cockroachCmd)
 }
 
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
+func clearFlagChanges(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	for _, subCmd := range cmd.Commands() {
+		clearFlagChanges(subCmd)
+	}
 }
 
+// cliContext captures the command-line parameters of most CLI commands.
 type cliContext struct {
 	// Embed the base context.
 	*base.Config
 
+	// isInteractive indicates whether the session is interactive, that
+	// is, the commands executed are extremely likely to be *input* from
+	// a human user: the standard input is a terminal and `-e` was not
+	// used (the shell has a prompt).
+	isInteractive bool
+
+	// terminalOutput indicates whether output is going to a terminal,
+	// that is, it is not going to a file, another program for automated
+	// processing, etc.: the standard output is a terminal.
+	terminalOutput bool
+
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
+
+	// cmdTimeout sets the maximum run time for the command.
+	// Commands that wish to use this must use cmdTimeoutContext().
+	cmdTimeout time.Duration
+
+	// clientConnHost is the hostname/address to use to connect to a server.
+	clientConnHost string
+
+	// clientConnPort is the port name/number to use to connect to a server.
+	clientConnPort string
+
+	// for CLI commands that use the SQL interface, these parameters
+	// determine how to connect to the server.
+	sqlConnURL, sqlConnUser, sqlConnDBName string
+
+	// The client password to use. This can be set via the --url flag.
+	sqlConnPasswd string
+
+	// extraConnURLOptions contains any additional query URL options
+	// specified in --url that do not have discrete equivalents.
+	extraConnURLOptions url.Values
 }
 
-type tableDisplayFormat int
+// cliCtx captures the command-line parameters common to most CLI utilities.
+// Defaults set by InitCLIDefaults() above.
+var cliCtx = cliContext{Config: baseCfg}
 
-const (
-	tableDisplayTSV tableDisplayFormat = iota
-	tableDisplayCSV
-	tableDisplayPretty
-	tableDisplayRecords
-	tableDisplaySQL
-	tableDisplayHTML
-)
-
-// Type implements the pflag.Value interface.
-func (f *tableDisplayFormat) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (f *tableDisplayFormat) String() string {
-	switch *f {
-	case tableDisplayTSV:
-		return "tsv"
-	case tableDisplayCSV:
-		return "csv"
-	case tableDisplayPretty:
-		return "pretty"
-	case tableDisplayRecords:
-		return "records"
-	case tableDisplaySQL:
-		return "sql"
-	case tableDisplayHTML:
-		return "html"
-	}
-	return ""
-}
-
-// Set implements the pflag.Value interface.
-func (f *tableDisplayFormat) Set(s string) error {
-	switch s {
-	case "tsv":
-		*f = tableDisplayTSV
-	case "csv":
-		*f = tableDisplayCSV
-	case "pretty":
-		*f = tableDisplayPretty
-	case "records":
-		*f = tableDisplayRecords
-	case "sql":
-		*f = tableDisplaySQL
-	case "html":
-		*f = tableDisplayHTML
-	default:
-		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, pretty, records, sql, html)", s)
-	}
-	return nil
-}
-
-type sqlContext struct {
-	// Embed the cli context.
+// sqlCtx captures the command-line parameters of the `sql` command.
+// Defaults set by InitCLIDefaults() above.
+var sqlCtx = struct {
 	*cliContext
+
+	// setStmts is a list of \set commands to execute before entering the sql shell.
+	setStmts statementsValue
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
-}
 
-type dumpContext struct {
-	// Embed the cli context.
-	*cliContext
+	// safeUpdates indicates whether to set sql_safe_updates in the CLI
+	// shell.
+	safeUpdates bool
 
+	// showTimes indicates whether to display query times after each result line.
+	showTimes bool
+
+	// echo, when set, requests that SQL queries sent to the server are
+	// also printed out on the client.
+	echo bool
+
+	// debugMode, when set, overrides the defaults to disable as much
+	// "intelligent behavior" in the SQL shell as possible and become
+	// more verbose (sets echo).
+	debugMode bool
+}{cliContext: &cliCtx}
+
+// dumpCtx captures the command-line parameters of the `sql` command.
+// Defaults set by InitCLIDefaults() above.
+var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
 
+	// asOf determines the time stamp at which the dump should be taken.
 	asOf string
 }
 
-type dumpMode int
-
-const (
-	dumpBoth dumpMode = iota
-	dumpSchemaOnly
-	dumpDataOnly
-)
-
-// Type implements the pflag.Value interface.
-func (m *dumpMode) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (m *dumpMode) String() string {
-	switch *m {
-	case dumpBoth:
-		return "both"
-	case dumpSchemaOnly:
-		return "schema"
-	case dumpDataOnly:
-		return "data"
-	}
-	return ""
+// debugCtx captures the command-line parameters of the `debug` command.
+// Defaults set by InitCLIDefaults() above.
+var debugCtx struct {
+	startKey, endKey  engine.MVCCKey
+	values            bool
+	sizes             bool
+	replicated        bool
+	inputFile         string
+	ballastSize       base.SizeSpec
+	printSystemConfig bool
+	maxResults        int64
 }
 
-// Set implements the pflag.Value interface.
-func (m *dumpMode) Set(s string) error {
-	switch s {
-	case "both":
-		*m = dumpBoth
-	case "schema":
-		*m = dumpSchemaOnly
-	case "data":
-		*m = dumpDataOnly
-	default:
-		return fmt.Errorf("invalid value for --dump-mode: %s", s)
-	}
-	return nil
+// zoneCtx captures the command-line parameters of the `zone` command.
+// Defaults set by InitCLIDefaults() above.
+var zoneCtx struct {
+	zoneConfig             string
+	zoneDisableReplication bool
 }
 
-type keyType int
+// startCtx captures the command-line arguments for the `start` command.
+// Defaults set by InitCLIDefaults() above.
+var startCtx struct {
+	// server-specific values of some flags.
+	serverInsecure    bool
+	serverSSLCertsDir string
+	serverListenAddr  string
 
-//go:generate stringer -type=keyType
-const (
-	raw keyType = iota
-	human
-	rangeID
-)
+	// temporary directory to use to spill computation results to disk.
+	tempDir string
+	// directory to use for remotely-initiated operations that can
+	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
+	externalIODir string
 
-var _keyTypes []string
+	// inBackground is set to true when restarting in the
+	// background after --background was processed.
+	inBackground bool
 
-func keyTypes() []string {
-	if _keyTypes == nil {
-		for i := 0; i+1 < len(_keyType_index); i++ {
-			_keyTypes = append(_keyTypes, _keyType_name[_keyType_index[i]:_keyType_index[i+1]])
-		}
-	}
-	return _keyTypes
+	// listeningURLFile indicates the file to which the server writes
+	// its listening URL when it is ready.
+	listeningURLFile string
+
+	// pidFile indicates the file to which the server writes its PID
+	// when it is ready.
+	pidFile string
+
+	// logging settings specific to file logging.
+	logDir     log.DirName
+	logDirFlag *pflag.Flag
 }
 
-func parseKeyType(value string) (keyType, error) {
-	for i, typ := range keyTypes() {
-		if strings.EqualFold(value, typ) {
-			return keyType(i), nil
-		}
-	}
-	return 0, fmt.Errorf("unknown key type '%s'", value)
+// quitCtx captures the command-line parameters of the `quit` command.
+// Defaults set by InitCLIDefaults() above.
+var quitCtx struct {
+	serverDecommission bool
 }
 
-// unquoteArg unquotes the provided argument using Go double-quoted
-// string literal rules.
-func unquoteArg(arg string) (string, error) {
-	s, err := strconv.Unquote(`"` + arg + `"`)
-	if err != nil {
-		return "", errors.Wrapf(err, "invalid argument %q", arg)
-	}
-	return s, nil
+// nodeCtx captures the command-line parameters of the `node` command.
+// Defaults set by InitCLIDefaults() above.
+var nodeCtx struct {
+	nodeDecommissionWait   nodeDecommissionWaitType
+	statusShowRanges       bool
+	statusShowStats        bool
+	statusShowDecommission bool
+	statusShowAll          bool
 }
 
-type mvccKey engine.MVCCKey
-
-func (k *mvccKey) String() string {
-	return engine.MVCCKey(*k).String()
+// systemBenchCtx captures the command-line parameters of the `bench` command.
+// Defaults set by InitCLIDefaults() above.
+var systemBenchCtx struct {
+	concurrency  int
+	duration     time.Duration
+	tempDir      string
+	writeSize    int64
+	syncInterval int64
 }
 
-func (k *mvccKey) Set(value string) error {
-	var typ keyType
-	var keyStr string
-	i := strings.IndexByte(value, ':')
-	if i == -1 {
-		keyStr = value
-	} else {
-		var err error
-		typ, err = parseKeyType(value[:i])
-		if err != nil {
-			return err
-		}
-		keyStr = value[i+1:]
-	}
-
-	switch typ {
-	case raw:
-		unquoted, err := unquoteArg(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
-	case human:
-		key, err := keys.UglyPrint(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(key))
-	case rangeID:
-		fromID, err := parseRangeID(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
-	default:
-		return fmt.Errorf("unknown key type %s", typ)
-	}
-
-	return nil
-}
-
-func (k *mvccKey) Type() string {
-	return "engine.MVCCKey"
-}
-
-type debugContext struct {
-	startKey, endKey engine.MVCCKey
-	values           bool
-	sizes            bool
-	replicated       bool
+// sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
+// Defaults set by InitCLIDefaults() above.
+var sqlfmtCtx struct {
+	len        int
+	useSpaces  bool
+	tabWidth   int
+	noSimplify bool
+	align      bool
+	execStmts  statementsValue
 }

@@ -1,46 +1,30 @@
 # The SQL layer in CockroachDB
 
+Last update: September 2018
+
 This document provides an architectural overview of the SQL layer in
 CockroachDB.  The SQL layer is responsible for providing the "SQL API"
 that enables access to a CockroachDB cluster by client applications.
 
 Original author: knz
 
+Table of contents:
+
+- [Prologue](#prologue)
+- [Overview](#overview)
+- [Detailed model - Query Processing phases](#detailed-model---query-processing-phases)
+- [Detailed model - Statements vs. Components](#detailed-model---statements-vs-components)
+- [Detailed model - Components and Data Flow](#detailed-model---components-and-data-flow)
+- Component details:
+  - [pgwire](#pgwire)
+  - [SQL front-end](#sql-front-end)
+  - [SQL middle-end](#sql-middle-end)
+  - [SQL back-end](#sql-back-end)
+  - [Executor](#executor)
+  - [Auxiliaries](#the-two-big-auxiliaries)
+  - [Other components](#fringe-interfaces-and-components)
+
 ## Prologue
-
-**tl;dr: I prepared this because I know people prefer pictures.**
-
-Prior to the existence of this document, high-level overviews of
-CockroachDB would describe the architecture of CockroachDB using this
-diagram:
-
-![High-level overview of the architecture of CockroachDB](sql/sql-opaque.png)
-
-More detailed presentations of the architecture during e.g. tech talks
-would focus on the lower layers, where CockroachDB differentiates
-itself most strongly from other SQL databases; the SQL layer would
-usually be kept abstract.
-
-Meanwhile, the source code of the SQL layer is growing. At currently
-(March 2017) 142 kLOCs, it has become a larger source base than the
-`kv` and `storage` packages combined (currently at 134 kLOCs).
-
-There is a very stark contrast between its extremely narrow interface
-area (described below), on the one hand, and the intricate network of
-data and state dependencies between its internal components on the
-other hand. This latter complexity has recently been growing too, due
-both to a moderate case of feature creep and a large amount of changes
-meant to fix functional and performance bugs.
-
-This document "opens the black box" and (attempts to) provide a
-high-level architectural overview of the state of affairs. This is
-done with two main goals in mind:
-
-- to enable newcomers in Q1-Q2 2017 to make sense of the existing code
-  base, and to ease their onboarding;
-- to enable and support much-needed discussions about how to keep this
-  complexity under control, by giving name and shape to things
-  not otherwise directly visible in the source code.
 
 This document *complements* the prior document "Life of a SQL query"
 by Andrei. Andrei's document is structured as an itinerary, where the
@@ -64,7 +48,7 @@ For example, if the architecture calls out a thing called e.g. "query
 runner", which takes as input a logical query plan (a data structure)
 and outputs result rows (another data structure), you'd usually expect
 a thing in the source code called "query runner" that looks like a
-class whose instances would carry the execution's internal state, a
+class whose instances would carry the execution's internal state
 providing some methods that take a logical plan as input, and returning
 result rows as results.
 
@@ -143,15 +127,9 @@ practice "ownership" in this part of the code base.
 
 ## Overview
 
-Without futher ado, here is an architectural diagram
-of CockroachDB's current SQL layer:
+The flow of data in the SQL layer during query processing can be summarized as follows:
 
-![Architecture model of CockroachDB's SQL layer](sql/sql-overview.png)
-
-(Right-click then "open image in new window" to zoom in and keep the
-diagram open while you read the rest of this document.)
-
-### Main component groups
+![Very high-level, somewhat inaccurate model of the interactions in the SQL layer](sql/sql-hl.png)
 
 There are overall five main component groups:
 
@@ -163,28 +141,137 @@ There are overall five main component groups:
   overview diagram.
 
 - the SQL **middle-end**, responsible for logical planning and
-  optimization; this comprises the two blocks "(plan constructors)"
-  and "Logical optimizer" in the overview diagram.
+  optimization.
 
-- the SQL **back-end**, of which there are actually two:
-  - the distSQL back-end, itself comprised of its own physical
-    planner, optimizer and runner, able to process any statement/query
-    *for which a distSQL plan can be constructed*;
-  - the **local runner**, responsible for everything else.
+- the SQL **back-end**, which comprises "physical planning" and "query
+  execution".
 
-- the **executor**, which coordinates between the previous four things
-  and the **session** object.
+- the **executor**, which coordinates between the previous four things,
+  the session data, the state SQL transaction and the interactions
+  with the state of the transaction in the KV layer.
 
-The way this is connected (overall) can be modeled thus:
+Note that these components are a fictional model: for efficiency and
+engineering reasons, the the front-end and middle-end are grouped
+together in the code; meanwhile the back-end is here considered as a
+single component but is effectively developed and maintained as
+multiple separate sub-components.
 
-![Very high-level, somewhat inaccurate model of the interactions in the SQL layer](sql/sql-hl.png)
+Besides these components on the "main" data path of a common SQL
+query, there are additional auxiliary components that can also participate:
 
-The three "auxiliary" components / component groups are the **lease
-manager**, the **schema change manager** and the **memory
-monitors**. Although they are auxiliary to the main components above,
-only the memory monitor is relatively simple -- a large architectural
+- the **lease manager** for access to SQL object descriptors;
+- the **schema change manager** to perform schema changes asynchronously;
+- the **memory monitors** for memory accounting.
+
+Although they are auxiliary to the main components above, only the
+memory monitor is relatively simple -- a large architectural
 discussion would be necessary to fully comprehend the complexity of
-SQL leases and schema changes. An outline is provided below.
+SQL leases and schema changes.
+
+The [detailed model section
+below](#detailed-model-components-and-data-flow) describes these
+components further and where they are located in the source code.
+
+## Detailed model - Query processing phases
+
+It is common for SQL engines to separate processing of a query into two
+phases: **preparation** and **execution**. This is especially valuable because
+the work of preparation can be performed just once for multiple
+executions.
+
+In CockroachDB this separation exists, and the preparation phase is
+itself split into sub-phases: **logical preparation** and **physical
+preparation**.
+
+This can be represented as follows:
+
+![Phases of SQL query execution](sql/sql-phases.png)
+
+This diagram reveals the following:
+
+- There are 3 main “groups” of statements:
+  1. “Read-only” queries which only use SELECT, TABLE and VALUES.
+  2. DDL statements (CREATE, ALTER etc) which incur schema changes.
+  3. The rest (non-DDL), including SHOW, SET and SQL mutations.
+
+- The **logical preparation** phase contains two sub-phases:
+  - **Semantic analysis and validation**, which is common to all SQL statements;
+  - **Plan optimization**, which uses different optimization implementations (or none)
+    depending on the statement group.
+
+- The **physical preparation** is performed differently depending on
+  the statement group.
+
+- **Query execution** is also performed differently depending on the statement group,
+  but with some shared components across statement groups.
+
+## Detailed model - Statements vs. Components
+
+The previous section revealed that different statements pass through
+different stages in the SQL layer. This can be further illustrated in
+the following diagram:
+
+![Current component use by statement type](sql/sql-current-layers.png)
+
+This diagram reveals the following:
+
+- There are actually 6 statement groups currently:
+  1. The “read-only” queries introduced above,
+  2. DDL statements introduced above,
+  3. SHOW/SET and other non-mutation SQL statements,
+  4. SQL mutation statements,
+  5. Bulk I/O statements in CCL code that influence the schema: IMPORT/EXPORT, BACKUP/RESTORE,
+  6. Other CCL statements.
+
+- There are 2 separate, independent and partly redundant
+  implementations of semantic analysis and validation. The CCL code
+  uses its own. (This is bad and ought to be changed, see below.)
+
+- There are 3 separate, somewhat independent but redundant
+  implementations of logical planning and optimizations.
+
+  - the SQL cost-based planner and optimizer is the new “main” component.
+  - the heuristic planner and optimizer was the code used before the cost-based optimizer
+	was implemented, and is still used for every statement not yet
+	supported by the optimizer. This code is being phased out as
+	its features are being taken over by the cost-based optimizer.
+  - the CCL planning code exists in a separate package and tries
+	hard (and badly) to create logical plans as an add-on package.
+	It interfaces with the heuristic planner via some glue code that
+	was organically grown over time without any consideration for
+	maintainability. So it's bad on its own and also heavily
+	relies on another component (the heuristic planner) which is
+	already obsolete. (This is bad; this code needs to disappear.)
+
+- There are 2 somewhat independent but redundant execution engines for
+  SQL query plans: **distributed** and **local**.
+
+  These two are currently being merged, although CCL statements
+  have no way to integrate with distributed execution currently and
+  still heavily rely on local execution. (This is bad; this needs to
+  change.)
+
+- The remaining components are used adequately by the statement types
+  that require them and not more.
+
+This proliferation of components is a historical artifact of the
+CockroachDB implementation strategy in 2017, and is not to remain in
+the long term. The desired situation looks more like the following:
+
+![Desired component use by statement type](sql/sql-desired-layers.png)
+
+That is, use the same planning and execution code for all the
+statement types.
+
+## Detailed model - Components and Data Flow
+
+Here is a more detailed version of the summary of data flow
+interactions between components, introduced at the beginning:
+
+![Architecture model of CockroachDB's SQL layer](sql/sql-overview.png)
+
+(Right-click then "open image in new window" to zoom in and keep the
+diagram open while you read the rest of this document.)
 
 ### Boundary interfaces
 
@@ -211,16 +298,10 @@ emerge as a side-effect of how the current source code is organized:
     conceptually very small part of the local runner) and accessing
     the KV client interface.
 
-- **the distSQL query planner also talks directly to the distributed storage layer**
+- **the distSQL physical planner also talks directly to the distributed storage layer**
   to get *locality information* about which nodes are leaseholders for which ranges.
   
-- **the APL/CCL interface,** which aims to augment the functionality
-  of the APL code if and only if the CCL code is also compiled
-  in. This interface has many points where the CCL code "hooks itself"
-  into the common (APL) code. This is outlined below.
-
-- **the internal SQL interface**, until recently called "internal
-  executor" (this name will hopefully be phased out soon), by which other
+- **the internal SQL interface**, by which other
   components of CockroachDB can use the SQL interface to access lower
   layers without having to open a pgwire connection.
   The users of the internal interface include:
@@ -267,31 +348,25 @@ repeat.
   reused for smallish SQL sessions without having to grab the global
   mutex.
 
-- `Session`: pgwire allocates and initializes the `sql.Session` object
-  (`setupSession`) once the connection is authenticated. This is
-  before any SQL traffic begins.
-
-- Executor: pgwire calls into the executor API to deliver incoming
-  "prepare" requests (`session.PreparedStatements.New()`), "execute"
-  requests (`exec.ExecuteStatements()`), and COPY data packets
-  (`exec.CopyData`/`CopyDone`/`CopyEnd`). The executor API calls
-  return results back to pgwire to be translated to response packets
-  towards the client.
+- Executor: pgwire queues input SQL queries and COPY data packets to
+  the "conn executor" in the `sql` package. For each input SQL query
+  pgwire also prepares a "result collector" that goes into the
+  queue. The executor monitors this queue, executes the incoming
+  queries and delivers the results via the result collectors.  pgwire
+  then translates the results to response packets towards the
+  client.
 
 Code lives in `sql/pgwire`.
 
-**Whom to ask for details:** mattj, jordan, alfonso, tamir, nathan.
+**Whom to ask for details:** mattj, jordan, alfonso, nathan.
 
 ## SQL front-end
 
-This part has two relatively independent components and one
-component intertwined with the middle end:
-
 1. the "Parser" (really: lexer + parser), in charge of **syntactic
    analysis**.
-2. **expression semantic analysis**, including name resolution,
+2. **scalar expression semantic analysis**, including name resolution,
    constant folding, type checking and simplification.
-3. **statement semantic analysis** (that's the one intertwined),
+3. **statement semantic analysis**,
    including e.g. existence tests on the target names of schema change
    statements.
 
@@ -347,7 +422,7 @@ suggests.
 
 **Whom to ask for details**: pretty much anyone.
 
-### Expression semantic analysis
+### Scalar expression semantic analysis
 
 **Role:** check AST expressions are valid, do some preliminary
 optimizations on them, provide them with types.
@@ -360,17 +435,16 @@ optimizations on them, provide them with types.
 
 **How:**
 
-1. `sql.replaceSubqueries()`: replace `parser.Subquery` nodes by
-   `sql.subquery` nodes (and performs some checks on them).
-2. `sql.resolveNames()`: replaces column names by `parser.IndexedVar`
-   instances, replaces function names by `parser.FuncDef` references.
-3. `parser.TypeCheck()`/`parser.TypeCheckAndRequire()`:
+1. name resolution (in various places): replaces column names by
+   `parser.IndexedVar` instances, replaces function names by
+   `parser.FuncDef` references.
+2. `parser.TypeCheck()`/`parser.TypeCheckAndRequire()`:
    - performs constant folding;
    - performs type inference;
    - performs type checking;
    - memoizes comparator functions on `ComparisonExpr` nodes;
    - annotates expressions and placeholders with their types.
-4. `parser.NormalizeExpr()`: desugar and simplify expressions:
+3. `parser.NormalizeExpr()`: desugar and simplify expressions:
    - for example, `(a+1) < 3` is transformed to `a < 2`
    - for example, `-(a - b)` is transformed to `(b - a)`
    - for example, `a between c and d` is transformed to `a >= c and a <= d`
@@ -385,14 +459,9 @@ placeholders (`$1`, `$2` etc) onto the semantic context object passed
 through the recursion in a way that is order-sensitive.
 
 Note: it's possible to inspect the expressions without desugaring and
-simplification using `EXPLAIN(EXPRS, NONORMALIZE)`.
+simplification using `EXPLAIN(EXPRS, TYPES)`.
 
-**Whom to ask for details:**
-
-- `replaceSubqueries`: knz
-- `resolveNames`: knz
-- `TypeCheck`: nathan, jordan, knz
-- `NormalizeExpr`: peter, radu, nathan, knz
+**Whom to ask for details:** the SQL team(s).
 
 ### Statement semantic analysis
 
@@ -416,19 +485,10 @@ simplification using `EXPLAIN(EXPRS, NONORMALIZE)`.
 - *check the validity of requested schema change operations* for DDL
   statements.
 
-**Code:** interleaved in the `planNode` constructors, which really belong
-to the SQL middle-end components described in the next section.
+**Code:** in the `opt` package, also currently some code in the `sql`
+package.
 
-**Whom to ask for details:** there's no single point of expertise
-currently able to talk about the commonalities of "statement semantic
-analysis". Instead, each author working on a specific `planNode` has
-made due diligence to follow the general checks made by other
-`planNodes`.
-
-(It's not foolproof though, and it's rather likely that some
-statements are not fully checked semantically or not in the same order
-as others -- which can/would/will/do result in inconsistent error
-messages in case of semantic errors by client applications).
+**Whom to ask for details:** the SQL team(s).
 
 ## SQL middle-end
 
@@ -442,197 +502,45 @@ Two things are involved here:
 
 **Role:** turn the AST into a logical plan.
 
-**Interface:**  `prepare()` and `newPlan()` in `sql/plan.go`.
+**Interface:** see `opt/optbuilder`.
 
 **How:**
 
 - in-order depth-first recursive traversal of the AST;
 - invokes semantics checks on the way;
-- constructs `planNode` instances on the way back from the recursion;
-  - or results in an error if some semantic check fails;
-- the resulting `planNode` tree *is* the logical plan.
+- constructs a tree of “relational expression nodes”. This tree is also called
+  “the memo” because of the data structure it uses internally.
+- the resulting tree *is* the logical plan.
 
-Note: some statements are not really translated to a logical plan,
-like `SET`. I call them *"immediate"*. These are executed (ran)
-immediately in `newPlan()` after semantic checking, and result in an
-"empty plan" from the perspective of the code using the logical
-planner. The `prepare()` interface exists so that these statements are
-ignored during SQL prepare, but this in turn also means that a SQL
-prepare operation is unable to run semantic checks on immediate
-statements.
-
-**Code:** the various `planNode` constructors in the `sql` package.
-
-**Whom to ask for details:** like for semantic checks, there's no
-single point of expertise currently able to talk about the commonalities of
-logical plan construction. Some areas of expertise have emerged:
-
-- `scanNode`: radu, andrei;
-- interaction between `renderNode`/`filterNode`/`groupNode`: radu, knz;
-- `windowNode`: nathan;
-- `sortNode`: radu, nathan, knz;
-- `copyNode`: mattj;
-- `updateNode`/`insertNode`/`upsertNode`/`deleteNode`: peter, danhhz, dt;
-- `create*Node`, `alter*Node`: dt, vivek, danhhz;
-- the others: a bit everyone who ever worked in the `sql` package.
+**Whom to ask for details:** the SQL team(s).
 
 ### Logical plan optimizer
 
 **Role:** make queries run faster.
 
-**Interface:** `optimizePlan()` takes a logical plan as input and
-returns an optimized logical plan.
+**Interface:** see `opt`.
 
-Note: `makePlan()` (`plan.go`) calls `newPlan()` (see above) then
-`optimizePlan()`.
+**Whom to ask for details:** the optimizer team.
 
-Note 2: it's possible to inspect a logical plan without optimizing it
-using `EXPLAIN(NOOPTIMIZE,NOEXPAND)`.
+## SQL back-end
 
-**How:**
+### Physical planner and distributed execution
 
-1. `setNeededColumns()`: mark result columns as needed throughout the
-   plan (and mark the non-needed columns as unneeded, which avoids
-   their computation).
-2. `triggerFilterPropagation()`: seee
-   https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/#optimizing-query-filters
-3. `expandPlan()`:
-   - `doExpandPlan()`: depth-first recursive traversal of the plan to:    
-     - perform index selection and replace `scanNode`s with `indexJoinNode`s.
-     - elide unnecessary `renderNode`s.
-     - propagate limits.
-     - annotate resulting orderings.
-   - `simplifyOrderings()`: another traversal, to elide unneeded sort nodes.
-4. `setNeededColumns()` again, to simplify the result of earlier optimizations
-   further.
-5. recursively apply `optimizePlan()` to every `sql.subquery` node in
-   the plan's expressions.
-
-The implementation of these sub-tasks is *nearly* purely
-functional. The only wart is that it spills into the session whether
-the current logical plan uses SQL stars (`select * from ...`), which
-is needed by `CREATE VIEW` to spill out an error (because we don't
-support SQL stars in views).
-
-**Code:**
-
-- `sql/optimize.go`: entry point
-- `sql/filter_opt.go`: `triggerFilterPropagation`
-- `sql/expand_plan.go`: `expandPlan`, `doExpandPlan`, `simplifyOrderings`
-- `sql/index_selection.go`, `sql/analyze.go`: index selection
-- `sql/needed_columns.go`: `setNeededColumns`
-
-**Whom to ask for details:**
-
-- `setNeededColumns`: radu
-- `triggerFilterPropagation`: knz, radu, andrei
-- `expandPlan`, index selection: radu, peter, knz
-- subquery processing: knz
-
-## SQL back-ends
-
-CockroachDB currently implements two back-ends.
-
-- the **local runner** is used by default, and always for statements
-  that don't have a distributed implementation (e.g. CREATE TABLE,
-  COPY).
-- the **distSQL back-end** is used when `SET DISTSQL` is set to
-  `auto`, `on` or `always`.
-
-### Local runner
-
-**Role:** run SQL statements on the SQL gateway node (the node where
-pgwire is handling the client connection).
-
-**Interface:**
-
-- interface from the perspective of the executor:
-  - conceptually: provide a logical plan as input, get row sets (or
-    error status) as output.
-  - concretely: the `Start()` and `Next()` methods of `planNode`.
-- lower-level interface:
-  - the **sql schema changer** for DDL statements;
-  - the **client KV interface** for "leaf" plan nodes that access
-    the database.
-- towards the memory monitor: to account for intermediate results
-  held in memory.
-
-**How:**
-
-- uses the Volcano execution model - see https://doi.org/10.1109/69.273032
-  - each level's `Next()` recurses into sub-nodes to request rows, and returns
-    result rows to the levels above
-  - the executor uses the top node's `Next()` results to construct the final
-	result set to return to the client.
-- `Start()` is meant to run execution steps prior to the creation of
-  the first result row. Some nodes (e.g. `deleteNode()`) can do all
-  their work in `Start()`.
-- *can run all statements*
-- fully sequential execution per statement
-
-From a software engineering perspective, it's a little weird to make
-`Start()` and `Next()` *methods* of the data structure they are really
-consuming as input (the logical plan) but not otherwise
-modifying. It's also weird and rather unfortunate that the internal
-execution state of the local runner is also carried as attributes of
-the logical plan, because this means the logical plan nodes must
-allocate space for it even when the local runner is not used.
-
-These shortcomings are an artifact from an earlier time where there
-was no conceptual separation between constructing the logical plan and
-running it, and *all* operations using `planNode`s were implemented as
-`planNode` methods.  We're moving (slowly) away from that; eventually
-`Next()` and `Start()` will be detached too and the local runner's
-internal state will sit in separate data structures.
-
-**Code:** the `Start()` and `Next()` methods of all `planNode`s.
-
-**Whom to ask for details:** the authors of the respective methods.
-
-### SQL Expression evaluator
-
-This is conceptually a part of the local runner, but is well
-encapsulated in the `Eval()` method of `Expr` nodes and is used
-independently by distSQL processors, so it deserves its own
-sub-section here.
-
-**Role:** `TypedExpr` in, `Datum` out.
-
-**Interface:** `TypedExpr.Eval()`.
-
-**How:** depth-first in-order traversal of the expression tree,
-returning values (`Datum`s) on the way back from the recursion.
-
-**Code:** `pkg/sql/parser/eval.go`
-
-**Whom to ask for details:** nathan, jordan, knz
-
-### DistSQL back-end
-
-**Role:** distribute the execution of queries and (some) statements
-
-**Interface:** `distSQLPlanner.PlanAndRun()`: takes a logical plan as
-input, produces results (or error) as output.
-
-**How:**
-
-This is rather complicated.
-
-Overall query distribution is itself split into two phases:
-
-- **physical planning** transforms the logical plan into a physical plan
-  which determines which processors run on which node;
-- the **distSQL runner** dispatches the work as distSQL "processors" on all
-  nodes involved, manages the data "flows" and gathers the results.
+**Role:** plan the distribution of query execution (= decide which
+computation goes to which node) and then actually run the query.
 
 See the distSQL RFC and "Life of a SQL query" for details.
 
-Note: currently misses a connection to the memory monitor; allocations
-by distSQL are still unchecked.
-
 **Code:** `pkg/sql/distsql{plan,run}`
 
-**Whom to ask for details:** radu, andrei, vivek, peter, arjun
+**Whom to ask for details:** the SQL execution team.
+
+### Distributed processors
+
+**Role:** perform individual relational operations in a currently
+executing distributed plan.
+
+**Whom to ask for details:** the SQL execution team.
 
 ## Executor
 
@@ -653,7 +561,7 @@ by distSQL are still unchecked.
   `CopyData()`/`CopyDone()`/`CopyEnd()`;
 
 - for the internal SQL interface: `QueryRow()`, `queryRows()`,
-  `query()`, `queryRowsAsRoot()`, `exec()`;
+  `query()`, `exec()`;
 
 - into the other components within the SQL layer: see the interfaces
   in the previous sections of this document;
@@ -668,15 +576,9 @@ by distSQL are still unchecked.
 - there's a monster "god class" called `planner`;
 - it's a mess, and yet it works!
 
-For more details, see [Life of a SQL query](life_of_a_query.md).
-
-(This code has become unwieldy and is ripe for refactoring and
-extensive re-documentation.)
-
-**Whom to ask for details:** radu, nathan, andrei, tamir, peter, mattj
+**Whom to ask for details:** andrei, nathan
 
 ## The two big auxiliaries
-
 
 ### SQL table lease manager
 
@@ -780,45 +682,9 @@ To ensure this:
 
 In addition a monitor can be "subservient" to another monitor, with
 its allocations counted against both its own budget and the budget of
-the monitor one level up. We (currently) use the following hierarchy
-of monitor:
+the monitor one level up.
 
-- root monitors:
-  - `"sql"`, one for all pgwire connections: `pgwire.Server.sqlMemoryPool`
-  - `"admin"`, one for all admin RPC commands: `adminServer.memMonitor`
+**Code:** `util/mon`; more details in a comment at the start of
+`util/mon/bytes_usage.go`.
 
-- `"conn`" (`pgwire.Server.connMonitor`), to serve chunks of memory
-  pre-registered from the `"sql"` monitor to the `"root"` monitor
-  below, without needing to actually interact with the `"sql"` monitor
-  (a sort of buffer, to reduce mutex contention);
-  
-- `"root"`, one per `Session` instance (`Session.mon`), hanging off
-  one of the root monitors for pgwire and admin RPC commands, and
-  completely standalone (i.e. unchecked) for uses of the internal SQL
-  interface;
-  
-- `"session"`, one per `Session` instance (`Session.sessionMon`),
-  hanging off `"root"`, for session-wide allocations like prepared
-  statements and result sets;
-
-- `"txn"`, one per `Session` instance (`Session.Txn.mon`), hanging off
-  `"root"`, for txn-wide allocations like temporary rows sets.
-
-**Code:** `sql/mon`; more details in a comment at the start of
-`sql/mon/mem_usage.go`.
-
-**Whom to ask for details:** andrei, knz
-
-### The APL/CCL interface
-
-- CCL components may "hook" into the executor between the parser and the
-  logical planner.
-- in this hook, they can hijack logical planning and provide their
-  own logical plan using objects with custom CCL definitions but
-  the same interface as other APL nodes.
-- this is the way CCL components also provide their own local runner
-  implementation, which is thus automatically selected to run
-  CCL-specific statements.
-
-**Whom to ask for details**: danhhz
-
+**Whom to ask for details:** the SQL execution team

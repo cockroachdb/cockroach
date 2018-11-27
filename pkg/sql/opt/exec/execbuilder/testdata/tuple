@@ -1,0 +1,138 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  INDEX (u,v,w)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /1/2/3-            ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /2/1/2-            ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
+----
+scan  ·       ·                       (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx       ·          ·
+·     spans   /!NULL-/2/3/2           ·          ·
+·     filter  (u, v, w) <= (2, 3, 1)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
+----
+scan  ·       ·                      (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx      ·          ·
+·     spans   /!NULL-/2/2/2          ·          ·
+·     filter  (u, v, w) < (2, 2, 2)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
+----
+scan  ·       ·                       (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx       ·          ·
+·     spans   -/1/2/3 /1/2/4-         ·          ·
+·     filter  (u, v, w) != (1, 2, 3)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /2-                ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /!NULL-/2          ·          ·
+
+statement ok
+DROP TABLE uvw
+
+# Regression test for #6390.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8, 9, 10)
+----
+filter           ·       ·                                                     (a, b, c)              ·
+ │               filter  ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                      ·
+ └── index-join  ·       ·                                                     (a, b, c)              ·
+      ├── scan   ·       ·                                                     (a, b, rowid[hidden])  ·
+      │          table   abc@abc_a_b_idx                                       ·                      ·
+      │          spans   /1/2-/8/10                                            ·                      ·
+      └── scan   ·       ·                                                     (a, b, c)              ·
+·                table   abc@primary                                           ·                      ·
+
+statement ok
+DROP TABLE abc
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
+----
+scan  ·       ·                      (a, b, c)  ·
+·     table   abc@abc_a_b_c_idx      ·          ·
+·     spans   /1-                    ·          ·
+·     filter  (a, b, c) > (1, 2, 3)  ·          ·
+
+statement ok
+DROP TABLE abc
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+# Regression test for #27398.
+# Check that tuple type includes labels.
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+render     ·         ·                                                                                   (x tuple{int AS a, int AS b, int AS c})  ·
+ │         render 0  ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
+ └── scan  ·         ·                                                                                   (v int)                                  ·
+·          table     kv@primary                                                                          ·                                        ·
+·          spans     ALL                                                                                 ·                                        ·
+
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+render          ·         ·                                                                                   (a int, b int, c int)                    ·
+ │              render 0  (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]                                 ·                                        ·
+ │              render 1  (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]                                 ·                                        ·
+ │              render 2  (((x)[tuple{int AS a, int AS b, int AS c}]).c)[int]                                 ·                                        ·
+ └── render     ·         ·                                                                                   (x tuple{int AS a, int AS b, int AS c})  ·
+      │         render 0  ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
+      └── scan  ·         ·                                                                                   (v int)                                  ·
+·               table     kv@primary                                                                          ·                                        ·
+·               spans     ALL                                                                                 ·                                        ·
+
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+render              ·         ·                                                                                                (e int, f string, g bool)                    ·
+ │                  render 0  (((x)[tuple{int AS e, string AS f, bool AS g}]).e)[int]                                          ·                                            ·
+ │                  render 1  (((x)[tuple{int AS e, string AS f, bool AS g}]).f)[string]                                       ·                                            ·
+ │                  render 2  (((x)[tuple{int AS e, string AS f, bool AS g}]).g)[bool]                                         ·                                            ·
+ └── render         ·         ·                                                                                                (x tuple{int AS e, string AS f, bool AS g})  ·
+      │             render 0  ((((1)[int], ('2')[string], (true)[bool]) AS e, f, g))[tuple{int AS e, string AS f, bool AS g}]  ·                                            ·
+      └── emptyrow  ·         ·                                                                                                ()                                           ·

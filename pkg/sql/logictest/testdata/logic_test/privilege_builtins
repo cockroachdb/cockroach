@@ -1,0 +1,955 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE USER bar
+
+statement ok
+GRANT CREATE ON DATABASE test TO bar
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+GRANT GRANT ON t TO bar;
+
+statement ok
+GRANT DELETE ON t TO bar;
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+GRANT SELECT ON seq TO bar;
+
+statement ok
+GRANT SELECT ON seq TO testuser;
+
+statement ok
+GRANT GRANT ON seq TO testuser;
+
+
+## has_any_column_privilege
+
+query BBBB
+SELECT has_any_column_privilege(12345, 'SELECT'),
+       has_any_column_privilege(12345, 'INSERT'),
+       has_any_column_privilege(12345, 'UPDATE'),
+       has_any_column_privilege(12345, 'REFERENCES')
+----
+NULL  NULL  NULL  NULL
+
+query BBBB
+SELECT has_any_column_privilege(12345::OID::REGCLASS, 'SELECT'),
+       has_any_column_privilege(12345::OID::REGCLASS, 'INSERT'),
+       has_any_column_privilege(12345::OID::REGCLASS, 'UPDATE'),
+       has_any_column_privilege(12345::OID::REGCLASS, 'REFERENCES')
+----
+NULL  NULL  NULL  NULL
+
+query BBBB
+SELECT has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'SELECT'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'INSERT'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'UPDATE'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'REFERENCES')
+----
+true  false  false  true
+
+query BBBB
+SELECT has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'SELECT'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'INSERT'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'UPDATE'),
+       has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'REFERENCES')
+----
+true  true  true  true
+
+query error pgcode 42P01 relation "does_not_exist" does not exist
+SELECT has_any_column_privilege('does_not_exist', 'SELECT')
+
+query BBBBB
+SELECT has_any_column_privilege('pg_type', 'SELECT'),
+       has_any_column_privilege('pg_type', 'INSERT'),
+       has_any_column_privilege('pg_type', 'UPDATE'),
+       has_any_column_privilege('pg_type', 'REFERENCES'),
+       has_any_column_privilege('pg_type', 'SELECT, INSERT, UPDATE')
+----
+true  false  false  true  false
+
+query BBBBB
+SELECT has_any_column_privilege('t', 'SELECT'),
+       has_any_column_privilege('t', 'INSERT'),
+       has_any_column_privilege('t', 'UPDATE'),
+       has_any_column_privilege('t', 'REFERENCES'),
+       has_any_column_privilege('t', 'SELECT, INSERT, UPDATE')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_any_column_privilege('t', 'SELECT WITH GRANT OPTION'),
+       has_any_column_privilege('t', 'INSERT WITH GRANT OPTION'),
+       has_any_column_privilege('t', 'UPDATE WITH GRANT OPTION'),
+       has_any_column_privilege('t', 'REFERENCES WITH GRANT OPTION'),
+       has_any_column_privilege('t', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_any_column_privilege('t'::Name, 'SELECT'),
+       has_any_column_privilege('t'::Name, 'INSERT'),
+       has_any_column_privilege('t'::Name, 'UPDATE'),
+       has_any_column_privilege('t'::Name, 'REFERENCES'),
+       has_any_column_privilege('t'::Name, 'SELECT, INSERT, UPDATE')
+----
+true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: ""
+SELECT has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), '')
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_any_column_privilege('t', 'USAGE')
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_any_column_privilege('t', 'SELECT, USAGE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_any_column_privilege('no_user', 't', 'SELECT')
+
+query BBBBB
+SELECT has_any_column_privilege('bar', 't', 'SELECT'),
+       has_any_column_privilege('bar', 't', 'INSERT'),
+       has_any_column_privilege('bar', 't', 'UPDATE'),
+       has_any_column_privilege('bar', 't', 'REFERENCES'),
+       has_any_column_privilege('bar', 't', 'SELECT, INSERT, UPDATE')
+----
+false  false  false  false  false
+
+query BBBBB
+SELECT has_any_column_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
+       has_any_column_privilege('bar', 't', 'INSERT WITH GRANT OPTION'),
+       has_any_column_privilege('bar', 't', 'UPDATE WITH GRANT OPTION'),
+       has_any_column_privilege('bar', 't', 'REFERENCES WITH GRANT OPTION'),
+       has_any_column_privilege('bar', 't', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+false  false  false  false  false
+
+
+## has_column_privilege
+
+query BBBB
+SELECT has_column_privilege(12345, 1, 'SELECT'),
+       has_column_privilege(12345, 1, 'INSERT'),
+       has_column_privilege(12345, 1, 'UPDATE'),
+       has_column_privilege(12345, 1, 'REFERENCES')
+----
+NULL  NULL  NULL  NULL
+
+query BBBB
+SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'SELECT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'INSERT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'UPDATE'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'REFERENCES')
+----
+true  false  false  true
+
+query BBBB
+SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 1, 'SELECT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 2, 'INSERT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 1, 'UPDATE'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 2, 'REFERENCES')
+----
+true  true  true  true
+
+query error pgcode 42P01 relation "does_not_exist" does not exist
+SELECT has_column_privilege('does_not_exist', 1, 'SELECT')
+
+query error pgcode 42703 column 100 of relation 'pg_type' does not exist
+SELECT has_column_privilege('pg_type', 100, 'SELECT')
+
+query BBBBB
+SELECT has_column_privilege('pg_type', 1, 'SELECT'),
+       has_column_privilege('pg_type', 1, 'INSERT'),
+       has_column_privilege('pg_type', 1, 'UPDATE'),
+       has_column_privilege('pg_type', 1, 'REFERENCES'),
+       has_column_privilege('pg_type', 1, 'SELECT, INSERT, UPDATE')
+----
+true  false  false  true  false
+
+query BBBBB
+SELECT has_column_privilege('t', 1, 'SELECT'),
+       has_column_privilege('t', 1, 'INSERT'),
+       has_column_privilege('t', 1, 'UPDATE'),
+       has_column_privilege('t', 1, 'REFERENCES'),
+       has_column_privilege('t', 1, 'SELECT, INSERT, UPDATE')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_column_privilege('t', 1, 'SELECT WITH GRANT OPTION'),
+       has_column_privilege('t', 1, 'INSERT WITH GRANT OPTION'),
+       has_column_privilege('t', 1, 'UPDATE WITH GRANT OPTION'),
+       has_column_privilege('t', 1, 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('t', 1, 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_column_privilege('t', 1, 'USAGE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_column_privilege('no_user', 't', 1, 'SELECT')
+
+query BBBBB
+SELECT has_column_privilege('bar', 't', 1, 'SELECT'),
+       has_column_privilege('bar', 't', 1, 'INSERT'),
+       has_column_privilege('bar', 't', 1, 'UPDATE'),
+       has_column_privilege('bar', 't', 1, 'REFERENCES'),
+       has_column_privilege('bar', 't', 1, 'SELECT, INSERT, UPDATE')
+----
+false  false  false  false  false
+
+query BBBBB
+SELECT has_column_privilege('bar', 't', 1, 'SELECT WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 1, 'INSERT WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 1, 'UPDATE WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 1, 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 1, 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+false  false  false  false  false
+
+query BBBB
+SELECT has_column_privilege(12345, 'col', 'SELECT'),
+       has_column_privilege(12345, 'col', 'INSERT'),
+       has_column_privilege(12345, 'col', 'UPDATE'),
+       has_column_privilege(12345, 'col', 'REFERENCES')
+----
+NULL  NULL  NULL  NULL
+
+query BBBB
+SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'SELECT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'INSERT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'UPDATE'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'REFERENCES')
+----
+true  false  false  true
+
+query BBBB
+SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'a', 'SELECT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'b', 'INSERT'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'a', 'UPDATE'),
+       has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'b', 'REFERENCES')
+----
+true  true  true  true
+
+query error pgcode 42P01 relation "does_not_exist" does not exist
+SELECT has_column_privilege('does_not_exist', 'col', 'SELECT')
+
+query error pgcode 42703 column 'does not exist' of relation 'pg_type' does not exist
+SELECT has_column_privilege('pg_type', 'does not exist', 'SELECT')
+
+query BBBBB
+SELECT has_column_privilege('pg_type', 'typname', 'SELECT'),
+       has_column_privilege('pg_type', 'typname', 'INSERT'),
+       has_column_privilege('pg_type', 'typname', 'UPDATE'),
+       has_column_privilege('pg_type', 'typname', 'REFERENCES'),
+       has_column_privilege('pg_type', 'typname', 'SELECT, INSERT, UPDATE')
+----
+true  false  false  true  false
+
+query BBBBB
+SELECT has_column_privilege('t', 'a', 'SELECT'),
+       has_column_privilege('t', 'a', 'INSERT'),
+       has_column_privilege('t', 'a', 'UPDATE'),
+       has_column_privilege('t', 'a', 'REFERENCES'),
+       has_column_privilege('t', 'a', 'SELECT, INSERT, UPDATE')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_column_privilege('t', 'a', 'SELECT WITH GRANT OPTION'),
+       has_column_privilege('t', 'a', 'INSERT WITH GRANT OPTION'),
+       has_column_privilege('t', 'a', 'UPDATE WITH GRANT OPTION'),
+       has_column_privilege('t', 'a', 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('t', 'a', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_column_privilege('t'::Name, 'a'::Name, 'SELECT WITH GRANT OPTION'),
+       has_column_privilege('t'::Name, 'a'::Name, 'INSERT WITH GRANT OPTION'),
+       has_column_privilege('t'::Name, 'a'::Name, 'UPDATE WITH GRANT OPTION'),
+       has_column_privilege('t'::Name, 'a'::Name, 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('t'::Name, 'a'::Name, 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_column_privilege('t', 'a', 'USAGE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_column_privilege('no_user', 't', 'a', 'SELECT')
+
+query BBBBB
+SELECT has_column_privilege('bar', 't', 'a', 'SELECT'),
+       has_column_privilege('bar', 't', 'a', 'INSERT'),
+       has_column_privilege('bar', 't', 'a', 'UPDATE'),
+       has_column_privilege('bar', 't', 'a', 'REFERENCES'),
+       has_column_privilege('bar', 't', 'a', 'SELECT, INSERT, UPDATE')
+----
+false  false  false  false  false
+
+query BBBBB
+SELECT has_column_privilege('bar', 't', 'a', 'SELECT WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 'a', 'INSERT WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 'a', 'UPDATE WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 'a', 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('bar', 't', 'a', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+----
+false  false  false  false  false
+
+
+## has_database_privilege
+
+query BBBB
+SELECT has_database_privilege(12345, 'CREATE'),
+       has_database_privilege(12345, 'CONNECT'),
+       has_database_privilege(12345, 'TEMPORARY'),
+       has_database_privilege(12345, 'TEMP')
+----
+NULL  NULL  NULL  NULL
+
+query BBBB
+SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'CREATE'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'CONNECT'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMPORARY'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMP')
+----
+false  true  false  false
+
+query BBBB
+SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'CREATE'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'CONNECT'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'TEMPORARY'),
+       has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'TEMP')
+----
+true  true  true  true
+
+query error pgcode 3D000 database 'does_not_exist' does not exist
+SELECT has_database_privilege('does_not_exist', 'CREATE')
+
+query BBBBB
+SELECT has_database_privilege('system', '  CrEaTe      '),
+       has_database_privilege('system', '      CONNECT'),
+       has_database_privilege('system', 'TEMPORARY'),
+       has_database_privilege('system', 'TEMP'),
+       has_database_privilege('system', '  CrEaTe      ,CONNECT')
+----
+false  true  false  false  false
+
+query BBBBB
+SELECT has_database_privilege('test', '  CrEaTe      '),
+       has_database_privilege('test', '      CONNECT'),
+       has_database_privilege('test', 'TEMPORARY'),
+       has_database_privilege('test', 'TEMP'),
+       has_database_privilege('test', '  CrEaTe      ,CONNECT')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_database_privilege('test', 'CREATE WITH GRANT OPTION'),
+       has_database_privilege('test', 'CONNECT WITH GRANT OPTION'),
+       has_database_privilege('test', 'TEMPORARY WITH GRANT OPTION'),
+       has_database_privilege('test', 'TEMP WITH GRANT OPTION'),
+       has_database_privilege('test', 'CREATE WITH GRANT OPTION, CONNECT WITH GRANT OPTION')
+----
+true  true  true  true  true
+
+query BBBBB
+SELECT has_database_privilege('test'::Name, 'CREATE'),
+       has_database_privilege('test'::Name, 'CONNECT'),
+       has_database_privilege('test'::Name, 'TEMPORARY'),
+       has_database_privilege('test'::Name, 'TEMP'),
+       has_database_privilege('test'::Name, 'CREATE, CONNECT')
+----
+true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_database_privilege('test', 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_database_privilege('test', 'CREATE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_database_privilege('no_user', 'test', 'CREATE')
+
+query BBBBBB
+SELECT has_database_privilege('bar', 'test', 'CREATE'),
+       has_database_privilege('bar', 'test', 'CONNECT'),
+       has_database_privilege('bar', 'test', 'TEMPORARY'),
+       has_database_privilege('bar', 'test', 'TEMP'),
+       has_database_privilege('bar', 'test', 'CREATE, CONNECT'),
+       has_database_privilege('bar', 'test', 'CREATE, TEMP')
+----
+true  true  true  true  true  true
+
+query BBBBBB
+SELECT has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION'),
+       has_database_privilege('bar', 'test', 'CONNECT WITH GRANT OPTION'),
+       has_database_privilege('bar', 'test', 'TEMPORARY WITH GRANT OPTION'),
+       has_database_privilege('bar', 'test', 'TEMP WITH GRANT OPTION'),
+       has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION, CONNECT WITH GRANT OPTION'),
+       has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION, TEMP WITH GRANT OPTION')
+----
+false  true  false  false  false  false
+
+
+## has_foreign_data_wrapper_privilege
+
+query B
+SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE')
+----
+true
+
+query error pgcode 42704 foreign-data wrapper 'does_not_exist' does not exist
+SELECT has_foreign_data_wrapper_privilege('does_not_exist', 'USAGE')
+
+query error pgcode 42704 foreign-data wrapper 'does_not_exist' does not exist
+SELECT has_foreign_data_wrapper_privilege('does_not_exist'::Name, 'USAGE')
+
+query B
+SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE WITH GRANT OPTION')
+----
+true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_foreign_data_wrapper_privilege(12345, 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_foreign_data_wrapper_privilege(12345, 'USAGE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_foreign_data_wrapper_privilege('no_user', 12345, 'USAGE')
+
+query B
+SELECT has_foreign_data_wrapper_privilege('bar', 12345, 'USAGE')
+----
+true
+
+
+## has_function_privilege
+
+query B
+SELECT has_function_privilege(12345, 'EXECUTE')
+----
+NULL
+
+query B
+SELECT has_function_privilege((SELECT oid FROM pg_proc LIMIT 1), 'EXECUTE')
+----
+true
+
+query error pgcode 42883 unknown function: does_not_exist()
+SELECT has_function_privilege('does_not_exist', 'EXECUTE')
+
+query error pgcode 42883 unknown function: does_not_exist()
+SELECT has_function_privilege('does_not_exist()', 'EXECUTE')
+
+query B
+SELECT has_function_privilege('version', '  EXECUTE      ')
+----
+true
+
+query B
+SELECT has_function_privilege('version()', 'EXECUTE')
+----
+true
+
+query B
+SELECT has_function_privilege('cos(float)', 'EXECUTE WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_function_privilege('version'::Name, 'EXECUTE')
+----
+true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_function_privilege('acos(float)', 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_function_privilege('acos(float)', 'EXECUTE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_function_privilege('no_user', 'acos(float)', 'EXECUTE')
+
+query B
+SELECT has_function_privilege('bar', 'current_date'::REGPROC, 'EXECUTE')
+----
+true
+
+query B
+SELECT has_function_privilege('bar', 'current_date'::REGPROC::OID, 'EXECUTE')
+----
+true
+
+
+## has_language_privilege
+
+query B
+SELECT has_language_privilege(12345, 'USAGE')
+----
+NULL
+
+query error pgcode 42704 language 'does_not_exist' does not exist
+SELECT has_language_privilege('does_not_exist', 'USAGE')
+
+query error pgcode 42704 language 'does_not_exist' does not exist
+SELECT has_language_privilege('does_not_exist'::Name, 'USAGE')
+
+query B
+SELECT has_language_privilege(12345, 'USAGE WITH GRANT OPTION')
+----
+NULL
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_language_privilege(12345, 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_language_privilege(12345, 'USAGE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_language_privilege('no_user', 12345, 'USAGE')
+
+query B
+SELECT has_language_privilege('bar', 12345, 'USAGE')
+----
+NULL
+
+
+## has_schema_privilege
+
+query BB
+SELECT has_schema_privilege(12345, 'CREATE'), 
+       has_schema_privilege(12345, 'USAGE')
+----
+NULL  NULL
+
+query BB
+SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'CREATE'),
+       has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'USAGE')
+----
+true  true
+
+query BB
+SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'CREATE'),
+       has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'USAGE')
+----
+true  true
+
+query BB
+SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'public'), 'CREATE'),
+       has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'public'), 'USAGE')
+----
+true  true
+
+query error pgcode 3F000 schema 'does_not_exist' does not exist
+SELECT has_schema_privilege('does_not_exist', 'CREATE')
+
+query BBB
+SELECT has_schema_privilege('public', 'CREATE'),
+       has_schema_privilege('public', 'USAGE'),
+       has_schema_privilege('public', 'CREATE, USAGE')
+----
+true  true  true
+
+query BBB
+SELECT has_schema_privilege('public', 'CREATE WITH GRANT OPTION'),
+       has_schema_privilege('public', 'USAGE WITH GRANT OPTION'),
+       has_schema_privilege('public', 'CREATE WITH GRANT OPTION, USAGE WITH GRANT OPTION')
+----
+true  true  true
+
+query BBB
+SELECT has_schema_privilege('public'::Name, 'CREATE'),
+       has_schema_privilege('public'::Name, 'USAGE'),
+       has_schema_privilege('public'::Name, 'CREATE, USAGE')
+----
+true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_schema_privilege('public', 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_schema_privilege('public', 'CREATE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_schema_privilege('no_user', 'public', 'CREATE')
+
+query BBB
+SELECT has_schema_privilege('bar', 'public', 'CREATE'),
+       has_schema_privilege('bar', 'public', 'USAGE'),
+       has_schema_privilege('bar', 'public', 'CREATE, USAGE')
+----
+true  false  false
+
+query BBB
+SELECT has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION'),
+       has_schema_privilege('bar', 'public', 'USAGE WITH GRANT OPTION'),
+       has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION, USAGE WITH GRANT OPTION')
+----
+false  false  false
+
+
+## has_sequence_privilege
+
+query BBB
+SELECT has_sequence_privilege(12345, 'USAGE'),
+       has_sequence_privilege(12345, 'SELECT'),
+       has_sequence_privilege(12345, 'UPDATE')
+----
+NULL  NULL  NULL
+
+query BBB
+SELECT has_sequence_privilege((SELECT oid FROM pg_class WHERE relname = 'seq'), 'USAGE'),
+       has_sequence_privilege((SELECT oid FROM pg_class WHERE relname = 'seq'), 'SELECT'),
+       has_sequence_privilege((SELECT oid FROM pg_class WHERE relname = 'seq'), 'UPDATE')
+----
+true  true  true
+
+query error pgcode 42P01 relation "does_not_exist" does not exist
+SELECT has_sequence_privilege('does_not_exist', 'SELECT')
+
+query error pgcode 42809 't' is not a sequence
+SELECT has_sequence_privilege('t', 'SELECT')
+
+query BBB
+SELECT has_sequence_privilege('seq', 'USAGE'),
+       has_sequence_privilege('seq', 'SELECT'),
+       has_sequence_privilege('seq', 'UPDATE')
+----
+true  true  true
+
+query BBB
+SELECT has_sequence_privilege('seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('seq', 'UPDATE WITH GRANT OPTION')
+----
+true  true  true
+
+query BBB
+SELECT has_sequence_privilege('seq'::Name, 'USAGE'),
+       has_sequence_privilege('seq'::Name, 'SELECT'),
+       has_sequence_privilege('seq'::Name, 'UPDATE')
+----
+true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "DELETE"
+SELECT has_sequence_privilege('seq', 'DELETE')
+
+query error pgcode 22023 unrecognized privilege type: "DELETE"
+SELECT has_sequence_privilege('seq', 'SELECT, DELETE')
+
+user testuser
+
+query BBB
+SELECT has_sequence_privilege('seq', 'USAGE'),
+       has_sequence_privilege('seq', 'SELECT'),
+       has_sequence_privilege('seq', 'UPDATE')
+----
+true  true  false
+
+query BBB
+SELECT has_sequence_privilege('seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('seq', 'UPDATE WITH GRANT OPTION')
+----
+true  true  false
+
+user root
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_sequence_privilege('no_user', 'seq', 'SELECT')
+
+query BBB
+SELECT has_sequence_privilege('bar', 'seq', 'USAGE'),
+       has_sequence_privilege('bar', 'seq', 'SELECT'),
+       has_sequence_privilege('bar', 'seq', 'UPDATE')
+----
+true  true  false
+
+query BBB
+SELECT has_sequence_privilege('bar', 'seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('bar', 'seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('bar', 'seq', 'UPDATE WITH GRANT OPTION')
+----
+false  false  false
+
+
+## has_server_privilege
+
+query B
+SELECT has_server_privilege(12345, 'USAGE')
+----
+true
+
+query error pgcode 42704 server 'does_not_exist' does not exist
+SELECT has_server_privilege('does_not_exist', 'USAGE')
+
+query error pgcode 42704 server 'does_not_exist' does not exist
+SELECT has_server_privilege('does_not_exist'::Name, 'USAGE')
+
+query B
+SELECT has_server_privilege(12345, 'USAGE WITH GRANT OPTION')
+----
+true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_server_privilege(12345, 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_server_privilege(12345, 'USAGE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_server_privilege('no_user', 12345, 'USAGE')
+
+query B
+SELECT has_server_privilege('bar', 12345, 'USAGE')
+----
+true
+
+
+## has_table_privilege
+
+query BBBBBBB
+SELECT has_table_privilege(12345, 'SELECT'),
+       has_table_privilege(12345, 'INSERT'),
+       has_table_privilege(12345, 'UPDATE'),
+       has_table_privilege(12345, 'DELETE'),
+       has_table_privilege(12345, 'TRUNCATE'),
+       has_table_privilege(12345, 'REFERENCES'),
+       has_table_privilege(12345, 'TRIGGER')
+----
+NULL  NULL  NULL  NULL  NULL  NULL  NULL
+
+query BBBBBBB
+SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'SELECT'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'INSERT'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'UPDATE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'DELETE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRUNCATE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'REFERENCES'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRIGGER')
+----
+true  false  false  false  false  true  false
+
+query BBBBBBB
+SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'SELECT'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'INSERT'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'UPDATE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'DELETE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'TRUNCATE'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'REFERENCES'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'TRIGGER')
+----
+true  true  true  true  true  true  true
+
+query error pgcode 42P01 relation "does_not_exist" does not exist
+SELECT has_table_privilege('does_not_exist', 'SELECT')
+
+query BBBBBBBBB
+SELECT has_table_privilege('pg_type', 'SELECT'),
+       has_table_privilege('pg_type', 'INSERT'),
+       has_table_privilege('pg_type', 'UPDATE'),
+       has_table_privilege('pg_type', 'DELETE'),
+       has_table_privilege('pg_type', 'TRUNCATE'),
+       has_table_privilege('pg_type', 'REFERENCES'),
+       has_table_privilege('pg_type', 'TRIGGER'),
+       has_table_privilege('pg_type', 'SELECT, INSERT, UPDATE'),
+       has_table_privilege('pg_type', 'SELECT, TRUNCATE')
+----
+true  false  false  false  false  true  false  false  false
+
+query BBBBBBBBB
+SELECT has_table_privilege('t', 'SELECT'),
+       has_table_privilege('t', 'INSERT'),
+       has_table_privilege('t', 'UPDATE'),
+       has_table_privilege('t', 'DELETE'),
+       has_table_privilege('t', 'TRUNCATE'),
+       has_table_privilege('t', 'REFERENCES'),
+       has_table_privilege('t', 'TRIGGER'),
+       has_table_privilege('t', 'SELECT, INSERT, UPDATE'),
+       has_table_privilege('t', 'SELECT, TRUNCATE')
+----
+true  true  true  true  true  true  true  true  true
+
+query BBBBBBBBB
+SELECT has_table_privilege('t', 'SELECT WITH GRANT OPTION'),
+       has_table_privilege('t', 'INSERT WITH GRANT OPTION'),
+       has_table_privilege('t', 'UPDATE WITH GRANT OPTION'),
+       has_table_privilege('t', 'DELETE WITH GRANT OPTION'),
+       has_table_privilege('t', 'TRUNCATE WITH GRANT OPTION'),
+       has_table_privilege('t', 'REFERENCES WITH GRANT OPTION'),
+       has_table_privilege('t', 'TRIGGER WITH GRANT OPTION'),
+       has_table_privilege('t', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
+       has_table_privilege('t', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION')
+----
+true  true  true  true  true  true  true  true  true
+
+query BBBBBBBBB
+SELECT has_table_privilege('t'::Name, 'SELECT'),
+       has_table_privilege('t'::Name, 'INSERT'),
+       has_table_privilege('t'::Name, 'UPDATE'),
+       has_table_privilege('t'::Name, 'DELETE'),
+       has_table_privilege('t'::Name, 'TRUNCATE'),
+       has_table_privilege('t'::Name, 'REFERENCES'),
+       has_table_privilege('t'::Name, 'TRIGGER'),
+       has_table_privilege('t'::Name, 'SELECT, INSERT, UPDATE'),
+       has_table_privilege('t'::Name, 'SELECT, TRUNCATE')
+----
+true  true  true  true  true  true  true  true  true
+
+# has_table_privilege works with sequences as well.
+query BBBBBBBBB
+SELECT has_table_privilege('seq', 'SELECT'),
+       has_table_privilege('seq', 'INSERT'),
+       has_table_privilege('seq', 'UPDATE'),
+       has_table_privilege('seq', 'DELETE'),
+       has_table_privilege('seq', 'TRUNCATE'),
+       has_table_privilege('seq', 'REFERENCES'),
+       has_table_privilege('seq', 'TRIGGER'),
+       has_table_privilege('seq', 'SELECT, INSERT, UPDATE'),
+       has_table_privilege('seq', 'SELECT, TRUNCATE')
+----
+true  true  true  true  true  true  true  true  true
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_table_privilege('t', 'USAGE')
+
+query error pgcode 22023 unrecognized privilege type: "USAGE"
+SELECT has_table_privilege('t', 'SELECT, USAGE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_table_privilege('no_user', 't', 'SELECT')
+
+query BBBBBBBBB
+SELECT has_table_privilege('bar', 't', 'SELECT'),
+       has_table_privilege('bar', 't', 'INSERT'),
+       has_table_privilege('bar', 't', 'UPDATE'),
+       has_table_privilege('bar', 't', 'DELETE'),
+       has_table_privilege('bar', 't', 'TRUNCATE'),
+       has_table_privilege('bar', 't', 'REFERENCES'),
+       has_table_privilege('bar', 't', 'TRIGGER'),
+       has_table_privilege('bar', 't', 'SELECT, INSERT, UPDATE'),
+       has_table_privilege('bar', 't', 'SELECT, TRUNCATE')
+----
+false  false  false  true  true  false  true  false  false
+
+query BBBBBBBBB
+SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'UPDATE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'DELETE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'TRUNCATE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'REFERENCES WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'TRIGGER WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION')
+----
+false  false  false  true  true  false  true  false  false
+
+
+## has_tablespace_privilege
+
+query B
+SELECT has_tablespace_privilege(12345, 'CREATE')
+----
+true
+
+query B
+SELECT has_tablespace_privilege((SELECT oid FROM pg_tablespace LIMIT 1), 'CREATE')
+----
+true
+
+query error pgcode 42704 tablespace 'does_not_exist' does not exist
+SELECT has_tablespace_privilege('does_not_exist', 'CREATE')
+
+query B
+SELECT has_tablespace_privilege('pg_default', '  CrEaTe      ')
+----
+true
+
+query B
+SELECT has_tablespace_privilege('pg_default', 'CREATE WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_tablespace_privilege('pg_default'::Name, 'CREATE')
+----
+true
+
+query error pgcode 22023 unrecognized privilege type: "CREATE    WITH GRANT OPTION"
+SELECT has_tablespace_privilege('pg_default', 'CREATE    WITH GRANT OPTION')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_tablespace_privilege('pg_default', 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_tablespace_privilege('pg_default', 'CREATE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_tablespace_privilege('no_user', 'pg_default', 'CREATE')
+
+query B
+SELECT has_tablespace_privilege('bar', (SELECT oid FROM pg_tablespace LIMIT 1), 'CREATE')
+----
+true
+
+
+## has_type_privilege
+
+query B
+SELECT has_type_privilege(12345, 'USAGE')
+----
+NULL
+
+query B
+SELECT has_type_privilege((SELECT oid FROM pg_type LIMIT 1), 'USAGE')
+----
+true
+
+query error pgcode 42704 type 'does_not_exist' does not exist
+SELECT has_type_privilege('does_not_exist', 'USAGE')
+
+query B
+SELECT has_type_privilege('int', '  USAGE      ')
+----
+true
+
+query B
+SELECT has_type_privilege('decimal(18,2)', 'USAGE WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_type_privilege('int'::Name, 'USAGE')
+----
+true
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_type_privilege('int4', 'UPDATE')
+
+query error pgcode 22023 unrecognized privilege type: "UPDATE"
+SELECT has_type_privilege('int4', 'USAGE, UPDATE')
+
+query error pgcode 42704 role 'no_user' does not exist
+SELECT has_type_privilege('no_user', 'int4', 'USAGE')
+
+query B
+SELECT has_type_privilege('bar', 'text'::REGTYPE, 'USAGE')
+----
+true
+
+query B
+SELECT has_type_privilege('bar', 'text'::REGTYPE::OID, 'USAGE')
+----
+true

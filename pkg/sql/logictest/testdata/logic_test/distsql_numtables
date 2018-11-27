@@ -1,0 +1,208 @@
+# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+
+# First, we set up two data tables:
+#   - NumToSquare maps integers from 1 to 100 to their squares
+#   - NumToStr maps integers from 1 to 100*100 to strings; this table is
+#     split and distributed to all nodes.
+statement ok
+CREATE TABLE NumToSquare (x INT PRIMARY KEY, xsquared INT)
+
+statement ok
+INSERT INTO NumToSquare SELECT i, i*i FROM generate_series(1, 100) AS g(i)
+
+statement ok
+CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split into five parts.
+statement ok
+ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
+
+# Relocate the five parts to the five nodes.
+statement ok
+ALTER TABLE NumToStr EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
+
+statement ok
+INSERT INTO NumToStr SELECT i, to_english(i) FROM generate_series(1, 100*100) AS g(i)
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToSquare]
+----
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToStr]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2000    {1}       1
+/2000      /4000    {2}       2
+/4000      /6000    {3}       3
+/6000      /8000    {4}       4
+/8000      NULL     {5}       5
+
+#
+# -- Basic tests --
+#
+
+# Query with a restricted span.
+
+query IIIT
+SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
+----
+5 10  8 eight
+5  7  5 five
+5  6  4 four
+5 11  9 nine
+5  3  1 one
+5 12 10 one-zero
+5  9  7 seven
+5  8  6 six
+5  5  3 three
+5  4  2 two
+
+
+# Query which requires a full table scan.
+query IIIT
+SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
+----
+5  8002  8000 eight-zero-zero-zero
+5  5002  5000 five-zero-zero-zero
+5  4002  4000 four-zero-zero-zero
+5  9002  9000 nine-zero-zero-zero
+5  1002  1000 one-zero-zero-zero
+5 10002 10000 one-zero-zero-zero-zero
+5  7002  7000 seven-zero-zero-zero
+5  6002  6000 six-zero-zero-zero
+5  3002  3000 three-zero-zero-zero
+5  2002  2000 two-zero-zero-zero
+
+# Query with a restricted span + filter.
+query T
+SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y
+----
+one
+three
+five
+seven
+eight
+nine
+
+# Query which requires a full table scan.
+query T
+SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y
+----
+five-zero-zero-zero
+six-zero-zero-zero
+eight-zero-zero-zero
+nine-zero-zero-zero
+
+
+#
+# -- Join tests --
+#
+
+# Save the result of the following statement to a label.
+query IT rowsort label-sq-str
+SELECT i, to_english(i*i) FROM generate_series(1, 100) AS g(i)
+
+# Compare the results of this query to the one above.
+query IT rowsort label-sq-str
+SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
+
+# Save the result of the following statement to a label.
+query IT rowsort label-sq-2-str
+SELECT 2*i, to_english(2*i) FROM generate_series(1, 50) AS g(i)
+
+# Compare the results of this query to the one above.
+query IT rowsort label-sq-2-str
+SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
+
+
+#
+# -- Aggregation tests --
+#
+
+# Sum the numbers in the NumToStr table. The expected result is
+#  n * n * (n * n + 1) / 2
+query R
+SELECT sum(y) FROM NumToStr
+----
+50005000
+
+# Count the rows in the NumToStr table.
+query I
+SELECT count(*) FROM NumToStr
+----
+10000
+
+# Count how many numbers contain the digit 5.
+# Result calculated here: https://play.golang.org/p/e-YsJRDsXF
+query I
+SELECT count(*) FROM NumToStr WHERE str LIKE '%five%'
+----
+3439
+
+
+#
+# -- Limit tests --
+#
+
+query I
+SELECT y FROM NumToStr ORDER BY y LIMIT 5
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5
+----
+10000
+9999
+9998
+9997
+9996
+
+query I
+SELECT y FROM NumToStr ORDER BY y OFFSET 5 LIMIT 2
+----
+6 7
+
+query I
+SELECT y FROM NumToStr ORDER BY y LIMIT 0
+----
+
+query I
+SELECT * FROM (SELECT y FROM NumToStr LIMIT 3) AS a ORDER BY y OFFSET 3
+----
+
+query I
+SELECT y FROM NumToStr ORDER BY str LIMIT 5
+----
+8
+88
+888
+8888
+8885
+
+query I
+SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
+----
+1
+3
+4
+5
+
+# Regression test for #20481.
+query I
+SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
+----
+10

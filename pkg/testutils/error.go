@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package testutils
 
@@ -22,6 +20,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
@@ -34,7 +33,8 @@ func IsError(err error, re string) bool {
 	if err == nil || re == "" {
 		return false
 	}
-	matched, merr := regexp.MatchString(re, err.Error())
+	errString := pgerror.FullError(err)
+	matched, merr := regexp.MatchString(re, errString)
 	if merr != nil {
 		return false
 	}
@@ -62,10 +62,16 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 // itself. This can occur when a node is restarting or is unstable in
 // some other way. Note that retryable errors may occur event in cases
 // where the SQL execution ran to completion.
+//
+// TODO(bdarnell): Why are RPC errors in this list? These should
+// generally be retried on the server side or transformed into
+// ambiguous result errors ("connection reset/refused" are needed for
+// the pgwire connection, but anything RPC-related should be handled
+// within the cluster).
 func IsSQLRetryableError(err error) bool {
 	// Don't forget to update the corresponding test when making adjustments
 	// here.
-	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|result is ambiguous)")
+	return IsError(err, "(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|EOF|result is ambiguous)")
 }
 
 // Caller returns filename and line number info for the specified stack

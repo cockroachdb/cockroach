@@ -1,9 +1,23 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import _ from "lodash";
 
-import * as protos from "../js/protos";
+import * as protos from "src/js/protos";
 
-export type NodeStatus$Properties = protos.cockroach.server.status.NodeStatus$Properties;
-const nodeStatus: NodeStatus$Properties = null;
+export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
+const nodeStatus: INodeStatus = null;
 export type StatusMetrics = typeof nodeStatus.metrics;
 
 /**
@@ -29,7 +43,7 @@ export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[])
  * metrics collection of the supplied NodeStatus object. This is convenient
  * for all current usages of NodeStatus in the UI.
  */
-export function RollupStoreMetrics(ns: NodeStatus$Properties): void {
+export function RollupStoreMetrics(ns: INodeStatus): void {
   AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, (ss) => ss.metrics));
 }
 
@@ -48,6 +62,7 @@ export namespace MetricConstants {
   export const liveBytes: string = "livebytes";
   export const keyBytes: string = "keybytes";
   export const valBytes: string = "valbytes";
+  export const totalBytes: string = "totalbytes";
   export const intentBytes: string = "intentbytes";
   export const liveCount: string = "livecount";
   export const keyCount: string = "keycount";
@@ -58,6 +73,7 @@ export namespace MetricConstants {
   export const lastUpdateNano: string = "lastupdatenanos";
   export const capacity: string = "capacity";
   export const availableCapacity: string = "capacity.available";
+  export const usedCapacity: string = "capacity.used";
   export const sysBytes: string = "sysbytes";
   export const sysCount: string = "syscount";
 
@@ -72,21 +88,25 @@ export namespace MetricConstants {
 /**
  * TotalCPU computes the total CPU usage accounted for in a NodeStatus.
  */
-export function TotalCpu(status: NodeStatus$Properties): number {
-  let metrics = status.metrics;
+export function TotalCpu(status: INodeStatus): number {
+  const metrics = status.metrics;
   return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
 }
 
 /**
  * BytesUsed computes the total byte usage accounted for in a NodeStatus.
  */
-let aggregateByteKeys = [
+const aggregateByteKeys = [
   MetricConstants.liveBytes,
   MetricConstants.intentBytes,
   MetricConstants.sysBytes,
 ];
 
-export function BytesUsed(s: NodeStatus$Properties): number {
+export function BytesUsed(s: INodeStatus): number {
+  const usedCapacity = s.metrics[MetricConstants.usedCapacity];
+  if (usedCapacity !== 0) {
+    return usedCapacity;
+  }
   return _.sumBy(aggregateByteKeys, (key: string) => {
     return s.metrics[key];
   });

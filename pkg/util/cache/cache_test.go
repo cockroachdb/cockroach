@@ -13,8 +13,6 @@
 // permissions and limitations under the License.
 //
 // This code is based on: https://github.com/golang/groupcache/
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package cache
 
@@ -214,6 +212,35 @@ func TestOrderedCache(t *testing.T) {
 	}
 	if _, v, ok := oc.Floor(testKey("c")); !ok || v.(int) != 2 {
 		t.Error("expected fetch of key \"b\" for floor of maximum key")
+	}
+
+	// Test do over entire cache.
+	expKeys, collectKeys := []string{"a", "b"}, []string{}
+	expVals, collectVals := []int{1, 2}, []int{}
+	collect := func(k, v interface{}) bool {
+		collectKeys = append(collectKeys, string(k.(testKey)))
+		collectVals = append(collectVals, v.(int))
+		return false
+	}
+
+	oc.Do(collect)
+	if !reflect.DeepEqual(expKeys, collectKeys) {
+		t.Errorf("expected do to find keys %v, found %v", expKeys, collectKeys)
+	}
+	if !reflect.DeepEqual(expVals, collectVals) {
+		t.Errorf("expected do to find values %v, found %v", expVals, collectVals)
+	}
+
+	// Test doRange over range ["a","b").
+	expKeys, collectKeys = []string{"a"}, []string{}
+	expVals, collectVals = []int{1}, []int{}
+
+	oc.DoRange(collect, testKey("a"), testKey("b"))
+	if !reflect.DeepEqual(expKeys, collectKeys) {
+		t.Errorf("expected do to find keys %v, found %v", expKeys, collectKeys)
+	}
+	if !reflect.DeepEqual(expVals, collectVals) {
+		t.Errorf("expected do to find values %v, found %v", expVals, collectVals)
 	}
 }
 

@@ -1,0 +1,116 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
+)
+
+statement ok
+INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             name         ASC        false    false
+
+statement error index name "bar" already exists
+ALTER INDEX users@foo RENAME TO bar
+
+statement error empty index name
+ALTER INDEX users@foo RENAME TO ""
+
+statement error index "ffo" does not exist
+ALTER INDEX users@ffo RENAME TO ufo
+
+statement ok
+ALTER INDEX IF EXISTS users@ffo RENAME TO ufo
+
+statement ok
+ALTER INDEX users@foo RENAME TO ufoo
+
+statement ok
+ALTER INDEX ufoo RENAME TO ufo
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       ufo         true        1             name         ASC        false    false
+users       ufo         true        2             id           ASC        false    true
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             name         ASC        false    false
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on relation users
+ALTER INDEX users@bar RENAME TO rar
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE users TO testuser
+
+user testuser
+
+statement ok
+ALTER INDEX users@bar RENAME TO rar
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       ufo         true        1             name         ASC        false    false
+users       ufo         true        2             id           ASC        false    true
+users       rar         false       1             id           ASC        false    false
+users       rar         false       2             name         ASC        false    false
+
+user root
+
+query ITT rowsort
+SELECT * FROM users
+----
+1 tom   cat
+2 jerry rat
+
+statement ok
+CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=ufo}
+
+statement error cannot rename index "ufo" because view "v" depends on it
+ALTER INDEX users@ufo RENAME TO foo
+
+statement ok
+ALTER INDEX users@rar RENAME TO bar
+
+# Regression test for #24774
+statement ok
+ALTER INDEX users@"primary" RENAME TO pk
+
+query ITT rowsort
+SELECT * FROM users@pk
+----
+1 tom   cat
+2 jerry rat
+
+query TTT
+EXPLAIN ALTER INDEX users@bar RENAME TO woo
+----
+rename index  ·  ·
+
+# Verify that EXPLAIN did not actually rename the index (#30543)
+query T rowsort
+SELECT DISTINCT index_name FROM [SHOW INDEXES FROM users]
+----
+pk
+ufo
+bar

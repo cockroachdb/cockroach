@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 syntax = "proto2";
 package cockroach.acceptance.cluster;
@@ -20,15 +18,31 @@ option go_package = "cluster";
 
 import "gogoproto/gogo.proto";
 
+// InitMode specifies different ways to initialize the cluster.
+enum InitMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // INIT_COMMAND starts every node with a join flag and issues the
+  // init command.
+  INIT_COMMAND = 0;
+
+  // INIT_BOOTSTRAP_NODE_ZERO uses the legacy protocol of omitting the
+  // join flag from node zero.
+  INIT_BOOTSTRAP_NODE_ZERO = 1;
+
+  // INIT_NONE starts every node with a join flag and leaves the
+  // cluster uninitialized.
+  INIT_NONE = 2;
+}
+
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
 }
 
 // NodeConfig holds the configuration of a collection of similar nodes.
 message NodeConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
+  optional string version = 1 [(gogoproto.nullable) = false];
   repeated StoreConfig stores = 2 [(gogoproto.nullable) = false];
 }
 
@@ -38,5 +52,8 @@ message TestConfig {
   // Duration is the total time that the test should run for. Important for
   // tests such as TestPut that will run indefinitely.
   optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-// TODO(bram): #4559 once defined, add in a collection of chaos agents here.
+  optional InitMode init_mode = 4 [(gogoproto.nullable) = false];
+  // When set, the cluster is started as quickly as possible, without waiting
+  // for ranges to replicate, or even ports to be opened.
+  optional bool no_wait = 5 [(gogoproto.nullable) = false];
 }

@@ -1,0 +1,58 @@
+exec-ddl
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
+----
+TABLE xyzs
+ ├── x int not null
+ ├── y int
+ ├── z float not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+build
+SELECT * FROM xyzs WHERE (SELECT v FROM kuv) = 'foo'
+----
+select
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
+ ├── scan xyzs
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── filters
+      └── eq [type=bool]
+           ├── subquery [type=string]
+           │    └── max1-row
+           │         ├── columns: v:7(string)
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(7)
+           │         └── project
+           │              ├── columns: v:7(string)
+           │              ├── prune: (7)
+           │              └── scan kuv
+           │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
+           │                   ├── key: (5)
+           │                   ├── fd: (5)-->(6,7)
+           │                   ├── prune: (5-7)
+           │                   └── interesting orderings: (+5)
+           └── const: 'foo' [type=string]

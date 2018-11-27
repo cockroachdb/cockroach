@@ -1,7 +1,0 @@
-# LogicTest: default distsql
-
-# The placeholder returns one row with one value: the string 'planhook'.
-query T
-SHOW planhook
-----
-planhook

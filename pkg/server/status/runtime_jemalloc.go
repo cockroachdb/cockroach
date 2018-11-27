@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
 
 // +build !stdmalloc
 
@@ -20,12 +18,6 @@ package status
 
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
 // #cgo LDFLAGS: -ljemalloc
-// // On macOS, je_zone_register is run at init time to register
-// // jemalloc with the system allocator. Unfortunately, all the
-// // machinery for this is in a single file, and is not referenced
-// // elsewhere, causing the linker to omit the file's symbols.
-// // Manually force the presence of these symbols on macOS.
-// #cgo darwin LDFLAGS: -u_je_zone_register
 // #cgo dragonfly freebsd LDFLAGS: -lm
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 //
@@ -86,11 +78,12 @@ package status
 import "C"
 
 import (
+	"context"
+	"math"
 	"reflect"
 	"strings"
 
 	"github.com/dustin/go-humanize"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -120,7 +113,11 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 		log.Infof(ctx, "jemalloc stats: %s", strings.Join(stats, " "))
 	}
 
-	if log.V(3) {
+	// NB: the `!V(MaxInt32)` condition is a workaround to not spew this to the
+	// logs whenever log interception (log spy) is active. If we refactored
+	// je_malloc_stats_print to return a string that we can `log.Infof` instead,
+	// we wouldn't need this.
+	if log.V(3) && !log.V(math.MaxInt32) {
 		// Detailed jemalloc stats (very verbose, includes per-arena stats).
 		C.je_malloc_stats_print(nil, nil, nil)
 	}

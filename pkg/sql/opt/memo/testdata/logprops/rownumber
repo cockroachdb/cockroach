@@ -1,0 +1,23 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT * FROM xy WITH ORDINALITY
+----
+row-number
+ ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (3)-->(1,2)
+ ├── prune: (1,2)
+ └── scan xy
+      ├── columns: x:1(int!null) y:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1)

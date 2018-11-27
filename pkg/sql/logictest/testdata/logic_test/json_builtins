@@ -1,0 +1,976 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
+
+## json_typeof and jsonb_typeof
+
+query T
+SELECT json_typeof('-123.4'::JSON)
+----
+number
+
+query T
+SELECT jsonb_typeof('-123.4'::JSON)
+----
+number
+
+query T
+SELECT json_typeof('"-123.4"'::JSON)
+----
+string
+
+query T
+SELECT jsonb_typeof('"-123.4"'::JSON)
+----
+string
+
+query T
+SELECT json_typeof('{"1": {"2": 3}}'::JSON)
+----
+object
+
+query T
+SELECT jsonb_typeof('{"1": {"2": 3}}'::JSON)
+----
+object
+
+query T
+SELECT json_typeof('[1, 2, [3]]'::JSON)
+----
+array
+
+query T
+SELECT jsonb_typeof('[1, 2, [3]]'::JSON)
+----
+array
+
+query T
+SELECT json_typeof('true'::JSON)
+----
+boolean
+
+query T
+SELECT jsonb_typeof('true'::JSON)
+----
+boolean
+
+query T
+SELECT json_typeof('false'::JSON)
+----
+boolean
+
+query T
+SELECT jsonb_typeof('false'::JSON)
+----
+boolean
+
+query T
+SELECT json_typeof('null'::JSON)
+----
+null
+
+query T
+SELECT jsonb_typeof('null'::JSON)
+----
+null
+
+## array_to_json
+query T
+SELECT array_to_json(ARRAY[[1, 2], [3, 4]])
+----
+[[1, 2], [3, 4]]
+
+query T
+SELECT array_to_json('{1, 2, 3}'::INT[])
+----
+[1, 2, 3]
+
+query T
+SELECT array_to_json('{"a", "b", "c"}'::STRING[])
+----
+["a", "b", "c"]
+
+query T
+SELECT array_to_json('{1.0, 2.0, 3.0}'::DECIMAL[])
+----
+[1.0, 2.0, 3.0]
+
+query T
+SELECT array_to_json(NULL)
+----
+NULL
+
+query T
+SELECT array_to_json(ARRAY[1, 2, 3], NULL)
+----
+NULL
+
+query T
+SELECT array_to_json(ARRAY[1, 2, 3], false)
+----
+[1, 2, 3]
+
+query error pq: array_to_json\(\): pretty printing is not supported
+SELECT array_to_json(ARRAY[1, 2, 3], true)
+
+query error pq: unknown signature: array_to_json\(string\)
+SELECT array_to_json('hello world')
+
+## to_json and to_jsonb
+
+query T
+SELECT to_json(123::INT)
+----
+123
+
+query T
+SELECT to_json('\a'::TEXT)
+----
+"\\a"
+
+query T
+SELECT to_json('\a'::TEXT COLLATE "fr_FR")
+----
+"\\a"
+
+query T
+SELECT to_json(3::OID::INT::OID)
+----
+"3"
+
+query T
+SELECT to_json('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::UUID);
+----
+"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+
+query T
+SELECT to_json('\x0001'::BYTEA)
+----
+"\\x0001"
+
+query T
+SELECT to_json(true::BOOL)
+----
+true
+
+query T
+SELECT to_json(false::BOOL)
+----
+false
+
+query T
+SELECT to_json('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_json(1.234::FLOAT)
+----
+1.234
+
+query T
+SELECT to_json(1.234::DECIMAL)
+----
+1.234
+
+query T
+SELECT to_json('10.1.0.0/16'::INET)
+----
+"10.1.0.0/16"
+
+query T
+SELECT to_json(ARRAY[[1, 2], [3, 4]])
+----
+[[1, 2], [3, 4]]
+
+query T
+SELECT to_json('2014-05-28 12:22:35.614298'::TIMESTAMP)
+----
+"2014-05-28 12:22:35.614298+00:00"
+
+query T
+SELECT to_json('2014-05-28 12:22:35.614298-04'::TIMESTAMPTZ)
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+SELECT to_json('2014-05-28'::DATE)
+----
+"2014-05-28"
+
+query T
+SELECT to_json('00:00:00'::TIME)
+----
+"00:00:00"
+
+query T
+SELECT to_json('2h45m2s234ms'::INTERVAL)
+----
+"2h45m2s234ms"
+
+query T
+SELECT to_json((1, 2, 'hello', NULL, NULL))
+----
+{"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
+
+query T
+SELECT to_jsonb(123::INT)
+----
+123
+
+query T
+SELECT to_jsonb('\a'::TEXT)
+----
+"\\a"
+
+query T
+SELECT to_jsonb('\a'::TEXT COLLATE "fr_FR")
+----
+"\\a"
+
+query T
+SELECT to_jsonb(3::OID::INT::OID)
+----
+"3"
+
+query T
+SELECT to_jsonb('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::UUID);
+----
+"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+
+query T
+SELECT to_jsonb('\x0001'::BYTEA)
+----
+"\\x0001"
+
+query T
+SELECT to_jsonb(true::BOOL)
+----
+true
+
+query T
+SELECT to_jsonb(false::BOOL)
+----
+false
+
+query T
+SELECT to_jsonb('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_jsonb(1.234::FLOAT)
+----
+1.234
+
+query T
+SELECT to_jsonb(1.234::DECIMAL)
+----
+1.234
+
+query T
+SELECT to_jsonb('10.1.0.0/16'::INET)
+----
+"10.1.0.0/16"
+
+query T
+SELECT to_jsonb(ARRAY[[1, 2], [3, 4]])
+----
+[[1, 2], [3, 4]]
+
+query T
+SELECT to_jsonb('2014-05-28 12:22:35.614298'::TIMESTAMP)
+----
+"2014-05-28 12:22:35.614298+00:00"
+
+query T
+SELECT to_jsonb('2014-05-28 12:22:35.614298-04'::TIMESTAMPTZ)
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+SELECT to_jsonb('2014-05-28'::DATE)
+----
+"2014-05-28"
+
+query T
+SELECT to_jsonb('00:00:00'::TIME)
+----
+"00:00:00"
+
+query T
+SELECT to_jsonb('2h45m2s234ms'::INTERVAL)
+----
+"2h45m2s234ms"
+
+query T
+SELECT to_jsonb((1, 2, 'hello', NULL, NULL))
+----
+{"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
+
+## json_array_elements and jsonb_array_elements
+
+query T
+SELECT json_array_elements('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT jsonb_array_elements('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+1
+true
+null
+"text"
+-1.234
+{"2": 3, "4": "5"}
+[1, 2, 3]
+
+query T
+SELECT json_array_elements('[]'::JSON)
+----
+
+
+query error pq: cannot be called on a non-array
+SELECT json_array_elements('{"1": 2}'::JSON)
+
+query error pq: cannot be called on a non-array
+SELECT jsonb_array_elements('{"1": 2}'::JSON)
+
+
+## json_array_elements_text and jsonb_array_elements_text
+
+query T
+SELECT json_array_elements_text('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements_text('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements_text('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+1
+true
+NULL
+text
+-1.234
+{"2": 3, "4": "5"}
+[1, 2, 3]
+
+query T
+SELECT json_array_elements('[]'::JSON)
+----
+
+query error pq: cannot be called on a non-array
+SELECT json_array_elements_text('{"1": 2}'::JSON)
+
+query error pq: cannot be called on a non-array
+SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
+
+
+## json_object_keys and jsonb_object_keys
+
+query T
+SELECT json_object_keys('{"1": 2, "3": 4}'::JSON)
+----
+1
+3
+
+query T
+SELECT jsonb_object_keys('{"1": 2, "3": 4}'::JSON)
+----
+1
+3
+
+query T
+SELECT json_object_keys('{}'::JSON)
+----
+
+query T
+SELECT json_object_keys('{"\"1\"": 2}'::JSON)
+----
+"1"
+
+# Keys are sorted.
+query T
+SELECT json_object_keys('{"a": 1, "1": 2, "3": {"4": 5, "6": 7}}'::JSON)
+----
+1
+3
+a
+
+query error pq: cannot call json_object_keys on a scalar
+SELECT json_object_keys('null'::JSON)
+
+query error pq: cannot call json_object_keys on an array
+SELECT json_object_keys('[1, 2, 3]'::JSON)
+
+## json_build_object
+
+query T
+SELECT json_build_object()
+----
+{}
+
+query T
+SELECT json_build_object('a', 2, 'b', 4)
+----
+{"a": 2, "b": 4}
+
+query T
+SELECT jsonb_build_object(true,'val',1, 0, 1.3, 2, date '2019-02-03' - date '2019-01-01', 4)
+----
+{"1": 0, "1.3": 2, "33": 4, "true": "val"}
+
+query T
+SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e','{"x": 3, "y": [1,2,3]}'::JSON)
+----
+{"a": 1, "b": 1.2, "c": true, "d": null, "e": {"x": 3, "y": [1, 2, 3]}}
+
+query T
+SELECT json_build_object(
+       'a', json_build_object('b',false,'c',99),
+       'd', json_build_object('e',ARRAY[9,8,7]::int[])
+)
+----
+{"a": {"b": false, "c": 99}, "d": {"e": [9, 8, 7]}}
+
+query T
+SELECT json_build_object(a,3) FROM (SELECT 1 AS a, 2 AS b) r
+----
+{"1": 3}
+
+query T
+SELECT json_build_object('\a'::TEXT COLLATE "fr_FR", 1)
+----
+{"\\a": 1}
+
+query T
+SELECT json_build_object('\a', 1)
+----
+{"\\a": 1}
+
+query T
+SELECT json_build_object(json_object_keys('{"x":3, "y":4}'::JSON), 2)
+----
+{"x": 2}
+{"y": 2}
+
+# even number of arguments
+query error pq: json_build_object\(\): argument list must have even number of elements
+SELECT json_build_object(1,2,3)
+
+# keys must be scalar and not null
+query error pq: json_build_object\(\): argument 1 cannot be null
+SELECT json_build_object(null,2)
+
+query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+SELECT json_build_object((1,2),3)
+
+query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+SELECT json_build_object('{"a":1,"b":2}'::JSON, 3)
+
+query error pq: json_build_object\(\): key value must be scalar, not array, tuple, or json
+SELECT json_build_object('{1,2,3}'::int[], 3)
+
+query T
+SELECT json_extract_path('{"a": 1}', 'a')
+----
+1
+
+query T
+SELECT json_extract_path('{"a": 1}', 'a', NULL)
+----
+NULL
+
+query T
+SELECT json_extract_path('{"a": 1}')
+----
+{"a": 1}
+
+query T
+SELECT json_extract_path('{"a": {"b": 2}}', 'a')
+----
+{"b": 2}
+
+query T
+SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b')
+----
+2
+
+query T
+SELECT jsonb_extract_path('{"a": {"b": 2}}', 'a', 'b')
+----
+2
+
+query T
+SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b', 'c')
+----
+NULL
+
+query T
+SELECT jsonb_pretty('{"a": 1}')
+----
+{
+    "a": 1
+}
+
+query T
+SELECT '[1,2,3]'::JSON || '[4,5,6]'::JSON
+----
+[1, 2, 3, 4, 5, 6]
+
+query T
+SELECT '{"a": 1, "b": 2}'::JSON || '{"b": 3, "c": 4}'
+----
+{"a": 1, "b": 3, "c": 4}
+
+query error pgcode 22023 invalid concatenation of jsonb objects
+SELECT '{"a": 1, "b": 2}'::JSON || '"c"'
+
+query T
+SELECT json_build_array()
+----
+[]
+
+query T
+SELECT json_build_array('\x0001'::BYTEA)
+----
+["\\x0001"]
+
+query T
+SELECT json_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
+----
+[1, 1, 1.2, null, ["x", "y"]]
+
+query T
+SELECT jsonb_build_array()
+----
+[]
+
+query T
+SELECT jsonb_build_array('\x0001'::BYTEA)
+----
+["\\x0001"]
+
+query T
+SELECT jsonb_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
+----
+[1, 1, 1.2, null, ["x", "y"]]
+
+query error pq: json_object\(\): array must have even number of elements
+SELECT json_object('{a,b,c}'::TEXT[])
+
+query error pq: json_object\(\): null value not allowed for object key
+SELECT json_object('{NULL, a}'::TEXT[])
+
+query error pq: json_object\(\): null value not allowed for object key
+SELECT json_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: json_object\(\): mismatched array dimensions
+SELECT json_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: json_object\(\): mismatched array dimensions
+SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
+
+query error pq: unknown signature: json_object\(collatedstring\{fr_FR\}\[\]\)
+SELECT json_object(ARRAY['a'::TEXT COLLATE "fr_FR"])
+
+query T
+SELECT json_object('{}'::TEXT[])
+----
+{}
+
+query T
+SELECT json_object('{}'::TEXT[], '{}'::TEXT[])
+----
+{}
+
+query T
+SELECT json_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
+----
+{"a": "2", "b": "4"}
+
+query T
+SELECT json_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
+----
+{"a": "4", "b": "2"}
+
+query T
+SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
+----
+{"3": null, "a": "1", "b": "2", "d e f": "a b c"}
+
+query T
+SELECT json_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"": "3", "a": "1", "b": "2", "d e f": "a b c"}
+
+query T
+SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
+
+query error pq: jsonb_object\(\): array must have even number of elements
+SELECT jsonb_object('{a,b,c}'::TEXT[])
+
+query error pq: jsonb_object\(\): null value not allowed for object key
+SELECT jsonb_object('{NULL, a}'::TEXT[])
+
+query error pq: jsonb_object\(\): null value not allowed for object key
+SELECT jsonb_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: jsonb_object\(\): mismatched array dimensions
+SELECT jsonb_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: jsonb_object\(\): mismatched array dimensions
+SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
+
+query error pq: unknown signature: jsonb_object\(collatedstring\{fr_FR\}\[\]\)
+SELECT jsonb_object(ARRAY['a'::TEXT COLLATE "fr_FR"])
+
+query T
+SELECT jsonb_object('{}'::TEXT[])
+----
+{}
+
+query T
+SELECT jsonb_object('{}'::TEXT[], '{}'::TEXT[])
+----
+{}
+
+query T
+SELECT jsonb_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
+----
+{"a": "2", "b": "4"}
+
+query T
+SELECT jsonb_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
+----
+{"a": "4", "b": "2"}
+
+query T
+SELECT jsonb_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
+----
+{"3": null, "a": "1", "b": "2", "d e f": "a b c"}
+
+query T
+SELECT jsonb_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"": "3", "a": "1", "b": "2", "d e f": "a b c"}
+
+query T
+SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
+
+query error pq: cannot deconstruct an array as an object
+SELECT json_each('[1]'::JSON)
+
+query error pq: cannot deconstruct a scalar
+SELECT json_each('null'::JSON)
+
+query TT
+SELECT * from json_each('{}') q
+----
+
+query TT colnames
+SELECT * from json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   null
+f5   99
+f6   "stringy"
+
+query error pq: cannot deconstruct an array as an object
+SELECT jsonb_each('[1]'::JSON)
+
+query error pq: cannot deconstruct a scalar
+SELECT jsonb_each('null'::JSON)
+
+query TT
+SELECT * from jsonb_each('{}') q
+----
+
+query TT colnames
+SELECT * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   null
+f5   99
+f6   "stringy"
+
+query error pq: cannot deconstruct an array as an object
+SELECT jsonb_each_text('[1]'::JSON)
+
+query error pq: cannot deconstruct a scalar
+SELECT jsonb_each_text('null'::JSON)
+
+query TT
+SELECT * from jsonb_each_text('{}') q
+----
+
+query TT
+SELECT * from jsonb_each_text('{}') q
+----
+
+query TT colnames
+SELECT * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   NULL
+f5   99
+f6   stringy
+
+query error pq: cannot deconstruct an array as an object
+SELECT json_each_text('[1]'::JSON)
+
+query error pq: cannot deconstruct a scalar
+SELECT json_each_text('null'::JSON)
+
+query TT
+SELECT * from json_each_text('{}') q
+----
+
+query TT
+SELECT * from json_each_text('{}') q
+----
+
+query TT colnames
+SELECT * from json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   NULL
+f5   99
+f6   stringy
+
+query T
+SELECT json_set('{"a":1}', '{a}'::STRING[], '2')
+----
+{"a": 2}
+
+query T
+SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2')
+----
+{"a": 1, "b": 2}
+
+statement error path element at position 1 is null
+SELECT jsonb_set('{"a":1}', ARRAY[null, 'foo']::STRING[], '2')
+
+statement error path element at position 1 is null
+SELECT jsonb_set('{"a":1}', '{null,foo}'::STRING[], '2', true)
+
+statement error path element at position 2 is null
+SELECT jsonb_set('{"a":1}', '{foo,null}'::STRING[], '2', true)
+
+query T
+SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', true)
+----
+{"a": 1, "b": 2}
+
+query T
+SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', false)
+----
+{"a": 1}
+
+query T
+SELECT jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0,f1}'::STRING[], '[2,3,4]', false)
+----
+[{"f1": [2, 3, 4], "f2": null}, 2, null, 3]
+
+query T
+SELECT jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}'::STRING[], '[2,3,4]')
+----
+[{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"');
+----
+{"a": [0, "new_value", 1, 2]}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, {"a": ["a", "b", "d"]}, 4]', '{3, a, 2}'::STRING[], '"c"')
+----
+[0, 1, 2, {"a": ["a", "b", "c", "d"]}, 4]
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{b}'::STRING[], '"bar"')
+----
+{"a": "foo", "b": "bar"}
+
+query T
+SELECT jsonb_insert(NULL, '{a}', NULL, false)
+----
+NULL
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, "new_value", 2]}
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, -1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, 2, "new_value"]}
+
+query error pq: jsonb_insert\(\): cannot replace existing key
+SELECT jsonb_insert('{"a": "foo"}', '{a}'::STRING[], '"new_value"', false)
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{a, 0}'::STRING[], '"new_value"', false)
+----
+{"a": "foo"}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, 3]', '{3}'::STRING[], '10', true)
+----
+[0, 1, 2, 3, 10]
+
+statement error cannot set path in scalar
+SELECT jsonb_insert('1', '{a}'::STRING[], '10', true)
+
+query T
+SELECT jsonb_insert('1', NULL, '10')
+----
+NULL
+
+statement error path element at position 1 is null
+SELECT jsonb_insert('{"a": [0, 1, 2], "b": "hello", "c": "world"}', '{NULL, a, 0}'::STRING[], '"new_val"')
+
+statement error path element at position 2 is null
+SELECT jsonb_insert('{"a": [0, 1, 2], "b": "hello", "c": "world"}', '{a, NULL, 0}'::STRING[], '"new_val"')
+
+query T
+SELECT jsonb_strip_nulls(NULL)
+----
+NULL
+
+query T
+SELECT json_strip_nulls('1')
+----
+1
+
+query T
+SELECT json_strip_nulls('"a string"')
+----
+"a string"
+
+query T
+SELECT json_strip_nulls('null')
+----
+null
+
+query T
+SELECT json_strip_nulls('[1,2,null,3,4]')
+----
+[1, 2, null, 3, 4]
+
+query T
+SELECT json_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
+----
+{"a": 1, "c": [2, null, 3], "d": {"e": 4}}
+
+query T
+SELECT json_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
+----
+[1, {"a": 1, "c": 2}, 3]
+
+query T
+SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
+----
+{"a": {}, "d": {}}
+
+query T
+SELECT jsonb_strip_nulls(NULL)
+----
+NULL
+
+query T
+SELECT jsonb_strip_nulls('1')
+----
+1
+
+query T
+SELECT jsonb_strip_nulls('"a string"')
+----
+"a string"
+
+query T
+SELECT jsonb_strip_nulls('null')
+----
+null
+
+query T
+SELECT jsonb_strip_nulls('[1,2,null,3,4]')
+----
+[1, 2, null, 3, 4]
+
+query T
+SELECT jsonb_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
+----
+{"a": 1, "c": [2, null, 3], "d": {"e": 4}}
+
+query T
+SELECT jsonb_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
+----
+[1, {"a": 1, "c": 2}, 3]
+
+query T
+SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
+----
+{"a": {}, "d": {}}
+
+query error pq: json_array_length\(\): cannot get array length of a non-array
+SELECT json_array_length('{"f1":1,"f2":[5,6]}')
+
+query error pq: json_array_length\(\): cannot get array length of a scalar
+SELECT json_array_length('4')
+
+query I
+SELECT json_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]')
+----
+5
+
+query I
+SELECT json_array_length('[]')
+----
+0
+
+query error pq: jsonb_array_length\(\): cannot get array length of a non-array
+SELECT jsonb_array_length('{"f1":1,"f2":[5,6]}')
+
+query error pq: jsonb_array_length\(\): cannot get array length of a scalar
+SELECT jsonb_array_length('4')
+
+query I
+SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]')
+----
+5
+
+query I
+SELECT jsonb_array_length('[]')
+----
+0

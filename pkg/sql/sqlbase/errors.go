@@ -11,22 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
-// Author: Andrei Matei (andreimatei1@gmail.com)
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package sqlbase
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Cockroach error extensions:
@@ -34,7 +25,11 @@ const (
 	// CodeRangeUnavailable signals that some data from the cluster cannot be
 	// accessed (e.g. because all replicas awol).
 	// We're using the postgres "Internal Error" error class "XX".
-	CodeRangeUnavailable string = "XXC00"
+	CodeRangeUnavailable = "XXC00"
+
+	// CodeCCLRequired signals that a CCL binary is required to complete this
+	// task.
+	CodeCCLRequired = "XXC01"
 )
 
 const (
@@ -75,21 +70,6 @@ func NewNonNullViolationError(columnName string) error {
 	return pgerror.NewErrorf(pgerror.CodeNotNullViolationError, "null value in column %q violates not-null constraint", columnName)
 }
 
-// NewUniquenessConstraintViolationError creates an error that represents a
-// violation of a UNIQUE constraint.
-func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
-	valStrs := make([]string, 0, len(vals))
-	for _, val := range vals {
-		valStrs = append(valStrs, val.String())
-	}
-
-	return pgerror.NewErrorf(pgerror.CodeUniqueViolationError,
-		"duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(valStrs, ","),
-		index.Name)
-}
-
 // IsUniquenessConstraintViolationError returns true if the error is for a
 // uniqueness constraint violation.
 func IsUniquenessConstraintViolationError(err error) bool {
@@ -102,12 +82,22 @@ func NewInvalidSchemaDefinitionError(err error) error {
 	return pgerror.NewError(pgerror.CodeInvalidSchemaDefinitionError, err.Error())
 }
 
-// IsPermanentSchemaChangeError returns true if the error results in
-// a permanent failure of a schema change.
-func IsPermanentSchemaChangeError(err error) bool {
-	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
-		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+// NewUnsupportedSchemaUsageError creates an error for an invalid
+// schema use, e.g. mydb.someschema.tbl.
+func NewUnsupportedSchemaUsageError(name string) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		"unsupported schema specification: %q", name)
+}
+
+// NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
+// binary.
+func NewCCLRequiredError(err error) error {
+	return pgerror.NewError(CodeCCLRequired, err.Error())
+}
+
+// IsCCLRequiredError returns whether the error is a CCLRequired error.
+func IsCCLRequiredError(err error) bool {
+	return errHasCode(err, CodeCCLRequired)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
@@ -121,24 +111,23 @@ func NewUndefinedDatabaseError(name string) error {
 		pgerror.CodeInvalidCatalogNameError, "database %q does not exist", name)
 }
 
-// IsUndefinedDatabaseError returns true if the error is for an undefined database.
-func IsUndefinedDatabaseError(err error) bool {
-	return errHasCode(err, pgerror.CodeInvalidCatalogNameError)
+// NewInvalidWildcardError creates an error that represents the result of expanding
+// a table wildcard over an invalid database or schema prefix.
+func NewInvalidWildcardError(name string) error {
+	return pgerror.NewErrorf(
+		pgerror.CodeInvalidCatalogNameError,
+		"%q does not match any valid database or schema", name)
 }
 
-// NewUndefinedTableError creates an error that represents a missing database table.
-func NewUndefinedTableError(name string) error {
-	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "table %q does not exist", name)
+// NewUndefinedRelationError creates an error that represents a missing database table or view.
+func NewUndefinedRelationError(name tree.NodeFormatter) error {
+	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+		"relation %q does not exist", tree.ErrString(name))
 }
 
-// NewUndefinedViewError creates an error that represents a missing database view.
-func NewUndefinedViewError(name string) error {
-	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "view %q does not exist", name)
-}
-
-// IsUndefinedTableError returns true if the error is for an undefined table.
-func IsUndefinedTableError(err error) bool {
-	return errHasCode(err, pgerror.CodeUndefinedTableError)
+// NewUndefinedColumnError creates an error that represents a missing database column.
+func NewUndefinedColumnError(name string) error {
+	return pgerror.NewErrorf(pgerror.CodeUndefinedColumnError, "column %q does not exist", name)
 }
 
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
@@ -152,8 +141,9 @@ func NewRelationAlreadyExistsError(name string) error {
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
-func NewWrongObjectTypeError(name, desiredObjType string) error {
-	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s", name, desiredObjType)
+func NewWrongObjectTypeError(name *tree.TableName, desiredObjType string) error {
+	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s",
+		tree.ErrString(name), desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.
@@ -169,7 +159,7 @@ func NewDependentObjectError(msg string) error {
 // NewDependentObjectErrorWithHint creates a dependent object error with a hint
 func NewDependentObjectErrorWithHint(msg string, hint string) error {
 	pErr := pgerror.NewError(pgerror.CodeDependentObjectsStillExistError, msg)
-	pErr.(*pgerror.Error).Hint = hint
+	pErr.Hint = hint
 	return pErr
 }
 
@@ -181,9 +171,17 @@ func NewRangeUnavailableError(
 		rangeID, nodeIDs, origErr)
 }
 
-// NewWindowingError creates a windowing error.
-func NewWindowingError(in string) error {
-	return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", in)
+// NewWindowInAggError creates an error for the case when a window function is
+// nested within an aggregate function.
+func NewWindowInAggError() error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+		"aggregate function calls cannot contain window function calls")
+}
+
+// NewAggInAggError creates an error for the case when an aggregate function is
+// contained within another aggregate function.
+func NewAggInAggError() error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
 }
 
 // NewStatementCompletionUnknownError creates an error with the corresponding pg
@@ -199,67 +197,30 @@ func NewWindowingError(in string) error {
 // conditions under which Postgres returns this code, nor its relationship to
 // code CodeTransactionResolutionUnknownError. I couldn't find good
 // documentation on these codes.
-func NewStatementCompletionUnknownError(err *roachpb.AmbiguousResultError) error {
+func NewStatementCompletionUnknownError(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 
-func errHasCode(err error, code string) bool {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return pgErr.Code == code
-	}
-	return false
+// QueryCanceledError is an error representing query cancellation.
+var QueryCanceledError = pgerror.NewErrorf(
+	pgerror.CodeQueryCanceledError, "query execution canceled")
+
+// QueryTimeoutError is an error representing a query timeout.
+var QueryTimeoutError = pgerror.NewErrorf(
+	pgerror.CodeQueryCanceledError, "query execution canceled due to statement timeout")
+
+// IsQueryCanceledError checks whether this is a query canceled error.
+func IsQueryCanceledError(err error) bool {
+	return errHasCode(err, pgerror.CodeQueryCanceledError)
 }
 
-// ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(tableDesc *TableDescriptor, b *client.Batch) error {
-	origPErr := b.MustPErr()
-	if origPErr.Index == nil {
-		return origPErr.GoError()
-	}
-	index := origPErr.Index.Index
-	if index >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
-	}
-	result := b.Results[index]
-	var alloc DatumAlloc
-	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
-		row := result.Rows[0]
-		// TODO(dan): There's too much internal knowledge of the sql table
-		// encoding here (and this callsite is the only reason
-		// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-		indexID, key, err := DecodeIndexKeyPrefix(&alloc, tableDesc, row.Key)
-		if err != nil {
-			return err
-		}
-		index, err := tableDesc.FindIndexByID(indexID)
-		if err != nil {
-			return err
-		}
-		vals, err := MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
-		if err != nil {
-			return err
-		}
-		dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
-		for _, dir := range index.ColumnDirections {
-			convertedDir, err := dir.ToEncodingDirection()
-			if err != nil {
-				return err
+func errHasCode(err error, code ...string) bool {
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		for _, c := range code {
+			if pgErr.Code == c {
+				return true
 			}
-			dirs = append(dirs, convertedDir)
 		}
-		if _, err := DecodeKeyVals(&alloc, vals, dirs, key); err != nil {
-			return err
-		}
-		decodedVals := make([]parser.Datum, len(vals))
-		var da DatumAlloc
-		for i, val := range vals {
-			err := val.EnsureDecoded(&da)
-			if err != nil {
-				return err
-			}
-			decodedVals[i] = val.Datum
-		}
-		return NewUniquenessConstraintViolationError(index, decodedVals)
 	}
-	return origPErr.GoError()
+	return false
 }

@@ -11,40 +11,62 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package timeutil
 
 import (
+	"math"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
-var nowFunc = now
-
-func initFakeTime() {
-	if offset := envutil.EnvOrDefaultDuration("COCKROACH_SIMULATED_OFFSET", 0); offset == 0 {
-		nowFunc = now
-	} else {
-		nowFunc = func() time.Time {
-			return now().Add(offset)
-		}
-	}
-}
-
-// Now returns the current local time with an optional offset specified by the
-// environment. The offset functionality is guarded by the  "clockoffset" build
-// tag - if built with that tag, the clock offset is parsed from the
-// "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
-// which supports quasi-human values like "1h" or "1m".
-func Now() time.Time {
-	return nowFunc()
-}
+// ClocklessMaxOffset is a special-cased value that is used when the cluster
+// runs in "clockless" mode. In that (experimental) mode, we operate without
+// assuming any bound on the clock drift.
+const ClocklessMaxOffset = math.MaxInt64
 
 // Since returns the time elapsed since t.
 // It is shorthand for Now().Sub(t).
 func Since(t time.Time) time.Duration {
 	return Now().Sub(t)
+}
+
+// UnixEpoch represents the Unix epoch, January 1, 1970 UTC.
+var UnixEpoch = time.Unix(0, 0).UTC()
+
+// FromUnixMicros returns the UTC time.Time corresponding to the given Unix
+// time, usec microseconds since UnixEpoch. In Go's current time.Time
+// implementation, all possible values for us can be represented as a time.Time.
+func FromUnixMicros(us int64) time.Time {
+	return time.Unix(us/1e6, (us%1e6)*1e3).UTC()
+}
+
+// ToUnixMicros returns t as the number of microseconds elapsed since UnixEpoch.
+// Fractional microseconds are rounded, half up, using time.Round. Similar to
+// time.Time.UnixNano, the result is undefined if the Unix time in microseconds
+// cannot be represented by an int64.
+func ToUnixMicros(t time.Time) int64 {
+	return t.Unix()*1e6 + int64(t.Round(time.Microsecond).Nanosecond())/1e3
+}
+
+// Unix wraps time.Unix ensuring that the result is in UTC instead of Local.
+func Unix(sec, nsec int64) time.Time {
+	return time.Unix(sec, nsec).UTC()
+}
+
+// SleepUntil sleeps until the given time. The current time is
+// refreshed every second in case there was a clock jump
+//
+// untilNanos is the target time to sleep till in epoch nanoseconds
+// currentTimeNanos is a function returning current time in epoch nanoseconds
+func SleepUntil(untilNanos int64, currentTimeNanos func() int64) {
+	for {
+		d := time.Duration(untilNanos - currentTimeNanos())
+		if d <= 0 {
+			break
+		}
+		if d > time.Second {
+			d = time.Second
+		}
+		time.Sleep(d)
+	}
 }

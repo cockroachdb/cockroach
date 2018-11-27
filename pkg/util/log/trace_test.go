@@ -11,52 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package log
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type events []string
-
-// testingTracer creates a Tracer that appends the events to the given slice.
-func testingTracer(ev *events) opentracing.Tracer {
-	opts := basictracer.DefaultOptions()
-	opts.ShouldSample = func(_ uint64) bool { return true }
-	opts.NewSpanEventListener = func() func(basictracer.SpanEvent) {
-		// The op variable is used in the returned function and is associated with
-		// a span; it lives for as long as the span is open.
-		var op string
-		return func(e basictracer.SpanEvent) {
-			switch t := e.(type) {
-			case basictracer.EventCreate:
-				op = t.OperationName
-				*ev = append(*ev, fmt.Sprintf("%s:start", op))
-			case basictracer.EventFinish:
-				*ev = append(*ev, fmt.Sprintf("%s:finish", op))
-			case basictracer.EventLogFields:
-				*ev = append(*ev, fmt.Sprintf("%s:%s", op, t.Fields[0].Value()))
-			case basictracer.EventLog:
-				panic("EventLog is deprecated")
-			}
-		}
-	}
-	opts.DebugAssertUseAfterFinish = true
-	// We don't care about the recorder but we need to set it to something.
-	opts.Recorder = &basictracer.InMemorySpanRecorder{}
-	return basictracer.NewWithOptions(opts)
-}
 
 func compareTraces(expected, actual events) bool {
 	if len(expected) != len(actual) {
@@ -87,6 +59,12 @@ func compareTraces(expected, actual events) bool {
 	return true
 }
 
+// noLogV returns a verbosity level that will not result in VEvents and
+// VErrEvents being logged.
+func noLogV() int32 {
+	return int32(logging.verbosity.get() + 1)
+}
+
 func TestTrace(t *testing.T) {
 	ctx := context.Background()
 
@@ -97,14 +75,14 @@ func TestTrace(t *testing.T) {
 	// Events to context without a trace should be no-ops.
 	Event(ctx, "should-not-show-up")
 
-	var ev events
-
-	tracer := testingTracer(&ev)
+	tracer := tracing.NewTracer()
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
-	ErrEvent(ctxWithSpan, "testerr")
-	VEvent(ctxWithSpan, logging.verbosity.get()+1, "test2")
+	VEvent(ctxWithSpan, noLogV(), "test2")
+	VErrEvent(ctxWithSpan, noLogV(), "testerr")
 	Info(ctxWithSpan, "log")
 
 	// Events to parent context should still be no-ops.
@@ -112,34 +90,41 @@ func TestTrace(t *testing.T) {
 
 	sp.Finish()
 
-	expected := events{"s:start", "s:test1", "s:testerr", "s:test2", "s:log", "s:finish"}
-	if !compareTraces(expected, ev) {
-		t.Errorf("expected events '%s', got '%v'", expected, ev)
+	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+		span s:
+		  event: test1
+		  event: test2
+		  event: testerr
+		  event: log
+	`); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestTraceWithTags(t *testing.T) {
 	ctx := context.Background()
-	ctx = WithLogTagInt(ctx, "tag", 1)
+	ctx = logtags.AddTag(ctx, "tag", 1)
 
-	var ev events
-
-	tracer := testingTracer(&ev)
+	tracer := tracing.NewTracer()
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+
 	Event(ctxWithSpan, "test1")
-	ErrEvent(ctxWithSpan, "testerr")
-	VEvent(ctxWithSpan, logging.verbosity.get()+1, "test2")
+	VEvent(ctxWithSpan, noLogV(), "test2")
+	VErrEvent(ctxWithSpan, noLogV(), "testerr")
 	Info(ctxWithSpan, "log")
 
 	sp.Finish()
-
-	expected := events{
-		"s:start", "s:[tag=1] test1", "s:[tag=1] testerr", "s:[tag=1] test2", "s:[tag=1] log",
-		"s:finish",
-	}
-	if !compareTraces(expected, ev) {
-		t.Errorf("expected events '%s', got '%v'", expected, ev)
+	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+		span s:
+		  event: [tag=1] test1
+		  event: [tag=1] test2
+		  event: [tag=1] testerr
+		  event: [tag=1] log
+	`); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -172,8 +157,8 @@ func TestEventLog(t *testing.T) {
 	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Eventf(ctxWithEventLog, "test%d", 1)
-	ErrEvent(ctxWithEventLog, "testerr")
-	VEventf(ctxWithEventLog, logging.verbosity.get()+1, "test%d", 2)
+	VEventf(ctxWithEventLog, noLogV(), "test%d", 2)
+	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
 	Info(ctxWithEventLog, "log")
 	Errorf(ctxWithEventLog, "errlog%d", 1)
 
@@ -188,7 +173,7 @@ func TestEventLog(t *testing.T) {
 	// Events after Finish should be ignored.
 	Errorf(ctxWithEventLog, "should-not-show-up")
 
-	expected := events{"test1", "testerr(err)", "test2", "log", "errlog1(err)", "finish"}
+	expected := events{"test1", "test2", "testerr(err)", "log", "errlog1(err)", "finish"}
 	if !compareTraces(expected, el.ev) {
 		t.Errorf("expected events '%s', got '%v'", expected, el.ev)
 	}
@@ -204,28 +189,35 @@ func TestEventLogAndTrace(t *testing.T) {
 	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Event(ctxWithEventLog, "test1")
-	ErrEvent(ctxWithEventLog, "testerr")
+	VEventf(ctxWithEventLog, noLogV(), "test2")
+	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
 
-	var traceEv events
-	tracer := testingTracer(&traceEv)
+	tracer := tracing.NewTracer()
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 	ctxWithBoth := opentracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
-	ErrEventf(ctxWithBoth, "%s", "test3err")
+	VEventf(ctxWithBoth, noLogV(), "test4")
+	VErrEventf(ctxWithBoth, noLogV(), "%s", "test5err")
 
 	// Events to parent context should still go to the event log.
-	Event(ctxWithEventLog, "test5")
+	Event(ctxWithEventLog, "test6")
 
 	sp.Finish()
 	el.Finish()
 
-	trExpected := "[s:start s:test3 s:test3err s:finish]"
-	if evStr := fmt.Sprint(traceEv); evStr != trExpected {
-		t.Errorf("expected events '%s', got '%s'", trExpected, evStr)
+	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+		span s:
+		  event: test3
+		  event: test4
+		  event: test5err
+	`); err != nil {
+		t.Fatal(err)
 	}
 
-	elExpected := "[test1 testerr(err) test5 finish]"
+	elExpected := "[test1 test2 testerr(err) test6 finish]"
 	if evStr := fmt.Sprint(el.ev); evStr != elExpected {
 		t.Errorf("expected events '%s', got '%s'", elExpected, evStr)
 	}

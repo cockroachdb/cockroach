@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package base
 
@@ -32,11 +30,11 @@ const (
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 1 * time.Second
 
-	// DefaultSendNextTimeout is the duration to wait before trying
-	// another replica to send a KV batch.
-	DefaultSendNextTimeout = 500 * time.Millisecond
-
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
 	SlowRequestThreshold = 60 * time.Second
+
+	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
+	// to chunk or otherwise limit commands being sent to Raft.
+	ChunkRaftCommandThresholdBytes = 256 * 1000
 )

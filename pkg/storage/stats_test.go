@@ -11,21 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package storage
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/kr/pretty"
 )
 
 // initialStats are the stats for a Replica which has been created through
@@ -33,8 +31,8 @@ import (
 // writeInitialState().
 func initialStats() enginepb.MVCCStats {
 	return enginepb.MVCCStats{
-		SysBytes: 208,
-		SysCount: 6,
+		SysBytes: 130,
+		SysCount: 4,
 	}
 }
 func TestRangeStatsEmpty(t *testing.T) {
@@ -48,7 +46,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 
 	ms := tc.repl.GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
-		t.Errorf("expected stats %+v; got %+v", exp, ms)
+		t.Errorf("unexpected stats diff(exp, actual):\n%s", pretty.Diff(exp, ms))
 	}
 }
 
@@ -71,10 +69,11 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
+	rsl := stateloader.Make(nil /* st */, tc.repl.RangeID)
+	if err := rsl.SetMVCCStats(context.Background(), tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := engine.MVCCGetRangeStats(context.Background(), tc.engine, tc.repl.RangeID)
+	loadMS, err := rsl.LoadMVCCStats(context.Background(), tc.engine)
 	if err != nil {
 		t.Fatal(err)
 	}

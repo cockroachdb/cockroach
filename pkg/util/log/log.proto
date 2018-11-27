@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 syntax = "proto3";
 package cockroach.util.log;
@@ -53,7 +51,7 @@ message FileDetails {
   string program = 1;
   string host = 2;
   string user_name = 3;
-  Severity severity = 4;
+  reserved 4;
   int64 time = 5;
   int64 pid = 6 [(gogoproto.customname) = "PID"];
 }

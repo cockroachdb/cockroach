@@ -1,0 +1,203 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+query TTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz
+----
+distinct   ·            ·
+ │         distinct on  y, z
+ │         order key    y, z
+ └── scan  ·            ·
+·          table        xyz@foo
+·          spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+distinct   ·            ·
+ │         distinct on  y, z
+ │         order key    y, z
+ └── scan  ·            ·
+·          table        xyz@foo
+·          spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+sort            ·            ·
+ │              order        +y
+ └── distinct   ·            ·
+      │         distinct on  y, z
+      │         order key    y, z
+      └── scan  ·            ·
+·               table        xyz@foo
+·               spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+sort            ·            ·
+ │              order        +y,+z
+ └── distinct   ·            ·
+      │         distinct on  y, z
+      │         order key    y, z
+      └── scan  ·            ·
+·               table        xyz@foo
+·               spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
+----
+distinct             ·            ·
+ │                   distinct on  r
+ │                   order key    r
+ └── sort            ·            ·
+      │              order        +r
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        xyz@primary
+·                    spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
+----
+distinct   ·            ·
+ │         distinct on  w, z
+ │         order key    w, z
+ └── scan  ·            ·
+·          table        xyz@foo
+·          spans        ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
+----
+sort            ·            ·
+ │              order        +w
+ └── distinct   ·            ·
+      │         distinct on  w
+      └── scan  ·            ·
+·               table        xyz@primary
+·               spans        ALL
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
+----
+scan  ·      ·            (x)  ·
+·     table  xyz@primary  ·    ·
+·     spans  ALL          ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
+----
+scan  ·      ·            (x, y, z)  ·
+·     table  xyz@primary  ·          ·
+·     spans  ALL          ·          ·
+
+# Test the case when the DistinctOn operator is projecting away a column.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
+----
+distinct        ·            ·        (z)     weak-key(z)
+ │              distinct on  z        ·       ·
+ │              order key    z        ·       ·
+ └── render     ·            ·        (z)     ·
+      │         render 0     z        ·       ·
+      └── scan  ·            ·        (y, z)  +z
+·               table        xyz@foo  ·       ·
+·               spans        ALL      ·       ·
+·               filter       y > 1    ·       ·
+
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT NOT NULL,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX (d, b)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
+----
+render     ·         ·                  (z, d, b)  ·
+ │         render 0  1                  ·          ·
+ │         render 1  d                  ·          ·
+ │         render 2  b                  ·          ·
+ └── scan  ·         ·                  (b, d)     +d,+b
+·          table     abcd@abcd_d_b_key  ·          ·
+·          spans     ALL                ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
+----
+distinct   ·            ·             (a, b)  weak-key(a,b); +a,+b
+ │         distinct on  a, b          ·       ·
+ │         order key    a, b          ·       ·
+ └── scan  ·            ·             (a, b)  +a,+b
+·          table        abcd@primary  ·       ·
+·          spans        ALL           ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
+----
+scan  ·      ·             (a, b, c)  ·
+·     table  abcd@primary  ·          ·
+·     spans  ALL           ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
+----
+scan  ·      ·             (a, b, c, d)  ·
+·     table  abcd@primary  ·             ·
+·     spans  ALL           ·             ·
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
+----
+distinct   ·            ·       (v)  weak-key(v); +v
+ │         distinct on  v       ·    ·
+ │         order key    v       ·    ·
+ └── scan  ·            ·       (v)  +v
+·          table        kv@idx  ·    ·
+·          spans        ALL     ·    ·
+
+# Verify we don't incorrectly elide the distinct node when we only have a weak key (#19343).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
+----
+distinct   ·            ·       (v)  weak-key(v); +v
+ │         distinct on  v       ·    ·
+ │         order key    v       ·    ·
+ └── scan  ·            ·       (v)  +v
+·          table        kv@idx  ·    ·
+·          spans        ALL     ·    ·
+
+# Here we can infer that v is not-NULL so eliding the node is correct.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
+----
+scan  ·      ·       (v)  ·
+·     table  kv@idx  ·    ·
+·     spans  /1-     ·    ·
+
+statement ok
+CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
+
+# In this case it is correct to elide the distinct node.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
+----
+scan  ·      ·        (v)  ·
+·     table  kv2@idx  ·    ·
+·     spans  ALL      ·    ·

@@ -12,6 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package timeutil
+package timeutil_test
 
-import _ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+import (
+	"os"
+	"testing"
+
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+)
+
+func TestMain(m *testing.M) {
+	randutil.SeedForTests()
+	os.Exit(m.Run())
+}

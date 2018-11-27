@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package encoding
 
@@ -101,10 +99,10 @@ func encodeDecimalWithDir(dir Direction, buf []byte, d *apd.Decimal) []byte {
 
 func decodeDecimalWithDir(
 	t *testing.T, dir Direction, buf []byte, tmp []byte,
-) ([]byte, *apd.Decimal) {
+) ([]byte, apd.Decimal) {
 	var err error
 	var resBuf []byte
-	var res *apd.Decimal
+	var res apd.Decimal
 	if dir == Ascending {
 		resBuf, res, err = DecodeDecimalAscending(buf, tmp)
 	} else {
@@ -118,6 +116,14 @@ func decodeDecimalWithDir(
 
 func mustDecimalFloat64(f float64) *apd.Decimal {
 	d, err := new(apd.Decimal).SetFloat64(f)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+func mustDecimalString(s string) *apd.Decimal {
+	d, _, err := apd.NewFromString(s)
 	if err != nil {
 		panic(err)
 	}
@@ -257,7 +263,7 @@ func TestEncodeDecimalRand(t *testing.T) {
 				tmp = randBuf(rng, 100)
 			}
 			var enc []byte
-			var res *apd.Decimal
+			var res apd.Decimal
 			var err error
 			if dir == Ascending {
 				enc = EncodeDecimalAscending(appendTo, cur)
@@ -275,7 +281,7 @@ func TestEncodeDecimalRand(t *testing.T) {
 			testPeekLength(t, enc)
 
 			// Make sure we decode the same value we encoded.
-			if cur.Cmp(res) != 0 {
+			if cur.Cmp(&res) != 0 {
 				t.Fatalf("unexpected mismatch for %v, got %v", cur, res)
 			}
 
@@ -344,6 +350,7 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		{apd.New(99122, 99999), []byte{0x34, 0xf8, 0x01, 0x86, 0xa4, 0x01, 0x83, 0x32}},
 		{apd.New(99122839898321208, 99999), []byte{0x34, 0xf8, 0x01, 0x86, 0xb0, 0x01, 0x60, 0x27, 0xb2, 0x9d, 0x44, 0x71, 0x38}},
 		{&apd.Decimal{Form: apd.Infinite}, []byte{0x35}},
+		{mustDecimalString("142378208485490985369999605144727062141206925976498256305323716858805588894693616552055968571135475510700810219028167653516982373238641332965927953273383572708760984694356069974208844865675206339235758647159337463780100273189720943242182911961627806424621091859596571173867825568394327041453823674373002756096"), []byte{0x34, 0xf7, 0x01, 0x35, 0xca, 0xc0, 0xd8, 0x34, 0x68, 0x5d, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -421,7 +428,7 @@ func TestNonsortingEncodeDecimalRand(t *testing.T) {
 		}
 
 		// Make sure we decode the same value we encoded.
-		if cur.Cmp(res) != 0 {
+		if cur.Cmp(&res) != 0 {
 			t.Fatalf("unexpected mismatch for %v, got %v", cur, res)
 		}
 
@@ -429,6 +436,43 @@ func TestNonsortingEncodeDecimalRand(t *testing.T) {
 		if est := UpperBoundNonsortingDecimalSize(cur); est < len(enc) {
 			t.Fatalf("expected estimate of %d for %v to be greater than or equal to the encoded length, found [% x]", est, cur, enc)
 		}
+	}
+}
+
+// TestNonsortingEncodeDecimalRoundtrip tests that decimals can round trip
+// through EncodeNonsortingDecimal and DecodeNonsortingDecimal with an expected
+// coefficient and exponent.
+func TestNonsortingEncodeDecimalRoundtrip(t *testing.T) {
+	tests := map[string]string{
+		"0":         "0E+0",
+		"0.0":       "0E-1",
+		"0.00":      "0E-2",
+		"0e-10":     "0E-10",
+		"0.00e-10":  "0E-12",
+		"00":        "0E+0",
+		"-0":        "-0E+0",
+		"-0.0":      "-0E-1",
+		"-0.00":     "-0E-2",
+		"-0e-10":    "-0E-10",
+		"-0.00e-10": "-0E-12",
+		"-00":       "-0E+0",
+	}
+	for tc, expect := range tests {
+		t.Run(tc, func(t *testing.T) {
+			d, _, err := apd.NewFromString(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			enc := EncodeNonsortingDecimal(nil, d)
+			res, err := DecodeNonsortingDecimal(enc, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := res.Text('E')
+			if expect != s {
+				t.Fatalf("expected %s, got %s", expect, s)
+			}
+		})
 	}
 }
 

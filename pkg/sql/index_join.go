@@ -11,26 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
 import (
+	"context"
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
-const indexJoinBatchSize = 100
-
-// An indexJoinNode implements joining of results from an index with the rows
+// indexJoinNode implements joining of results from an index with the rows
 // of a table.
 //
 // There are three parameters to an index join:
@@ -83,23 +77,9 @@ const indexJoinBatchSize = 100
 // values, but really this could be optimized further to re-use the
 // column data from the index scanNode instead. See the comment
 // for valNeededForCol in scanNode.
-
 type indexJoinNode struct {
 	index *scanNode
 	table *scanNode
-
-	// primaryKeyPrefix is the KV key prefix of the rows
-	// retrieved from the table scanNode.
-	primaryKeyPrefix roachpb.Key
-
-	// colIDtoRowIndex maps column IDs in the table scanNode into column
-	// IDs in the index scanNode's results. The presence of a column ID
-	// in this mapping is not sufficient to cause a column's values to
-	// be produced; which columns are effectively loaded are decided by
-	// the scanNodes' own valNeededForCol, which is updated by
-	// setNeededColumns(). So there may be more columns in
-	// colIDtoRowIndex than effectively accessed.
-	colIDtoRowIndex map[sqlbase.ColumnID]int
 
 	// primaryKeyColumns is the set of PK columns for which the
 	// indexJoinNode requires a value from the index scanNode, to use as
@@ -108,38 +88,34 @@ type indexJoinNode struct {
 	// uses more columns than the PK.
 	primaryKeyColumns []bool
 
-	explain   explainMode
-	debugVals debugValues
+	// The columns returned by this node. While these are not ever different from
+	// the table scanNode in the heuristic planner, the optimizer plans them to
+	// be different in some cases.
+	cols []sqlbase.ColumnDescriptor
+	// There is a 1-1 correspondence between cols and resultColumns.
+	resultColumns sqlbase.ResultColumns
+
+	// props contains the physical properties provided by this node.
+	// These are pre-computed at construction time.
+	props physicalProps
+
+	run indexJoinRun
 }
 
-// makeIndexJoin build an index join node.
-// This destroys the original table scan node argument and reuses its
-// storage to construct a new index scan node. A new table scan node
-// is created separately as a member of the resulting index join node.
-// The new index scan node is also returned alongside the new index join
-// node.
-func (p *planner) makeIndexJoin(
-	origScan *scanNode, exactPrefix int,
-) (resultPlan *indexJoinNode, indexScan *scanNode) {
-	// Reuse the input argument's scanNode and its initialized parameters
-	// at a starting point to build the new indexScan node.
-	indexScan = origScan
-
-	// Create a new scanNode that will be used with the primary index.
-	table := p.Scan()
-	table.desc = origScan.desc
-	// Note: initDescDefaults can only error out if its 2nd argument is not nil.
-	_ = table.initDescDefaults(origScan.scanVisibility, nil)
-	table.initOrdering(0)
-	table.disableBatchLimit()
-
-	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
+// processIndexJoinColumns returns
+// * a slice denoting the columns being returned which are members of the primary key and
+// * a map from column IDs to their index in the output.
+func processIndexJoinColumns(
+	table *scanNode, indexScan *scanNode,
+) (primaryKeyColumns []bool, colIDtoRowIndex map[sqlbase.ColumnID]int) {
+	colIDtoRowIndex = map[sqlbase.ColumnID]int{}
 
 	// primaryKeyColumns defined here will serve both as the primaryKeyColumns
 	// field in the indexJoinNode, and to determine which columns are
 	// provided by this index for the purpose of splitting the WHERE
 	// filter into an index-specific part and a "rest" part.
-	primaryKeyColumns := make([]bool, len(origScan.valNeededForCol))
+	// TODO(justin): make this a FastIntSet.
+	primaryKeyColumns = make([]bool, len(indexScan.cols))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		// All the PK columns from the table scanNode must
 		// be fetched in the index scanNode.
@@ -151,31 +127,61 @@ func (p *planner) makeIndexJoin(
 		colIDtoRowIndex[colID] = idx
 	}
 
+	return primaryKeyColumns, colIDtoRowIndex
+}
+
+// makeIndexJoin build an index join node.
+// This destroys the original table scan node argument and reuses its
+// storage to construct a new index scan node. A new table scan node
+// is created separately as a member of the resulting index join node.
+// The new index scan node is also returned alongside the new index join
+// node.
+func (p *planner) makeIndexJoin(
+	origScan *scanNode, exactPrefix int,
+) (resultPlan *indexJoinNode, indexScan *scanNode, _ error) {
+	// Reuse the input argument's scanNode and its initialized parameters
+	// at a starting point to build the new indexScan node.
+	indexScan = origScan
+
+	// Create a new scanNode that will be used with the primary index.
+	table := p.Scan()
+	table.desc = origScan.desc
+	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
+	if err := table.initDescDefaults(p.curPlan.deps, origScan.colCfg); err != nil {
+		return nil, nil, err
+	}
+	table.initOrdering(0 /* exactPrefix */, p.EvalContext())
+	table.disableBatchLimit()
+
+	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(table, indexScan)
+
 	// To split the WHERE filter into an index-specific part and a
 	// "rest" part below the splitFilter() code must know which columns
 	// are provided by the index scanNode. Since primaryKeyColumns only
 	// contains the PK columns of the indexed table, we also need to
 	// gather here which additional columns are indexed. This is done in
 	// valProvidedIndex.
-	valProvidedIndex := make([]bool, len(origScan.valNeededForCol))
+	valProvidedIndex := make([]bool, len(origScan.cols))
 
 	// Then, in case the index-specific part, post-split, actually
 	// refers to any additional column, we also need to prepare the
 	// mapping for these columns in colIDtoRowIndex.
-	for _, colID := range indexScan.index.ColumnIDs {
-		idx, ok := indexScan.colIdxMap[colID]
-		if !ok {
-			panic(fmt.Sprintf("Unknown column %d in index!", colID))
+	if indexScan.index.Type == sqlbase.IndexDescriptor_FORWARD {
+		for _, colID := range indexScan.index.ColumnIDs {
+			idx, ok := indexScan.colIdxMap[colID]
+			if !ok {
+				panic(fmt.Sprintf("Unknown column %d in index!", colID))
+			}
+			valProvidedIndex[idx] = true
+			colIDtoRowIndex[colID] = idx
 		}
-		valProvidedIndex[idx] = true
-		colIDtoRowIndex[colID] = idx
 	}
 
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
-			colIdx := expr.(*parser.IndexedVar).Idx
+		splitFunc := func(expr tree.VariableExpr) (ok bool, newExpr tree.Expr) {
+			colIdx := expr.(*tree.IndexedVar).Idx
 			if !(primaryKeyColumns[colIdx] || valProvidedIndex[colIdx]) {
 				return false, nil
 			}
@@ -194,76 +200,49 @@ func (p *planner) makeIndexJoin(
 
 	// Ensure that the remaining indexed vars are transferred to the
 	// table scanNode fully.
-	table.filter = table.filterVars.Rebind(table.filter, true, false)
+	table.filter = table.filterVars.Rebind(table.filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	indexScan.initOrdering(exactPrefix, p.EvalContext())
 
-	indexScan.initOrdering(exactPrefix)
-
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&table.desc, table.index.ID))
-
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 	node := &indexJoinNode{
 		index:             indexScan,
 		table:             table,
-		primaryKeyPrefix:  primaryKeyPrefix,
-		colIDtoRowIndex:   colIDtoRowIndex,
+		cols:              table.cols,
+		resultColumns:     table.resultColumns,
 		primaryKeyColumns: primaryKeyColumns,
+		run: indexJoinRun{
+			primaryKeyPrefix: primaryKeyPrefix,
+			colIDtoRowIndex:  colIDtoRowIndex,
+		},
+		// We need to store the physical props in this node because they might be
+		// different from the underlying index scan in plans produced by the
+		// optimizer (though they will be the same in plans produced by the
+		// heuristic planner).
+		props: planPhysicalProps(indexScan),
 	}
 
-	return node, indexScan
+	return node, indexScan, nil
 }
 
-func (n *indexJoinNode) Columns() sqlbase.ResultColumns {
-	return n.table.Columns()
+// indexJoinRun stores the run-time state of indexJoinNode during local execution.
+type indexJoinRun struct {
+	// primaryKeyPrefix is the KV key prefix of the rows
+	// retrieved from the table scanNode.
+	primaryKeyPrefix roachpb.Key
+
+	// colIDtoRowIndex maps column IDs in the table scanNode into column
+	// IDs in the index scanNode's results. The presence of a column ID
+	// in this mapping is not sufficient to cause a column's values to
+	// be produced; which columns are effectively loaded are decided by
+	// the scanNodes' own valNeededForCol, which is updated by
+	// setNeededColumns(). So there may be more columns in
+	// colIDtoRowIndex than effectively accessed.
+	colIDtoRowIndex map[sqlbase.ColumnID]int
 }
 
-func (n *indexJoinNode) Ordering() orderingInfo {
-	return n.index.Ordering()
-}
+const indexJoinBatchSize = 100
 
-func (n *indexJoinNode) Values() parser.Datums {
-	return n.table.Values()
-}
-
-func (n *indexJoinNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	// Mark both the index and the table scan nodes as debug.
-	n.index.MarkDebug(mode)
-	n.table.MarkDebug(mode)
-}
-
-func (n *indexJoinNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
-}
-
-func (n *indexJoinNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	indexReads, indexWrites, err := n.index.Spans(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(indexWrites) > 0 {
-		return nil, nil, errors.Errorf("unexpected index scan span writes: %v", indexWrites)
-	}
-	// We can not be sure which spans in the table we will read based only on the
-	// initial index span because we will dynamically lookup rows in the table based
-	// on the result of the index scan. We conservatively report that we will read the
-	// index span and the entire span for the table's primary index.
-	primaryReads := n.table.desc.PrimaryIndexSpan()
-	return append(indexReads, primaryReads), nil, nil
-}
-
-func (n *indexJoinNode) Start(ctx context.Context) error {
-	if err := n.table.Start(ctx); err != nil {
-		return err
-	}
-	return n.index.Start(ctx)
-}
-
-func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
+func (n *indexJoinNode) Next(params runParams) (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from
 	// the index we perform another iteration of the loop looking for rows in the
@@ -272,24 +251,21 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
 		// First, try to pull a row from the table.
 		if tableLookup {
-			next, err := n.table.Next(ctx)
+			next, err := n.table.Next(params)
 			if err != nil {
 				return false, err
 			}
 			if next {
-				if n.explain == explainDebug {
-					n.debugVals = n.table.DebugValues()
-				}
 				return true, nil
 			}
 		}
 
 		// The table is out of rows. Pull primary keys from the index.
-		n.table.scanInitialized = false
+		n.table.run.scanInitialized = false
 		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < indexJoinBatchSize {
-			if next, err := n.index.Next(ctx); !next {
+			if next, err := n.index.Next(params); !next {
 				// The index is out of rows or an error occurred.
 				if err != nil {
 					return false, err
@@ -300,17 +276,9 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				}
 				break
 			}
-
-			if n.explain == explainDebug {
-				n.debugVals = n.index.DebugValues()
-				if n.debugVals.output != debugValueRow {
-					return true, nil
-				}
-			}
-
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-				&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+				n.table.desc, n.table.index, n.run.colIDtoRowIndex, vals, n.run.primaryKeyPrefix)
 			if err != nil {
 				return false, err
 			}
@@ -319,19 +287,17 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				Key:    key,
 				EndKey: key.PrefixEnd(),
 			})
-
-			if n.explain == explainDebug {
-				// In debug mode, return the index information as a "partial" row.
-				n.debugVals.output = debugValuePartial
-				return true, nil
-			}
 		}
 
 		if log.V(3) {
-			log.Infof(ctx, "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+			log.Infof(params.ctx, "table scan: %s", sqlbase.PrettySpans(n.table.index, n.table.spans, 0))
 		}
 	}
 	return false, nil
+}
+
+func (n *indexJoinNode) Values() tree.Datums {
+	return n.table.Values()
 }
 
 func (n *indexJoinNode) Close(ctx context.Context) {

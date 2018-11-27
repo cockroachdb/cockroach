@@ -11,17 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package client_test
 
 import (
 	"bytes"
-	"reflect"
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -154,14 +150,23 @@ func TestDB_InitPut(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	if err := db.InitPut(ctx, "aa", "1"); err != nil {
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.InitPut(ctx, "aa", "1"); err != nil {
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.InitPut(ctx, "aa", "2"); err == nil {
+	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
 		t.Fatal("expected error from init put")
+	}
+	if err := db.Del(ctx, "aa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
+		t.Fatal("expected error from init put")
+	}
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
 	if err != nil {
@@ -255,6 +260,51 @@ func TestDB_ReverseScan(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_TxnIterate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.TODO(), b); err != nil {
+		t.Fatal(err)
+	}
+
+	tc := []struct{ pageSize, numPages int }{
+		{1, 2},
+		{2, 1},
+	}
+	var rows []client.KeyValue = nil
+	var p int
+	for _, c := range tc {
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			p = 0
+			rows = make([]client.KeyValue, 0)
+			return txn.Iterate(context.TODO(), "a", "b", c.pageSize,
+				func(rs []client.KeyValue) error {
+					p++
+					rows = append(rows, rs...)
+					return nil
+				})
+		}); err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"aa": []byte("1"),
+			"ab": []byte("2"),
+		}
+
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+		if p != c.numPages {
+			t.Errorf("expected %d pages, got %d", c.numPages, p)
+		}
+	}
+}
+
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
@@ -324,114 +374,4 @@ func TestDB_Put_insecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkResult(t, []byte("1"), result.ValueBytes())
-}
-
-func TestDebugName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		const expected = "unnamed"
-		if txn.DebugName() != expected {
-			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())
-		}
-		return nil
-	}); err != nil {
-		t.Errorf("txn failed: %s", err)
-	}
-}
-
-func TestCommonMethods(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	batchType := reflect.TypeOf(&client.Batch{})
-	dbType := reflect.TypeOf(&client.DB{})
-	txnType := reflect.TypeOf(&client.Txn{})
-	types := []reflect.Type{batchType, dbType, txnType}
-
-	type key struct {
-		typ    reflect.Type
-		method string
-	}
-	omittedChecks := map[key]struct{}{
-		// TODO(tschottdorf): removed GetProto from Batch, which necessitates
-		// these two exceptions. Batch.GetProto would require wrapping each
-		// request with the information that this particular Get must be
-		// unmarshaled, which didn't seem worth doing as we're not using
-		// Batch.GetProto at the moment.
-		{dbType, "GetProto"}:                         {},
-		{txnType, "GetProto"}:                        {},
-		{batchType, "CheckConsistency"}:              {},
-		{batchType, "AddRawRequest"}:                 {},
-		{batchType, "PutInline"}:                     {},
-		{batchType, "RawResponse"}:                   {},
-		{batchType, "MustPErr"}:                      {},
-		{dbType, "AdminMerge"}:                       {},
-		{dbType, "AdminSplit"}:                       {},
-		{dbType, "AdminTransferLease"}:               {},
-		{dbType, "AdminChangeReplicas"}:              {},
-		{dbType, "CheckConsistency"}:                 {},
-		{dbType, "Run"}:                              {},
-		{dbType, "Txn"}:                              {},
-		{dbType, "GetSender"}:                        {},
-		{dbType, "PutInline"}:                        {},
-		{dbType, "WriteBatch"}:                       {},
-		{txnType, "AcceptUnhandledRetryableErrors"}:  {},
-		{txnType, "Commit"}:                          {},
-		{txnType, "CommitInBatch"}:                   {},
-		{txnType, "CommitOrCleanup"}:                 {},
-		{txnType, "Rollback"}:                        {},
-		{txnType, "CleanupOnError"}:                  {},
-		{txnType, "DebugName"}:                       {},
-		{txnType, "EnsureProto"}:                     {},
-		{txnType, "InternalSetPriority"}:             {},
-		{txnType, "IsFinalized"}:                     {},
-		{txnType, "NewBatch"}:                        {},
-		{txnType, "Exec"}:                            {},
-		{txnType, "GetDeadline"}:                     {},
-		{txnType, "ResetDeadline"}:                   {},
-		{txnType, "Run"}:                             {},
-		{txnType, "SetDebugName"}:                    {},
-		{txnType, "SetIsolation"}:                    {},
-		{txnType, "SetUserPriority"}:                 {},
-		{txnType, "SetSystemConfigTrigger"}:          {},
-		{txnType, "SetTxnAnchorKey"}:                 {},
-		{txnType, "UpdateDeadlineMaybe"}:             {},
-		{txnType, "UpdateStateOnRemoteRetryableErr"}: {},
-		{txnType, "AddCommitTrigger"}:                {},
-		{txnType, "CommandCount"}:                    {},
-		{txnType, "IsRetryableErrMeantForTxn"}:       {},
-		{txnType, "Isolation"}:                       {},
-		{txnType, "OrigTimestamp"}:                   {},
-		{txnType, "Proto"}:                           {},
-		{txnType, "UserPriority"}:                    {},
-		{txnType, "AnchorKey"}:                       {},
-	}
-
-	for b := range omittedChecks {
-		if _, ok := b.typ.MethodByName(b.method); !ok {
-			t.Fatalf("blacklist method (%s).%s does not exist", b.typ, b.method)
-		}
-	}
-
-	for _, typ := range types {
-		for j := 0; j < typ.NumMethod(); j++ {
-			m := typ.Method(j)
-			if len(m.PkgPath) > 0 {
-				continue
-			}
-			if _, ok := omittedChecks[key{typ, m.Name}]; ok {
-				continue
-			}
-			for _, otherTyp := range types {
-				if typ == otherTyp {
-					continue
-				}
-				if _, ok := otherTyp.MethodByName(m.Name); !ok {
-					t.Errorf("(%s).%s does not exist, but (%s).%s does",
-						otherTyp, m.Name, typ, m.Name)
-				}
-			}
-		}
-	}
 }

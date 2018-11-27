@@ -11,13 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrei Matei (andreimatei1@gmail.com)
 package pgerror
 
 import (
 	// Import the logging package so that tests in this package can accept the
-	// --verbosity flag and friends. As of 03/2017, no test in this package needs
+	// --vmodule flag and friends. As of 03/2017, no test in this package needs
 	// logging, but we want the test binary to accept the flags for uniformity
 	// with the other tests.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log"

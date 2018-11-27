@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+if ! which benchstat > /dev/null; then
+  cat 1>&2 <<EOF
+Requires github.com/cockroachdb/benchstat
+Run:
+  go get github.com/cockroachdb/benchstat
+EOF
+  exit 1
+fi
+
+cd "$(dirname $0)/.."
+if [[ $# < 1 || $# > 2 ]]; then
+  cat 1>&2 <<EOF
+Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch [newbranch]
+EOF
+  exit 1
+fi
+
+OLDNAME=$1
+OLD=$(git rev-parse "$1")
+
+ORIGREF=$(git symbolic-ref -q HEAD)
+ORIG=${ORIGREF##refs/heads/}
+
+if [[ $# < 2 ]]; then
+  NEWNAME="HEAD"
+  NEW=$ORIG
+else
+  NEWNAME=$2
+  NEW=$(git rev-parse "$2")
+fi
+
+echo "Comparing $NEWNAME (new) with $OLDNAME (old)"
+echo ""
+
+dest=$(mktemp -d)
+echo "Writing to ${dest}"
+
+shas=($OLD $NEW)
+names=($OLDNAME $NEWNAME)
+
+for (( i=0; i<${#shas[@]}; i+=1 )); do
+  name=${names[i]}
+  sha=${shas[i]}
+  echo "Switching to $name"
+  git checkout -q "$sha"
+  (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${name}" 2> "${dest}/log.txt")
+done
+benchstat "${dest}/bench.$OLDNAME" "${dest}/bench.$NEWNAME"
+
+git checkout "$ORIG"

@@ -11,49 +11,71 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Alfonso Subiotto Marqués (alfonso@cockroachlabs.com)
 
 package sql
 
 import (
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
 // found in system.users.
 func GetUserHashedPassword(
-	ctx context.Context, executor *Executor, metrics *MemoryMetrics, username string,
-) ([]byte, error) {
-	normalizedUsername := parser.Name(username).Normalize()
-	// The root user is not in system.users.
+	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
+) (bool, []byte, error) {
+	normalizedUsername := tree.Name(username).Normalize()
+	// Always return no password for the root user, even if someone manually inserts one.
 	if normalizedUsername == security.RootUser {
-		return nil, nil
+		return true, nil, nil
 	}
 
-	var hashedPassword []byte
-	if err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
-		defer finishInternalPlanner(p)
-		const getHashedPassword = `SELECT hashedPassword FROM system.users ` +
-			`WHERE username=$1`
-		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
-		if err != nil {
-			return errors.Errorf("error looking up user %s", normalizedUsername)
-		}
-		if len(values) == 0 {
-			return errors.Errorf("user %s does not exist", normalizedUsername)
-		}
-		hashedPassword = []byte(*(values[0].(*parser.DBytes)))
-		return nil
-	}); err != nil {
+	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+		`WHERE username=$1 AND "isRole" = false`
+	values, err := ie.QueryRow(
+		ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
+	if err != nil {
+		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+	}
+	if values == nil {
+		return false, nil, nil
+	}
+	hashedPassword := []byte(*(values[0].(*tree.DBytes)))
+	return true, hashedPassword, nil
+}
+
+// The map value is true if the map key is a role, false if it is a user.
+func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
+	query := `SELECT username,"isRole"  FROM system.users`
+	rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "read-users", p.txn, query)
+	if err != nil {
 		return nil, err
 	}
 
-	return hashedPassword, nil
+	users := make(map[string]bool)
+	for _, row := range rows {
+		username := tree.MustBeDString(row[0])
+		isRole := row[1].(*tree.DBool)
+		users[string(username)] = bool(*isRole)
+	}
+	return users, nil
+}
+
+var roleMembersTableName = tree.MakeTableName("system", "role_members")
+
+// BumpRoleMembershipTableVersion increases the table version for the
+// role membership table.
+func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, anyDescType)
+	if err != nil {
+		return err
+	}
+
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }

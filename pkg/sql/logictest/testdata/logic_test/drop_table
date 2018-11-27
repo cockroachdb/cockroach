@@ -1,0 +1,55 @@
+# LogicTest: local local-opt
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+
+statement ok
+INSERT INTO a VALUES (3),(7),(2)
+
+query I rowsort
+SELECT * FROM a
+----
+2
+3
+7
+
+statement ok
+DROP TABLE a
+
+query TT
+SELECT status, running_status FROM [SHOW JOBS]
+----
+running  waiting for GC TTL
+
+query T
+SHOW TABLES FROM test
+----
+b
+
+statement error pgcode 42P01 relation "a" does not exist
+SELECT * FROM a
+
+statement error pq: \[53 AS a\]: table is being dropped
+SELECT * FROM [53 AS a]
+
+statement error pgcode 42P01 relation "a" does not exist
+DROP TABLE a
+
+statement ok
+DROP TABLE IF EXISTS a
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM a
+----

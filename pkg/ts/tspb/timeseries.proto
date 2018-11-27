@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 syntax = "proto2";
 package cockroach.ts.tspb;
@@ -61,6 +59,16 @@ enum TimeSeriesQueryAggregator {
   MAX = 3;
   // MIN returns the minimum value of datapoints.
   MIN = 4;
+  // FIRST returns the value of the first datapoint in the set being aggregated.
+  // This aggregator is not valid for a source aggregator, and should only be
+  // used for downsampling.
+  FIRST = 5;
+  // LAST returns the value of the last datapoint in the set being aggregated.
+  // This aggregator is not valid for a source aggregator, and should only be
+  // used for downsampling.
+  LAST = 6;
+  // VARIANCE returns the variance (σ^2) of the datapoints.
+  VARIANCE = 7;
 }
 
 // TimeSeriesQueryDerivative describes a derivative function used to convert
@@ -130,6 +138,8 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
+message DumpRequest {}
+
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service TimeSeries {
@@ -140,4 +150,10 @@ service TimeSeries {
       body: "*"
     };
   }
+
+  // Dump returns a stream of raw timeseries data that has been stored on the
+  // server. Only data from the 10-second resolution is returned - rollup data is
+  // not returned. Data is returned in the order it is read from disk, meaning
+  // that data from different series may be interleaved.
+  rpc Dump(DumpRequest) returns (stream TimeSeriesData) {}
 }

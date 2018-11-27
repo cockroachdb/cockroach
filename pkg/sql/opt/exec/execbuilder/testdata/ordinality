@@ -1,0 +1,58 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
+----
+group            ·            ·                (max)           ·
+ │               aggregate 0  max(ordinality)  ·               ·
+ │               scalar       ·                ·               ·
+ └── ordinality  ·            ·                ("ordinality")  ·
+      └── scan   ·            ·                ()              ·
+·                table        foo@primary      ·               ·
+·                spans        ALL              ·               ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
+----
+filter           ·       ·                 (x, "ordinality")  +"ordinality"
+ │               filter  "ordinality" > 1  ·                  ·
+ └── ordinality  ·       ·                 (x, "ordinality")  ·
+      └── scan   ·       ·                 (x)                ·
+·                table   foo@primary       ·                  ·
+·                spans   ALL               ·                  ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
+----
+sort                  ·       ·                 (x, "ordinality")  -"ordinality"
+ │                    order   -"ordinality"     ·                  ·
+ └── filter           ·       ·                 (x, "ordinality")  ·
+      │               filter  "ordinality" > 1  ·                  ·
+      └── ordinality  ·       ·                 (x, "ordinality")  ·
+           └── scan   ·       ·                 (x)                ·
+·                     table   foo@primary       ·                  ·
+·                     spans   ALL               ·                  ·
+
+# Show that the primary key is used under ordinalityNode.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
+----
+ordinality  ·      ·            (x, "ordinality")  ·
+ └── scan   ·      ·            (x)                ·
+·           table  foo@primary  ·                  ·
+·           spans  /"a\x00"-    ·                  ·
+
+# Show that the primary key cannot be used with a PK predicate
+# outside of ordinalityNode.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+----
+filter           ·       ·            (x, "ordinality")  ·
+ │               filter  x > 'a'      ·                  ·
+ └── ordinality  ·       ·            (x, "ordinality")  ·
+      └── scan   ·       ·            (x)                ·
+·                table   foo@primary  ·                  ·
+·                spans   ALL          ·                  ·

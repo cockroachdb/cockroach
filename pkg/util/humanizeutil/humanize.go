@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package humanizeutil
 
@@ -76,7 +74,7 @@ var _ pflag.Value = &BytesValue{}
 
 // NewBytesValue creates a new pflag.Value bound to the specified
 // int64 variable. It also happens to be a flag.Value.
-func NewBytesValue(val *int64) pflag.Value {
+func NewBytesValue(val *int64) *BytesValue {
 	return &BytesValue{val: val}
 }
 
@@ -109,4 +107,9 @@ func (b *BytesValue) String() string {
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
 	return IBytes(atomic.LoadInt64(b.val))
+}
+
+// IsSet returns true iff Set has successfully been called.
+func (b *BytesValue) IsSet() bool {
+	return b.isSet
 }

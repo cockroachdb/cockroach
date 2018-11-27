@@ -11,21 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package storage
 
 import (
+	"context"
 	"fmt"
-	"math"
+	"math/rand"
 	"reflect"
+	"sync/atomic"
 	"testing"
+	"testing/quick"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,10 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -48,115 +52,316 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 	}
 }
 
-// TestGCQueueShouldQueue verifies conditions which inform priority
-// and whether or not the range should be queued into the GC queue.
-// Ranges are queued for GC based on two conditions. The age of bytes
-// available to be GC'd, and the age of unresolved intents.
-func TestGCQueueShouldQueue(t *testing.T) {
+func TestGCQueueScoreString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
-		t.Fatal("config not set")
-	}
-	desc := tc.repl.Desc()
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf(context.Background(), "could not find GC policy for range %s: %s, got zone %+v",
-			tc.repl, err, zone)
-		return
-	}
-	policy := zone.GC
-
-	iaN := intentAgeNormalization.Nanoseconds()
-	ia := iaN / 1E9
-	bc := int64(gcByteCountNormalization)
-	ttl := int64(policy.TTLSeconds)
-
-	now := makeTS(considerThreshold*iaN, 0) // at time of stats object
-
-	testCases := []struct {
-		gcBytes     int64
-		gcBytesAge  int64
-		intentCount int64
-		intentAge   int64
-		now         hlc.Timestamp // at time of shouldQueue
-		shouldQ     bool
-		priority    float64
+	for i, c := range []struct {
+		r   gcQueueScore
+		exp string
 	}{
-		// First, test cases where shouldQueue is called with the same
-		// timestamp that the stats are at.
-
-		// No GC'able bytes, no time elapsed.
-		{0, 0, 0, 0, now, false, 0},
-		// No GC'able bytes, with intent age, 1/2 intent normalization period elapsed.
-		{0, 0, 1, ia / 2, now, false, 0},
-		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
-		{0, 0, 1, ia / 2, now, false, 0},
-		// No GC'able bytes, with (abs and avg) intent age=1.5*normalization.
-		{0, 0, 1, 3 * ia / 2, now, true, 1.5},
-		// No GC'able bytes, 2 intents, with avg intent age=3.5*normalization.
-		{0, 0, 2, 7 * ia, now, true, 3.5},
-		// GC'able bytes, no time elapsed.
-		{bc, 0, 0, 0, now, false, 0},
-		// GC'able bytes, avg age = just below TTLSeconds.
-		{bc, bc*ttl - 1, 0, 0, now, false, 0},
-		// GC'able bytes, avg age = 2*TTLSeconds.
-		{bc, 2 * bc * ttl, 0, 0, now, true, 2},
-		// x2 GC'able bytes, avg age = TTLSeconds.
-		{2 * bc, 2 * bc * ttl, 0, 0, now, true, 2},
-		// GC'able bytes, intent bytes, and intent normalization * 2 elapsed.
-		// Queues solely because of gc'able bytes.
-		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5},
-		// A contribution of 1 from gc, 10/5 from intents.
-		{bc, bc * ttl, 5, 10 * ia, now, true, (1 + 2)},
-
-		// Some tests where the ages increase since we call shouldNow with
-		// a later timestamp.
-
-		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, hlc.Timestamp{}, true, float64(now.WallTime) / (1E9 * considerThreshold)},
-
-		// 2 intents aging from zero to now (which is exactly the intent age
-		// normalization).
-		{0, 0, 2, 0, hlc.Timestamp{}, true, 1},
-	}
-
-	gcQ := newGCQueue(tc.store, tc.gossip)
-
-	for i, test := range testCases {
-		// Write gc'able bytes as key bytes; since "live" bytes will be
-		// zero, this will translate into non live bytes.  Also write
-		// intent count. Note: the actual accounting on bytes is fictional
-		// in this test.
-		ms := enginepb.MVCCStats{
-			KeyBytes:        test.gcBytes,
-			IntentCount:     test.intentCount,
-			IntentAge:       test.intentAge * considerThreshold,
-			GCBytesAge:      test.gcBytesAge * considerThreshold,
-			LastUpdateNanos: test.now.WallTime,
+		{gcQueueScore{}, "(empty)"},
+		{gcQueueScore{
+			ShouldQueue:              true,
+			FuzzFactor:               1.25,
+			FinalScore:               3.45 * 1.25,
+			ValuesScalableScore:      4,
+			DeadFraction:             0.25,
+			IntentScore:              0.45,
+			ExpMinGCByteAgeReduction: 256 * 1024,
+			GCByteAge:                512 * 1024,
+			GCBytes:                  1024 * 3,
+			LikelyLastGC:             5 * time.Second,
+		},
+			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
+likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
+		// Check case of empty GCThreshold.
+		{gcQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
+likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`},
+	} {
+		if act := c.r.String(); act != c.exp {
+			t.Errorf("%d: wanted:\n'%s'\ngot:\n'%s'", i, c.exp, act)
 		}
-		func() {
-			// Hold lock throughout to reduce chance of random commands
-			// leading to inconsistent state.
-			tc.repl.mu.Lock()
-			defer tc.repl.mu.Unlock()
-			if err := tc.repl.stateLoader.setMVCCStats(context.Background(), tc.repl.store.Engine(), &ms); err != nil {
+	}
+}
+
+func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rnd, seed := randutil.NewPseudoRand()
+	cfg := quick.Config{
+		MaxCount: 50000,
+		Rand:     rnd,
+	}
+	initialNow := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
+	ctx := context.Background()
+
+	// Verify that the basic assumption always holds: We won't queue based on
+	// GCByte{s,Age} unless TTL-based deletion would actually delete something.
+	if err := quick.Check(func(
+		seed uint16, uTTLSec uint32, uTimePassed time.Duration, uGCBytes uint32, uGCByteAge uint32,
+	) bool {
+		ttlSec, timePassed := int32(uTTLSec), uTimePassed
+		gcBytes, gcByteAge := int64(uGCBytes), int64(uGCByteAge)
+
+		ms := enginepb.MVCCStats{
+			LastUpdateNanos: initialNow.WallTime,
+			ValBytes:        gcBytes,
+			GCBytesAge:      gcByteAge,
+		}
+		now := initialNow.Add(timePassed.Nanoseconds(), 0)
+		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, ttlSec)
+		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
+		result := !r.ShouldQueue || wouldHaveToDeleteSomething
+		if !result {
+			log.Warningf(ctx, "failing on ttl=%d, timePassed=%s, gcBytes=%d, gcByteAge=%d:\n%s",
+				ttlSec, timePassed, gcBytes, gcByteAge, r)
+		}
+		return result
+	}, &cfg); err != nil {
+		t.Fatal(errors.Wrapf(err, "with seed %d", seed))
+	}
+}
+
+func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates bool) bool {
+		r := makeGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
+			ContainsEstimates: containsEstimates,
+			LiveBytes:         int64(liveBytes),
+			ValBytes:          int64(valBytes),
+			KeyBytes:          int64(keyBytes),
+		}, 60)
+		return r.DeadFraction >= 0 && r.DeadFraction <= 1
+	}, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const cacheFirstLen = 3
+
+type gcTestCacheKey struct {
+	enginepb.MVCCStats
+	string
+}
+type gcTestCacheVal struct {
+	first [cacheFirstLen]enginepb.MVCCStats
+	last  enginepb.MVCCStats
+}
+
+type cachedWriteSimulator struct {
+	cache map[gcTestCacheKey]gcTestCacheVal
+	t     *testing.T
+}
+
+func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
+	var cws cachedWriteSimulator
+	cws.t = t
+	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
+		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
+			first: [cacheFirstLen]enginepb.MVCCStats{
+				{ContainsEstimates: false, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+			},
+			last: enginepb.MVCCStats{ContainsEstimates: false, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+		},
+	}
+	return &cws
+}
+
+func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
+	var value roachpb.Value
+	kb := make([]byte, size)
+	if n, err := rand.New(rand.NewSource(int64(size))).Read(kb); err != nil {
+		cws.t.Fatal(err)
+	} else if n != size {
+		cws.t.Fatalf("wrote only %d < %d", n, size)
+	}
+	value.SetBytes(kb)
+	return value
+}
+
+func (cws *cachedWriteSimulator) multiKey(
+	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
+) {
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+	key, value := []byte("multikey"), cws.value(size)
+	var eachMS enginepb.MVCCStats
+	if err := engine.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < numOps; i++ {
+		ms.Add(eachMS)
+	}
+}
+
+func (cws *cachedWriteSimulator) singleKeySteady(
+	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
+) {
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))
+	cached, ok := cws.cache[gcTestCacheKey{*ms, cacheKey}]
+	if !ok && duration > 0 {
+		t.Fatalf("cache key missing: %s with %s", cacheKey, pretty.Sprint(*ms))
+	}
+	firstSl := make([]enginepb.MVCCStats, 0, cacheFirstLen)
+	// Pick random bytes once; they don't matter for stats but we want reproducability.
+	key, value := []byte("0123456789"), cws.value(size)
+
+	initialNow := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+
+	for elapsed := time.Duration(0); elapsed <= duration; elapsed += time.Second {
+		for i := 0; i < qps; i++ {
+			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
+
+			if err := engine.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
 				t.Fatal(err)
 			}
-			tc.repl.mu.state.Stats = ms
-		}()
-		shouldQ, priority := gcQ.shouldQueue(context.TODO(), now, tc.repl, cfg)
-		if shouldQ != test.shouldQ {
-			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
+			if len(firstSl) < cacheFirstLen {
+				firstSl = append(firstSl, *ms)
+			} else if len(firstSl) == cacheFirstLen {
+				if ok && reflect.DeepEqual(firstSl, cached.first[:cacheFirstLen]) {
+					*ms = cached.last
+					// Exit both loops.
+					elapsed += duration
+					break
+				} else {
+					ok = false
+				}
+			}
 		}
-		if scaledExpPri := test.priority * considerThreshold; math.Abs(priority-scaledExpPri) > 0.00001 {
-			t.Errorf("%d: priority expected %f; got %f", i, scaledExpPri, priority)
-		}
+	}
+
+	if !ok && duration > 0 {
+		copy(cached.first[:3], firstSl)
+		cached.last = *ms
+		t.Fatalf("missing or incorrect cache entry for %s, should be \n%s", cacheKey, pretty.Sprint(cached))
+	}
+}
+
+func (cws *cachedWriteSimulator) shouldQueue(
+	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
+) {
+	cws.t.Helper()
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
+	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, int32(ttl.Seconds()))
+	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
+		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
+			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
+	}
+}
+
+// TestGCQueueMakeGCScoreRealistic verifies conditions which inform priority and
+// whether or not the range should be queued into the GC queue. Ranges are
+// queued for GC based on two conditions. The age of bytes available to be GC'd,
+// and the age of unresolved intents.
+func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cws := newCachedWriteSimulator(t)
+
+	initialMS := func() enginepb.MVCCStats {
+		var zeroMS enginepb.MVCCStats
+		zeroMS.AgeTo(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano())
+		return zeroMS
+	}
+
+	minuteTTL, hourTTL := time.Minute, time.Hour
+
+	{
+		// Hammer a key with 1MB blobs for a (simulated) minute. Logically, at
+		// the end of that you have around 60MB that are non-live, but cannot
+		// immediately be deleted. Deletion is only possible for keys that are
+		// (more or less) past TTL, and shouldQueue should respect that.
+		ms := initialMS()
+		cws.singleKeySteady(1, time.Minute, 1<<20, &ms)
+
+		// First, check that a zero second TTL behaves like a one second one.
+		// This is a special case without which the priority would be +Inf.
+		//
+		// Since at the time of this check the data is already 30s old on
+		// average (i.e. ~30x the TTL), we expect to *really* want GC.
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
+
+		// Right after we finished writing, we don't want to GC yet with a one-minute TTL.
+		cws.shouldQueue(false, 0.48, time.Duration(0), minuteTTL, ms)
+
+		// Neither after a minute. The first values are about to become GC'able, though.
+		cws.shouldQueue(false, 1.46, time.Minute, minuteTTL, ms)
+		// 90 seconds in it's really close, but still just shy of GC. Half of the
+		// values could be deleted now (remember that we wrote them over a one
+		// minute period).
+		cws.shouldQueue(false, 1.95, 3*time.Minute/2, minuteTTL, ms)
+		// Advancing another 1/4 minute does the trick.
+		cws.shouldQueue(true, 2.20, 7*time.Minute/4, minuteTTL, ms)
+		// After an hour, that's (of course) still true with a very high priority.
+		cws.shouldQueue(true, 59.34, time.Hour, minuteTTL, ms)
+
+		// Let's see what the same would look like with a 1h TTL.
+		// Can't delete anything until 59min have passed, and indeed the score is low.
+		cws.shouldQueue(false, 0.01, time.Duration(0), hourTTL, ms)
+		cws.shouldQueue(false, 0.02, time.Minute, hourTTL, ms)
+		cws.shouldQueue(false, 0.99, time.Hour, hourTTL, ms)
+		// After 90 minutes, we're getting closer. After just over two hours,
+		// definitely ripe for GC (and this would delete all the values).
+		cws.shouldQueue(false, 1.48, 90*time.Minute, hourTTL, ms)
+		cws.shouldQueue(true, 2.05, 125*time.Minute, hourTTL, ms)
+	}
+
+	{
+		ms, valSize := initialMS(), 1<<10
+
+		// Write 999 distinct 1kb keys at the initial timestamp without transaction.
+		cws.multiKey(999, valSize, nil /* no txn */, &ms)
+
+		// GC shouldn't move at all, even after a long time and short TTL.
+		cws.shouldQueue(false, 0, 24*time.Hour, minuteTTL, ms)
+
+		// Write a single key twice.
+		cws.singleKeySteady(2, 0, valSize, &ms)
+
+		// Now we have the situation in which the replica is pretty large
+		// compared to the amount of (ever) GC'able data it has. Consequently,
+		// the GC score should rise very slowly.
+
+		// If the fact that 99.9% of the replica is live were not taken into
+		// account, this would get us at least close to GC.
+		cws.shouldQueue(false, 0.00, 5*time.Minute, minuteTTL, ms)
+
+		// 12 hours in the score becomes relevant, but not yet large enough.
+		// The key is of course GC'able and has been for a long time, but
+		// to find it we'd have to scan all the other kv pairs as well.
+		cws.shouldQueue(false, 0.71, 12*time.Hour, minuteTTL, ms)
+
+		// Two days in we're more than ready to go, would queue for GC, and
+		// delete.
+		cws.shouldQueue(true, 2.85, 48*time.Hour, minuteTTL, ms)
+	}
+
+	{
+		irrelevantTTL := 24 * time.Hour * 365
+		ms, valSize := initialMS(), 1<<10
+		txn := newTransaction(
+			"txn", roachpb.Key("key"), roachpb.NormalUserPriority, enginepb.SERIALIZABLE,
+			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
+
+		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
+		// the average intent age is just the time elapsed from now, and this is roughly
+		// normalized by one day at the time of writing. Note that the size of the writes
+		// doesn't matter. In reality, the value-based GC score will often strike first.
+		cws.multiKey(100, valSize, txn, &ms)
+
+		cws.shouldQueue(false, 1.00, 24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 1.99, 2*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 3.99, 4*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 6.98, 7*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(true, 11.97, 12*24*time.Hour, irrelevantTTL, ms)
 	}
 }
 
@@ -245,6 +450,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &dArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Timestamp: datum.ts,
@@ -259,6 +465,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &pArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Timestamp: datum.ts,
@@ -269,14 +476,59 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
+	}
+
+	// The total size of the GC'able versions of the keys and values in GCInfo.
+	// Key size: len("a") + mvccVersionTimestampSize (13 bytes) = 14 bytes.
+	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
+	// key1 at ts1  (14 bytes) => "value" (10 bytes)
+	// key2 at ts1  (14 bytes) => "value" (10 bytes)
+	// key3 at ts1  (14 bytes) => "value" (10 bytes)
+	// key4 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts2  (14 bytes) => delete (0 bytes)
+	// key10 at ts1 (14 bytes) => delete (0 bytes)
+	var expectedVersionsKeyBytes int64 = 7 * 14
+	var expectedVersionsValBytes int64 = 5 * 10
+
+	// Call RunGC with dummy functions to get current GCInfo.
+	gcInfo, err := func() (GCInfo, error) {
+		snap := tc.repl.store.Engine().NewSnapshot()
+		desc := tc.repl.Desc()
+		defer snap.Close()
+
+		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+		if err != nil {
+			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
+		}
+
+		ctx := context.Background()
+		now := tc.Clock().Now()
+		return RunGC(ctx, desc, snap, now, *zone.GC,
+			NoopGCer{},
+			func(ctx context.Context, intents []roachpb.Intent) error {
+				return nil
+			},
+			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
+				return nil
+			})
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gcInfo.AffectedVersionsKeyBytes != expectedVersionsKeyBytes {
+		t.Errorf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes, gcInfo.AffectedVersionsKeyBytes)
+	}
+	if gcInfo.AffectedVersionsValBytes != expectedVersionsValBytes {
+		t.Errorf("expected total values size: %d bytes; got %d bytes", expectedVersionsValBytes, gcInfo.AffectedVersionsValBytes)
 	}
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.repl, cfg); err != nil {
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -308,30 +560,35 @@ func TestGCQueueProcess(t *testing.T) {
 		{key11, ts1},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
-	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
-		engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, kv := range kvs {
-		if log.V(1) {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+	// However, because the GC processing pushes transactions and
+	// resolves intents asynchronously, we use a SucceedsSoon loop.
+	testutils.SucceedsSoon(t, func() error {
+		kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
+			engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
+		if err != nil {
+			return err
 		}
-	}
-	if len(kvs) != len(expKVs) {
-		t.Fatalf("expected length %d; got %d", len(expKVs), len(kvs))
-	}
-	for i, kv := range kvs {
-		if !kv.Key.Key.Equal(expKVs[i].key) {
-			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
+		for i, kv := range kvs {
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
 		}
-		if kv.Key.Timestamp != expKVs[i].ts {
-			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
+		if len(kvs) != len(expKVs) {
+			return fmt.Errorf("expected length %d; got %d", len(expKVs), len(kvs))
 		}
-		if log.V(1) {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+		for i, kv := range kvs {
+			if !kv.Key.Key.Equal(expKVs[i].key) {
+				return fmt.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
+			}
+			if kv.Key.Timestamp != expKVs[i].ts {
+				return fmt.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
+			}
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
 		}
-	}
+		return nil
+	})
 }
 
 func TestGCQueueTransactionTable(t *testing.T) {
@@ -343,11 +600,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	now := manual.UnixNano()
 
-	gcTxnAndAC := now - txnCleanupThreshold.Nanoseconds()
-	gcACOnly := now - abortCacheAgeThreshold.Nanoseconds()
-	if gcTxnAndAC >= gcACOnly {
-		t.Fatalf("test assumption violated due to changing constants; needs adjustment")
-	}
+	gcExpiration := now - storagebase.TxnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
@@ -356,71 +609,55 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
-		expAbortGC  bool                      // expect abort cache entries removed?
+		expAbortGC  bool                      // expect AbortSpan entries removed?
 	}
 	// Describes the state of the Txn table before the test.
-	// Many of the abort cache entries deleted wouldn't even be there, so don't
+	// Many of the AbortSpan entries deleted wouldn't even be there, so don't
 	// be confused by that.
 	testCases := map[string]spec{
 		// Too young, should not touch.
-		"aa": {
+		"a": {
 			status:    roachpb.PENDING,
-			orig:      gcACOnly + 1,
+			orig:      gcExpiration + 1,
 			newStatus: roachpb.PENDING,
 		},
-		// A little older, so the AbortCache gets cleaned up.
-		"ab": {
-			status:     roachpb.PENDING,
-			orig:       gcTxnAndAC + 1,
-			newStatus:  roachpb.PENDING,
-			expAbortGC: true,
+		// Old and pending, but still heartbeat (so no Push attempted; it
+		// would succeed).
+		"b": {
+			status:    roachpb.PENDING,
+			orig:      1, // immaterial
+			hb:        gcExpiration + 1,
+			newStatus: roachpb.PENDING,
 		},
-		// Old and pending, but still heartbeat (so no Push attempted; it would succeed).
-		// It's old enough to delete the abort cache entry though.
-		"ba": {
-			status:     roachpb.PENDING,
-			orig:       1, // immaterial
-			hb:         gcTxnAndAC + 1,
-			newStatus:  roachpb.PENDING,
-			expAbortGC: true,
-		},
-		// Not old enough for Txn GC, but old enough to remove the abort cache entry.
-		"bb": {
-			status:     roachpb.ABORTED,
-			orig:       gcACOnly - 1,
-			newStatus:  roachpb.ABORTED,
-			expAbortGC: true,
-		},
-		// Old, pending and abandoned. Should push and abort it successfully,
-		// but not GC it just yet (this is an artifact of the implementation).
-		// The abort cache gets cleaned up though.
+		// Old, pending and abandoned. Should push and abort it
+		// successfully, and GC it, along with resolving the intent. The
+		// AbortSpan is also cleaned up.
 		"c": {
 			status:     roachpb.PENDING,
-			orig:       gcTxnAndAC - 1,
-			newStatus:  roachpb.ABORTED,
+			orig:       gcExpiration - 1,
+			newStatus:  -1,
+			expResolve: true,
 			expAbortGC: true,
 		},
 		// Old and aborted, should delete.
 		"d": {
 			status:     roachpb.ABORTED,
-			orig:       gcTxnAndAC - 1,
+			orig:       gcExpiration - 1,
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
 		},
-		// Committed and fresh, so no action. But the abort cache entry is old
-		// enough to be discarded.
+		// Committed and fresh, so no action.
 		"e": {
-			status:     roachpb.COMMITTED,
-			orig:       gcTxnAndAC + 1,
-			newStatus:  roachpb.COMMITTED,
-			expAbortGC: true,
+			status:    roachpb.COMMITTED,
+			orig:      gcExpiration + 1,
+			newStatus: roachpb.COMMITTED,
 		},
 		// Committed and old. It has an intent (like all tests here), which is
 		// resolvable and hence we can GC.
 		"f": {
 			status:     roachpb.COMMITTED,
-			orig:       gcTxnAndAC - 1,
+			orig:       gcExpiration - 1,
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -429,7 +666,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		// resolution here will fail and consequently no GC is expected.
 		"g": {
 			status:      roachpb.COMMITTED,
-			orig:        gcTxnAndAC - 1,
+			orig:        gcExpiration - 1,
 			newStatus:   roachpb.COMMITTED,
 			failResolve: true,
 			expResolve:  true,
@@ -437,16 +674,22 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		},
 	}
 
-	resolved := map[string][]roachpb.Span{}
+	var resolved syncmap.Map
 
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
-				resolved[id] = append(resolved[id], roachpb.Span{
+				var spans []roachpb.Span
+				val, ok := resolved.Load(id)
+				if ok {
+					spans = val.([]roachpb.Span)
+				}
+				spans = append(spans, roachpb.Span{
 					Key:    resArgs.Key,
 					EndKey: resArgs.EndKey,
 				})
+				resolved.Store(id, spans)
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
@@ -478,32 +721,32 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn.Timestamp.Forward(hlc.MaxTimestamp)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
-			key := keys.TransactionKey(addrKey, *txn.ID)
+			key := keys.TransactionKey(addrKey, txn.ID)
 			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
-		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, *txn.ID, &entry); err != nil {
+		entry := roachpb.AbortSpanEntry{Key: txn.Key, Timestamp: txn.LastActive()}
+		if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Run GC.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(context.Background(), tc.repl, cfg); err != nil {
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
-			key := keys.TransactionKey(roachpb.Key(strKey), *txns[strKey].ID)
+			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
 			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, true, nil, txn)
 			if err != nil {
 				return err
@@ -519,17 +762,21 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			if sp.expResolve {
 				expIntents = testIntents
 			}
-			if !reflect.DeepEqual(resolved[strKey], expIntents) {
-				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
-					strKey, expIntents, resolved[strKey])
+			var spans []roachpb.Span
+			val, ok := resolved.Load(strKey)
+			if ok {
+				spans = val.([]roachpb.Span)
 			}
-			entry := &roachpb.AbortCacheEntry{}
-			abortExists, err := tc.repl.abortCache.Get(context.Background(), tc.store.Engine(), *txns[strKey].ID, entry)
+			if !reflect.DeepEqual(spans, expIntents) {
+				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
+			}
+			entry := &roachpb.AbortSpanEntry{}
+			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if abortExists == sp.expAbortGC {
-				return fmt.Errorf("%s: expected abort cache gc: %t, found %+v", strKey, sp.expAbortGC, entry)
+				return fmt.Errorf("%s: expected AbortSpan gc: %t, found %+v", strKey, sp.expAbortGC, entry)
 			}
 		}
 		return nil
@@ -539,7 +786,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
-		true, nil, false, func(roachpb.KeyValue) (bool, error) {
+		engine.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
 		}); err != nil {
@@ -552,14 +799,18 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
-	tc.repl.assertState(batch) // check that in-mem and on-disk state were updated
+	tc.repl.raftMu.Lock()
+	tc.repl.mu.Lock()
+	tc.repl.assertStateLocked(context.TODO(), batch) // check that in-mem and on-disk state were updated
+	tc.repl.mu.Unlock()
+	tc.repl.raftMu.Unlock()
 
 	tc.repl.mu.Lock()
 	txnSpanThreshold := tc.repl.mu.state.TxnSpanGCThreshold
 	tc.repl.mu.Unlock()
 
 	// Verify that the new TxnSpanGCThreshold has reached the Replica.
-	if expWT := int64(gcTxnAndAC); txnSpanThreshold.WallTime != expWT {
+	if expWT := gcExpiration; txnSpanThreshold.WallTime != expWT {
 		t.Fatalf("expected TxnSpanGCThreshold.Walltime %d, got timestamp %s",
 			expWT, txnSpanThreshold)
 	}
@@ -578,8 +829,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
-		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn1", roachpb.Key("0-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn2", roachpb.Key("1-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -590,46 +841,45 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// Two transactions.
 	for i := 0; i < 2; i++ {
 		// 5 puts per transaction.
-		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
-			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"))
+			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%d", i, j)), []byte("value"))
+			assignSeqNumsForReqs(txns[i], &pArgs)
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
-			txns[i].Sequence++
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	// Process through GC queue.
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
-
-	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.repl, cfg); err != nil {
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Iterate through all values to ensure intents have been fully resolved.
-	meta := &enginepb.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
-		engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
-			if !kv.Key.IsValue() {
-				if err := proto.Unmarshal(kv.Value, meta); err != nil {
-					return false, err
+	// This must be done in a SucceedsSoon loop because intent resolution
+	// is initiated asynchronously from the GC queue.
+	testutils.SucceedsSoon(t, func() error {
+		meta := &enginepb.MVCCMetadata{}
+		return tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
+			engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
+				if !kv.Key.IsValue() {
+					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+						return false, err
+					}
+					if meta.Txn != nil {
+						return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+					}
 				}
-				if meta.Txn != nil {
-					return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-				}
-			}
-			return false, nil
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
+				return false, nil
+			})
+	})
 }
 
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {
@@ -659,14 +909,14 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.repl, cfg); err != nil {
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -683,4 +933,102 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestGCQueueChunkRequests verifies that many intents are chunked
+// into separate batches. This is verified both for many different
+// keys and also for many different versions of keys.
+func TestGCQueueChunkRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var gcRequests int32
+	manual := hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
+				atomic.AddInt32(&gcRequests, 1)
+				return nil
+			}
+			return nil
+		}
+	tc := testContext{manualClock: manual}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	const keyCount = 100
+	if gcKeyVersionChunkBytes%keyCount != 0 {
+		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
+	}
+	// Reduce the key size by mvccVersionTimestampSize (13 bytes) to prevent batch overflow.
+	// This is due to MVCCKey.EncodedSize(), which returns the full size of the encoded key.
+	const keySize = (gcKeyVersionChunkBytes / keyCount) - 13
+	// Create a format string for creating version keys of exactly
+	// length keySize.
+	fmtStr := fmt.Sprintf("%%0%dd", keySize)
+
+	// First write 2 * gcKeyVersionChunkBytes different keys (each with two versions).
+	ba1, ba2 := roachpb.BatchRequest{}, roachpb.BatchRequest{}
+	for i := 0; i < 2*keyCount; i++ {
+		// Create keys which are
+		key := roachpb.Key(fmt.Sprintf(fmtStr, i))
+		pArgs := putArgs(key, []byte("value1"))
+		ba1.Add(&pArgs)
+		pArgs = putArgs(key, []byte("value2"))
+		ba2.Add(&pArgs)
+	}
+	ba1.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	if _, pErr := tc.Sender().Send(context.Background(), ba1); pErr != nil {
+		t.Fatal(pErr)
+	}
+	ba2.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	if _, pErr := tc.Sender().Send(context.Background(), ba2); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Next write 2 keys, the first with keyCount different GC'able
+	// versions, and the second with 2*keyCount GC'able versions.
+	key1 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount))
+	key2 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount+1))
+	for i := 0; i < 2*keyCount+1; i++ {
+		ba := roachpb.BatchRequest{}
+		// Only write keyCount+1 versions of key1.
+		if i < keyCount+1 {
+			pArgs1 := putArgs(key1, []byte(fmt.Sprintf("value%04d", i)))
+			ba.Add(&pArgs1)
+		}
+		// Write all 2*keyCount+1 versions of key2 to verify we'll
+		// tackle key2 in two separate batches.
+		pArgs2 := putArgs(key2, []byte(fmt.Sprintf("value%04d", i)))
+		ba.Add(&pArgs2)
+		ba.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Forward the clock past the default GC time.
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("config not set")
+	}
+	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))
+	if err != nil {
+		t.Fatalf("could not find zone config for range %s", err)
+	}
+	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1E9 + 1)
+	gcQ := newGCQueue(tc.store, tc.gossip)
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// We wrote two batches worth of keys spread out, and two keys that
+	// each have enough old versions to fill a whole batch each in the
+	// first case, and two whole batches in the second, adding up to
+	// five batches. There is also a first batch which sets the GC
+	// thresholds, making six total batches.
+	if a, e := atomic.LoadInt32(&gcRequests), int32(6); a != e {
+		t.Errorf("expected %d gc requests; got %d", e, a)
+	}
 }

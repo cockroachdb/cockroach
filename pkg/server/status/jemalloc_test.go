@@ -17,9 +17,8 @@
 package status
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,23 +27,19 @@ func TestJemalloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
-	cgoAllocated, cgoTotal, err := getJemallocStats(ctx)
+	cgoAllocated, _, err := getJemallocStats(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 10; i++ {
 		allocateMemory()
-		cgoAllocatedN, cgoTotalN, err := getJemallocStats(ctx)
+		cgoAllocatedN, _, err := getJemallocStats(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if cgoAllocatedN == cgoAllocated {
 			t.Errorf("allocated stat not incremented on allocation: %d", cgoAllocated)
 		}
-		if cgoTotalN == cgoTotal {
-			t.Errorf("total stat not incremented on allocation: %d", cgoTotal)
-		}
 		cgoAllocated = cgoAllocatedN
-		cgoTotal = cgoTotalN
 	}
 }

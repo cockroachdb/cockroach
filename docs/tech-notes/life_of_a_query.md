@@ -140,7 +140,7 @@ and, based on those options, executes the callback possibly multiple
 times and commits the transaction afterwards. If allowed by the
 options, the callback might be called multiple times, to deal with
 retries of transactions that are [sometimes
-necessary](https://www.cockroachlabs.com/docs/transactions.html#transaction-retries)
+necessary](https://www.cockroachlabs.com/docs/stable/transactions.html#transaction-retries)
 in CockroachDB (usually because of data contention). The SQL
 `Executor` might or might not want to let the KV client perform such
 retries automatically.
@@ -157,7 +157,7 @@ be retried verbatim (i.e. different results for a `SELECT` might
 trigger different subsequent statements). In this case, we bubble up a
 retryable error to the client; more details about this can be read in
 our [transaction
-documentation](https://www.cockroachlabs.com/docs/transactions.html#client-side-intervention). This
+documentation](https://www.cockroachlabs.com/docs/stable/transactions.html#client-side-intervention). This
 complexity is captured in
 [`Executor.execRequest()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L495),
 which has logic for setting the different execution options and
@@ -174,7 +174,7 @@ context of a KV transaction.
 
 ### Building execution plans
 
-Now that we'have figured out what (KV) transaction we're running inside
+Now that we have figured out what (KV) transaction we're running inside
 of, we are concerned with executing SQL statements one at a
 time. `runTxnAttempt()` has a few layers below it dealing with the
 various states a SQL transaction can be in
@@ -316,7 +316,7 @@ our execution planning more in the future).
    data source (usually a `scanNode`))
 2. normalization (e.g. `a = 1 + 1` -> `a = 2`, ` a not between b and c` -> `(a < b) or (a > c)`)
 3. type checking (see [the typing
-   RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/typing.md)
+   RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160203_typing.md)
    for an in-depth discussion of Cockroach's typing system).
 
    1. constant folding (e.g. `1 + 2` becomes `3`): we perform exact
@@ -353,9 +353,6 @@ our execution planning more in the future).
       for function calls and operators.
 4. replacing sub-query syntax nodes by a `sql.subquery` execution plan
    node.
-5. resolving names (the `colA` in `select colA from MyTable` needs to
-   be replaced by an index within the rows produced by the underlying
-   data source (usually a `scanNode`)).
 
 A note about sub-queries: consider a query like `select * from
 Employees where DepartmentID in (select DepartmentID from Departments
@@ -380,8 +377,8 @@ which initiates the processing, and
 [`Next`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/plan.go#L149),
 which is called repeatedly to produce the next row.
 
-To tie this to the [SQL Executor](#SQL Executor) section above,
-[`executor.execClassic()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L1251),
+To tie this to the [SQL Executor](#sql-executor) section above,
+`executor.execLocal()`,
 the method responsible for executing one statement, calls
 `plan.Next()` repeatedly and accumulates the results.
 
@@ -393,7 +390,7 @@ SELECT * FROM customers WHERE State LIKE 'C%' AND strpos(address, 'Infinite') !=
 ```
 
 as a slightly contrived example. This is supposed to return customers
-from states starting with "N" and whose address contains the string
+from states starting with "C" and whose address contains the string
 "Infinite". To get excited, let's see the query plan for this
 statement:
 
@@ -461,7 +458,7 @@ Now let's see how these `planNode`s run:
    from SQL92/99. Another interesting fact is that, if we're sorting by a
    non-trivial expression (e.g. `SELECT a, b ... ORDER BY a + b`), we
    need the `a + b` values (for every row) to be produced by a
-   lower-level node. This is achieved through a patter that's also
+   lower-level node. This is achieved through a pattern that's also
    present in other node: the lower node capable of evaluating
    expressions and rendering their results is the `renderNode`; the
    `sortNode` constructor checks if the expressions it needs are already
@@ -548,7 +545,7 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       decoding all the keys and values in SQL column values, dealing with
       differences between the primary index and other indexes and with
       the [layout of a
-      table](https://www.cockroachlabs.com/docs/column-families.html). For
+      table](https://www.cockroachlabs.com/docs/stable/column-families.html). For
       details on the mapping between SQL rows and KV pairs, see the
       [corresponding section from the Design
       Doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv) and the [encoding tech note](encoding.md).
@@ -968,10 +965,10 @@ sure they're not writing "under" a read that has already been
 performed.
 
  Now we're reading to actually evaluate the read - control moves to
- [`replica.executeBatch()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4000)
+ [`replica.evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5225)
  which calls
- [`replica.executeCmd`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4050)
- for each request in the batch. `executeCmd` switches over the request
+ [`replica.evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5286)
+ for each request in the batch. `evaluateCommand` switches over the request
  types using a [helper request to method
  map](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L84)
  and [passes
@@ -1016,7 +1013,7 @@ important part of servicing a request, is not something that
 CockroachDB devs generally deal with.
 
 For reads, the entry point into the `engine` package is
-[`MVCCScanInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1480). This
+[`mvccScanInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1480). This
 performs a scan over the KV database, dealing with the data
 representation we use for [MultiVersion Concurrency
 Control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
@@ -1132,12 +1129,12 @@ method. This takes in the `roachpb.BatchRequest` (the KV request we've
 been dealing with all along), [allocates an
 `engine.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3835)
 and delegates to
-[`executeBatch()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3850). This
+[`evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5225). This
 fellow finally
 [iterates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4041)
 over the individual requests in the batch and, for each one, calls
-[`executeCmd`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L115). We've
-seen `executeCmd` before, on the read path. It switches over the
+[`evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica_command.go#L63). We've
+seen `evaluateCommand` before, on the read path. It switches over the
 different types of requests and [calls a method specific to each
 type](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L160). One
 such method would be

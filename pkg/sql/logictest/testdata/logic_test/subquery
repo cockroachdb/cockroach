@@ -1,0 +1,530 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+# Tests for subqueries (SELECT statements which are part of a bigger statement).
+
+query I
+SELECT (SELECT 1)
+----
+1
+
+query B
+SELECT 1 IN (SELECT 1)
+----
+true
+
+query B
+SELECT 1 IN ((((SELECT 1))))
+----
+true
+
+query I
+SELECT ARRAY(((((VALUES (1), (2))))))[2]
+----
+2
+
+query I
+SELECT 1 + (SELECT 1)
+----
+2
+
+query error unsupported binary operator: <int> \+ <tuple{int AS a, int AS b}>
+SELECT 1 + (SELECT 1 AS a, 2 AS b)
+
+query B
+SELECT (1, 2, 3) IN (SELECT 1, 2, 3)
+----
+true
+
+query B
+SELECT (1, 2, 3) = (SELECT 1, 2, 3)
+----
+true
+
+query B
+SELECT (1, 2, 3) != (SELECT 1, 2, 3)
+----
+false
+
+query B
+SELECT (SELECT 1, 2, 3) = (SELECT 1, 2, 3)
+----
+true
+
+query B
+SELECT (SELECT 1) IN (SELECT 1)
+----
+true
+
+query B
+SELECT (SELECT 1) IN (1)
+----
+true
+
+# NB: Cockroach has different behavior from Postgres on a few esoteric
+# subqueries. The Cockroach behavior seems more sensical and
+# supporting the specific Postgres behavior appears onerous. Fingers
+# crossed this doesn't bite us down the road.
+
+# Postgres cannot handle this query (but MySQL can), even though it
+# seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN (select 1, 2);
+#                  ^
+query B
+SELECT (SELECT 1, 2) IN (SELECT 1, 2)
+----
+true
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN ((1, 2));
+#                  ^
+query B
+SELECT (SELECT 1, 2) IN ((1, 2))
+----
+true
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery has too many columns
+#   LINE 1: select (select (1, 2)) IN (select 1, 2);
+#                                  ^
+query B
+SELECT (SELECT (1, 2)) IN (SELECT 1, 2)
+----
+true
+
+query B
+SELECT (SELECT (1, 2)) IN ((1, 2))
+----
+true
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) in (select (1, 2));
+#                  ^
+query B
+SELECT (SELECT 1, 2) IN (SELECT (1, 2))
+----
+true
+
+query B
+SELECT (SELECT (1, 2)) IN (SELECT (1, 2))
+----
+true
+
+query B
+SELECT 1 = ANY(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = ANY(SELECT 1, 2)
+----
+true
+
+query B
+SELECT 1 = SOME(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = SOME(SELECT 1, 2)
+----
+true
+
+query B
+SELECT 1 = ALL(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = ALL(SELECT 1, 2)
+----
+true
+
+query error pgcode 42601 subquery must return only one column, found 2
+SELECT (SELECT 1, 2)
+
+query error unsupported comparison operator: <int> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT 1 IN (SELECT 1 AS a, 2 AS b)
+
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
+SELECT (1, 2) IN (SELECT 1 AS a)
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+statement ok
+ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
+
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
+SELECT (1, 2) IN (SELECT * FROM abc)
+
+query B
+SELECT (1, 2) IN (SELECT a, b FROM abc)
+----
+true
+
+query B
+SELECT (1, 2) IN (SELECT a, b FROM abc WHERE false)
+----
+false
+
+query error subquery must return only one column
+SELECT (SELECT * FROM abc)
+
+query error more than one row returned by a subquery used as an expression
+SELECT (SELECT a FROM abc)
+
+query I
+SELECT (SELECT a FROM abc WHERE false)
+----
+NULL
+
+query II
+VALUES (1, (SELECT (2)))
+----
+1 2
+
+statement ok
+INSERT INTO abc VALUES ((SELECT 7), (SELECT 8), (SELECT 9))
+
+query III
+SELECT * FROM abc WHERE a = 7
+----
+7 8 9
+
+statement error value type tuple{int, int, int} doesn't match type INT of column "a"
+INSERT INTO abc VALUES ((SELECT (10, 11, 12)))
+
+statement error subquery must return only one column, found 3
+INSERT INTO abc VALUES ((SELECT 10, 11, 12))
+
+statement ok
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+INSERT INTO xyz SELECT * FROM abc
+
+query III rowsort
+SELECT * FROM xyz
+----
+1 2 3
+4 5 6
+7 8 9
+
+statement ok
+INSERT INTO xyz (x, y, z) VALUES (10, 11, 12)
+
+statement ok
+UPDATE xyz SET z = (SELECT 10) WHERE x = 7
+
+query III rowsort
+SELECT * FROM xyz
+----
+1 2 3
+4 5 6
+7 8 10
+10 11 12
+
+statement error value type tuple{int, int} doesn't match type INT of column "z"
+UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
+
+statement error pgcode 42601 subquery must return 2 columns, found 1
+UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
+
+#regression, see #6852
+#statement ok
+#UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
+#
+#query III rowsort
+#SELECT * FROM xyz
+#----
+#1 2  3
+#4 5  6
+#7 11 12
+#10 11 12
+
+query B
+SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
+----
+true
+
+query III
+SELECT * FROM xyz WHERE x = (SELECT min(x) FROM xyz)
+----
+1 2 3
+
+query III
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
+----
+10 11 12
+
+query III
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz WHERE EXISTS(SELECT * FROM xyz WHERE z=x+3))
+----
+10 11 12
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
+
+statement ok
+INSERT INTO kv VALUES (1, 'one')
+
+query IT
+SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
+----
+1 one
+
+query B
+SELECT EXISTS(SELECT 1 FROM kv AS x WHERE x.k = 1)
+----
+true
+
+query B
+SELECT EXISTS(SELECT 1 FROM kv WHERE k = 2)
+----
+false
+
+
+# Tests for subquery in the FROM part of a SELECT
+
+query II colnames,rowsort
+SELECT * FROM (VALUES (1, 2)) AS foo
+----
+column1 column2
+1 2
+
+query II colnames,rowsort
+SELECT * FROM (VALUES (1, 2))
+----
+column1 column2
+1 2
+
+query IT colnames,rowsort
+SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
+----
+column1 column2
+1 one
+2 two
+3 three
+
+query III colnames,rowsort
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
+----
+column1 column2 column3
+1       2       3
+4       5       6
+
+query III colnames,rowsort
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
+----
+foo1 foo2 foo3
+1    2    3
+4    5    6
+
+query III colnames,rowsort
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
+----
+foo1 foo2 column3
+1    2    3
+4    5    6
+
+query III colnames,rowsort
+SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
+----
+x y  z
+1 2  3
+4 5  6
+
+query III colnames,rowsort
+SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
+----
+foo1 y  z
+1    2  3
+4    5  6
+
+query III colnames,rowsort
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
+----
+foo1 moo2 moo3
+1    2    3
+4    5    6
+
+query III colnames,rowsort
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
+----
+foo1 moo2 moo3
+1    2    3
+4    5    6
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7 ORDER BY moo2 DESC
+----
+foo1 moo2 moo3
+4    5    6
+1    2    3
+
+query III colnames
+SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
+----
+foo1 moo2 moo3
+4    5    6
+
+query III colnames
+SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
+----
+foo1 moo2 moo3
+1    8    8
+2    4    4
+3    1    1
+
+query II colnames
+SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
+----
+a b
+1 2
+3 4
+
+query I colnames
+SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
+----
+a
+1
+2
+3
+
+query IITT colnames
+SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
+----
+a a column2 column2
+1 1 one     one
+2 2 two     two
+3 3 three   three
+
+query I
+SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz WHERE x = 7)
+----
+7
+
+query I
+SELECT x FROM xyz WHERE x = 7 LIMIT (SELECT x FROM xyz WHERE x = 1)
+----
+7
+
+query I
+SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
+----
+4
+7
+10
+
+query B
+INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz))
+----
+true
+
+# This test checks that the double sub-query plan expansion caused by a
+# sub-expression being shared by two or more plan nodes does not
+# panic.
+statement ok
+CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
+
+statement ok
+INSERT INTO tab4 VALUES (1,1,1,1)
+
+statement ok
+CREATE INDEX idx_tab4_0 ON tab4 (col4,col0)
+
+query I
+SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
+----
+
+statement ok
+CREATE TABLE z (z INT PRIMARY KEY)
+
+# Regression test for #24171.
+query I
+SELECT * FROM  z WHERE CAST(COALESCE((SELECT 'a' FROM crdb_internal.zones LIMIT 1 OFFSET 5), (SELECT 'b' FROM pg_catalog.pg_trigger)) AS BYTEA) <= 'a'
+----
+
+# Regression test for #24170.
+query I
+SELECT * FROM z WHERE CAST(COALESCE((SELECT 'a'), (SELECT 'a')) AS bytea) < 'a'
+----
+
+statement ok
+CREATE TABLE test (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE test2(b INT PRIMARY KEY)
+
+# Regression test for #24225.
+query I
+SELECT * FROM test2 WHERE 0 = CASE WHEN true THEN (SELECT a FROM test LIMIT 1) ELSE 10 END
+----
+
+# Regression test for #28335.
+query I
+SELECT (SELECT ARRAY(SELECT 1))[1]
+----
+1
+
+query B
+SELECT (SELECT 123 IN (VALUES (1), (2)))
+----
+false
+
+statement error pq: subqueryfail
+SELECT * FROM xyz WHERE x IN (SELECT crdb_internal.force_error('', 'subqueryfail'))
+
+statement ok
+PREPARE a AS SELECT 1 = (SELECT $1:::int)
+
+query B
+EXECUTE a(1)
+----
+true
+
+query B
+EXECUTE a(2)
+----
+false
+
+statement ok
+PREPARE b AS SELECT EXISTS (SELECT $1:::int)
+
+query B
+EXECUTE b(3)
+----
+true
+
+# Regression test for #29205 - make sure the memory account for wrapped local
+# planNode within subqueries is properly hooked up.
+
+statement ok
+CREATE TABLE a (a TEXT PRIMARY KEY)
+
+statement ok
+SELECT (SELECT repeat(a::STRING, 2) FROM [INSERT INTO a VALUES('foo') RETURNING a]);
+
+statement ok
+UPDATE abc SET a = 2, (b, c) = (SELECT 5, 6) WHERE a = 1;
+
+# Failure in outer query with mutations in the subquery do not take effect.
+statement error pq: bar
+SELECT crdb_internal.force_error('foo', 'bar') FROM [INSERT INTO abc VALUES (11,12,13) RETURNING a]
+
+query III
+SELECT * FROM abc WHERE a = 11
+----
+
+statement error pq: bar
+INSERT INTO abc VALUES (1,2, (SELECT crdb_internal.force_error('foo', 'bar')))

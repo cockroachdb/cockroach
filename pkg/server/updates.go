@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -23,20 +24,33 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/mitchellh/reflectwalk"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/load"
+	"github.com/shirou/gopsutil/mem"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -61,6 +75,8 @@ func init() {
 	}
 }
 
+var envChannel = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+
 const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
@@ -71,19 +87,10 @@ const (
 	updateCheckJitterSeconds = 120
 )
 
-var (
-	diagnosticReportFrequency = settings.RegisterDurationSetting(
-		"diagnostics.reporting.interval",
-		"interval at which diagnostics data should be reported",
-		time.Hour,
-	)
-
-	// TODO(dt): this should be split from the report interval.
-	// statsResetFrequency = settings.RegisterDurationSetting(
-	// 	"sql.metrics.statement_details.reset_interval",
-	// 	"interval at which the collected statement statistics should be reset",
-	// 	time.Hour,
-	// )
+var diagnosticReportFrequency = settings.RegisterNonNegativeDurationSetting(
+	"diagnostics.reporting.interval",
+	"interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)",
+	time.Hour,
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
@@ -97,32 +104,11 @@ type versionInfo struct {
 	Details string `json:"details"`
 }
 
-type reportingInfo struct {
-	Node       nodeInfo                                          `json:"node"`
-	Stores     []storeInfo                                       `json:"stores"`
-	Schema     []sqlbase.TableDescriptor                         `json:"schema"`
-	QueryStats map[string]map[string]roachpb.StatementStatistics `json:"sqlstats"`
-}
-
-type nodeInfo struct {
-	NodeID     roachpb.NodeID `json:"node_id"`
-	Bytes      int            `json:"bytes"`
-	KeyCount   int            `json:"key_count"`
-	RangeCount int            `json:"range_count"`
-}
-
-type storeInfo struct {
-	NodeID     roachpb.NodeID  `json:"node_id"`
-	StoreID    roachpb.StoreID `json:"store_id"`
-	Bytes      int             `json:"bytes"`
-	KeyCount   int             `json:"key_count"`
-	RangeCount int             `json:"range_count"`
-}
-
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
-func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
+func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		defer log.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
 		startup := timeutil.Now()
 		nextUpdateCheck := startup
 		nextDiagnosticReport := startup
@@ -133,7 +119,7 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 			now := timeutil.Now()
 			runningTime := now.Sub(startup)
 
-			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
+			nextUpdateCheck = s.maybeCheckForUpdates(ctx, now, nextUpdateCheck, runningTime)
 			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
 
 			sooner := nextUpdateCheck
@@ -155,15 +141,21 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 // maybeCheckForUpdates determines if it is time to check for updates and does
 // so if it is, before returning the time at which the next check be done.
 func (s *Server) maybeCheckForUpdates(
-	now, scheduled time.Time, runningTime time.Duration,
+	ctx context.Context, now, scheduled time.Time, runningTime time.Duration,
 ) time.Time {
 	if scheduled.After(now) {
 		return scheduled
 	}
 
+	// if diagnostics reporting is disabled, we should assume that means that the
+	// user doesn't want us phoning home for new-version checks either.
+	if !log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+		return now.Add(updateCheckFrequency)
+	}
+
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
-	if succeeded := s.checkForUpdates(runningTime); !succeeded {
+	if succeeded := s.checkForUpdates(ctx, runningTime); !succeeded {
 		return now.Add(updateCheckRetryFrequency)
 	}
 
@@ -178,22 +170,71 @@ func (s *Server) maybeCheckForUpdates(
 	return now.Add(updateCheckFrequency)
 }
 
+func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time.Duration) {
+	q := url.Query()
+	b := build.GetInfo()
+	q.Set("version", b.Tag)
+	q.Set("platform", b.Platform)
+	q.Set("uuid", s.ClusterID().String())
+	q.Set("nodeid", s.NodeID().String())
+	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
+	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
+	q.Set("internal",
+		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
+	q.Set("buildchannel", b.Channel)
+	q.Set("envchannel", envChannel)
+	licenseType, err := base.LicenseType(s.st)
+	if err == nil {
+		q.Set("licensetype", licenseType)
+	} else {
+		log.Errorf(ctx, "error retrieving license type: %s", err)
+	}
+	url.RawQuery = q.Encode()
+}
+
+func fillHardwareInfo(ctx context.Context, report *diagnosticspb.DiagnosticReport) {
+	if platform, family, version, err := host.PlatformInformation(); err == nil {
+		report.Node.Os.Family = family
+		report.Node.Os.Platform = platform
+		report.Node.Os.Version = version
+	}
+
+	if virt, role, err := host.Virtualization(); err == nil && role == "guest" {
+		report.Node.Hardware.Virtualization = virt
+	}
+
+	if m, err := mem.VirtualMemory(); err == nil {
+		report.Node.Hardware.Mem.Available = m.Available
+		report.Node.Hardware.Mem.Total = m.Total
+	}
+
+	report.Node.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
+	if cpus, err := cpu.InfoWithContext(ctx); err == nil && len(cpus) > 0 {
+		report.Node.Hardware.Cpu.Sockets = int32(len(cpus))
+		c := cpus[0]
+		report.Node.Hardware.Cpu.Cores = c.Cores
+		report.Node.Hardware.Cpu.Model = c.ModelName
+		report.Node.Hardware.Cpu.Mhz = float32(c.Mhz)
+		report.Node.Hardware.Cpu.Features = c.Flags
+	}
+
+	if l, err := load.AvgWithContext(ctx); err == nil {
+		report.Node.Hardware.Loadavg15 = float32(l.Load15)
+	}
+}
+
 // checkForUpdates calls home to check for new versions for the current platform
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
-func (s *Server) checkForUpdates(runningTime time.Duration) bool {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
+func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration) bool {
+	if updatesURL == nil {
+		return true // don't bother with asking for retry -- we'll never succeed.
+	}
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "checkForUpdates")
 	defer span.Finish()
 
-	q := updatesURL.Query()
-	b := build.GetInfo()
-	q.Set("version", b.Tag)
-	q.Set("platform", b.Platform)
-	q.Set("uuid", s.node.ClusterID.String())
-	q.Set("nodeid", s.NodeID().String())
-	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
-	updatesURL.RawQuery = q.Encode()
+	addInfoToURL(ctx, updatesURL, s, runningTime)
 
 	res, err := http.Get(updatesURL.String())
 	if err != nil {
@@ -233,12 +274,6 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
-var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting.report_metrics",
-	"enable collection and reporting diagnostic metrics to cockroach labs",
-	true,
-)
-
 func (s *Server) maybeReportDiagnostics(
 	ctx context.Context, now, scheduled time.Time, running time.Duration,
 ) time.Time {
@@ -249,30 +284,43 @@ func (s *Server) maybeReportDiagnostics(
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
-	if log.DiagnosticsReportingEnabled.Get() && diagnosticsMetricsEnabled.Get() {
-		s.reportDiagnostics(running)
+	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+		s.reportDiagnostics(ctx, running)
 	}
-	s.sqlExecutor.ResetStatementStats(ctx)
+	s.pgServer.SQLServer.ResetStatementStats(ctx)
 
-	return scheduled.Add(diagnosticReportFrequency.Get())
+	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
 
-func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
-	n := s.node.recorder.GetStatusSummary()
+func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
+	info := diagnosticspb.DiagnosticReport{}
+	n := s.node.recorder.GenerateNodeStatus(ctx)
+	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
+	fillHardwareInfo(ctx, &info)
 
-	summary := nodeInfo{NodeID: s.node.Descriptor.NodeID}
+	secret := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
+	// Add in the localities.
+	for _, tier := range s.node.Descriptor.Locality.Tiers {
+		info.Node.Locality.Tiers = append(info.Node.Locality.Tiers, roachpb.Tier{
+			Key:   sql.HashForReporting(secret, tier.Key),
+			Value: sql.HashForReporting(secret, tier.Value),
+		})
+	}
 
-	stores := make([]storeInfo, len(n.StoreStatuses))
+	info.Stores = make([]diagnosticspb.StoreInfo, len(n.StoreStatuses))
 	for i, r := range n.StoreStatuses {
-		stores[i].NodeID = r.Desc.Node.NodeID
-		stores[i].StoreID = r.Desc.StoreID
-		stores[i].KeyCount = int(r.Metrics["keycount"])
-		summary.KeyCount += stores[i].KeyCount
-		stores[i].RangeCount = int(r.Metrics["replicas"])
-		summary.RangeCount += stores[i].RangeCount
-		bytes := int(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
-		stores[i].Bytes = bytes
-		summary.Bytes += bytes
+		info.Stores[i].NodeID = r.Desc.Node.NodeID
+		info.Stores[i].StoreID = r.Desc.StoreID
+		info.Stores[i].KeyCount = int64(r.Metrics["keycount"])
+		info.Stores[i].Capacity = int64(r.Metrics["capacity"])
+		info.Stores[i].Available = int64(r.Metrics["capacity.available"])
+		info.Stores[i].Used = int64(r.Metrics["capacity.used"])
+		info.Node.KeyCount += info.Stores[i].KeyCount
+		info.Stores[i].RangeCount = int64(r.Metrics["replicas"])
+		info.Node.RangeCount += info.Stores[i].RangeCount
+		bytes := int64(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
+		info.Stores[i].Bytes = bytes
+		info.Node.Bytes += bytes
 	}
 
 	schema, err := s.collectSchemaInfo(ctx)
@@ -280,28 +328,118 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		log.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
 		schema = nil
 	}
+	info.Schema = schema
 
-	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubbedStmtStats()}
+	info.FeatureUsage = telemetry.GetAndResetFeatureCounts(true /* quantize */)
+
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd rather only report the non-defaults.
+	if datums, _, err := s.internalExecutor.Query(
+		ctx, "read-setting", nil /* txn */, "SELECT name FROM system.settings",
+	); err != nil {
+		log.Warningf(ctx, "failed to read settings: %s", err)
+	} else {
+		info.AlteredSettings = make(map[string]string, len(datums))
+		for _, row := range datums {
+			name := string(tree.MustBeDString(row[0]))
+			info.AlteredSettings[name] = settings.SanitizedValue(name, &s.st.SV)
+		}
+	}
+
+	if datums, _, err := s.internalExecutor.Query(
+		ctx,
+		"read-zone-configs",
+		nil, /* txn */
+		"SELECT id, config FROM system.zones",
+	); err != nil {
+		log.Warning(ctx, err)
+	} else {
+		info.ZoneConfigs = make(map[int64]config.ZoneConfig)
+		for _, row := range datums {
+			id := int64(tree.MustBeDInt(row[0]))
+			var zone config.ZoneConfig
+			if bytes, ok := row[1].(*tree.DBytes); !ok {
+				continue
+			} else {
+				if err := protoutil.Unmarshal([]byte(*bytes), &zone); err != nil {
+					log.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
+					continue
+				}
+			}
+			var anonymizedZone config.ZoneConfig
+			anonymizeZoneConfig(&anonymizedZone, zone, secret)
+			info.ZoneConfigs[id] = anonymizedZone
+		}
+	}
+
+	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
+	return &info
 }
 
-func (s *Server) reportDiagnostics(runningTime time.Duration) {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
+func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret string) {
+	if src.RangeMinBytes != nil {
+		dst.RangeMinBytes = proto.Int64(*src.RangeMinBytes)
+	}
+	if src.RangeMaxBytes != nil {
+		dst.RangeMaxBytes = proto.Int64(*src.RangeMaxBytes)
+	}
+	if src.GC != nil {
+		dst.GC = &config.GCPolicy{TTLSeconds: src.GC.TTLSeconds}
+	}
+	if src.NumReplicas != nil {
+		dst.NumReplicas = proto.Int32(*src.NumReplicas)
+	}
+	dst.Constraints = make([]config.Constraints, len(src.Constraints))
+	for i := range src.Constraints {
+		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas
+		dst.Constraints[i].Constraints = make([]config.Constraint, len(src.Constraints[i].Constraints))
+		for j := range src.Constraints[i].Constraints {
+			dst.Constraints[i].Constraints[j].Type = src.Constraints[i].Constraints[j].Type
+			if key := src.Constraints[i].Constraints[j].Key; key != "" {
+				dst.Constraints[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.Constraints[i].Constraints[j].Value; val != "" {
+				dst.Constraints[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
+	dst.LeasePreferences = make([]config.LeasePreference, len(src.LeasePreferences))
+	for i := range src.LeasePreferences {
+		dst.LeasePreferences[i].Constraints = make([]config.Constraint, len(src.LeasePreferences[i].Constraints))
+		for j := range src.LeasePreferences[i].Constraints {
+			dst.LeasePreferences[i].Constraints[j].Type = src.LeasePreferences[i].Constraints[j].Type
+			if key := src.LeasePreferences[i].Constraints[j].Key; key != "" {
+				dst.LeasePreferences[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.LeasePreferences[i].Constraints[j].Value; val != "" {
+				dst.LeasePreferences[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
+	dst.Subzones = make([]config.Subzone, len(src.Subzones))
+	for i := range src.Subzones {
+		dst.Subzones[i].IndexID = src.Subzones[i].IndexID
+		dst.Subzones[i].PartitionName = sql.HashForReporting(secret, src.Subzones[i].PartitionName)
+		anonymizeZoneConfig(&dst.Subzones[i].Config, src.Subzones[i].Config, secret)
+	}
+}
+
+func (s *Server) reportDiagnostics(ctx context.Context, runningTime time.Duration) {
+	if reportingURL == nil {
+		return
+	}
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
-	b := new(bytes.Buffer)
-	if err := json.NewEncoder(b).Encode(s.getReportingInfo(ctx)); err != nil {
+	b, err := protoutil.Marshal(s.getReportingInfo(ctx))
+	if err != nil {
 		log.Warning(ctx, err)
 		return
 	}
 
-	q := reportingURL.Query()
-	q.Set("version", build.GetInfo().Tag)
-	q.Set("uuid", s.node.ClusterID.String())
-	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
-	reportingURL.RawQuery = q.Encode()
-
-	res, err := http.Post(reportingURL.String(), "application/json", b)
-
+	addInfoToURL(ctx, reportingURL, s, runningTime)
+	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
@@ -310,6 +448,7 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 		}
 		return
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)

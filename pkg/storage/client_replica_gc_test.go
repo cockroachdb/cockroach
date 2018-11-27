@@ -11,17 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Kenji Kaneda (kenji.kaneda@gmail.com)
 
 package storage_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -47,7 +45,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// waits for the first.
 	cfg := storage.TestStoreConfig(nil)
 	mtc.storeConfig = &cfg
-	mtc.storeConfig.TestingKnobs.TestingEvalFilter =
+	mtc.storeConfig.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest)
 			if !ok || filterArgs.Sid != 2 {
@@ -74,6 +72,32 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.Start(t, numStores)
 
 	mtc.replicateRange(rangeID, 1, 2)
+
+	{
+		repl1, err := mtc.stores[1].GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Put some bogus data on the replica which we're about to remove. Then,
+		// at the end of the test, check that that sideloaded storage is now
+		// empty (in other words, GC'ing the Replica took care of cleanup).
+		repl1.PutBogusSideloadedData()
+		if !repl1.HasBogusSideloadedData() {
+			t.Fatal("sideloaded storage ate our data")
+		}
+
+		defer func() {
+			if !t.Failed() {
+				testutils.SucceedsSoon(t, func() error {
+					if repl1.HasBogusSideloadedData() {
+						return errors.Errorf("first replica still has sideloaded files despite GC")
+					}
+					return nil
+				})
+			}
+		}()
+	}
+
 	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.

@@ -11,18 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package sql
 
 import (
+	"context"
 	"sync"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -43,7 +40,7 @@ import (
 // 2. If two dependent plans are added to the queue, the plan added first will be
 //    executed before the plan added second.
 // 3. No plans will begin execution once an error has been seen until Wait is
-//    called to drain the plans and reset the error state.
+//    called to drain the plans and reset the error-set state.
 //
 type ParallelizeQueue struct {
 	// analyzer is a DependencyAnalyzer that computes when certain plans are dependent
@@ -54,9 +51,10 @@ type ParallelizeQueue struct {
 	// channels. These channels are closed when the plan has finished executing.
 	plans map[planNode]doneChan
 
-	// err is the first error seen since the last call to ParallelizeQueue.Wait.
-	// Referred to as the current "parallel batch's error".
-	err error
+	// errs is the set of error seen since the last call to Wait. Referred to as
+	// the current "parallel batch's error-set". This will be populated by any
+	// errors returned from the exec functions passed to Add.
+	errs []error
 
 	mu           syncutil.Mutex
 	runningGroup sync.WaitGroup
@@ -74,18 +72,26 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 	}
 }
 
-// Add inserts a new plan in the queue and executes the provided function when
-// all plans that it depends on have completed successfully, obeying the guarantees
-// made by the ParallelizeQueue above. The exec function should be used to run the
-// planNode and return any error observed during its execution.
+// Add inserts the current plan in the queue and executes the provided function
+// when all plans that it depends on have completed successfully, obeying the
+// guarantees made by the ParallelizeQueue above.
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(planNode) error) {
-	prereqs, finishLocked := pq.insertInQueue(ctx, plan)
+func (pq *ParallelizeQueue) Add(params runParams, exec func() error) error {
+	prereqs, finishLocked, err := pq.insertInQueue(params)
+	if err != nil {
+		params.p.curPlan.close(params.ctx)
+		return err
+	}
+
 	pq.runningGroup.Add(1)
 	go func() {
 		defer pq.runningGroup.Done()
+		// Be careful to close the planner's top-level node, and not just
+		// the hash key retrieved above -- there may be more work done by
+		// this close() method than plan.Close().
+		defer params.p.curPlan.close(params.ctx)
 
 		// Block on the execution of each prerequisite plan blocking us.
 		for _, prereq := range prereqs {
@@ -96,7 +102,7 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 		if abort := func() bool {
 			pq.mu.Lock()
 			defer pq.mu.Unlock()
-			if pq.err != nil {
+			if len(pq.errs) > 0 {
 				finishLocked()
 				return true
 			}
@@ -106,35 +112,37 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 		}
 
 		// Execute the plan.
-		err := exec(plan)
+		// No need to give it the plan it needs to operate on -- it will
+		// know about the current plan from its captured planner
+		// reference.
+		err := exec()
 
 		pq.mu.Lock()
-		defer pq.mu.Unlock()
-
-		if pq.err == nil {
-			// If we have not already seen an error since the last Wait, set the
-			// error state.
-			pq.err = err
+		if err != nil {
+			pq.errs = append(pq.errs, err)
 		}
-
 		finishLocked()
+		pq.mu.Unlock()
 	}()
+	return nil
 }
 
 // insertInQueue inserts the planNode in the queue. It returns a list of the "done"
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *ParallelizeQueue) insertInQueue(
-	ctx context.Context, newPlan planNode,
-) ([]doneChan, func()) {
+func (pq *ParallelizeQueue) insertInQueue(params runParams) ([]doneChan, func(), error) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
 	// Determine the set of prerequisite plans.
-	prereqs := pq.prereqsForPlanLocked(ctx, newPlan)
+	prereqs, err := pq.prereqsForPlanLocked(params)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// Insert newPlan in running set.
+	// Insert the current plan in running set.
+	newPlan := params.p.curPlan.plan
 	newDoneChan := make(doneChan)
 	pq.plans[newPlan] = newDoneChan
 	finish := func() {
@@ -147,22 +155,30 @@ func (pq *ParallelizeQueue) insertInQueue(
 		// caching any state about the plan.
 		pq.analyzer.Clear(newPlan)
 	}
-	return prereqs, finish
+	return prereqs, finish, nil
 }
 
 // prereqsForPlanLocked determines the set of plans currently running and pending
 // that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *ParallelizeQueue) prereqsForPlanLocked(ctx context.Context, newPlan planNode) []doneChan {
+func (pq *ParallelizeQueue) prereqsForPlanLocked(params runParams) ([]doneChan, error) {
+	// First, submit the planNode to the analyzer for analysis. This assures
+	// that the analysis takes place before the plan is executed, even if
+	// no calls to analyzer.Independent are necessary at this time.
+	if err := pq.analyzer.Analyze(params); err != nil {
+		return nil, err
+	}
+
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
+	newPlan := params.p.curPlan.plan
 	for plan, doneChan := range pq.plans {
-		if !pq.analyzer.Independent(ctx, plan, newPlan) {
+		if !pq.analyzer.Independent(plan, newPlan) {
 			prereqs = append(prereqs, doneChan)
 		}
 	}
-	return prereqs
+	return prereqs, nil
 }
 
 // Len returns the number of plans in the ParallelizeQueue.
@@ -173,32 +189,32 @@ func (pq *ParallelizeQueue) Len() int {
 }
 
 // Wait blocks until the ParallelizeQueue finishes executing all plans. It then
-// returns the error of the last batch of parallelized execution before reseting
-// the error to allow for future use.
+// returns the error-set of the last batch of parallelized execution before reseting
+// the error-set to allow for future use.
 //
 // Wait can not be called concurrently with Add. If we need to lift this
 // restriction, consider replacing the sync.WaitGroup with a syncutil.RWMutex,
 // which will provide the desired starvation and ordering properties. Those
 // being that once Wait is called, future Adds will not be reordered ahead
 // of Waits attempts to drain all running and pending plans.
-func (pq *ParallelizeQueue) Wait() error {
+func (pq *ParallelizeQueue) Wait() []error {
 	pq.runningGroup.Wait()
 
 	// There is no race condition between waiting on the WaitGroup and locking
 	// the mutex because ParallelizeQueue.Wait cannot be called concurrently with
-	// Add. We lock only because Err may be called concurrently.
+	// Add. We lock only because Errs may be called concurrently.
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	err := pq.err
-	pq.err = nil
-	return err
+	errs := pq.errs
+	pq.errs = nil
+	return errs
 }
 
-// Err returns the ParallelizeQueue's error.
-func (pq *ParallelizeQueue) Err() error {
+// Errs returns the ParallelizeQueue's error-set.
+func (pq *ParallelizeQueue) Errs() []error {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	return pq.err
+	return pq.errs
 }
 
 // DependencyAnalyzer determines if plans are independent of one another, where
@@ -210,12 +226,20 @@ func (pq *ParallelizeQueue) Err() error {
 // DependencyAnalyzer implementations do not need to be safe to use from multiple
 // goroutines concurrently.
 type DependencyAnalyzer interface {
-	// Independent determines if the provided planNodes are independent from one
-	// another. Implementations of Independent are always commutative.
-	Independent(context.Context, planNode, planNode) bool
-	// Clear is a hint to the DependencyAnalyzer that the provided planNode will
-	// no longer be needed. It is useful for DependencyAnalyzers that cache state
-	// on the planNodes.
+	// Analyze collects any upfront analysis that is necessary to make future
+	// independence decisions about the current plan. It must be called before
+	// calling Independent for each planNode, and the current plan provided must
+	// not be running when Analyze is called. Analyze is allowed to mutate the
+	// provided planner if necessary.
+	Analyze(runParams) error
+	// Independent determines if the provided planNodess are independent from
+	// one another. Either planNode may be running when Independent is called,
+	// so the method will not modify the plans in any way. Implementations of
+	// Independent are always commutative.
+	Independent(planNode, planNode) bool
+	// Clear is a hint to the DependencyAnalyzer that the provided plan will
+	// no longer be needed. It is useful for DependencyAnalyzers that cache
+	// state on the planNodes during Analyze.
 	Clear(planNode)
 }
 
@@ -226,11 +250,12 @@ var _ DependencyAnalyzer = &spanBasedDependencyAnalyzer{}
 // to a function for all dependency decisions.
 type dependencyAnalyzerFunc func(planNode, planNode) bool
 
-func (f dependencyAnalyzerFunc) Independent(_ context.Context, p1 planNode, p2 planNode) bool {
+func (f dependencyAnalyzerFunc) Independent(p1 planNode, p2 planNode) bool {
 	return f(p1, p2)
 }
 
-func (f dependencyAnalyzerFunc) Clear(_ planNode) {}
+func (f dependencyAnalyzerFunc) Analyze(_ runParams) error { return nil }
+func (f dependencyAnalyzerFunc) Clear(_ planNode)          {}
 
 // NoDependenciesAnalyzer is a DependencyAnalyzer that performs no analysis on
 // planNodes and asserts that all plans are independent.
@@ -265,10 +290,28 @@ func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
 	}
 }
 
-func (a *spanBasedDependencyAnalyzer) Independent(
-	ctx context.Context, p1 planNode, p2 planNode,
-) bool {
-	a1, a2 := a.analyzePlan(ctx, p1), a.analyzePlan(ctx, p2)
+func (a *spanBasedDependencyAnalyzer) Analyze(params runParams) error {
+	p := params.p.curPlan.plan
+	readSpans, writeSpans, err := params.p.curPlan.collectSpans(params)
+	if err != nil {
+		return err
+	}
+	hasOrderingFn := containsOrderingFunction(params.ctx, p)
+	analysis := planAnalysis{
+		read:          rangeGroupFromSpans(readSpans),
+		write:         rangeGroupFromSpans(writeSpans),
+		hasOrderingFn: hasOrderingFn,
+	}
+	a.analysisCache[p] = analysis
+	return nil
+}
+
+func (a *spanBasedDependencyAnalyzer) Independent(p1 planNode, p2 planNode) bool {
+	a1, ok1 := a.analysisCache[p1]
+	a2, ok2 := a.analysisCache[p2]
+	if !ok1 || !ok2 {
+		panic("Analyze must be called for each plan before Independent")
+	}
 	if a1.hasOrderingFn || a2.hasOrderingFn {
 		return false
 	}
@@ -284,23 +327,8 @@ func (a *spanBasedDependencyAnalyzer) Independent(
 	return true
 }
 
-func (a *spanBasedDependencyAnalyzer) analyzePlan(ctx context.Context, p planNode) planAnalysis {
-	if a, ok := a.analysisCache[p]; ok {
-		return a
-	}
-
-	readSpans, writeSpans, err := p.Spans(ctx)
-	if err != nil {
-		panic(err)
-	}
-	hasOrderingFn := containsOrderingFunction(ctx, p)
-	analysis := planAnalysis{
-		read:          rangeGroupFromSpans(readSpans),
-		write:         rangeGroupFromSpans(writeSpans),
-		hasOrderingFn: hasOrderingFn,
-	}
-	a.analysisCache[p] = analysis
-	return analysis
+func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
+	delete(a.analysisCache, p)
 }
 
 // orderingFunctions is a set of all functions that preclude statement independence.
@@ -312,8 +340,8 @@ var orderingFunctions = map[string]struct{}{
 
 func containsOrderingFunction(ctx context.Context, plan planNode) bool {
 	sawOrderingFn := false
-	po := planObserver{expr: func(_, _ string, n int, expr parser.Expr) {
-		if f, ok := expr.(*parser.FuncExpr); ok {
+	po := planObserver{expr: func(_ observeVerbosity, _, _ string, n int, expr tree.Expr) {
+		if f, ok := expr.(*tree.FuncExpr); ok {
 			if _, ok := orderingFunctions[f.Func.String()]; ok {
 				sawOrderingFn = true
 			}
@@ -333,25 +361,21 @@ func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
 	return rg
 }
 
-func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
-	delete(a.analysisCache, p)
-}
-
 // IsStmtParallelized determines if a given statement's execution should be
 // parallelized. This means that its results should be mocked out, and that
 // it should be run asynchronously and in parallel with other statements that
 // are independent.
-func IsStmtParallelized(stmt parser.Statement) bool {
-	parallelizedRetClause := func(ret parser.ReturningClause) bool {
-		_, ok := ret.(*parser.ReturningNothing)
+func IsStmtParallelized(stmt tree.Statement) bool {
+	parallelizedRetClause := func(ret tree.ReturningClause) bool {
+		_, ok := ret.(*tree.ReturningNothing)
 		return ok
 	}
 	switch s := stmt.(type) {
-	case *parser.Delete:
+	case *tree.Delete:
 		return parallelizedRetClause(s.Returning)
-	case *parser.Insert:
+	case *tree.Insert:
 		return parallelizedRetClause(s.Returning)
-	case *parser.Update:
+	case *tree.Update:
 		return parallelizedRetClause(s.Returning)
 	}
 	return false

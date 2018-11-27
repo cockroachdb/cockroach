@@ -1,0 +1,123 @@
+index-constraints vars=(int, int) index=(@1)
+@1 = 1 AND @2 = 2
+----
+[/1 - /1]
+Remaining filter: @2 = 2
+
+index-constraints vars=(int, int) index=(@2)
+@1 = 1 AND @2 = 2
+----
+[/2 - /2]
+Remaining filter: @1 = 1
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > NULL
+----
+
+index-constraints vars=(int, int) index=(@1, @2)
+@2 = 1 AND @1 > NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 > 2 AND @1 < 4
+----
+[/3 - /3]
+
+index-constraints vars=(int) index=(@1)
+@1 >= 2 AND @1 <= 4
+----
+[/2 - /4]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 > 2 AND @2 > 5
+----
+[/3/6 - ]
+Remaining filter: @2 > 5
+
+index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 > 2 AND @2 < 5
+----
+[/3/4 - ]
+Remaining filter: @2 < 5
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 != 1 AND @2 > 5
+----
+(/NULL - /0]
+[/2/6 - ]
+Remaining filter: @2 > 5
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 != 1 AND @2 < 5
+----
+(/NULL - /0/4]
+(/2/NULL - ]
+Remaining filter: @2 < 5
+
+index-constraints vars=(int) index=(@1)
+@1 >= 1 AND @1 <= 5 AND @1 != 3
+----
+[/1 - /2]
+[/4 - /5]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/1/8 - /2/9]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+index-constraints vars=(int, int) index=(@1 desc, @2)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/2/8 - /1/9]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/1/9 - /2/8]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
+----
+[/2/6 - /3/7]
+Remaining filter: (@2 > 5) AND (@2 < 8)
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 > 1 AND @1 < 4 AND @2 = 5
+----
+[/2/5 - /3/5]
+Remaining filter: @2 = 5
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > 3 AND @2 < 5
+----
+[/1/4 - /1/4]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > 3 AND @2 < 8
+----
+[/1/4 - /1/7]
+
+index-constraints vars=(int) index=(@1)
+@1 > 2 AND @1 < 1
+----
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 != 2
+----
+(/1/NULL - /1/1]
+[/1/3 - /1]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @1 <= 5 AND @2 != 2
+----
+(/1/NULL - /5]
+Remaining filter: @2 != 2
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@3 > 0 OR @3 < 10)
+----
+[/1 - /1]
+Remaining filter: (@3 > 0) OR (@3 < 10)

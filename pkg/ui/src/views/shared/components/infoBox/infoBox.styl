@@ -1,0 +1,35 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require "~styl/base/palette.styl"
+
+.info-box
+  margin-top 20px
+  padding 10px
+  padding-left 26px
+  background-color $info-box-fill-color
+  border-left 5px solid $info-box-border-color
+  max-width 560px
+
+  h1, h2, h3, h4, h5
+    font-weight bold
+    color $info-box-heading-color
+
+  p
+    margin-top 10px
+    color $body-color
+
+  a
+    text-decoration none
+    color $link-color

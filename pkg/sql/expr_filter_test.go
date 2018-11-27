@@ -11,17 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -29,24 +30,24 @@ type countVarsVisitor struct {
 	numNames, numValues int
 }
 
-func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *countVarsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch expr.(type) {
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		v.numValues++
-	case *parser.ColumnItem:
+	case *tree.ColumnItem:
 		v.numNames++
 	}
 
 	return true, expr
 }
 
-func (*countVarsVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*countVarsVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // countVars counts how many *ColumnItems and *IndexedVar nodes are in an expression.
-func countVars(expr parser.Expr) (numNames, numValues int) {
+func countVars(expr tree.Expr) (numNames, numValues int) {
 	v := countVarsVisitor{}
 	if expr != nil {
-		parser.WalkExprConst(&v, expr)
+		tree.WalkExprConst(&v, expr)
 	}
 	return v.numNames, v.numValues
 }
@@ -115,26 +116,91 @@ func TestSplitFilter(t *testing.T) {
 		{`a IN (1, b) AND c`, []string{"a"}, `<nil>`, `(a IN (1, b)) AND c`},
 		{`a IN (1, b) AND c`, []string{"a", "b"}, `a IN (1, b)`, `c`},
 		{`a IN (1, b) AND c`, []string{"c"}, `c`, `a IN (1, b)`},
+
+		{`(a, b, j) = (1, 2, 3)`, []string{"b"}, `b = 2`, `(a, b, j) = (1, 2, 3)`},
+		{`(a, b, j) = (1, 2, 3)`, []string{"a", "j"}, `(a, j) = (1, 3)`, `(a, b, j) = (1, 2, 3)`},
+
+		{`(a, b, j) != (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) != (1, 2, 3)`},
+		{`(a, b, j) != (1, 2, 3)`, []string{"a", "j"}, `<nil>`, `(a, b, j) != (1, 2, 3)`},
+
+		{`(a, b, j) < (1, 2, 3)`, []string{"a"}, `a <= 1`, `(a, b, j) < (1, 2, 3)`},
+		{`(a, b, j) < (1, 2, 3)`, []string{"a", "b"}, `(a, b) <= (1, 2)`, `(a, b, j) < (1, 2, 3)`},
+		{`(a, b, j) < (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) < (1, 2, 3)`},
+
+		{`(a, b, j) <= (1, 2, 3)`, []string{"a"}, `a <= 1`, `(a, b, j) <= (1, 2, 3)`},
+		{`(a, b, j) <= (1, 2, 3)`, []string{"a", "b"}, `(a, b) <= (1, 2)`, `(a, b, j) <= (1, 2, 3)`},
+		{`(a, b, j) <= (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) <= (1, 2, 3)`},
+
+		{`(a, b, j) > (1, 2, 3)`, []string{"a"}, `a >= 1`, `(a, b, j) > (1, 2, 3)`},
+		{`(a, b, j) > (1, 2, 3)`, []string{"a", "b"}, `(a, b) >= (1, 2)`, `(a, b, j) > (1, 2, 3)`},
+		{`(a, b, j) > (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) > (1, 2, 3)`},
+
+		{`(a, b, j) >= (1, 2, 3)`, []string{"a"}, `a >= 1`, `(a, b, j) >= (1, 2, 3)`},
+		{`(a, b, j) >= (1, 2, 3)`, []string{"a", "b"}, `(a, b) >= (1, 2)`, `(a, b, j) >= (1, 2, 3)`},
+		{`(a, b, j) >= (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) >= (1, 2, 3)`},
+
+		{`NOT ((a, b, j) = (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) = (1, 2, 3))`},
+		{`NOT ((a, b, j) = (1, 2, 3))`, []string{"a", "j"}, `<nil>`, `NOT ((a, b, j) = (1, 2, 3))`},
+
+		{`NOT ((a, b, j) != (1, 2, 3))`, []string{"b"}, `NOT (b != 2)`, `NOT ((a, b, j) != (1, 2, 3))`},
+		{`NOT ((a, b, j) != (1, 2, 3))`, []string{"a", "j"}, `NOT ((a, j) != (1, 3))`, `NOT ((a, b, j) != (1, 2, 3))`},
+
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"a"}, `NOT (a < 1)`, `NOT ((a, b, j) < (1, 2, 3))`},
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) < (1, 2))`, `NOT ((a, b, j) < (1, 2, 3))`},
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) < (1, 2, 3))`},
+
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"a"}, `NOT (a < 1)`, `NOT ((a, b, j) <= (1, 2, 3))`},
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) < (1, 2))`, `NOT ((a, b, j) <= (1, 2, 3))`},
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) <= (1, 2, 3))`},
+
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"a"}, `NOT (a > 1)`, `NOT ((a, b, j) > (1, 2, 3))`},
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) > (1, 2))`, `NOT ((a, b, j) > (1, 2, 3))`},
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) > (1, 2, 3))`},
+
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"a"}, `NOT (a > 1)`, `NOT ((a, b, j) >= (1, 2, 3))`},
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) > (1, 2))`, `NOT ((a, b, j) >= (1, 2, 3))`},
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) >= (1, 2, 3))`},
+
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a"}, `a <= 1`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "j"}, `a <= 1`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "b", "j"}, `(a, b, j) <= (1, 2, 3)`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "b", "h"}, `(a, b) <= (1, 2)`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+
+		// Regression tests for #21243.
+		{
+			`((a, b, j) = (1, 2, 6)) AND (h > 8.0)`,
+			[]string{"a", "b"},
+			`(a, b) = (1, 2)`,
+			`((a, b, j) = (1, 2, 6)) AND (h > 8.0)`,
+		},
+		{
+			`(((a, b) > (1, 2)) OR (((a, b) = (1, 2)) AND (j < 6))) OR (((a, b, j) = (1, 2, 6)) AND (h > 8.0))`,
+			[]string{"a", "b"},
+			`(((a, b) > (1, 2)) OR ((a, b) = (1, 2))) OR ((a, b) = (1, 2))`,
+			`(((a, b) > (1, 2)) OR (((a, b) = (1, 2)) AND (j < 6))) OR (((a, b, j) = (1, 2, 6)) AND (h > 8.0))`,
+		},
 	}
 
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
-			sel := makeSelectNode(t)
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
+			defer p.extendedEvalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			// A function that "converts" only vars in the list.
-			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
-				iv := expr.(*parser.IndexedVar)
+			conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
+				iv := expr.(*tree.IndexedVar)
 				colName := iv.String()
 				for _, col := range d.vars {
 					if colName == col {
 						// Convert to a VarName (to check that conversion happens correctly). It
 						// will print the same.
-						return true, parser.UnresolvedName{parser.Name(colName)}
+						return true, &tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{colName}}
 					}
 				}
 				return false, nil
 			}
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
 			exprStr := expr.String()
 			res, rem := splitFilter(expr, conv)
 			// We use Sprint to handle the 'nil' case correctly.
@@ -158,6 +224,61 @@ func TestSplitFilter(t *testing.T) {
 			if exprStr != expr.String() {
 				t.Errorf("Expression changed after splitFilter; before: `%s` after: `%s`",
 					exprStr, expr.String())
+			}
+		})
+	}
+}
+
+func TestExtractNotNullConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Note: see testTableDesc for the variable schema.
+	testCases := []struct {
+		expr        string
+		notNullVars []int
+	}{
+		{`c`, []int{2}},
+		{`NOT c`, []int{2}},
+		{`a = 1`, []int{0}},
+		{`a IS NULL`, []int{}},
+		{`a IS NOT NULL`, []int{0}},
+		{`NOT (a = 1)`, []int{0}},
+		{`NOT (a IS NULL)`, []int{}}, // We could do better here.
+		{`NOT (a IS NOT NULL)`, []int{}},
+		{`(a IS NOT NULL) AND (b IS NOT NULL)`, []int{0, 1}},
+		{`(a IS NOT NULL) OR (b IS NOT NULL)`, []int{}},
+		{`(a IS NOT NULL) OR (a IS NULL)`, []int{}},
+		{`a > b`, []int{0, 1}},
+		{`a = b`, []int{0, 1}},
+		{`a + b > 1`, []int{0, 1}},
+		{`c OR d`, []int{}}, // `NULL OR true` and `true OR NULL` are true.
+		{`a = 1 AND b = 2`, []int{0, 1}},
+		{`a = 1 OR b = 2`, []int{}},
+		{`(a = 1 AND b = 2) OR (b = 3 AND j = 4)`, []int{1}},
+		{`(a, b) = (1, 2)`, []int{0, 1}},
+		{`(a, b) > (1, 2)`, []int{}},
+		{`a IN (b,j)`, []int{0}},
+		{`(a, b) IN ((1,j))`, []int{0, 1}},
+		{`a NOT IN (b,j)`, []int{0}},
+		{`(a, b) NOT IN ((1,j))`, []int{0, 1}},
+		{`(a + b, 1 + j) IN ((1, 2), (3, 4))`, []int{0, 1, 9}},
+	}
+
+	p := makeTestPlanner()
+	for _, tc := range testCases {
+		t.Run(tc.expr, func(t *testing.T) {
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
+			defer p.extendedEvalCtx.Stop(context.Background())
+
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, tc.expr, sel)
+			result := extractNotNullConstraints(expr)
+			var expected util.FastIntSet
+			for _, v := range tc.notNullVars {
+				expected.Add(v)
+			}
+			if !result.Equals(expected) {
+				t.Errorf("expected %s, got %s", &expected, result)
 			}
 		})
 	}

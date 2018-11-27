@@ -1,0 +1,117 @@
+# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
+
+query TII colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  equal_rows
+1            0           1000
+2            0           1000
+3            0           1000
+4            0           1000
+5            0           1000
+6            0           1000
+7            0           1000
+8            0           1000
+9            0           1000
+10           0           1000
+
+statement ok
+CREATE STATISTICS "" ON b FROM data
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+NULL             {"b"}         10000      10              0
+
+# Verify that we can package statistics into a json object and later restore them.
+let $json_stats
+SHOW STATISTICS USING JSON FOR TABLE data
+
+statement ok
+DELETE FROM system.table_statistics
+
+statement ok
+ALTER TABLE data INJECT STATISTICS '$json_stats'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+NULL             {"b"}         10000      10              0
+
+# Verify that any other statistics are blown away when we INJECT.
+statement ok
+CREATE STATISTICS s3 ON c FROM data
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+NULL             {"b"}         10000      10              0
+s3               {"c"}         10000      10              0
+
+statement ok
+ALTER TABLE data INJECT STATISTICS '$json_stats'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {"a"}         10000      10              0
+NULL             {"b"}         10000      10              0

@@ -11,17 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package sql
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/context"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,11 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 func newPlanNode() planNode {
-	return &emptyNode{}
+	return newZeroNode(nil /* columns */)
 }
 
 // assertLen asserts the number of plans in the ParallelizeQueue.
@@ -54,19 +52,32 @@ func assertLenEventually(t *testing.T, pq *ParallelizeQueue, exp int) {
 	})
 }
 
-// waitAndAssertEmptyWithErr waits for the ParallelizeQueue to drain, then asserts
-// that the queue is empty. It returns the error produced by ParallelizeQueue.Wait.
-func waitAndAssertEmptyWithErr(t *testing.T, pq *ParallelizeQueue) error {
-	err := pq.Wait()
+// waitAndAssertEmptyWithErrs waits for the ParallelizeQueue to drain, then asserts
+// that the queue is empty. It returns the errors produced by ParallelizeQueue.Wait.
+func waitAndAssertEmptyWithErrs(t *testing.T, pq *ParallelizeQueue) []error {
+	errs := pq.Wait()
 	if l := pq.Len(); l != 0 {
 		t.Errorf("expected empty ParallelizeQueue, found %d plans remaining", l)
 	}
-	return err
+	return errs
 }
 
 func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
-	if err := waitAndAssertEmptyWithErr(t, pq); err != nil {
-		t.Fatalf("unexpected error waiting for ParallelizeQueue to drain: %v", err)
+	if errs := waitAndAssertEmptyWithErrs(t, pq); len(errs) > 0 {
+		t.Fatalf("unexpected errors waiting for ParallelizeQueue to drain: %v", errs)
+	}
+}
+
+func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func() error) {
+	p := makeTestPlanner()
+	params := runParams{
+		ctx:             context.TODO(),
+		p:               p,
+		extendedEvalCtx: &p.extendedEvalCtx,
+	}
+	params.p.curPlan.plan = plan
+	if err := pq.Add(params, exec); err != nil {
+		t.Fatalf("ParallelizeQueue.Add failed: %v", err)
 	}
 }
 
@@ -75,27 +86,26 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 // we use channels to guarantee deterministic execution.
 func TestParallelizeQueueNoDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
 	var res []int
 	run1, run2, run3 := make(chan struct{}), make(chan struct{}), make(chan struct{})
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -116,7 +126,6 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 // need no extra synchronization to guarantee deterministic execution.
 func TestParallelizeQueueAllDependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
 	var res []int
 	run := make(chan struct{})
@@ -126,18 +135,18 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -156,7 +165,6 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 // until the prerequisite plan completes execution.
 func TestParallelizeQueueSingleDependency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -171,18 +179,18 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -202,7 +210,6 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 // and the prerequisite plan throws an error.
 func TestParallelizeQueueError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -218,19 +225,19 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -239,9 +246,9 @@ func TestParallelizeQueueError(t *testing.T) {
 	})
 	close(run3)
 
-	resErr := waitAndAssertEmptyWithErr(t, &pq)
-	if resErr != planErr {
-		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
+	resErrs := waitAndAssertEmptyWithErrs(t, &pq)
+	if len(resErrs) != 1 || resErrs[0] != planErr {
+		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
 	exp := []int{3, 1}
@@ -256,7 +263,6 @@ func TestParallelizeQueueError(t *testing.T) {
 // will be cleared.
 func TestParallelizeQueueAddAfterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -264,7 +270,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -272,13 +278,13 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		// We need this, because any signal from within plan1's execution could
 		// race with the beginning of plan2.
-		if pqErr := pq.Err(); pqErr == nil {
+		if pqErrs := pq.Errs(); len(pqErrs) == 0 {
 			return errors.Errorf("plan1 not yet run")
 		}
 		return nil
 	})
 
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -287,12 +293,12 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Wait for the ParallelizeQueue to clear and assert that we see the
 	// correct error.
-	resErr := waitAndAssertEmptyWithErr(t, &pq)
-	if resErr != planErr {
-		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
+	resErrs := waitAndAssertEmptyWithErrs(t, &pq)
+	if len(resErrs) != 1 || resErrs[0] != planErr {
+		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -306,15 +312,18 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	}
 }
 
-func planNodeForQuery(
-	t *testing.T, s serverutils.TestServerInterface, sql string,
-) (planNode, func()) {
-	kvDB := s.KVClient().(*client.DB)
-	txn := client.NewTxn(kvDB)
-	txn.Proto().OrigTimestamp = s.Clock().Now()
-	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
-	p.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
-	p.session.Database = "test"
+func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
+	kvDB := s.DB()
+	txn := client.NewTxn(context.TODO(), kvDB, s.NodeID(), client.RootTxn)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	p, cleanup := newInternalPlanner(
+		"plan", txn, security.RootUser, &MemoryMetrics{}, &execCfg)
+	p.extendedEvalCtx.Tables.leaseMgr = s.LeaseManager().(*LeaseManager)
+	// HACK: we're mutating the SessionData directly, without going through the
+	// SessionDataMutator. We're not really supposed to do that, but were we to go
+	// through the mutator, we'd need a session and then we'd have to reset the
+	// planner with the session so that its copy of the session data gets updated.
+	p.extendedEvalCtx.SessionData.Database = "test"
 
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
@@ -324,12 +333,12 @@ func planNodeForQuery(
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(context.TODO(), stmt)
-	if err != nil {
+	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
-	return plan, func() {
-		finishInternalPlanner(p)
+	return p, func() {
+		p.curPlan.close(context.TODO())
+		cleanup()
 	}
 }
 
@@ -349,15 +358,18 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 	}
 	if _, err := db.Exec(`
 		CREATE TABLE bar (
-			k INT PRIMARY KEY, 
-			v INT, 
-			a INT, 
+			k INT PRIMARY KEY DEFAULT 0,
+			v INT DEFAULT 1,
+			a INT,
 			UNIQUE INDEX idx(v)
 		)
 	`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE fks (f INT REFERENCES foo)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE baz (a INT DEFAULT 1)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -383,11 +395,14 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`DELETE FROM bar`, `SELECT * FROM bar`, false},
 		{`DELETE FROM bar`, `SELECT * FROM bar@idx`, false},
 
+		{`DELETE FROM bar`, `WITH a AS (DELETE FROM bar RETURNING v) SELECT EXISTS(SELECT * FROM a) AS e`, false},
+		{`DELETE FROM bar`, `SELECT EXISTS(SELECT * FROM [DELETE FROM bar RETURNING v]) AS e`, false},
+		{`SELECT EXISTS(SELECT * FROM [DELETE FROM foo WHERE k = 1 RETURNING k]) AS e`,
+			`SELECT EXISTS(SELECT * FROM [DELETE FROM bar WHERE k = 1 RETURNING v]) AS e`, true},
+
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar VALUES (1)`, true},
-		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (1)`, false},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT k FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT f FROM fks`, true},
-		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (1)`, false},
 		{`INSERT INTO bar VALUES (1)`, `INSERT INTO fks VALUES (1)`, true},
 		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM bar`, true},
@@ -395,6 +410,30 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`INSERT INTO bar VALUES (1)`, `SELECT * FROM bar@idx`, false},
 		{`INSERT INTO foo VALUES (1)`, `DELETE FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `DELETE FROM bar`, true},
+
+		// INSERT ... VALUES statements are special-cased with tighter span
+		// analysis to allow inserts into the same table to be independent.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (1)`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (2)`, true},
+		// Subqueries can be arbitrarily-complex, so they don't work.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo SELECT 2`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo SELECT 2 FROM foo`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES ((SELECT 2))`, false},
+		// Secondary indexes need to be independent too.
+		{`INSERT INTO bar VALUES (1)`, `INSERT INTO bar VALUES (1)`, false},
+		{`INSERT INTO bar VALUES (1)`, `INSERT INTO bar VALUES (2)`, false},
+		{`INSERT INTO bar VALUES (1, 5)`, `INSERT INTO bar VALUES (2, 5)`, false},
+		{`INSERT INTO bar VALUES (1, 5)`, `INSERT INTO bar VALUES (2, 6)`, true},
+		{`INSERT INTO bar (v, k) VALUES (1, 5)`, `INSERT INTO bar (v, k) VALUES (2, 5)`, false},
+		{`INSERT INTO bar (k, v) VALUES (1, 5)`, `INSERT INTO bar (k, v) VALUES (2, 5)`, false},
+		{`INSERT INTO bar (v, k) VALUES (NULL, 5)`, `INSERT INTO bar (v, k) VALUES (NULL, 5)`, false},
+		{`INSERT INTO bar (k, v) VALUES (1, NULL)`, `INSERT INTO bar (k, v) VALUES (2, NULL)`, true},
+		// DEFAULT VALUES clauses are handled by this special-case as well.
+		{`INSERT INTO bar DEFAULT VALUES`, `INSERT INTO bar DEFAULT VALUES`, false},
+		{`INSERT INTO baz DEFAULT VALUES`, `INSERT INTO baz DEFAULT VALUES`, true},
+		// This also tightens FK span analysis for INSERT ... VALUES statements.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (1)`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (2)`, true},
 
 		{`UPDATE foo SET k = 1`, `UPDATE bar SET k = 1`, true},
 		{`UPDATE foo SET k = 1`, `UPDATE foo SET k = 1`, false},
@@ -425,17 +464,79 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				da := NewSpanBasedDependencyAnalyzer()
 
-				plan1, finish1 := planNodeForQuery(t, s, q1)
+				planAndAnalyze := func(q string) (planNode, func()) {
+					p, finish := planQuery(t, s, q)
+					params := runParams{
+						ctx:             context.TODO(),
+						extendedEvalCtx: &p.extendedEvalCtx,
+						p:               p,
+					}
+
+					if err := da.Analyze(params); err != nil {
+						t.Fatalf("plan analysis failed: %v", err)
+					}
+
+					return p.curPlan.plan, func() {
+						finish()
+						da.Clear(p.curPlan.plan)
+					}
+				}
+
+				plan1, finish1 := planAndAnalyze(q1)
+				plan2, finish2 := planAndAnalyze(q2)
 				defer finish1()
-				plan2, finish2 := planNodeForQuery(t, s, q2)
 				defer finish2()
 
-				indep := da.Independent(context.TODO(), plan1, plan2)
+				indep := da.Independent(plan1, plan2)
 				if exp := test.independent; indep != exp {
 					t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
 						q1, q2, exp, indep)
 				}
 			})
+		}
+	}
+}
+
+// Smoke test for parallel writes. Checks that parallel statements commit fine.
+func TestParallelWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create three tables because spanBasedDependencyAnalyzer currently
+	// considers all writes to the same table to be dependent.
+	//
+	// TODO(nvanbenschoten): once #14953 is addressed, we can get rid of the
+	// extra tables.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test  (k INT PRIMARY KEY);
+CREATE TABLE t.test2  (k INT PRIMARY KEY);
+CREATE TABLE t.test3  (k INT PRIMARY KEY);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 100; i++ {
+		if _, err := sqlDB.Exec(fmt.Sprintf(`
+BEGIN;
+INSERT INTO t.test(k)  VALUES (%d) RETURNING NOTHING;
+INSERT INTO t.test2(k) VALUES (%d) RETURNING NOTHING;
+INSERT INTO t.test3(k) VALUES (%d) RETURNING NOTHING;
+END;
+`, i, i, i)); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, table := range []string{"t.test", "t.test2", "t.test3"} {
+			var count int
+			if err := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != i+1 {
+				t.Fatalf("Expected %d rows, got %d", i+1, count)
+			}
 		}
 	}
 }

@@ -1,0 +1,63 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+# Tests for the implicit one row, zero column values operator.
+query I
+SELECT 1
+----
+1
+
+query I
+SELECT 1 + 2
+----
+3
+
+query III colnames
+VALUES (1, 2, 3), (4, 5, 6)
+----
+column1 column2 column3
+1       2       3
+4       5       6
+
+query I
+VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
+----
+1
+2
+3
+4
+
+query I
+SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
+----
+3
+7
+11
+
+query error pgcode 42601 VALUES lists must all be the same length, expected 1 columns, found 2
+VALUES (1), (2, 3)
+
+query I
+VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
+----
+3
+2
+1
+
+query error pgcode 42703 column "z" does not exist
+VALUES (1), (1), (2), (3) ORDER BY z
+
+# subqueries can be evaluated in VALUES
+query I
+VALUES ((SELECT 1)), ((SELECT 2))
+----
+1
+2
+
+query error pgcode 42804 VALUES types string and int cannot be matched
+VALUES (NULL, 1), (2, NULL), (NULL, 'a')
+
+# subqueries in VALUES don't cause problems in EXPLAIN(DISTSQL), despite forcing
+# execution on the gateway.
+
+statement ok
+EXPLAIN(DISTSQL) VALUES((SELECT 1), 3)

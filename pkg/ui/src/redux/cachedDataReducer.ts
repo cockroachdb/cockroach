@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 /**
  * This module maintains the state of read-only data fetched from the cluster.
  * Data is fetched from an API endpoint in either 'util/api' or
@@ -6,20 +20,24 @@
 
 import _ from "lodash";
 import { Action, Dispatch } from "redux";
-import { assert } from "chai";
+import assert from "assert";
 import moment from "moment";
+import { hashHistory } from "react-router";
+import { push } from "react-router-redux";
 
-import { APIRequestFn } from "../util/api";
+import { getLoginPage } from "src/redux/login";
+import { APIRequestFn } from "src/util/api";
 
-import { PayloadAction, WithRequest } from "../interfaces/action";
+import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
-  data: TResponseMessage; // the latest data received
+  data?: TResponseMessage; // the latest data received
   inFlight = false; // true if a request is in flight
   valid = false; // true if data has been received and has not been invalidated
-  setAt: moment.Moment; // Timestamp when this data was last updated.
-  lastError: Error; // populated with the most recent error, if the last request failed
+  requestedAt?: moment.Moment; // Timestamp when data was last requested.
+  setAt?: moment.Moment; // Timestamp when this data was last updated.
+  lastError?: Error; // populated with the most recent error, if the last request failed
 }
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
@@ -51,14 +69,16 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * actionNamespace - A unique namespace for the redux actions.
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
+   * requestTimeout (optional)
    */
   constructor(
     protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
     public actionNamespace: string,
     protected invalidationPeriod?: moment.Duration,
+    protected requestTimeout?: moment.Duration,
   ) {
     // check actionNamespace
-    assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
+    assert(!CachedDataReducer.namespaces.hasOwnProperty(actionNamespace), "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;
 
     this.REQUEST = `cockroachui/CachedDataReducer/${actionNamespace}/REQUEST`;
@@ -71,7 +91,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * setTimeSource overrides the source of timestamps used by this component.
    * Intended for use in tests only.
    */
-  setTimeSource(timeSource: {(): moment.Moment}) {
+  setTimeSource(timeSource: { (): moment.Moment }) {
     this.timeSource = timeSource;
   }
 
@@ -87,6 +107,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       case this.REQUEST:
         // A request is in progress.
         state = _.clone(state);
+        state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
       case this.RECEIVE:
@@ -101,7 +122,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         return state;
       case this.ERROR:
         // A request failed.
-        let { payload: error } = action as PayloadAction<WithRequest<Error, TRequest>>;
+        const { payload: error } = action as PayloadAction<WithRequest<Error, TRequest>>;
         state = _.clone(state);
         state.inFlight = false;
         state.lastError = error.data;
@@ -164,7 +185,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    */
   refresh = <S>(req?: TRequest, stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace]) => {
     return (dispatch: Dispatch<S>, getState: () => any) => {
-      let state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
+      const state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
       if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
         return;
@@ -173,16 +194,30 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req, this.invalidationPeriod).then((data) => {
-        // Dispatch the results to the store.
-        dispatch(this.receiveData(data, req));
-      }).catch((error: Error) => {
-        // If an error occurred during the fetch, add it to the store.
-        // Wait 1s to record the error to avoid spamming errors.
-        // TODO(maxlang): Fix error handling more comprehensively.
-        // Tracked in #8699
-        setTimeout(() => dispatch(this.errorData(error, req)), 1000);
-      }).then(() => {
+      return this.apiEndpoint(req, this.requestTimeout).then(
+        (data) => {
+          // Dispatch the results to the store.
+          dispatch(this.receiveData(data, req));
+        },
+        (error: Error) => {
+          // TODO(couchand): This is a really myopic way to check for HTTP
+          // codes.  However, at the moment that's all that the underlying
+          // timeoutFetch offers.  Major changes to this plumbing are warranted.
+          if (error.message === "Unauthorized") {
+            // TODO(couchand): This is an unpleasant dependency snuck in here...
+            const location = hashHistory.getCurrentLocation();
+            if (location && !location.pathname.startsWith("/login")) {
+              dispatch(push(getLoginPage(location)));
+            }
+          }
+
+          // If an error occurred during the fetch, add it to the store.
+          // Wait 1s to record the error to avoid spamming errors.
+          // TODO(maxlang): Fix error handling more comprehensively.
+          // Tracked in #8699
+          setTimeout(() => dispatch(this.errorData(error, req)), 1000);
+        },
+      ).then(() => {
         // Invalidate data after the invalidation period if one exists.
         if (this.invalidationPeriod) {
           setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
@@ -191,7 +226,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     };
   }
 
-  private timeSource: {(): moment.Moment} = () => moment();
+  private timeSource: { (): moment.Moment } = () => moment();
 }
 
 /**
@@ -214,19 +249,27 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    *   as a key to store data returned from that request
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
-   *
-   * apiEndpoint, actionNamespace, and invalidationPeriod are all passed
-   * to the CachedDataReducer constructor
+   * requestTimeout (optional)
+   * apiEndpoint, actionNamespace, invalidationPeriod and requestTimeout are all
+   * passed to the CachedDataReducer constructor
    */
-  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private requestToID: (req: TRequest) => string, protected invalidationPeriod?: moment.Duration) {
-    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(apiEndpoint, actionNamespace, invalidationPeriod);
+  constructor(
+    protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>,
+    public actionNamespace: string,
+    private requestToID: (req: TRequest) => string,
+    protected invalidationPeriod?: moment.Duration,
+    protected requestTimeout?: moment.Duration,
+  ) {
+    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(
+      apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout,
+    );
   }
 
   /**
    * setTimeSource overrides the source of timestamps used by this component.
    * Intended for use in tests only.
    */
-  setTimeSource(timeSource: {(): moment.Moment}) {
+  setTimeSource(timeSource: { (): moment.Moment }) {
     this.cachedDataReducer.setTimeSource(timeSource);
   }
 
@@ -251,8 +294,8 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
       case this.cachedDataReducer.RECEIVE:
       case this.cachedDataReducer.ERROR:
       case this.cachedDataReducer.INVALIDATE:
-        let { request } = (action as PayloadAction<WithRequest<TResponseMessage | Error | void, TRequest>>).payload;
-        let id = this.requestToID(request);
+        const { request } = (action as PayloadAction<WithRequest<TResponseMessage | Error | void, TRequest>>).payload;
+        const id = this.requestToID(request);
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
         return state;

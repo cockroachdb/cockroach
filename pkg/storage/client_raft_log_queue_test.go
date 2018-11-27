@@ -11,25 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package storage_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"testing"
 
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
@@ -42,9 +38,9 @@ func TestRaftLogQueue(t *testing.T) {
 	// Set maxBytes to something small so we can trigger the raft log truncation
 	// without adding 64MB of logs.
 	const maxBytes = 1 << 16
-	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
-		RangeMaxBytes: maxBytes,
-	})()
+	cfg := config.DefaultZoneConfig()
+	cfg.RangeMaxBytes = proto.Int64(maxBytes)
+	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
@@ -58,12 +54,12 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Write a single value to ensure we have a leader.
 	pArgs := putArgs([]byte("key"), []byte("value"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Get the raft leader (and ensure one exists).
-	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica([]byte("a")).RangeID
 	raftLeaderRepl := mtc.getRaftLeader(rangeID)
 	if raftLeaderRepl == nil {
 		t.Fatalf("could not find raft leader replica for range %d", rangeID)
@@ -82,33 +78,26 @@ func TestRaftLogQueue(t *testing.T) {
 	value := bytes.Repeat([]byte("a"), 1000) // 1KB
 	for size := int64(0); size < 2*maxBytes; size += int64(len(value)) {
 		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", size)), value)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Sadly, occasionally the queue has a race with the force processing so
-	// this succeeds within will captures those rare cases.
-	var afterTruncationIndex uint64
-	testutils.SucceedsSoon(t, func() error {
-		// Force a truncation check.
-		for _, store := range mtc.stores {
-			store.ForceRaftLogScanAndProcess()
-		}
+	// Force a truncation check.
+	for _, store := range mtc.stores {
+		store.ForceRaftLogScanAndProcess()
+	}
 
-		// Ensure that firstIndex has increased indicating that the log
-		// truncation has occurred.
-		var err error
-		afterTruncationIndex, err = raftLeaderRepl.GetFirstIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if afterTruncationIndex <= originalIndex {
-			return errors.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
-				afterTruncationIndex, originalIndex)
-		}
-		return nil
-	})
+	// Ensure that firstIndex has increased indicating that the log
+	// truncation has occurred.
+	afterTruncationIndex, err := raftLeaderRepl.GetFirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterTruncationIndex <= originalIndex {
+		t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+			afterTruncationIndex, originalIndex)
+	}
 
 	// Force a truncation check again to ensure that attempting to truncate an
 	// already truncated log has no effect. This check, unlike in the last

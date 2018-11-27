@@ -11,18 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package ts
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -31,41 +28,6 @@ var (
 	firstTSRKey = roachpb.RKey(keys.TimeseriesPrefix)
 	lastTSRKey  = firstTSRKey.PrefixEnd()
 )
-
-// ContainsTimeSeries returns true if the given key range overlaps the
-// range of possible time series keys.
-func (tsdb *DB) ContainsTimeSeries(start, end roachpb.RKey) bool {
-	return !lastTSRKey.Less(start) && !end.Less(firstTSRKey)
-}
-
-// PruneTimeSeries prunes old data for any time series found in the supplied
-// key range.
-//
-// The snapshot should be supplied by a local store, and is used only to
-// discover the names of time series which are store in that snapshot. The KV
-// client is then used to prune old data from the discovered series.
-//
-// The snapshot is used for key discovery (as opposed to the KV client) because
-// the task of pruning time series is distributed across the cluster to the
-// individual ranges which contain that time series data. Because replicas of
-// those ranges are guaranteed to have time series data locally, we can use the
-// snapshot to quickly obtain a set of keys to be pruned with no network calls.
-func (tsdb *DB) PruneTimeSeries(
-	ctx context.Context,
-	snapshot engine.Reader,
-	start, end roachpb.RKey,
-	db *client.DB,
-	timestamp hlc.Timestamp,
-) error {
-	series, err := findTimeSeries(snapshot, start, end, timestamp)
-	if err != nil {
-		return err
-	}
-	return pruneTimeSeries(ctx, db, series, timestamp)
-}
-
-// Assert that DB implements the necessary interface from the storage package.
-var _ storage.TimeSeriesDataStore = (*DB)(nil)
 
 type timeSeriesResolutionInfo struct {
 	Name       string
@@ -81,13 +43,10 @@ type timeSeriesResolutionInfo struct {
 // An engine snapshot is used, rather than a client, because this function is
 // intended to be called by a storage queue which can inspect the local data for
 // a single range without the need for expensive network calls.
-func findTimeSeries(
+func (tsdb *DB) findTimeSeries(
 	snapshot engine.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
-
-	iter := snapshot.NewIterator(false)
-	defer iter.Close()
 
 	// Set start boundary for the search, which is the lesser of the range start
 	// key and the beginning of time series data.
@@ -105,12 +64,15 @@ func findTimeSeries(
 		end = lastTS
 	}
 
-	thresholds := computeThresholds(now.WallTime)
+	thresholds := tsdb.computeThresholds(now.WallTime)
+
+	iter := snapshot.NewIterator(engine.IterOptions{UpperBound: endKey.AsRawKey()})
+	defer iter.Close()
 
 	for iter.Seek(next); ; iter.Seek(next) {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
-		} else if !ok || !iter.Less(end) {
+		} else if !ok || !iter.UnsafeKey().Less(end) {
 			break
 		}
 		foundKey := iter.Key().Key
@@ -152,16 +114,15 @@ func findTimeSeries(
 //
 // As range deletion of inline data is an idempotent operation, it is safe to
 // run this operation concurrently on multiple nodes at the same time.
-func pruneTimeSeries(
+func (tsdb *DB) pruneTimeSeries(
 	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
-	thresholds := computeThresholds(now.WallTime)
+	thresholds := tsdb.computeThresholds(now.WallTime)
 
 	b := &client.Batch{}
 	for _, timeSeries := range timeSeriesList {
 		// Time series data for a specific resolution falls in a contiguous key
 		// range, and can be deleted with a DelRange command.
-
 		// The start key is the prefix unique to this name/resolution pair.
 		start := makeDataKeySeriesPrefix(timeSeries.Name, timeSeries.Resolution)
 
@@ -178,7 +139,7 @@ func pruneTimeSeries(
 		}
 
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key:    start,
 				EndKey: end,
 			},
@@ -187,15 +148,4 @@ func pruneTimeSeries(
 	}
 
 	return db.Run(ctx, b)
-}
-
-// computeThresholds returns a map of timestamps for each resolution supported
-// by the system. Data at a resolution which is older than the threshold
-// timestamp for that resolution is considered eligible for deletion.
-func computeThresholds(timestamp int64) map[Resolution]int64 {
-	result := make(map[Resolution]int64, len(pruneThresholdByResolution))
-	for k, v := range pruneThresholdByResolution {
-		result[k] = timestamp - v
-	}
-	return result
 }

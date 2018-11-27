@@ -1,0 +1,248 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.sql.jobs.jobspb;
+option go_package = "jobspb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "roachpb/io-formats.proto";
+import "sql/sqlbase/structured.proto";
+import "util/hlc/timestamp.proto";
+
+message Lease {
+  option (gogoproto.equal) = true;
+
+  // The ID of the node that holds the lease.
+  uint32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // The epoch of the lease holder's node liveness entry.
+  int64 epoch = 2;
+}
+
+message BackupDetails {
+  util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  string uri = 3 [(gogoproto.customname) = "URI"];
+  bytes backup_descriptor = 4;
+}
+
+message BackupProgress {
+
+}
+
+message RestoreDetails {
+  message TableRewrite {
+    uint32 table_id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+    uint32 parent_id = 2 [
+      (gogoproto.customname) = "ParentID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+  }
+  reserved 1;
+  util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
+  map<uint32, TableRewrite> table_rewrites = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  repeated string uris = 3 [(gogoproto.customname) = "URIs"];
+  repeated sqlbase.TableDescriptor table_descs = 5;
+  string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
+}
+
+message RestoreProgress {
+  bytes high_water = 1;
+}
+
+message ImportDetails {
+  message Table {
+    sqlbase.TableDescriptor desc = 1;
+    string name = 18;
+    int64 seq_val = 19;
+    reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
+  }
+  repeated Table tables = 1 [(gogoproto.nullable) = false];
+  repeated string uris = 2 [(gogoproto.customname) = "URIs"];
+  roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
+
+  int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
+  int64 oversample = 9;
+  bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
+  int64 walltime = 5;
+  uint32 parent_id = 6 [
+    (gogoproto.customname) = "ParentID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  string backup_path = 7;
+
+  // samples is a sampling of cockroach KV keys generated from the input data.
+  // It is populated with the sampling phase's results. These must be
+  // used if a job is resumed to guarantee that AddSSTable will not attempt
+  // to add ranges with an old split point within them.
+  repeated bytes samples = 8;
+}
+
+message ImportProgress {
+  repeated float sampling_progress = 1;
+  repeated float read_progress = 2;
+  repeated float write_progress = 3;
+  // The spans of split keys which have had their SSTable's generated.
+  // This allows us to skip the shuffle stage for already-completed
+  // spans when resuming an import job.
+  repeated roachpb.Span span_progress = 4 [(gogoproto.nullable) = false];
+}
+
+message ResumeSpanList {
+  repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
+}
+
+enum Status {
+  DRAINING_NAMES = 0;
+  WAIT_FOR_GC_INTERVAL = 1;
+  ROCKSDB_COMPACTION = 2;
+  DONE = 10;
+}
+
+message DroppedTableDetails {
+  string name = 1;
+  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  Status status = 3;
+}
+
+message SchemaChangeDetails {
+  reserved 1;
+  // A schema change can involve running multiple processors backfilling
+  // or deleting data. They occasionally checkpoint Spans so that the
+  // processing can resume in the event of a node failure. The spans are
+  // non-overlapping contiguous areas of the KV space that still need to
+  // be processed. The index represents the index of a mutation in a
+  // mutation list containing mutations for the same mutationID.
+  repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
+  repeated DroppedTableDetails dropped_tables = 3 [(gogoproto.nullable) = false];
+  // The descriptor ID of the dropped database which created this job.
+  uint32 dropped_database_id = 4 [
+    (gogoproto.customname) = "DroppedDatabaseID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+}
+
+message SchemaChangeProgress {
+
+}
+
+message ChangefeedTarget {
+  string statement_time_name = 1;
+
+  // TODO(dan): Add partition name, ranges of primary keys.
+}
+
+message ChangefeedDetails {
+  // Targets contains the user-specified tables and databases to watch, mapping
+  // the descriptor id to the name at the time of changefeed creating. There is
+  // a 1:1 correspondance between unique targets in the original sql query and
+  // entries in this map.
+  //
+  // - A watched table is stored here under its table id
+  // - TODO(dan): A watched database is stored here under its database id
+  // - TODO(dan): A db.* expansion is treated identicially to watching the
+  //   database
+  //
+  // Note that the TODOs mean this field currently is guaranteed to only hold
+  // table ids and a cluster version check will be added when this changes.
+  //
+  // The names at resolution time are included so that table and database
+  // renames can be detected. They are also used to construct an error message
+  // if the descriptor id no longer exists when the jobs is unpaused (which can
+  // happen if it was dropped or truncated).
+  map<uint32, ChangefeedTarget> targets = 6 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID",
+    (gogoproto.casttype) = "ChangefeedTargets",
+    (gogoproto.nullable) = false
+  ];
+  string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
+  map<string, string> opts = 4;
+  util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+
+  reserved 1, 2, 5;
+}
+
+message ResolvedSpan {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+message ChangefeedProgress {
+  reserved 1;
+  repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
+}
+
+message Payload {
+  string description = 1;
+  string username = 2;
+  // For consistency with the SQL timestamp type, which has microsecond
+  // precision, we avoid the timestamp.Timestamp WKT, which has nanosecond
+  // precision, and use microsecond integers directly.
+  int64 started_micros = 3;
+  int64 finished_micros = 4;
+  reserved 5;
+  repeated uint32 descriptor_ids = 6 [
+    (gogoproto.customname) = "DescriptorIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  reserved 7;
+  string error = 8;
+  // ID 9 is intentionally reserved for lease information.
+  Lease lease = 9;
+  oneof details {
+    BackupDetails backup = 10;
+    RestoreDetails restore = 11;
+    SchemaChangeDetails schemaChange = 12;
+    ImportDetails import = 13;
+    ChangefeedDetails changefeed = 14;
+  }
+}
+
+message Progress {
+  oneof progress {
+    float fraction_completed = 1;
+    util.hlc.Timestamp high_water = 3;
+  }
+  int64 modified_micros = 2;
+  string running_status = 4;
+
+  oneof details {
+    BackupProgress backup = 10;
+    RestoreProgress restore = 11;
+    SchemaChangeProgress schemaChange = 12;
+    ImportProgress import = 13;
+    ChangefeedProgress changefeed = 14;
+  }
+}
+
+enum Type {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
+  BACKUP = 1 [(gogoproto.enumvalue_customname) = "TypeBackup"];
+  RESTORE = 2 [(gogoproto.enumvalue_customname) = "TypeRestore"];
+  SCHEMA_CHANGE = 3 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
+  IMPORT = 4 [(gogoproto.enumvalue_customname) = "TypeImport"];
+  CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
+}

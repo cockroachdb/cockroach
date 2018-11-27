@@ -1,0 +1,600 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_desc (b DESC),
+  INDEX bc (b, c)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3), (3, 4, 5), (5, 6, 7)
+
+query I rowsort
+SELECT a FROM t WHERE a < 4.0
+----
+1
+3
+
+query I
+SELECT b FROM t WHERE c > 4.0 AND a < 4
+----
+4
+
+statement ok
+CREATE TABLE ab (
+  s STRING,
+  i INT
+); INSERT INTO ab VALUES ('a', 1), ('b', 1), ('c', 1)
+
+query IT rowsort
+SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+statement ok
+CREATE INDEX baz ON ab (i, s)
+
+query IT rowsort
+SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+# Issue #14426: verify we don't have an internal filter that contains "a IN ()"
+# (which causes an error in DistSQL due to expression serialization).
+statement ok
+CREATE TABLE tab0(
+  k INT PRIMARY KEY,
+  a INT,
+  b INT
+)
+
+query I
+SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
+----
+
+# Regression tests for #12022
+
+statement ok
+CREATE TABLE t12022 (
+  c1 INT,
+  c2 BOOL,
+  UNIQUE INDEX i (c1, c2)
+);
+
+statement ok
+INSERT INTO t12022 VALUES
+  (1, NULL), (1, false), (1, true),
+  (2, NULL), (2, false), (2, true);
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, NULL) ORDER BY (c1, c2);
+----
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, false) ORDER BY (c1, c2);
+----
+1  true
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, true) ORDER BY (c1, c2);
+----
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, NULL) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, false) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, true) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+2  false
+
+
+# Regression test for #20035.
+statement ok
+CREATE TABLE favorites (
+  id INT NOT NULL DEFAULT unique_rowid(),
+  resource_type STRING(30) NOT NULL,
+  resource_key STRING(255) NOT NULL,
+  device_group STRING(30) NOT NULL,
+  customerid INT NOT NULL,
+  jurisdiction STRING(2) NOT NULL,
+  brand STRING(255) NOT NULL,
+  created_ts TIMESTAMP NULL,
+  guid_id STRING(100) NOT NULL,
+  locale STRING(10) NOT NULL DEFAULT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  UNIQUE INDEX favorites_idx (resource_type ASC, device_group ASC, resource_key ASC, customerid ASC),
+  INDEX favorites_guid_idx (guid_id ASC),
+  INDEX favorites_glob_fav_idx (resource_type ASC, device_group ASC, jurisdiction ASC, brand ASC, locale ASC, resource_key ASC),
+  FAMILY "primary" (id, resource_type, resource_key, device_group, customerid, jurisdiction, brand, created_ts, guid_id, locale)
+)
+
+statement ok
+INSERT INTO favorites (customerid, guid_id, resource_type, device_group, jurisdiction, brand, locale, resource_key)
+  VALUES (1, '1', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'tp'),
+         (2, '2', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts'),
+         (3, '3', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts1'),
+         (4, '4', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts2'),
+         (5, '5', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts3'),
+         (6, '6', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts4')
+
+query TI rowsort
+SELECT
+  resource_key,
+  count(resource_key) total
+FROM favorites f1
+WHERE f1.jurisdiction   = 'MT'
+AND   f1.brand          = 'xxx'
+AND   f1.resource_type  = 'GAME'
+AND   f1.device_group   = 'web'
+AND   f1.locale         = 'en_GB'
+AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
+GROUP BY resource_key
+ORDER BY total DESC
+----
+ts 1
+ts2 1
+ts3 1
+
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX adb (a, d, b),
+  INDEX abcd (a, b, c, d)
+)
+
+# Regression tests for #20362 (IS NULL handling).
+statement ok
+INSERT INTO abcd VALUES
+(NULL, NULL, NULL),
+(NULL, NULL, 1),
+(NULL, NULL, 5),
+(NULL, NULL, 10),
+(NULL, 1,    NULL),
+(NULL, 1,    1),
+(NULL, 1,    5),
+(NULL, 1,    10),
+(NULL, 5,    NULL),
+(NULL, 5,    1),
+(NULL, 5,    5),
+(NULL, 5,    10),
+(NULL, 10,   NULL),
+(NULL, 10,   1),
+(NULL, 10,   5),
+(NULL, 10,   10),
+(1,    NULL, NULL),
+(1,    NULL, 1),
+(1,    NULL, 5),
+(1,    NULL, 10),
+(1,    1,    NULL),
+(1,    1,    1),
+(1,    1,    5),
+(1,    1,    10),
+(1,    5,    NULL),
+(1,    5,    1),
+(1,    5,    5),
+(1,    5,    10),
+(1,    10,   NULL),
+(1,    10,   1),
+(1,    10,   5),
+(1,    10,   10)
+
+query IIII rowsort
+SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
+----
+NULL  10  NULL  NULL
+NULL  10  1     NULL
+NULL  10  5     NULL
+NULL  10  10    NULL
+
+query IIII rowsort
+SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
+----
+NULL  1  NULL  NULL
+NULL  1  1     NULL
+NULL  1  5     NULL
+NULL  1  10    NULL
+
+query IIII partialsort(1,2)
+SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
+----
+NULL  NULL  NULL  NULL
+NULL  NULL  1     NULL
+NULL  NULL  5     NULL
+NULL  NULL  10    NULL
+NULL  1     NULL  NULL
+NULL  1     1     NULL
+NULL  1     5     NULL
+NULL  1     10    NULL
+NULL  5     NULL  NULL
+NULL  5     1     NULL
+NULL  5     5     NULL
+NULL  5     10    NULL
+NULL  10    NULL  NULL
+NULL  10    1     NULL
+NULL  10    5     NULL
+NULL  10    10    NULL
+
+query IIII
+SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
+----
+1  NULL  1  NULL
+1  NULL  5  NULL
+
+# Regression test for #21831.
+statement ok
+CREATE TABLE str (k INT PRIMARY KEY, v STRING, INDEX(v))
+
+statement ok
+INSERT INTO str VALUES (1, 'A'), (4, 'AB'), (2, 'ABC'), (5, 'ABCD'), (3, 'ABCDEZ'), (9, 'ABD')
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'ABC%'
+----
+2  ABC
+5  ABCD
+3  ABCDEZ
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
+----
+3  ABCDEZ
+
+query IT rowsort
+SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
+----
+2  ABC
+5  ABCD
+3  ABCDEZ
+
+# Regression tests for #22670.
+statement ok
+CREATE TABLE xy (x INT, y INT, INDEX (y))
+
+statement ok
+CREATE INDEX xy_idx ON xy (x, y)
+
+statement ok
+INSERT INTO xy VALUES (NULL, NULL), (1, NULL), (NULL, 1), (1, 1)
+
+query II rowsort
+SELECT * FROM xy WHERE x IN (NULL, 1, 2)
+----
+1  NULL
+1  1
+
+statement ok
+CREATE TABLE ef (e INT, f INT, INDEX(f))
+
+statement ok
+INSERT INTO ef VALUES (NULL, 1), (1, 1)
+
+query I rowsort
+SELECT e FROM ef WHERE f > 0 AND f < 2 ORDER BY f
+----
+NULL
+1
+
+query II
+SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
+----
+1  1
+
+# Test index constraints for IS (NOT) TRUE/FALSE.
+statement ok
+CREATE TABLE bool1 (
+  a BOOL,
+  INDEX (a)
+);
+INSERT INTO bool1 VALUES (NULL), (TRUE), (FALSE)
+
+query B
+SELECT * FROM bool1 WHERE a IS NULL
+----
+NULL
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT NULL
+----
+false
+true
+
+query B
+SELECT * FROM bool1 WHERE a IS TRUE
+----
+true
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT TRUE
+----
+NULL
+false
+
+query B
+SELECT * FROM bool1 WHERE a IS FALSE
+----
+false
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT FALSE
+----
+NULL
+true
+
+statement ok
+CREATE TABLE bool2 (
+  a BOOL NOT NULL,
+  INDEX (a)
+);
+INSERT INTO bool2 VALUES (TRUE), (FALSE)
+
+query B
+SELECT * FROM bool2 WHERE a IS NULL
+----
+
+query B rowsort
+SELECT * FROM bool2 WHERE a IS NOT NULL
+----
+false
+true
+
+query B
+SELECT * FROM bool2 WHERE a IS TRUE
+----
+true
+
+query B
+SELECT * FROM bool2 WHERE a IS NOT TRUE
+----
+false
+
+query B
+SELECT * FROM bool2 WHERE a IS FALSE
+----
+false
+
+query B
+SELECT * FROM bool2 WHERE a IS NOT FALSE
+----
+true
+
+# Test index constraints for IS (NOT) DISTINCT FROM on an integer column.
+statement ok
+CREATE TABLE int (
+  a INT,
+  INDEX (a)
+);
+INSERT INTO int VALUES (NULL), (0), (1), (2)
+
+query I
+SELECT * FROM int WHERE a IS NOT DISTINCT FROM 2
+----
+2
+
+query I rowsort
+SELECT * FROM int WHERE a IS DISTINCT FROM 2
+----
+NULL
+0
+1
+
+# ------------------------------------------------------------------------------
+# Non-covering index
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE noncover (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b (b),
+  UNIQUE INDEX c (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+statement ok
+INSERT INTO noncover VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query IIII
+SELECT * FROM noncover WHERE b = 2
+----
+1 2 3 4
+
+# Subset of output columns, not including tested column.
+query II
+SELECT a, d FROM noncover WHERE b=2
+----
+1 4
+
+# Subset of output columns, not including tested column or order by column.
+query I
+SELECT a FROM noncover WHERE b=2 ORDER BY c DESC
+----
+1
+
+# Regression: panic when projecting non-covered column in sorted index join.
+query III
+SELECT a, b, d FROM noncover WHERE b=2 ORDER BY b
+----
+1 2 4
+
+# Use non-covered column in filtered and sorted index join.
+query II
+SELECT a, b FROM noncover WHERE b=2 AND d>3 ORDER BY b
+----
+1 2
+
+query IIII
+SELECT * FROM noncover WHERE c = 7
+----
+5 6 7 8
+
+query IIII
+SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
+----
+5 6 7 8
+1 2 3 4
+
+query IIII
+SELECT * FROM noncover WHERE c > 0 AND d = 8
+----
+5 6 7 8
+
+# Contradiction
+query IIII
+SELECT * FROM noncover WHERE b = 5 AND b <> 5
+----
+
+# Contradiction with remainder filter
+query IIII
+SELECT * FROM noncover WHERE b = 5 AND b <> 5 AND d>100
+----
+
+# ------------------------------------------------------------------------------
+# These tests verify that while we are joining an index with the table, we
+# evaluate what parts of the filter we can using the columns in the index
+# to avoid unnecessary lookups in the table.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  s STRING,
+  INDEX bc (b, c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (s)
+)
+
+statement ok
+INSERT INTO t2 VALUES
+  (1, 1, 1, '11'),
+  (2, 1, 2, '12'),
+  (3, 1, 3, '13'),
+  (4, 2, 1, '21'),
+  (5, 2, 2, '22'),
+  (6, 2, 3, '23'),
+  (7, 3, 1, '31'),
+  (8, 3, 2, '32'),
+  (9, 3, 3, '33')
+
+query I rowsort
+SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+----
+4
+5
+6
+
+statement ok
+CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
+
+statement ok
+INSERT INTO t3 VALUES
+  (10, 50, 1),
+  (30, 40, 2),
+  (50, 30, 3),
+  (70, 20, 4),
+  (90, 10, 5),
+  (110, 0, 6),
+  (130, -10, 7)
+
+query I
+SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+----
+5
+4
+3
+2
+1
+
+statement ok
+CREATE TABLE tab1 (
+      pk INTEGER NOT NULL,
+      col0 INTEGER NULL,
+      col1 FLOAT NULL,
+      col2 STRING NULL,
+      col3 INTEGER NULL,
+      col4 FLOAT NULL,
+      col5 STRING NULL,
+      CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+      INDEX idx_tab1_0 (col0 ASC),
+      INDEX idx_tab1_1 (col1 ASC),
+      INDEX idx_tab1_3 (col3 ASC),
+      INDEX idx_tab1_4 (col4 ASC),
+      FAMILY "primary" (pk, col0, col1, col2, col3, col4, col5)
+)
+
+statement ok
+INSERT INTO tab1(pk, col0, col3) VALUES
+  (1, 65, 65),
+  (2, 87, 87),
+  (3, 70, 70),
+  (4, 88, 88),
+  (5, 69, 69),
+  (6, 72, 72),
+  (7, 82, 82)
+
+query II
+SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
+----
+7 82
+6 72
+5 69
+3 70
+2 87
+
+# Use a unique index with a nullable column. Rows with a NULL value for that
+# column will have the PK columns added to the key, whereas rows with a non-NULL
+# value will not. Ensure that when the index is used, it returns all rows.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a, b), UNIQUE INDEX c (c))
+
+statement ok
+INSERT INTO abc (a, b, c) VALUES (0, 1, NULL);
+INSERT INTO abc (a, b, c) VALUES (0, 2, NULL);
+INSERT INTO abc (a, b, c) VALUES (1, 1, NULL);
+INSERT INTO abc (a, b, c) VALUES (1, 2, NULL);
+INSERT INTO abc (a, b, c) VALUES (2, 1, 1);
+INSERT INTO abc (a, b, c) VALUES (2, 2, 2);
+
+query III rowsort
+SELECT * FROM abc WHERE (c IS NULL OR c=2) AND a>0
+----
+1  1  NULL
+1  2  NULL
+2  2  2

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
@@ -22,12 +20,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"sort"
+	"strings"
 
+	"strconv"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 )
 
@@ -64,10 +68,22 @@ func colListStr(cols []uint32) string {
 	return buf.String()
 }
 
+// summary implements the diagramCellType interface.
 func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
 }
 
+// summary implements the diagramCellType interface.
+func (mts *MetadataTestSenderSpec) summary() (string, []string) {
+	return "MetadataTestSender", []string{mts.ID}
+}
+
+// summary implements the diagramCellType interface.
+func (*MetadataTestReceiverSpec) summary() (string, []string) {
+	return "MetadataTestReceiver", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (v *ValuesCoreSpec) summary() (string, []string) {
 	var bytes uint64
 	for _, b := range v.RawBytes {
@@ -77,61 +93,183 @@ func (v *ValuesCoreSpec) summary() (string, []string) {
 	return "Values", []string{detail}
 }
 
+// summary implements the diagramCellType interface.
 func (a *AggregatorSpec) summary() (string, []string) {
 	details := make([]string, 0, len(a.Aggregations)+1)
 	if len(a.GroupCols) > 0 {
 		details = append(details, colListStr(a.GroupCols))
 	}
+	if len(a.OrderedGroupCols) > 0 {
+		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(a.OrderedGroupCols)))
+	}
 	for _, agg := range a.Aggregations {
-		distinct := ""
+		var buf bytes.Buffer
+		buf.WriteString(agg.Func.String())
+		buf.WriteByte('(')
+
 		if agg.Distinct {
-			distinct = "DISTINCT "
+			buf.WriteString("DISTINCT ")
 		}
-		str := fmt.Sprintf("%s(%s@%d)", agg.Func, distinct, agg.ColIdx+1)
-		details = append(details, str)
+		buf.WriteString(colListStr(agg.ColIdx))
+		buf.WriteByte(')')
+		if agg.FilterColIdx != nil {
+			fmt.Fprintf(&buf, " FILTER @%d", *agg.FilterColIdx+1)
+		}
+
+		details = append(details, buf.String())
 	}
 
 	return "Aggregator", details
 }
 
-func (tr *TableReaderSpec) summary() (string, []string) {
+func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 	index := "primary"
-	if tr.IndexIdx > 0 {
-		index = tr.Table.Indexes[tr.IndexIdx-1].Name
+	if indexIdx > 0 {
+		index = desc.Indexes[indexIdx-1].Name
 	}
-	details := []string{
-		fmt.Sprintf("%s@%s", index, tr.Table.Name),
-	}
-	// TODO(radu): a summary of the spans
-	return "TableReader", details
+	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
 }
 
+// summary implements the diagramCellType interface.
+func (tr *TableReaderSpec) summary() (string, []string) {
+	// TODO(radu): a summary of the spans
+	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
+}
+
+// summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
 	index := "primary"
 	if jr.IndexIdx > 0 {
 		index = jr.Table.Indexes[jr.IndexIdx-1].Name
 	}
-	details := []string{
-		fmt.Sprintf("%s@%s", index, jr.Table.Name),
+	details := make([]string, 0, 4)
+	if jr.Type != sqlbase.InnerJoin {
+		details = append(details, joinTypeDetail(jr.Type))
+	}
+	details = append(details, fmt.Sprintf("%s@%s", index, jr.Table.Name))
+	if jr.LookupColumns != nil {
+		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
+	}
+	if !jr.IndexFilterExpr.Empty() {
+		// Note: The displayed IndexFilter is a bit confusing because its
+		// IndexedVars refer to only the index column indices. This means they don't
+		// line up with other column indices like the output columns, which refer to
+		// the columns from both sides of the join.
+		details = append(
+			details, fmt.Sprintf("IndexFilter: %s (right side only)", jr.IndexFilterExpr))
+	}
+	if !jr.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
 	}
 	return "JoinReader", details
 }
 
-func (hj *HashJoinerSpec) summary() (string, []string) {
-	details := make([]string, 0, 2)
+func joinTypeDetail(joinType sqlbase.JoinType) string {
+	typeStr := strings.Replace(joinType.String(), "_", " ", -1)
+	if joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin {
+		return fmt.Sprintf("Type: %s", typeStr)
+	}
+	return fmt.Sprintf("Type: %s JOIN", typeStr)
+}
 
+// summary implements the diagramCellType interface.
+func (hj *HashJoinerSpec) summary() (string, []string) {
+	name := "HashJoiner"
+	if isSetOpJoin(hj.Type) {
+		name = "HashSetOp"
+	}
+
+	details := make([]string, 0, 4)
+
+	if hj.Type != sqlbase.InnerJoin {
+		details = append(details, joinTypeDetail(hj.Type))
+	}
 	if len(hj.LeftEqColumns) > 0 {
 		details = append(details, fmt.Sprintf(
 			"left(%s)=right(%s)",
 			colListStr(hj.LeftEqColumns), colListStr(hj.RightEqColumns),
 		))
 	}
-	if hj.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	if !hj.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr))
 	}
-	return "HashJoiner", details
+	if hj.MergedColumns {
+		details = append(details, fmt.Sprintf("Merged columns: %d", len(hj.LeftEqColumns)))
+	}
+
+	return name, details
 }
 
+func orderedJoinDetails(
+	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
+) []string {
+	details := make([]string, 0, 3)
+
+	if joinType != sqlbase.InnerJoin {
+		details = append(details, joinTypeDetail(joinType))
+	}
+	details = append(details, fmt.Sprintf(
+		"left(%s)=right(%s)", left.diagramString(), right.diagramString(),
+	))
+
+	if !onExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", onExpr))
+	}
+
+	return details
+}
+
+// summary implements the diagramCellType interface.
+func (mj *MergeJoinerSpec) summary() (string, []string) {
+	name := "MergeJoiner"
+	if isSetOpJoin(mj.Type) {
+		name = "MergeSetOp"
+	}
+	return name, orderedJoinDetails(mj.Type, mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
+}
+
+// summary implements the diagramCellType interface.
+func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
+	// As of right now, we only plan InterleaveReaderJoiner with two
+	// tables.
+	tables := irj.Tables[:2]
+	details := make([]string, 0, len(tables)*6+3)
+	for i, table := range tables {
+		// left or right label
+		var tableLabel string
+		if i == 0 {
+			tableLabel = "Left"
+		} else if i == 1 {
+			tableLabel = "Right"
+		}
+		details = append(details, tableLabel)
+		// table@index name
+		details = append(details, indexDetails(table.IndexIdx, &table.Desc)...)
+		// Post process (filters, projections, renderExprs, limits/offsets)
+		details = append(details, table.Post.summaryWithPrefix(fmt.Sprintf("%s ", tableLabel))...)
+	}
+	details = append(details, "Joiner")
+	details = append(
+		details, orderedJoinDetails(irj.Type, tables[0].Ordering, tables[1].Ordering, irj.OnExpr)...,
+	)
+	return "InterleaveReaderJoiner", details
+}
+
+// summary implemets the diagramCellType interface.
+func (zj *ZigzagJoinerSpec) summary() (string, []string) {
+	name := "ZigzagJoiner"
+	tables := zj.Tables
+	details := make([]string, 0, len(tables)+1)
+	for i, table := range tables {
+		details = append(details, fmt.Sprintf("Side %d: %s", i, indexDetails(zj.IndexIds[i], &table)[0]))
+	}
+	if !zj.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", zj.OnExpr))
+	}
+	return name, details
+}
+
+// summary implements the diagramCellType interface.
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
@@ -140,6 +278,7 @@ func (s *SorterSpec) summary() (string, []string) {
 	return "Sorter", details
 }
 
+// summary implements the diagramCellType interface.
 func (bf *BackfillerSpec) summary() (string, []string) {
 	details := []string{
 		bf.Table.Name,
@@ -148,16 +287,53 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 	return "Backfiller", details
 }
 
+// summary implements the diagramCellType interface.
 func (d *DistinctSpec) summary() (string, []string) {
 	details := []string{
 		colListStr(d.DistinctColumns),
 	}
 	if len(d.OrderedColumns) > 0 {
-		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(d.DistinctColumns)))
+		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(d.OrderedColumns)))
 	}
 	return "Distinct", details
 }
 
+// summary implements the diagramCellType interface.
+func (d *ProjectSetSpec) summary() (string, []string) {
+	var details []string
+	for _, expr := range d.Exprs {
+		details = append(details, expr.String())
+	}
+	return "ProjectSet", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *SamplerSpec) summary() (string, []string) {
+	details := []string{fmt.Sprintf("SampleSize: %d", s.SampleSize)}
+	for _, sk := range s.Sketches {
+		details = append(details, fmt.Sprintf("Stat: %s", colListStr(sk.Columns)))
+	}
+
+	return "Sampler", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *SampleAggregatorSpec) summary() (string, []string) {
+	details := []string{
+		fmt.Sprintf("SampleSize: %d", s.SampleSize),
+	}
+	for _, sk := range s.Sketches {
+		s := fmt.Sprintf("Stat: %s", colListStr(sk.Columns))
+		if sk.GenerateHistogram {
+			s = fmt.Sprintf("%s (%d buckets)", s, sk.HistogramMaxBuckets)
+		}
+		details = append(details, s)
+	}
+
+	return "SampleAggregator", details
+}
+
+// summary implements the diagramCellType interface.
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
@@ -169,6 +345,12 @@ func (is *InputSyncSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
+func (r *LocalPlanNodeSpec) summary() (string, []string) {
+	return fmt.Sprintf("local %s %d", *r.Name, *r.RowSourceIdx), []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (r *OutputRouterSpec) summary() (string, []string) {
 	switch r.Type {
 	case OutputRouterSpec_PASS_THROUGH:
@@ -184,37 +366,120 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
 func (post *PostProcessSpec) summary() []string {
+	return post.summaryWithPrefix("")
+}
+
+// prefix is prepended to every line outputted to disambiguate processors
+// (namely InterleavedReaderJoiner) that have multiple PostProcessors.
+func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
-	if post.Filter.Expr != "" {
-		res = append(res, fmt.Sprintf("Filter: %s", post.Filter.Expr))
+	if !post.Filter.Empty() {
+		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter))
 	}
 	if post.Projection {
-		res = append(res, fmt.Sprintf("Out: %s", colListStr(post.OutputColumns)))
+		outputColumns := "None"
+		if len(post.OutputColumns) > 0 {
+			outputColumns = colListStr(post.OutputColumns)
+		}
+		res = append(res, fmt.Sprintf("%sOut: %s", prefix, outputColumns))
 	}
 	if len(post.RenderExprs) > 0 {
 		var buf bytes.Buffer
-		buf.WriteString("Render:")
-		for _, expr := range post.RenderExprs {
-			buf.WriteByte(' ')
-			buf.WriteString(expr.Expr)
+		buf.WriteString(fmt.Sprintf("%sRender: ", prefix))
+		for i, expr := range post.RenderExprs {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			// Remove any spaces in the expression (makes things more compact
+			// and it's easier to visually separate expressions).
+			buf.WriteString(strings.Replace(expr.String(), " ", "", -1))
 		}
 		res = append(res, buf.String())
 	}
 	if post.Limit != 0 || post.Offset != 0 {
 		var buf bytes.Buffer
 		if post.Limit != 0 {
-			fmt.Fprintf(&buf, "Limit %d", post.Limit)
+			fmt.Fprintf(&buf, "%sLimit %d", prefix, post.Limit)
 		}
 		if post.Offset != 0 {
 			if buf.Len() != 0 {
 				buf.WriteByte(' ')
 			}
-			fmt.Fprintf(&buf, "Offset %d", post.Offset)
+			fmt.Fprintf(&buf, "%sOffset %d", prefix, post.Offset)
 		}
 		res = append(res, buf.String())
 	}
 	return res
+}
+
+// summary implements the diagramCellType interface.
+func (c *ReadImportDataSpec) summary() (string, []string) {
+	ss := make([]string, 0, len(c.Uri))
+	for _, s := range c.Uri {
+		ss = append(ss, s)
+	}
+	return "ReadImportData", ss
+}
+
+// summary implements the diagramCellType interface.
+func (s *SSTWriterSpec) summary() (string, []string) {
+	var res []string
+	for _, span := range s.Spans {
+		res = append(res, fmt.Sprintf("%s: %s", span.Name, keys.PrettyPrint(nil, span.End)))
+	}
+	return "SSTWriter", res
+}
+
+// summary implements the diagramCellType interface.
+func (s *CSVWriterSpec) summary() (string, []string) {
+	return "CSVWriter", []string{s.Destination}
+}
+
+// summary implements the diagramCellType interface.
+func (w *WindowerSpec) summary() (string, []string) {
+	details := make([]string, 0, len(w.WindowFns))
+	if len(w.PartitionBy) > 0 {
+		details = append(details, fmt.Sprintf("PARTITION BY: %s", colListStr(w.PartitionBy)))
+	}
+	for _, windowFn := range w.WindowFns {
+		var buf bytes.Buffer
+		if windowFn.Func.WindowFunc != nil {
+			buf.WriteString(windowFn.Func.WindowFunc.String())
+		} else {
+			buf.WriteString(windowFn.Func.AggregateFunc.String())
+		}
+		buf.WriteByte('(')
+		args := make([]uint32, windowFn.ArgCount)
+		for i := uint32(0); i < windowFn.ArgCount; i++ {
+			args[i] = i + windowFn.ArgIdxStart
+		}
+		buf.WriteString(colListStr(args))
+		buf.WriteByte(')')
+		if len(windowFn.Ordering.Columns) > 0 {
+			buf.WriteString(" (ORDER BY ")
+			buf.WriteString(windowFn.Ordering.diagramString())
+			buf.WriteByte(')')
+		}
+		details = append(details, buf.String())
+	}
+
+	return "Windower", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *ChangeAggregatorSpec) summary() (string, []string) {
+	var details []string
+	for _, watch := range s.Watches {
+		details = append(details, watch.Span.String())
+	}
+	return "ChangeAggregator", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *ChangeFrontierSpec) summary() (string, []string) {
+	return "ChangeFrontier", []string{}
 }
 
 type diagramCell struct {
@@ -227,13 +492,29 @@ type diagramProcessor struct {
 	Inputs  []diagramCell `json:"inputs"`
 	Core    diagramCell   `json:"core"`
 	Outputs []diagramCell `json:"outputs"`
+	StageID int32         `json:"stage"`
+
+	processorID int32
 }
 
 type diagramEdge struct {
-	SourceProc   int `json:"sourceProc"`
-	SourceOutput int `json:"sourceOutput"`
-	DestProc     int `json:"destProc"`
-	DestInput    int `json:"destInput"`
+	SourceProc   int      `json:"sourceProc"`
+	SourceOutput int      `json:"sourceOutput"`
+	DestProc     int      `json:"destProc"`
+	DestInput    int      `json:"destInput"`
+	Stats        []string `json:"stats,omitempty"`
+
+	streamID StreamID
+}
+
+// FlowDiagram is a plan diagram that can be made into a URL.
+type FlowDiagram interface {
+	// ToURL generates the json data for a flow diagram and a URL which encodes the
+	// diagram.
+	ToURL() (string, url.URL, error)
+
+	// AddSpans adds stats extracted from the input spans to the diagram.
+	AddSpans([]tracing.RecordedSpan)
 }
 
 type diagramData struct {
@@ -242,8 +523,32 @@ type diagramData struct {
 	Edges      []diagramEdge      `json:"edges"`
 }
 
-func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, error) {
-	d := diagramData{NodeNames: nodeNames}
+var _ FlowDiagram = &diagramData{}
+
+// ToURL implements the FlowDiagram interface.
+func (d diagramData) ToURL() (string, url.URL, error) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(d); err != nil {
+		return "", url.URL{}, err
+	}
+	return encodeJSONToURL(buf)
+}
+
+// AddSpans implements the FlowDiagram interface.
+func (d *diagramData) AddSpans(spans []tracing.RecordedSpan) {
+	processorStats, streamStats := extractStatsFromSpans(spans)
+	for i := range d.Processors {
+		if statDetails, ok := processorStats[int(d.Processors[i].processorID)]; ok {
+			d.Processors[i].Core.Details = append(d.Processors[i].Core.Details, statDetails...)
+		}
+	}
+	for i := range d.Edges {
+		d.Edges[i].Stats = streamStats[int(d.Edges[i].streamID)]
+	}
+}
+
+func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, error) {
+	d := &diagramData{NodeNames: nodeNames}
 
 	// inPorts maps streams to their "destination" attachment point. Only DestProc
 	// and DestInput are set in each diagramEdge value.
@@ -255,6 +560,8 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 		for _, p := range flows[n].Processors {
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
+			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
+			proc.processorID = p.ProcessorID
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
@@ -285,7 +592,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 				for _, o := range r.Streams {
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						if syncResponseNode != -1 && syncResponseNode != n {
-							return diagramData{}, errors.Errorf("multiple nodes with SyncResponse")
+							return nil, errors.Errorf("multiple nodes with SyncResponse")
 						}
 						syncResponseNode = n
 					}
@@ -302,6 +609,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			} else {
 				proc.Outputs = []diagramCell{}
 			}
+			proc.StageID = p.StageID
 			d.Processors = append(d.Processors, proc)
 			pIdx++
 		}
@@ -313,6 +621,10 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			Core:    diagramCell{Title: "Response", Details: []string{}},
 			Inputs:  []diagramCell{},
 			Outputs: []diagramCell{},
+			// When generating stats, spans are mapped from processor ID in the span
+			// tags to processor ID in the diagram data. To avoid clashing with
+			// the processor with ID 0, assign an impossible processorID.
+			processorID: -1,
 		})
 	}
 
@@ -329,13 +641,14 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 					edge := diagramEdge{
 						SourceProc:   pIdx,
 						SourceOutput: srcOutput,
+						streamID:     o.StreamID,
 					}
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						edge.DestProc = len(d.Processors) - 1
 					} else {
 						to, ok := inPorts[o.StreamID]
 						if !ok {
-							return diagramData{}, errors.Errorf("stream %d has no destination", o.StreamID)
+							return nil, errors.Errorf("stream %d has no destination", o.StreamID)
 						}
 						edge.DestProc = to.DestProc
 						edge.DestInput = to.DestInput
@@ -346,13 +659,14 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			pIdx++
 		}
 	}
+
 	return d, nil
 }
 
-// GeneratePlanDiagram generates the json data for a flow diagram.  There should
-// be one FlowSpec per node. The function assumes that StreamIDs are unique
-// across all flows.
-func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
+// GeneratePlanDiagram generates the data for a flow diagram. There should be
+// one FlowSpec per node. The function assumes that StreamIDs are unique across
+// all flows.
+func GeneratePlanDiagram(flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
 	nodeIDs := make([]int, 0, len(flows))
@@ -365,26 +679,26 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
 	nodeNames := make([]string, len(nodeIDs))
 	for i, nVal := range nodeIDs {
 		n := roachpb.NodeID(nVal)
-
-		flowSlice[i] = flows[n]
+		flowSlice[i] = *flows[n]
 		nodeNames[i] = n.String()
 	}
 
-	d, err := generateDiagramData(flowSlice, nodeNames)
-	if err != nil {
-		return err
-	}
-	return json.NewEncoder(w).Encode(d)
+	return generateDiagramData(flowSlice, nodeNames)
 }
 
-// GeneratePlanDiagramWithURL generates the json data for a flow diagram and a
+// GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
-	var json, compressed bytes.Buffer
-	if err := GeneratePlanDiagram(flows, &json); err != nil {
-		return "", url.URL{}, err
+func GeneratePlanDiagramURL(flows map[roachpb.NodeID]*FlowSpec) (string, url.URL, error) {
+	d, err := GeneratePlanDiagram(flows)
+	if err != nil {
+		return "", url.URL{}, nil
 	}
+	return d.ToURL()
+}
+
+func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
+	var compressed bytes.Buffer
 	jsonStr := json.String()
 
 	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
@@ -402,8 +716,46 @@ func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.
 		Scheme:   "https",
 		Host:     "cockroachdb.github.io",
 		Path:     "distsqlplan/decode.html",
-		RawQuery: compressed.String(),
+		Fragment: compressed.String(),
 	}
-
 	return jsonStr, url, nil
+}
+
+// extractStatsFromSpans extracts stats from spans tagged with a processor id
+// and returns a map from that processor id to a slice of stat descriptions
+// that can be added to a plan.
+func extractStatsFromSpans(
+	spans []tracing.RecordedSpan,
+) (processorStats, streamStats map[int][]string) {
+	processorStats = make(map[int][]string)
+	streamStats = make(map[int][]string)
+	for _, span := range spans {
+		var id string
+		var stats map[int][]string
+
+		// Get the processor or stream id for this span. If neither exists, this
+		// span doesn't belong to a processor or stream.
+		if pid, ok := span.Tags[processorIDTagKey]; ok {
+			id = pid
+			stats = processorStats
+		} else if sid, ok := span.Tags[streamIDTagKey]; ok {
+			id = sid
+			stats = streamStats
+		} else {
+			continue
+		}
+
+		var da types.DynamicAny
+		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
+			continue
+		}
+		if dss, ok := da.Message.(DistSQLSpanStats); ok {
+			i, err := strconv.Atoi(id)
+			if err != nil {
+				continue
+			}
+			stats[i] = append(stats[i], dss.StatsForQueryPlan()...)
+		}
+	}
+	return processorStats, streamStats
 }

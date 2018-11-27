@@ -1,0 +1,5 @@
+create_database_stmt ::=
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause 'ENCODING' opt_equal non_reserved_word_or_sconst opt_lc_collate_clause opt_lc_ctype_clause
+	| 'CREATE' 'DATABASE' database_name opt_with opt_template_clause  opt_lc_collate_clause opt_lc_ctype_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause 'ENCODING' opt_equal non_reserved_word_or_sconst opt_lc_collate_clause opt_lc_ctype_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause  opt_lc_collate_clause opt_lc_ctype_clause

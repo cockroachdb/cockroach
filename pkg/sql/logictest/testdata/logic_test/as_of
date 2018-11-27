@@ -1,0 +1,42 @@
+# LogicTest: local local-opt
+
+statement ok
+CREATE TABLE t (i INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+# Verify strings can be parsed as intervals.
+query I
+SELECT * FROM t AS OF SYSTEM TIME '-0ns'
+----
+2
+
+query I
+SELECT * FROM t AS OF SYSTEM TIME '-1ns'
+----
+2
+
+# Verify a forced interval type works.
+query I
+SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1ns'
+----
+2
+
+# Verify that we can use computed expressions.
+query I
+SELECT * FROM t AS OF SYSTEM TIME -( ('1' || 'ns')::INTERVAL )
+----
+2
+
+statement error pq: AS OF SYSTEM TIME: only constant expressions are allowed
+SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
+
+statement error pq: subqueries are not allowed in AS OF SYSTEM TIME
+SELECT * FROM t AS OF SYSTEM TIME (SELECT '-1h'::INTERVAL)
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement error cannot specify timestamp in the future
+SELECT * FROM t AS OF SYSTEM TIME '10s'

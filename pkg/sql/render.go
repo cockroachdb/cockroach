@@ -11,83 +11,76 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package sql
 
 import (
-	"bytes"
-	"errors"
+	"context"
 	"fmt"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // renderNode encapsulates the render logic of a select statement:
 // expressing new values using expressions over source values.
 type renderNode struct {
-	planner *planner
-
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
 	source planDataSource
 
-	// sourceInfo contains the reference to the dataSourceInfo in the
+	// sourceInfo contains the reference to the DataSourceInfo in the
 	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
 	// re-creating it every time analyzeExpr() is called in computeRender().
-	sourceInfo multiSourceInfo
+	sourceInfo sqlbase.MultiSourceInfo
 
 	// Helper for indexed vars. This holds the actual instances of
 	// IndexedVars replaced in Exprs. The indexed vars contain indices
 	// to the array of source columns.
-	ivarHelper parser.IndexedVarHelper
+	ivarHelper tree.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
-	// populated by addOrMergeRenders()
+	// populated by addOrReuseRenders()
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
 	// sortNode adds extra renderNode renders for sort columns not requested as select targets.
 	// groupNode copies/extends the render array defined by initTargets() and
 	// will add extra renderNode renders for the aggregation sources.
 	// windowNode also adds additional renders for the window functions.
-	render  []parser.TypedExpr
-	columns sqlbase.ResultColumns
+	render []tree.TypedExpr
 
-	// A piece of metadata to indicate whether a star expression was expanded
-	// during rendering.
-	isStar bool
+	// Common properties for all expressions mentioned as select target
+	// expressions (including DISTINCT ON) and ORDER BY.
+	renderProps tree.ScalarProperties
+
+	// renderStrings stores the symbolic representations of the expressions in
+	// render, in the same order. It's used to prevent recomputation of the
+	// symbolic representations.
+	renderStrings []string
+
+	// columns is the set of result columns.
+	columns sqlbase.ResultColumns
 
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are
 	// columns[numOriginalCols:].
-	// populated by initTargets(), which thus must be obviously vcalled before initWhere()
+	// populated by initTargets(), which thus must be obviously called before initWhere()
 	// and the other initializations that may add render columns.
 	numOriginalCols int
 
 	// ordering indicates the order of returned rows.
 	// initially suggested by the GROUP BY and ORDER BY clauses;
 	// modified by index selection.
-	ordering orderingInfo
+	props physicalProps
 
-	// explain supports EXPLAIN(DEBUG).
-	explain explainMode
-
-	// The current source row, with one value per source column.
-	// populated by Next(), used by renderRow().
-	curSourceRow parser.Datums
-
-	// The rendered row, with one value for each render expression.
-	// populated by Next().
-	row parser.Datums
+	run renderRun
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -97,109 +90,55 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-func (s *renderNode) Columns() sqlbase.ResultColumns {
-	return s.columns
-}
-
-func (s *renderNode) Ordering() orderingInfo {
-	return s.ordering
-}
-
-func (s *renderNode) Values() parser.Datums {
-	return s.row
-}
-
-func (s *renderNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	s.explain = mode
-	s.source.plan.MarkDebug(mode)
-}
-
-func (s *renderNode) DebugValues() debugValues {
-	return s.source.plan.DebugValues()
-}
-
-func (s *renderNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return s.source.plan.Spans(ctx)
-}
-
-func (s *renderNode) Start(ctx context.Context) error {
-	return s.source.plan.Start(ctx)
-}
-
-func (s *renderNode) Next(ctx context.Context) (bool, error) {
-	if next, err := s.source.plan.Next(ctx); !next {
-		return false, err
-	}
-
-	if s.explain == explainDebug && s.source.plan.DebugValues().output != debugValueRow {
-		// Pass through non-row debug values.
-		return true, nil
-	}
-
-	row := s.source.plan.Values()
-	s.curSourceRow = row
-
-	err := s.renderRow()
-	return err == nil, err
-}
-
-func (s *renderNode) Close(ctx context.Context) {
-	s.source.plan.Close(ctx)
-}
-
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (s *renderNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	return s.curSourceRow[idx].Eval(ctx)
-}
-
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (s *renderNode) IndexedVarResolvedType(idx int) parser.Type {
-	return s.sourceInfo[0].sourceColumns[idx].Typ
-}
-
-// IndexedVarString implements the parser.IndexedVarContainer interface.
-func (s *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	s.sourceInfo[0].FormatVar(buf, f, idx)
-}
-
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	ctx context.Context, n *parser.Select, desiredTypes []parser.Type,
+	ctx context.Context, n *tree.Select, desiredTypes []types.T,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
+	with := n.With
 
-	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
+		if s.Select.With != nil {
+			if with != nil {
+				return nil, pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")
+			}
+			with = s.Select.With
+		}
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
-				return nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
+				)
 			}
 			orderBy = s.Select.OrderBy
 		}
 		if s.Select.Limit != nil {
 			if limit != nil {
-				return nil, fmt.Errorf("multiple LIMIT clauses not allowed")
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
+				)
 			}
 			limit = s.Select.Limit
 		}
 	}
 
 	switch s := wrapped.(type) {
-	case *parser.SelectClause:
+	case *tree.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, with, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
 	// through. Instead of continuing this special casing, it may be worth
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
+	// TODO(jordan): this limitation also applies to CTEs, which do not yet
+	// propagate into VALUES and UNION clauses
 	default:
 		plan, err := p.newPlan(ctx, s, desiredTypes)
 		if err != nil {
@@ -233,67 +172,156 @@ func (p *planner) Select(
 // visible to the select.
 //
 // NB: This is passed directly to planNode only when there is no ORDER BY,
-// LIMIT, or parenthesis in the parsed SELECT. See `sql/parser.Select` and
-// `sql/parser.SelectStatement`.
+// LIMIT, or parenthesis in the parsed SELECT. See `sql/tree.Select` and
+// `sql/tree.SelectStatement`.
 //
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) SelectClause(
 	ctx context.Context,
-	parsed *parser.SelectClause,
-	orderBy parser.OrderBy,
-	limit *parser.Limit,
-	desiredTypes []parser.Type,
+	parsed *tree.SelectClause,
+	orderBy tree.OrderBy,
+	limit *tree.Limit,
+	with *tree.With,
+	desiredTypes []types.T,
 	scanVisibility scanVisibility,
-) (planNode, error) {
-	s := &renderNode{planner: p}
+) (result planNode, err error) {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
 
-	if err := s.initFrom(ctx, parsed, scanVisibility); err != nil {
+	r := &renderNode{}
+
+	resetter, err := p.initWith(ctx, with)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer func() {
+			if cteErr := resetter(p); cteErr != nil && err == nil {
+				// If no error was found in the inner planning but a CTE error
+				// is occurring during the final checks on the way back from
+				// the recursion, use that error as final error for this
+				// stage.
+				err = cteErr
+				result = nil
+			}
+		}()
+	}
+
+	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
-	where, err := s.initWhere(ctx, parsed.Where)
+	// We need to process the WHERE clause before initTargets below because
+	// it must not see any column generated by SRFs.
+	var where *filterNode
+	if parsed.Where != nil {
+		where, err = p.initWhere(ctx, r, parsed.Where.Expr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// We're going to collect scalar properties for the select target
+	// expressions and the DISTINCT ON expressions into r.renderProps
+	// below. Also we allow any function from here on.
+	p.semaCtx.Properties.Clear()
+
+	if err := p.initTargets(ctx, r, parsed.Exprs, desiredTypes); err != nil {
+		return nil, err
+	}
+
+	// NB: orderBy, window, and groupBy are passed and can modify the
+	// renderNode, but must do so in that order.
+	// Note that this order is exactly the reverse of the order of how the
+	// plan is constructed i.e. a logical plan tree might look like
+	// (renderNodes omitted)
+	//  distinctNode
+	//       |
+	//       |
+	//       v
+	//    sortNode
+	//       |
+	//       |
+	//       v
+	//   windowNode
+	//       |
+	//       |
+	//       v
+	//   groupNode
+	//       |
+	//       |
+	//       v
+	distinctComplex, distinct, err := p.distinct(ctx, parsed, r)
 	if err != nil {
 		return nil, err
 	}
 
-	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
-
-	if err := s.initTargets(ctx, parsed.Exprs, desiredTypes); err != nil {
-		return nil, err
-	}
-
-	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
-	// but must do so in that order.
-	sort, err := p.orderBy(ctx, orderBy, s)
-	if err != nil {
-		return nil, err
-	}
-	window, err := p.window(ctx, parsed, s)
-	if err != nil {
-		return nil, err
-	}
-	group, err := p.groupBy(ctx, parsed, s)
+	sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
 
-	if where != nil && where.filter != nil && group != nil {
-		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false, false)
+	r.renderProps = p.semaCtx.Properties.Derived
+
+	// For DISTINCT ON expressions either one of the following must be
+	// satisfied:
+	//    - DISTINCT ON expressions is a subset of a prefix of the ORDER BY
+	//	expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a, b, c
+	//    - DISTINCT ON expressions includes all ORDER BY expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a
+	if distinct != nil && sort != nil && !distinct.distinctOnColIdxs.Empty() {
+		numDistinctExprs := distinct.distinctOnColIdxs.Len()
+		for i, order := range sort.ordering {
+			// DISTINCT ON contains all ORDER BY expressions.
+			// Continue.
+			if i >= numDistinctExprs {
+				break
+			}
+
+			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError,
+					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
+				)
+			}
+		}
+	}
+
+	window, err := p.window(ctx, parsed, r)
+	if err != nil {
+		return nil, err
+	}
+	groupComplex, group, err := p.groupBy(ctx, parsed, r)
+	if err != nil {
+		return nil, err
+	}
+
+	if group != nil && group.requiresIsDistinctFromNullFilter() {
+		if where == nil {
+			var err error
+			where, err = p.initWhere(ctx, r, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+		group.addIsDistinctFromNullFilter(where, r)
 	}
 
 	limitPlan, err := p.Limit(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	distinctPlan := p.Distinct(parsed)
 
-	result := planNode(s)
-	if group != nil {
-		group.plan = result
-		result = group
+	result = planNode(r)
+	if groupComplex != nil {
+		// group.plan is already r.
+		result = groupComplex
 	}
 	if window != nil {
 		window.plan = result
@@ -303,9 +331,9 @@ func (p *planner) SelectClause(
 		sort.plan = result
 		result = sort
 	}
-	if distinctPlan != nil {
-		distinctPlan.plan = result
-		result = distinctPlan
+	if distinctComplex != nil && distinct != nil {
+		distinct.plan = result
+		result = distinctComplex
 	}
 	if limitPlan != nil {
 		limitPlan.plan = result
@@ -314,256 +342,235 @@ func (p *planner) SelectClause(
 	return result, nil
 }
 
-// initFrom initializes the table node, given the parsed select expression
-func (s *renderNode) initFrom(
-	ctx context.Context, parsed *parser.SelectClause, scanVisibility scanVisibility,
-) error {
-	// AS OF expressions should be handled by the executor.
-	if parsed.From.AsOf.Expr != nil && !s.planner.avoidCachedDescriptors {
-		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	return r.run.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
+	return r.sourceInfo[0].SourceColumns[idx].Typ
+}
+
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return r.sourceInfo[0].NodeFormatter(idx)
+}
+
+// renderRun contains the run-time state of renderNode during local execution.
+type renderRun struct {
+	// The current source row, with one value per source column.
+	// populated by Next(), used by renderRow().
+	curSourceRow tree.Datums
+
+	// The rendered row, with one value for each render expression.
+	// populated by Next().
+	row tree.Datums
+}
+
+func (r *renderNode) Next(params runParams) (bool, error) {
+	if next, err := r.source.plan.Next(params); !next {
+		return false, err
 	}
-	src, err := s.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
+
+	r.run.curSourceRow = r.source.plan.Values()
+
+	err := r.renderRow(params.EvalContext())
+	return err == nil, err
+}
+
+func (r *renderNode) Values() tree.Datums       { return r.run.row }
+func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
+
+// initFrom initializes the table node, given the parsed select expression
+func (p *planner) initFrom(
+	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
+) error {
+	_, _, err := p.getTimestamp(parsed.From.AsOf)
 	if err != nil {
 		return err
 	}
-	s.source = src
-	s.sourceInfo = multiSourceInfo{s.source.info}
+
+	src, err := p.getSources(ctx, parsed.From.Tables, scanVisibility)
+	if err != nil {
+		return err
+	}
+	r.source = src
+	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
 	return nil
 }
 
-func (s *renderNode) initTargets(
-	ctx context.Context, targets parser.SelectExprs, desiredTypes []parser.Type,
+// initTargets loads up the given target expressions in the renderNode's render list.
+// This function clobbers the planner's semaCtx so the caller is responsible
+// for saving and restoring it.
+func (p *planner) initTargets(
+	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
+	// We need to rewrite the SRFs first thing, because the ivarHelper
+	// initialized below needs to know the final shape of the FROM clause,
+	// after SRF rewrites has been processed.
+	var err error
+	targets, err = p.rewriteSRFs(ctx, r, targets)
+	if err != nil {
+		return err
+	}
+
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
+
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for i, target := range targets {
-		desiredType := parser.TypeAny
+		desiredType := types.Any
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(s.planner.session.SearchPath, target)
+		outputName, err := tree.GetRenderColName(p.SessionData().SearchPath, target)
 		if err != nil {
 			return err
 		}
 
-		// If the current expression contains a set-returning function, we need to
-		// move it up to the sources list as a cross join and add a render for the
-		// function's column in the join.
-		newTarget, err := s.rewriteSRFs(ctx, target)
+		cols, exprs, hasStar, err := p.computeRenderAllowingStars(ctx, target, desiredType,
+			r.sourceInfo, r.ivarHelper, outputName)
 		if err != nil {
 			return err
 		}
 
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
-			s.sourceInfo, s.ivarHelper, outputName)
-		if err != nil {
-			return err
-		}
-
-		s.isStar = s.isStar || hasStar
-		_ = s.addOrReuseRenders(cols, exprs, false)
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
+		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
 	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
 	// current (initial) number of columns.
-	s.numOriginalCols = len(s.columns)
-	if len(s.render) != len(s.columns) {
-		panic(fmt.Sprintf("%d renders but %d columns!", len(s.render), len(s.columns)))
+	r.numOriginalCols = len(r.columns)
+	if len(r.render) != len(r.columns) {
+		panic(fmt.Sprintf("%d renders but %d columns!", len(r.render), len(r.columns)))
 	}
 	return nil
 }
 
-// srfExtractionVisitor replaces the innermost set-returning function in an
-// expression with an IndexedVar that points at a new index at the end of the
-// ivarHelper. The extracted SRF is retained in the srf field.
-//
-// This visitor is intentionally limited to extracting only one SRF, because we
-// don't support lateral correlated subqueries.
-type srfExtractionVisitor struct {
-	err        error
-	srf        *parser.FuncExpr
-	ivarHelper *parser.IndexedVarHelper
-	searchPath parser.SearchPath
+// insertRender creates a new renderNode that renders exactly its
+// source plan.
+func (p *planner) insertRender(
+	ctx context.Context, plan planNode, tn *tree.TableName,
+) (*renderNode, error) {
+	src := planDataSource{
+		info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(plan)),
+		plan: plan,
+	}
+	render := &renderNode{
+		source:     src,
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+	}
+	if err := p.initTargets(ctx, render,
+		tree.SelectExprs{tree.SelectExpr{Expr: tree.StarExpr()}},
+		nil /*desiredTypes*/); err != nil {
+		return nil, err
+	}
+	return render, nil
 }
 
-var _ parser.Visitor = &srfExtractionVisitor{}
+// getTimestamp will get the timestamp for an AS OF clause. It will also
+// verify the timestamp against the transaction. If AS OF SYSTEM TIME is
+// specified in any part of the query, then it must be consistent with
+// what is known to the Executor. If the AsOfClause contains a
+// timestamp, then true will be returned.
+func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error) {
+	if asOf.Expr != nil {
+		// At this point, the executor only knows how to recognize AS OF
+		// SYSTEM TIME at the top level. When it finds it there,
+		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
+		// there, we cannot accept it anywhere else either.
+		// TODO(anyone): this restriction might be lifted if we support
+		// table readers at arbitrary timestamps, and each FROM clause
+		// can have its own timestamp. In that case, the timestamp
+		// would not be set globally for the entire txn.
+		if p.semaCtx.AsOfTimestamp == nil {
+			return hlc.MaxTimestamp, false,
+				fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
+		}
 
-func (v *srfExtractionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
-	_, isSubquery := expr.(*parser.Subquery)
-	return !isSubquery, expr
-}
-
-func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
-	switch t := expr.(type) {
-	case *parser.FuncExpr:
-		fd, err := t.Func.Resolve(v.searchPath)
+		// The Executor found an AS OF SYSTEM TIME clause at the top
+		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
+		// subqueries or view queries) but they must all point to the same
+		// timestamp.
+		ts, err := p.EvalAsOfTimestamp(asOf, hlc.MaxTimestamp)
 		if err != nil {
-			v.err = err
-			return expr
+			return hlc.MaxTimestamp, false, err
 		}
-		if _, ok := parser.Generators[fd.Name]; ok {
-			if v.srf != nil {
-				v.err = errors.New("cannot specify two set-returning functions in the same SELECT expression")
-				return expr
-			}
-			v.srf = t
-			return v.ivarHelper.IndexedVar(v.ivarHelper.AppendSlot())
+		if ts != *p.semaCtx.AsOfTimestamp {
+			return hlc.MaxTimestamp, false,
+				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
+		return ts, true, nil
 	}
-	return expr
+	return hlc.MaxTimestamp, false, nil
 }
 
-// rewriteSRFs creates data sources for any set-returning functions in the
-// provided render expression, cross-joins these data sources with the
-// renderNode's existing data sources, and returns a new render expression with
-// the set-returning function replaced by an IndexedVar that points at the new
-// data source.
-//
-// Expressions with more than one SRF require lateral correlated subqueries,
-// which are not yet supported. For now, this function returns an error if more
-// than one SRF is present in the render expression.
-func (s *renderNode) rewriteSRFs(
-	ctx context.Context, target parser.SelectExpr,
-) (parser.SelectExpr, error) {
-	// Walk the render expression looking for SRFs.
-	v := &s.planner.srfExtractionVisitor
-	*v = srfExtractionVisitor{
-		err:        nil,
-		srf:        nil,
-		ivarHelper: &s.ivarHelper,
-		searchPath: s.planner.session.SearchPath,
-	}
-	expr, _ := parser.WalkExpr(v, target.Expr)
-	if v.err != nil {
-		return target, v.err
-	}
+// initWhere initializes the expression for a WHERE clause and
+// produces a filterNode. Note that this function clobbers the current
+// properties in the semantic context. The caller is responsible for
+// saving and restoring it.
+func (p *planner) initWhere(
+	ctx context.Context, r *renderNode, whereExpr tree.Expr,
+) (*filterNode, error) {
+	f := &filterNode{source: r.source}
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].SourceColumns))
 
-	// Return the original render expression unchanged if the srfExtractionVisitor
-	// didn't find any SRFs.
-	if v.srf == nil {
-		return target, nil
-	}
-
-	// We rewrote exactly one SRF; cross-join it with our sources and return the
-	// new render expression.
-	src, err := s.planner.getDataSource(ctx, v.srf, nil, publicColumns)
-	if err != nil {
-		return target, err
-	}
-	src, err = s.planner.makeJoin(ctx, "CROSS JOIN", s.source, src, nil)
-	if err != nil {
-		return target, err
-	}
-	s.source = src
-	s.sourceInfo = multiSourceInfo{s.source.info}
-
-	return parser.SelectExpr{Expr: expr}, nil
-}
-
-func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filterNode, error) {
-	if where == nil {
-		return nil, nil
-	}
-
-	f := &filterNode{p: s.planner, source: s.source}
-	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(s.sourceInfo[0].sourceColumns))
-
-	var err error
-	f.filter, err = s.planner.analyzeExpr(ctx, where.Expr, s.sourceInfo, f.ivarHelper,
-		parser.TypeBool, true, "WHERE")
-	if err != nil {
-		return nil, err
-	}
-
-	// Make sure there are no aggregation/window functions in the filter
-	// (after subqueries have been expanded).
-	if err := s.planner.parser.AssertNoAggregationOrWindowing(
-		f.filter, "WHERE", s.planner.session.SearchPath,
-	); err != nil {
-		return nil, err
+	if whereExpr != nil {
+		p.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
+		var err error
+		f.filter, err = p.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
+			types.Bool, true, "WHERE")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Insert the newly created filterNode between the renderNode and
 	// its original FROM source.
-	f.source = s.source
-	s.source.plan = f
+	f.source = r.source
+	r.source.plan = f
 
 	return f, nil
 }
 
-// getRenderColName returns the output column name for a render expression.
-func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (string, error) {
-	if target.As != "" {
-		return string(target.As), nil
-	}
-
-	// If the expression designates a column, try to reuse that column's name
-	// as render name.
-	if err := target.NormalizeTopLevelVarName(); err != nil {
-		return "", err
-	}
-
-	// If target.Expr is a funcExpr, resolving the function within will normalize
-	// target.Expr's string representation. We want the output column name to be
-	// unnormalized, so we compute target.Expr's string representation now, even
-	// though we may choose to return something other than exprStr in the switch
-	// below.
-	exprStr := target.Expr.String()
-
-	switch t := target.Expr.(type) {
-	case *parser.ColumnItem:
-		// We only shorten the name of the result column to become the
-		// unqualified column part of this expr name if there is
-		// no additional subscript on the column.
-		if len(t.Selector) == 0 {
-			return t.Column(), nil
-		}
-
-	// For compatibility with Postgres, a render expression rooted by a
-	// set-returning function is named after that SRF.
-	case *parser.FuncExpr:
-		fd, err := t.Func.Resolve(searchPath)
-		if err != nil {
-			return "", err
-		}
-		if _, ok := parser.Generators[fd.Name]; ok {
-			return fd.Name, nil
-		}
-	}
-
-	return exprStr, nil
-}
-
 // appendRenderColumn adds a new render expression at the end of the current list.
 // The expression must be normalized already.
-func (s *renderNode) addRenderColumn(expr parser.TypedExpr, col sqlbase.ResultColumn) {
-	s.render = append(s.render, expr)
-	s.columns = append(s.columns, col)
+func (r *renderNode) addRenderColumn(
+	expr tree.TypedExpr, exprStr string, col sqlbase.ResultColumn,
+) {
+	r.render = append(r.render, expr)
+	r.renderStrings = append(r.renderStrings, exprStr)
+	r.columns = append(r.columns, col)
 }
 
 // resetRenderColumns resets all the render expressions. This is used e.g. by
 // aggregation and windowing (see group.go / window.go). The method also
 // asserts that both the render and columns array have the same size.
-func (s *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols sqlbase.ResultColumns) {
+func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.ResultColumns) {
 	if len(exprs) != len(cols) {
 		panic(fmt.Sprintf("resetRenderColumns used with arrays of different sizes: %d != %d", len(exprs), len(cols)))
 	}
-	s.render = exprs
-	s.columns = cols
+	r.render = exprs
+	// This clears all of the cached render strings. They'll get created again
+	// when necessary.
+	r.renderStrings = make([]string, len(cols))
+	r.columns = cols
 }
 
 // renderRow renders the row by evaluating the render expressions.
-func (s *renderNode) renderRow() error {
-	if s.row == nil {
-		s.row = make([]parser.Datum, len(s.render))
+func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
+	if r.run.row == nil {
+		r.run.row = make([]tree.Datum, len(r.render))
 	}
-	for i, e := range s.render {
+	evalCtx.IVarContainer = r
+	for i, e := range r.render {
 		var err error
-		s.row[i], err = e.Eval(&s.planner.evalCtx)
+		r.run.row[i], err = e.Eval(evalCtx)
 		if err != nil {
 			return err
 		}
@@ -571,27 +578,17 @@ func (s *renderNode) renderRow() error {
 	return nil
 }
 
-// Searches for a render target that matches the given column reference.
-func (s *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
-	for i, r := range s.render {
-		if ivar, ok := r.(*parser.IndexedVar); ok && ivar.Idx == colIdx {
-			return i, true
-		}
-	}
-	return invalidColIdx, false
-}
-
-// Computes ordering information for the render node, given ordering information for the "from"
-// node.
+// computePhysicalPropsForRender computes ordering information for the
+// render node, given ordering information for the "from" node.
 //
 //    SELECT a, b FROM t@abc ...
-//      the ordering is: first by column 0 (a), then by column 1 (b)
+//      the ordering is: first by column 0 (a), then by column 1 (b).
 //
 //    SELECT a, b FROM t@abc WHERE a = 1 ...
-//      the ordering is: exact match column (a), ordered by column 1 (b)
+//      the ordering is: exact match column (a), ordered by column 1 (b).
 //
 //    SELECT b, a FROM t@abc ...
-//      the ordering is: first by column 1 (a), then by column 0 (a)
+//      the ordering is: first by column 1 (a), then by column 0 (a).
 //
 //    SELECT a, c FROM t@abc ...
 //      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
@@ -602,39 +599,88 @@ func (s *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 //         SELECT a, c FROM t@abc ORDER by a,b,c
 //      we internally add b as a render target. The same holds for any targets required for
 //      grouping.
-func (s *renderNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
-	var ordering orderingInfo
+//
+//    SELECT a, b, a FROM t@abc ...
+//      we have an equivalency group between columns 0 and 2 and the ordering is
+//      first by column 0 (a), then by column 1.
+//
+// The planner is necessary to perform name resolution while detecting constant columns.
+func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physicalProps) {
+	// See physicalProps.project for a description of the projection map.
+	projMap := make([]int, len(r.render))
+	for i, expr := range r.render {
+		if ivar, ok := expr.(*tree.IndexedVar); ok {
+			// Column ivar.Idx of the source becomes column i of the render node.
+			projMap[i] = ivar.Idx
+		} else {
+			projMap[i] = -1
+		}
+	}
+	r.props = fromOrder.project(projMap)
 
-	// See if any of the "exact match" columns have render targets. We can ignore any columns that
-	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
-	// the query:
-	//
-	//   SELECT v FROM t WHERE k = 1
-	//
-	// The rows from the index are ordered by k then by v, but since k is an exact match
-	// column the results are also ordered just by v.
-	for colIdx := range fromOrder.exactMatchCols {
-		if renderIdx, ok := s.findRenderIndexForCol(colIdx); ok {
-			ordering.addExactMatchColumn(renderIdx)
+	// Detect constants.
+	for col, expr := range r.render {
+		_, hasRowDependentValues, _, err := p.resolveNamesForRender(expr, r)
+		if err != nil {
+			// If we get an error here, the expression must contain an unresolved name
+			// or invalid indexed var; ignore.
+			continue
+		}
+		if !hasRowDependentValues && !r.columns[col].Omitted {
+			r.props.addConstantColumn(col)
 		}
 	}
-	// Find the longest prefix of columns that have render targets. Once we find a column that is
-	// not part of the output, the rest of the ordered columns aren't useful.
-	//
-	// For example, assume we are using an ascending index on (k, v) with the query:
-	//
-	//   SELECT v FROM t WHERE k > 1
-	//
-	// The rows from the index are ordered by k then by v. We cannot make any use of this
-	// ordering as an ordering on v.
-	for _, colOrder := range fromOrder.ordering {
-		renderIdx, ok := s.findRenderIndexForCol(colOrder.ColIdx)
-		if !ok {
-			return ordering
+}
+
+// colIdxByRenderAlias returns the corresponding index in columns of an expression
+// that may refer to a column alias.
+// If there are no aliases in columns that expr refers to, then -1 is returned.
+// This method is pertinent to ORDER BY and DISTINCT ON clauses that may refer
+// to a column alias.
+func (r *renderNode) colIdxByRenderAlias(
+	expr tree.Expr, columns sqlbase.ResultColumns, op string,
+) (int, error) {
+	index := -1
+
+	if vBase, ok := expr.(tree.VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return 0, err
 		}
-		ordering.addColumn(renderIdx, colOrder.Direction)
+
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Parts[0] == "" {
+			// Look for an output column that matches the name. This
+			// handles cases like:
+			//
+			//   SELECT a AS b FROM t ORDER BY b
+			//   SELECT DISTINCT ON (b) a AS b FROM t
+			target := string(c.ColumnName)
+			for j, col := range columns {
+				if col.Name == target {
+					if index != -1 {
+						// There is more than one render alias that matches the clause. Here,
+						// SQL92 is specific as to what should be done: if the underlying
+						// expression is known (we're on a renderNode) and it is equivalent,
+						// then just accept that and ignore the ambiguity.
+						// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
+						// reject with an ambiguity error.
+						if r == nil || !r.equivalentRenders(j, index) {
+							return 0, pgerror.NewErrorf(
+								pgerror.CodeAmbiguousAliasError,
+								"%s \"%s\" is ambiguous", op, target,
+							)
+						}
+						// Note that in this case we want to use the index of the first matching
+						// column. This is because renderNode.computePhysicalProps also prefers
+						// the first column, and we want the orderings to match as much as
+						// possible.
+						continue
+					}
+					index = j
+				}
+			}
+		}
 	}
-	// We added all columns in fromOrder; we can copy the distinct flag.
-	ordering.unique = fromOrder.unique
-	return ordering
+
+	return index, nil
 }

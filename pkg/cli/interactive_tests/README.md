@@ -17,6 +17,10 @@ Two ways to run the tests are supported:
 
   This requires Docker. The test driver is in `acceptance/cli_test.go`.
 
+  To enable verbose debugging output, crank up the log verbosity:
+
+  `make acceptance TESTS=TestDockerCLI TESTFLAGS="-v -vmodule=cli_test=2"`
+
 - for a quick check, or manual testing while authoring a test, one can
   run the test from the current shell with:
 

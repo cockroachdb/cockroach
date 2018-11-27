@@ -11,14 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Daniel Harrison (daniel.harrison@gmail.com)
 
 syntax = "proto3";
 package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // SSTUserProperties contains the user-added properties of a single sstable.

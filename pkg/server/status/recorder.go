@@ -11,35 +11,48 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt.r.tracy@gmail.com)
 
 package status
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math"
 	"os"
+	"runtime"
 	"strconv"
-
-	"golang.org/x/net/context"
+	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
 const (
+	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -72,7 +85,7 @@ var recordHistogramQuantiles = []quantile{
 // directly in order to simplify testing.
 type storeMetrics interface {
 	StoreID() roachpb.StoreID
-	Descriptor() (*roachpb.StoreDescriptor, error)
+	Descriptor(bool) (*roachpb.StoreDescriptor, error)
 	MVCCStats() enginepb.MVCCStats
 	Registry() *metric.Registry
 }
@@ -85,11 +98,24 @@ type storeMetrics interface {
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
+	*HealthChecker
+	gossip       *gossip.Gossip
+	nodeLiveness *storage.NodeLiveness
+	rpcContext   *rpc.Context
+	settings     *cluster.Settings
+	clock        *hlc.Clock
+
+	// Counts to help optimize slice allocation. Should only be accessed atomically.
+	lastDataCount        int64
+	lastSummaryCount     int64
+	lastNodeMetricCount  int64
+	lastStoreMetricCount int64
+
+	// mu synchronizes the reading of node/store registries against the adding of
+	// nodes/stores. Consequently, almost all uses of it only need to take an
+	// RLock on it.
 	mu struct {
-		syncutil.Mutex
-		// prometheusExporter merges metrics into families and generates the
-		// prometheus text format.
-		prometheusExporter metric.PrometheusExporter
+		syncutil.RWMutex
 		// nodeRegistry contains, as subregistries, the multiple component-specific
 		// registries which are recorded as "node level" metrics.
 		nodeRegistry *metric.Registry
@@ -100,16 +126,20 @@ type MetricsRecorder struct {
 		// are not stored as subregistries, but rather are treated as wholly
 		// independent.
 		storeRegistries map[roachpb.StoreID]*metric.Registry
-		clock           *hlc.Clock
 		stores          map[roachpb.StoreID]storeMetrics
-
-		// Counts to help optimize slice allocation.
-		lastDataCount        int
-		lastSummaryCount     int
-		lastNodeMetricCount  int
-		lastStoreMetricCount int
 	}
-	// WriteStatusSummary is a potentially long-running method (with a network
+	// PrometheusExporter is not thread-safe even for operations that are
+	// logically read-only, but we don't want to block using it just because
+	// another goroutine is reading from the registries (i.e. using
+	// `mu.RLock()`), so we use a separate mutex just for prometheus.
+	// NOTE: promMu should always be locked BEFORE trying to lock mu.
+	promMu struct {
+		syncutil.Mutex
+		// prometheusExporter merges metrics into families and generates the
+		// prometheus text format.
+		prometheusExporter metric.PrometheusExporter
+	}
+	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
@@ -117,12 +147,24 @@ type MetricsRecorder struct {
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
 // given clock.
-func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
-	mr := &MetricsRecorder{}
+func NewMetricsRecorder(
+	clock *hlc.Clock,
+	nodeLiveness *storage.NodeLiveness,
+	rpcContext *rpc.Context,
+	gossip *gossip.Gossip,
+	settings *cluster.Settings,
+) *MetricsRecorder {
+	mr := &MetricsRecorder{
+		HealthChecker: NewHealthChecker(trackedMetrics),
+		nodeLiveness:  nodeLiveness,
+		rpcContext:    rpcContext,
+		gossip:        gossip,
+		settings:      settings,
+	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.mu.prometheusExporter = metric.MakePrometheusExporter()
-	mr.mu.clock = clock
+	mr.promMu.prometheusExporter = metric.MakePrometheusExporter()
+	mr.clock = clock
 	return mr
 }
 
@@ -142,9 +184,12 @@ func (mr *MetricsRecorder) AddNode(
 
 	// Create node ID gauge metric with host as a label.
 	metadata := metric.Metadata{
-		Name: "node-id",
-		Help: "node ID with labels for advertised RPC and HTTP addresses",
+		Name:        "node-id",
+		Help:        "node ID with labels for advertised RPC and HTTP addresses",
+		Measurement: "Node ID",
+		Unit:        metric.Unit_CONST,
 	}
+
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
 	nodeIDGauge := metric.NewGauge(metadata)
@@ -169,8 +214,8 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 // MarshalJSON returns an appropriate JSON representation of the current values
 // of the metrics being tracked by this recorder.
 func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
@@ -194,6 +239,14 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 
 // scrapePrometheusLocked updates the prometheusExporter's metrics snapshot.
 func (mr *MetricsRecorder) scrapePrometheusLocked() {
+	mr.scrapeIntoPrometheus(&mr.promMu.prometheusExporter)
+}
+
+// scrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
+// snapshot.
+func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
@@ -201,25 +254,50 @@ func (mr *MetricsRecorder) scrapePrometheusLocked() {
 		}
 	}
 
-	mr.mu.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
-		mr.mu.prometheusExporter.ScrapeRegistry(reg)
+		pm.ScrapeRegistry(reg)
 	}
 }
 
 // PrintAsText writes the current metrics values as plain-text to the writer.
+// We write metrics to a temporary buffer which is then copied to the writer.
+// This is to avoid hanging requests from holding the lock.
 func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	var buf bytes.Buffer
+	if err := mr.lockAndPrintAsText(&buf); err != nil {
+		return err
+	}
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+// lockAndPrintAsText grabs the recorder lock and generates the prometheus
+// metrics page.
+func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
+	mr.promMu.Lock()
+	defer mr.promMu.Unlock()
 	mr.scrapePrometheusLocked()
-	return mr.mu.prometheusExporter.PrintAsText(w)
+	return mr.promMu.prometheusExporter.PrintAsText(w)
+}
+
+// ExportToGraphite sends the current metric values to a Graphite server.
+// It creates a new PrometheusExporter each time to avoid needing to worry
+// about races with mr.promMu.prometheusExporter. We are not as worried
+// about the extra memory allocations.
+func (mr *MetricsRecorder) ExportToGraphite(
+	ctx context.Context, endpoint string, pm *metric.PrometheusExporter,
+) error {
+	mr.scrapeIntoPrometheus(pm)
+	graphiteExporter := metric.MakeGraphiteExporter(pm)
+	return graphiteExporter.Push(ctx, endpoint)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by
 // CockroachDB's time series system.
 func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
@@ -229,10 +307,11 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		return nil
 	}
 
-	data := make([]tspb.TimeSeriesData, 0, mr.mu.lastDataCount)
+	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
+	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
 
 	// Record time series from node-level registries.
-	now := mr.mu.clock.PhysicalNow()
+	now := mr.clock.PhysicalNow()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
@@ -251,37 +330,134 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		}
 		storeRecorder.record(&data)
 	}
-	mr.mu.lastDataCount = len(data)
+	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
 	return data
 }
 
-// GetStatusSummary returns a status summary messages for the node. The summary
-// includes the recent values of metrics for both the node and all of its
-// component stores.
-func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
+// GetMetricsMetadata returns the metadata from all metrics tracked in the node's
+// nodeRegistry and a randomly selected storeRegistry.
+func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "attempt to generate status summary before NodeID allocation.")
+			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
 		}
 		return nil
 	}
 
-	now := mr.mu.clock.PhysicalNow()
+	metrics := make(map[string]metric.Metadata)
+
+	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics)
+
+	// Get a random storeID.
+	var sID roachpb.StoreID
+
+	for storeID := range mr.mu.storeRegistries {
+		sID = storeID
+		break
+	}
+
+	// Get metric metadata from that store because all stores have the same metadata.
+	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+
+	return metrics
+}
+
+// getNetworkActivity produces three maps detailing information about
+// network activity between this node and all other nodes. The maps
+// are incoming throughput, outgoing throughput, and average
+// latency. Throughputs are stored as bytes, and latencies as nanos.
+func (mr *MetricsRecorder) getNetworkActivity(
+	ctx context.Context,
+) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
+	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
+	if mr.nodeLiveness != nil && mr.gossip != nil {
+		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
+
+		throughputMap := mr.rpcContext.GetStatsMap()
+		var currentAverages map[string]time.Duration
+		if mr.rpcContext.RemoteClocks != nil {
+			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
+		}
+		for nodeID, entry := range isLiveMap {
+			address, err := mr.gossip.GetNodeIDAddress(nodeID)
+			if err != nil {
+				if entry.IsLive {
+					log.Warning(ctx, err.Error())
+				}
+				continue
+			}
+			na := statuspb.NodeStatus_NetworkActivity{}
+			key := address.String()
+			if tp, ok := throughputMap.Load(key); ok {
+				stats := tp.(*rpc.Stats)
+				na.Incoming = stats.Incoming()
+				na.Outgoing = stats.Outgoing()
+			}
+			if entry.IsLive {
+				if latency, ok := currentAverages[key]; ok {
+					na.Latency = latency.Nanoseconds()
+				}
+			}
+			activity[nodeID] = na
+		}
+	}
+	return activity
+}
+
+// GenerateNodeStatus returns a status summary message for the node. The summary
+// includes the recent values of metrics for both the node and all of its
+// component stores. When the node isn't initialized yet, nil is returned.
+func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus {
+	activity := mr.getNetworkActivity(ctx)
+
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
+		}
+		return nil
+	}
+
+	now := mr.clock.PhysicalNow()
+
+	lastSummaryCount := atomic.LoadInt64(&mr.lastSummaryCount)
+	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
+	lastStoreMetricCount := atomic.LoadInt64(&mr.lastStoreMetricCount)
+
+	systemMemory, _, err := GetTotalMemoryWithoutLogging()
+	if err != nil {
+		log.Error(ctx, "could not get total system memory:", err)
+	}
 
 	// Generate a node status with no store data.
-	nodeStat := &NodeStatus{
-		Desc:          mr.mu.desc,
-		BuildInfo:     build.GetInfo(),
-		UpdatedAt:     now,
-		StartedAt:     mr.mu.startedAt,
-		StoreStatuses: make([]StoreStatus, 0, mr.mu.lastSummaryCount),
-		Metrics:       make(map[string]float64, mr.mu.lastNodeMetricCount),
-		Args:          os.Args,
-		Env:           envutil.GetEnvVarsUsed(),
+	nodeStat := &statuspb.NodeStatus{
+		Desc:              mr.mu.desc,
+		BuildInfo:         build.GetInfo(),
+		UpdatedAt:         now,
+		StartedAt:         mr.mu.startedAt,
+		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
+		Metrics:           make(map[string]float64, lastNodeMetricCount),
+		Args:              os.Args,
+		Env:               envutil.GetEnvVarsUsed(),
+		Activity:          activity,
+		NumCpus:           int32(runtime.NumCPU()),
+		TotalSystemMemory: systemMemory,
+	}
+
+	// If the cluster hasn't yet been definitively moved past the network stats
+	// phase, ensure that we provide latencies separately for backwards compatibility.
+	if !mr.settings.Version.IsMinSupported(cluster.VersionRPCNetworkStats) {
+		nodeStat.Latencies = make(map[roachpb.NodeID]int64)
+		for nodeID, na := range nodeStat.Activity {
+			nodeStat.Latencies[nodeID] = na.Latency
+		}
 	}
 
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
@@ -290,56 +466,58 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 
 	// Generate status summaries for stores.
 	for storeID, r := range mr.mu.storeRegistries {
-		storeMetrics := make(map[string]float64, mr.mu.lastStoreMetricCount)
+		storeMetrics := make(map[string]float64, lastStoreMetricCount)
 		eachRecordableValue(r, func(name string, val float64) {
 			storeMetrics[name] = val
 		})
 
 		// Gather descriptor from store.
-		descriptor, err := mr.mu.stores[storeID].Descriptor()
+		descriptor, err := mr.mu.stores[storeID].Descriptor(false /* useCached */)
 		if err != nil {
-			log.Errorf(context.TODO(), "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(ctx, "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
-		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, StoreStatus{
+		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, statuspb.StoreStatus{
 			Desc:    *descriptor,
 			Metrics: storeMetrics,
 		})
 	}
-	mr.mu.lastSummaryCount = len(nodeStat.StoreStatuses)
-	mr.mu.lastNodeMetricCount = len(nodeStat.Metrics)
+
+	atomic.CompareAndSwapInt64(
+		&mr.lastSummaryCount, lastSummaryCount, int64(len(nodeStat.StoreStatuses)))
+	atomic.CompareAndSwapInt64(
+		&mr.lastNodeMetricCount, lastNodeMetricCount, int64(len(nodeStat.Metrics)))
 	if len(nodeStat.StoreStatuses) > 0 {
-		mr.mu.lastStoreMetricCount = len(nodeStat.StoreStatuses[0].Metrics)
+		atomic.CompareAndSwapInt64(
+			&mr.lastStoreMetricCount, lastStoreMetricCount, int64(len(nodeStat.StoreStatuses[0].Metrics)))
 	}
+
 	return nodeStat
 }
 
-// WriteStatusSummary generates a summary and immediately writes it to the given
-// client.
-func (mr *MetricsRecorder) WriteStatusSummary(ctx context.Context, db *client.DB) error {
+// WriteNodeStatus writes the supplied summary to the given client.
+func (mr *MetricsRecorder) WriteNodeStatus(
+	ctx context.Context, db *client.DB, nodeStatus statuspb.NodeStatus,
+) error {
 	mr.writeSummaryMu.Lock()
 	defer mr.writeSummaryMu.Unlock()
-
-	nodeStatus := mr.GetStatusSummary()
-	if nodeStatus != nil {
-		key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
-		// We use PutInline to store only a single version of the node status.
-		// There's not much point in keeping the historical versions as we keep
-		// all of the constituent data as timeseries. Further, due to the size
-		// of the build info in the node status, writing one of these every 10s
-		// will generate more versions than will easily fit into a range over
-		// the course of a day.
-		if err := db.PutInline(ctx, key, nodeStatus); err != nil {
-			return err
+	key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
+	// We use PutInline to store only a single version of the node status.
+	// There's not much point in keeping the historical versions as we keep
+	// all of the constituent data as timeseries. Further, due to the size
+	// of the build info in the node status, writing one of these every 10s
+	// will generate more versions than will easily fit into a range over
+	// the course of a day.
+	if err := db.PutInline(ctx, key, &nodeStatus); err != nil {
+		return err
+	}
+	if log.V(2) {
+		statusJSON, err := json.Marshal(&nodeStatus)
+		if err != nil {
+			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
-		if log.V(2) {
-			statusJSON, err := json.Marshal(nodeStatus)
-			if err != nil {
-				log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
-			}
-			log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
-		}
+		log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}
 	return nil
 }
@@ -359,8 +537,6 @@ func extractValue(mtr interface{}) (float64, error) {
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.CounterWithRates:
-		return float64(mtr.Count()), nil
 	case *metric.Counter:
 		return float64(mtr.Count()), nil
 	case *metric.Gauge:
@@ -421,4 +597,74 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 			},
 		})
 	})
+}
+
+// GetTotalMemory returns either the total system memory or if possible the
+// cgroups available memory.
+func GetTotalMemory(ctx context.Context) (int64, error) {
+	memory, warning, err := GetTotalMemoryWithoutLogging()
+	if err != nil {
+		return 0, err
+	}
+	if warning != "" {
+		log.Infof(ctx, warning)
+	}
+	return memory, nil
+}
+
+// GetTotalMemoryWithoutLogging is the same as GetTotalMemory, but returns any warning
+// as a string instead of logging it.
+func GetTotalMemoryWithoutLogging() (int64, string, error) {
+	totalMem, err := func() (int64, error) {
+		mem := gosigar.Mem{}
+		if err := mem.Get(); err != nil {
+			return 0, err
+		}
+		if mem.Total > math.MaxInt64 {
+			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
+				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+		}
+		return int64(mem.Total), nil
+	}()
+	if err != nil {
+		return 0, "", err
+	}
+	checkTotal := func(x int64, warning string) (int64, string, error) {
+		if x <= 0 {
+			// https://github.com/elastic/gosigar/issues/72
+			return 0, warning, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+		}
+		return x, warning, nil
+	}
+	if runtime.GOOS != "linux" {
+		return checkTotal(totalMem, "")
+	}
+
+	var buf []byte
+	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
+	if err != nil {
+		warning := fmt.Sprintf("can't parse available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
+		warning := fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	if totalMem > 0 && int64(cgAvlMem) > totalMem {
+		warning := fmt.Sprintf("available memory from cgroups (%s) exceeds system memory %s, using system memory",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	return checkTotal(int64(cgAvlMem), "")
 }

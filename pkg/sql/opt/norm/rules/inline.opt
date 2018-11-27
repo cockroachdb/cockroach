@@ -1,0 +1,73 @@
+# =============================================================================
+# inline.opt contains normalization patterns that replace a variable reference
+# with the expression to which that variable is bound. For example:
+#
+#   SELECT x2+1 FROM (SELECT x+1 AS x2 FROM a)
+#
+# becomes:
+#
+#   SELECT (x+1)+1 FROM a
+#
+# Inlining variables can result in the complete elimination of Project
+# operators, or at least in the ability to more freely reorder them within the
+# larger relational expression tree. This allows pushing filters further down
+# the tree, as well as with pulling them up in the decorrelation case.
+# =============================================================================
+
+
+# PushSelectIntoInlinableProject pushes the Select operator into a Project, even
+# though the filter references it. This is made possible by inlining the
+# references to projected columns so that the Select becomes independent of the
+# Project, and therefore can be reordered. This normalization is important for
+# enabling Any filter conditions to be pushed down into scans.
+#
+# This rule is low priority so that it runs after the PushSelectIntoProject
+# and MergeProjectProject rules, since those rules are cheaper to match and
+# replace.
+#
+# Example:
+#   SELECT * FROM (SELECT x+1 AS x2 FROM xy) WHERE x2=10
+#   =>
+#   SELECT x+1 AS x2 FROM (SELECT * FROM xy WHERE (x+1)=10)
+#
+[PushSelectIntoInlinableProject, Normalize, LowPriority]
+(Select
+    (Project
+        $input:*
+        $projections:* & (CanInlineProjections $projections)
+        $passthrough:*
+    )
+    $filters:* & ^(FilterHasCorrelatedSubquery $filters)
+)
+=>
+(Project
+    (Select
+        $input
+        (InlineSelectProject $filters $projections)
+    )
+    $projections
+    $passthrough
+)
+
+# InlineProjectInProject folds an inner Project operator into an outer Project
+# that references each inner column no more than one time. If there are no
+# duplicate references, then there's no benefit to keeping the multiple nested
+# projections. This rule simplifies the relational expression tree and makes it
+# more likely that other normalization rules will match.
+#
+# This rule is low priority so that it runs after the EliminateProjectProject
+# rule, since that rule is cheaper to match and replace.
+#
+# Example:
+#   SELECT x2*2 FROM (SELECT x+1 AS x2 FROM xy)
+#   =>
+#   SELECT (x+1)*2 FROM xy
+#
+[InlineProjectInProject, Normalize, LowPriority]
+(Project
+    $input:(Project)
+    $projections:*
+    $passthrough:* & ^(HasDuplicateRefs $projections $passthrough)
+)
+=>
+(InlineProjectProject $input $projections $passthrough)

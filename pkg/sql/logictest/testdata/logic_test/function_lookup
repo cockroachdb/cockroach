@@ -1,0 +1,40 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE foo(x INT DEFAULT length(pg_typeof(1234))-1)
+
+statement ok
+CREATE TABLE bar(x INT, CHECK(pg_typeof(123) = 'int'))
+
+statement ok
+ALTER TABLE foo ALTER COLUMN x SET DEFAULT length(pg_typeof(123))
+
+statement ok
+ALTER TABLE foo ADD CONSTRAINT z CHECK(pg_typeof(123) = 'int')
+
+query T
+SELECT pg_typeof(123)
+----
+int
+
+query I
+SELECT count(*) FROM foo GROUP BY pg_typeof(x)
+----
+
+query I
+SELECT * FROM foo LIMIT length(pg_typeof(123))
+----
+
+query I
+SELECT * FROM foo WHERE pg_typeof(x) = 'int'
+----
+
+query T
+INSERT INTO foo(x) VALUES (42) RETURNING pg_typeof(x)
+----
+int
+
+# CockroachDB is case-preserving for quoted identifiers like pg, and
+# function names only exist in lowercase.
+query error unknown function: PG_TYPEOF\(\), but pg_typeof\(\) exists
+SELECT "PG_TYPEOF"(123)

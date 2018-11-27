@@ -11,34 +11,32 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package engine
 
 import (
 	"bytes"
+	"context"
 	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func ensureRangeEqual(
 	t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []MVCCKeyValue,
 ) {
+	t.Helper()
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
@@ -115,7 +113,7 @@ func TestEngineBatchCommit(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := batch.Commit(false /* !sync */); err != nil {
+		if err := batch.Commit(false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		close(writesDone)
@@ -136,7 +134,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		{
 			batch := eng.NewBatch()
 			defer batch.Close()
-			iter := batch.NewIterator(false)
+			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 			key := MVCCKey{Key: roachpb.Key("b")}
 
 			if err := batch.Put(key, []byte("foo")); err != nil {
@@ -250,7 +248,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			var m enginepb.MVCCMetadata
-			if err := proto.Unmarshal(b, &m); err != nil {
+			if err := protoutil.Unmarshal(b, &m); err != nil {
 				t.Fatal(err)
 			}
 			if !m.IsInline() {
@@ -299,7 +297,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 			}
 			// Try using an iterator to get the value from the batch.
-			iter := b.NewIterator(false)
+			iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 			iter.Seek(key)
 			if ok, err := iter.Valid(); !ok {
 				if currentBatch[len(currentBatch)-1].value != nil {
@@ -322,7 +320,7 @@ func TestEngineBatch(t *testing.T) {
 			}
 			iter.Close()
 			// Commit the batch and try getting the value from the engine.
-			if err := b.Commit(false /* !sync */); err != nil {
+			if err := b.Commit(false /* sync */); err != nil {
 				t.Errorf("%d: %v", i, err)
 				continue
 			}
@@ -424,22 +422,22 @@ func TestEngineMerge(t *testing.T) {
 			{
 				mvccKey("timeseriesmerged"),
 				[][]byte{
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{1, 1, 5, 5, 5},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{2, 1, 5, 5, 5},
 						{1, 2, 10, 7, 3},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{10, 1, 5, 5, 5},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{5, 1, 5, 5, 5},
 						{3, 1, 5, 5, 5},
 					}...),
 				},
-				timeSeries(testtime, 1000, []tsSample{
+				timeSeriesRow(testtime, 1000, []tsSample{
 					{1, 2, 10, 7, 3},
 					{2, 1, 5, 5, 5},
 					{3, 1, 5, 5, 5},
@@ -456,10 +454,10 @@ func TestEngineMerge(t *testing.T) {
 			}
 			result, _ := engine.Get(tc.testKey)
 			var resultV, expectedV enginepb.MVCCMetadata
-			if err := proto.Unmarshal(result, &resultV); err != nil {
+			if err := protoutil.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}
-			if err := proto.Unmarshal(tc.expected, &expectedV); err != nil {
+			if err := protoutil.Unmarshal(tc.expected, &expectedV); err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(resultV, expectedV) {
@@ -632,7 +630,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		iter := engine.NewIterator(false)
+		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return engine.ClearIterRange(iter, start, end)
 	})
@@ -763,7 +761,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify NewIterator still iterates over original snapshot.
-		iter := snap.NewIterator(false)
+		iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		iter.Seek(newKey)
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)

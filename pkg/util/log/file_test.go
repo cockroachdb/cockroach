@@ -1,6 +1,5 @@
 // Copyright 2013 Google Inc. All Rights Reserved.
-//
-// Go support for leveled logs, analogous to https://code.google.com/p/google-clog/
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,31 +13,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Bram Gruneir (bram@cockroachlabs.com)
+// This code originated in the github.com/golang/glog package.
 
 package log
 
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TestLogFilenameParsing ensures that logName and parseLogFilename work as
 // advertised.
 func TestLogFilenameParsing(t *testing.T) {
 	testCases := []time.Time{
-		time.Now(),
-		time.Now().AddDate(-10, 0, 0),
-		time.Now().AddDate(0, 0, -1),
+		timeutil.Now(),
+		timeutil.Now().AddDate(-10, 0, 0),
+		timeutil.Now().AddDate(0, 0, -1),
 	}
 
 	for i, testCase := range testCases {
-		filename, _ := logName(testCase)
+		filename, _ := logName(program, testCase)
 		details, err := parseLogFilename(filename)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := time.Unix(0, details.Time).Format(time.RFC3339), testCase.Format(time.RFC3339); a != e {
+		if a, e := timeutil.Unix(0, details.Time).Format(time.RFC3339), testCase.Format(time.RFC3339); a != e {
 			t.Errorf("%d: Times do not match, expected:%s - actual:%s", i, e, a)
 		}
 	}
@@ -53,12 +54,11 @@ func TestSelectFiles(t *testing.T) {
 	year2200 := time.Date(2200, time.January, 1, 1, 0, 0, 0, time.UTC)
 	for i := 0; i < 100; i++ {
 		fileTime := year2000.AddDate(i, 0, 0)
-		name, _ := logName(fileTime)
+		name, _ := logName(program, fileTime)
 		testfile := FileInfo{
 			Name: name,
 			Details: FileDetails{
-				Severity: Severity_INFO,
-				Time:     fileTime.UnixNano(),
+				Time: fileTime.UnixNano(),
 			},
 		}
 		testFiles = append(testFiles, testfile)

@@ -1,0 +1,2 @@
+with_clause ::=
+	'WITH' ( ( ( table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) 'AS' '(' preparable_stmt ')' ) ) ( ( ',' ( table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) 'AS' '(' preparable_stmt ')' ) ) )* ) ( insert_stmt | update_stmt | delete_stmt | upsert_stmt | select_stmt )

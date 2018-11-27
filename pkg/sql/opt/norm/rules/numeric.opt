@@ -1,0 +1,37 @@
+# =============================================================================
+# numeric.opt contains normalization rules for numeric operators.
+# =============================================================================
+
+# FoldPlusZero folds $left + 0 for numeric types.
+[FoldPlusZero, Normalize]
+(Plus $left:* (Const 0)) => $left
+
+# FoldZeroPlus folds 0 + $right for numeric types.
+[FoldZeroPlus, Normalize]
+(Plus (Const 0) $right:*) => $right
+
+# FoldMinusZero folds $left - 0 for numeric types.
+[FoldMinusZero, Normalize]
+(Minus $left:* (Const 0)) => $left
+
+# FoldMultOne folds $left * 1 for numeric types.
+[FoldMultOne, Normalize]
+(Mult $left:* (Const 1)) => $left
+
+# FoldOneMult folds 1 * $right for numeric types.
+[FoldOneMult, Normalize]
+(Mult (Const 1) $right:*) => $right
+
+# FoldDivOne folds $left / 1 for numeric types.
+[FoldDivOne, Normalize]
+(Div | FloorDiv $left:* (Const 1)) => $left
+
+# InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
+[InvertMinus, Normalize]
+(UnaryMinus (Minus $left:* $right:*) & (CanConstructBinary Minus $right $left))
+=>
+(Minus $right $left)
+
+# EliminateUnaryMinus discards a doubled UnaryMinus operator.
+[EliminateUnaryMinus, Normalize]
+(UnaryMinus (UnaryMinus $input:*)) => $input

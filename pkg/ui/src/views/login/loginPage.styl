@@ -1,0 +1,156 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require "~styl/base/palette.styl"
+
+.login-page
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+  width 100%
+  position absolute
+  background-color white
+
+  .content
+    border thin solid $table-border-color
+    display flex
+
+  &__info.section
+    width 486px
+    padding 24px
+
+  &__form.section
+    background-color $background-color
+    width 486px
+
+  .form-container
+    padding-left 50px
+    padding-right 50px
+
+  .form-internal
+    margin-bottom 140px
+
+  .heading
+    text-transform none
+    letter-spacing 1px
+    margin-bottom 24px
+
+  .aside
+    margin-top 12px
+    line-height 24px
+    color $body-color
+    width 350px
+    font-size 14px
+
+  .version
+    color $body-color
+    text-align right
+    margin-top 10px
+    margin-bottom 100px
+
+  .version-tag
+    color #54b30e
+
+  .logo
+    height 32px
+    position relative
+    margin-bottom 80px
+
+  .input-text
+    width 100%
+    font-size 14px
+    line-height 17px
+    padding 12px 18px
+    vertical-align middle
+    border 1px solid $button-border-color
+    border-radius 3px
+    margin 12px 0
+    color $body-color
+    display block
+
+    &::placeholder
+      color lightgrey
+
+    &--error
+      border-color $alert-color
+
+  .submit-button
+    width 100%
+    text-transform uppercase
+    font-size 14px
+    letter-spacing 2px
+    line-height 17px
+    padding 12px 24px
+    vertical-align middle
+    border 0px none
+    border-radius 3px
+    margin 24px 0
+    color $background-color
+    background-color $link-color
+    cursor pointer
+    display block
+
+    &:disabled
+      background-color #90b8ef
+
+  &__error
+    color $alert-color
+    margin 12px 0
+
+.login-new-feature
+  margin-left 30px
+
+  &__blurb
+    margin-top 5px
+    line-height 24px
+    color $body-color
+
+.login-new-feature-heading
+  &__text
+    color $link-color
+
+.login-note-box
+  &__sql-command
+    border 1px solid lightgrey
+    background $background-color
+    padding 5px
+    padding-left 9px
+    border-radius 4px
+    margin-top 10px
+
+    // These colors match the SQL examples in our docs.
+    // They don't match the colors in the table details or statement
+    // details page, since those display SQL on a dark blue background.
+    .sql-keyword
+      color #a0247a
+
+    .sql-string
+      color #3c80e1
+
+.login-docs-link
+  display block
+  margin-top 10px
+  text-decoration none
+  color $link-color
+
+  &__icon
+    display inline-block
+    position relative
+    top 3px
+
+  &__text
+    display inline-block
+    line-height 30px
+    margin-left 6px

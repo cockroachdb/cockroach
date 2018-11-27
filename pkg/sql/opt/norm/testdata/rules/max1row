@@ -1,0 +1,117 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+----
+TABLE b
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# EliminateMax1Row
+# --------------------------------------------------
+opt expect=EliminateMax1Row
+SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
+----
+project
+ ├── columns: r:6(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── gt [type=bool]
+           ├── subquery [type=int]
+           │    └── scan a
+           │         ├── columns: i:2(int)
+           │         ├── limit: 1
+           │         ├── key: ()
+           │         └── fd: ()-->(2)
+           └── const: 5 [type=int]
+
+opt expect=EliminateMax1Row
+SELECT (SELECT count(*) FROM a) > 100 AS r
+----
+project
+ ├── columns: r:7(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── gt [type=bool]
+           ├── subquery [type=int]
+           │    └── scalar-group-by
+           │         ├── columns: count_rows:6(int)
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(6)
+           │         ├── scan a
+           │         └── aggregations
+           │              └── count-rows [type=int]
+           └── const: 100 [type=int]
+
+opt expect=EliminateMax1Row
+SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
+----
+project
+ ├── columns: r:6(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── gt [type=bool]
+           ├── subquery [type=int]
+           │    └── values
+           │         ├── columns: i:2(int)
+           │         ├── cardinality: [0 - 0]
+           │         ├── key: ()
+           │         └── fd: ()-->(2)
+           └── const: 5 [type=int]
+
+# Don't remove the Max1Row operator.
+opt expect-not=EliminateMax1Row
+SELECT (SELECT i FROM a) > 5 AS r
+----
+project
+ ├── columns: r:6(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── gt [type=bool]
+           ├── subquery [type=int]
+           │    └── max1-row
+           │         ├── columns: i:2(int)
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(2)
+           │         └── scan a
+           │              └── columns: i:2(int)
+           └── const: 5 [type=int]

@@ -11,13 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"sync/atomic"
@@ -25,7 +24,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -132,8 +130,115 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit(false /* !sync */)
+		return b.Commit(false /* sync */)
 	})
+}
+
+func shouldPanic(t *testing.T, f func(), funcName string, expectedPanicStr string) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%v: test did not panic", funcName)
+		} else if r != expectedPanicStr {
+			t.Fatalf("%v: unexpected panic: %v", funcName, r)
+		}
+	}()
+	f()
+}
+
+func shouldNotPanic(t *testing.T, f func(), funcName string) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("%v: unexpected panic: %v", funcName, r)
+		}
+	}()
+	f()
+}
+
+// TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via
+// engine.NewReadOnly()) all Reader methods work, and all Writer methods panic
+// as "not implemented". Also basic iterating functionality is verified.
+func TestReadOnlyBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	b := e.NewReadOnly()
+	if b.Closed() {
+		t.Fatal("read-only is expectedly found to be closed")
+	}
+	a := mvccKey("a")
+	getVal := &roachpb.Value{}
+	successTestCases := []func(){
+		func() { _, _ = b.Get(a) },
+		func() { _, _, _, _ = b.GetProto(a, getVal) },
+		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+		func() { b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+		func() {
+			b.NewIterator(IterOptions{
+				MinTimestampHint: hlc.MinTimestamp,
+				MaxTimestampHint: hlc.MaxTimestamp,
+				UpperBound:       roachpb.KeyMax,
+			}).Close()
+		},
+	}
+	defer func() {
+		b.Close()
+		if !b.Closed() {
+			t.Fatal("even after calling Close, a read-only should not be closed")
+		}
+		shouldPanic(t, func() { b.Close() }, "Close", "closing an already-closed rocksDBReadOnly")
+		for i, f := range successTestCases {
+			shouldPanic(t, f, string(i), "using a closed rocksDBReadOnly")
+		}
+	}()
+
+	for i, f := range successTestCases {
+		shouldNotPanic(t, f, string(i))
+	}
+
+	// For a read-only ReadWriter, all Writer methods should panic.
+	failureTestCases := []func(){
+		func() { _ = b.ApplyBatchRepr(nil, false) },
+		func() { _ = b.Clear(a) },
+		func() { _ = b.ClearRange(a, a) },
+		func() { _ = b.Merge(a, nil) },
+		func() { _ = b.Put(a, nil) },
+	}
+	for i, f := range failureTestCases {
+		shouldPanic(t, f, string(i), "not implemented")
+	}
+
+	if err := e.Put(mvccKey("a"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Clear(mvccKey("b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Merge(mvccKey("c"), appender("bar")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, merged values should be:
+	expValues := []MVCCKeyValue{
+		{Key: mvccKey("a"), Value: []byte("value")},
+		{Key: mvccKey("c"), Value: appender("foobar")},
+	}
+
+	kvs, err := Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(expValues, kvs) {
+		t.Errorf("%v != %v", kvs, expValues)
+	}
 }
 
 func TestBatchRepr(t *testing.T) {
@@ -145,8 +250,14 @@ func TestBatchRepr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if count, expected := r.Count(), 3; count != expected {
-			t.Fatalf("bad count: expected %d, but found %d", expected, count)
+		const expectedCount = 3
+		if count := r.Count(); count != expectedCount {
+			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
+		}
+		if count, err := RocksDBBatchCount(repr); err != nil {
+			t.Fatal(err)
+		} else if count != expectedCount {
+			t.Fatalf("bad count: RocksDBBatchCount expected %d, but found %d", expectedCount, count)
 		}
 
 		var ops []string
@@ -156,12 +267,12 @@ func TestBatchRepr(t *testing.T) {
 			}
 			switch r.BatchType() {
 			case BatchTypeDeletion:
-				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.UnsafeKey())))
+				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.Key())))
 			case BatchTypeValue:
-				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.UnsafeKey()), string(r.UnsafeValue())))
+				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.Key()), string(r.Value())))
 			case BatchTypeMerge:
 				// The merge value is a protobuf and not easily displayable.
-				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.UnsafeKey())))
+				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.Key())))
 			}
 		}
 		if err != nil {
@@ -178,14 +289,14 @@ func TestBatchRepr(t *testing.T) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
 		}
 
-		return e.ApplyBatchRepr(repr, false /* !sync */)
+		return e.ApplyBatchRepr(repr, false /* sync */)
 	})
 }
 
 func TestWriteBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, true /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit(false /* !sync */)
+		return b.Commit(false /* sync */)
 	})
 }
 
@@ -211,7 +322,7 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b2 := e.NewBatch()
 		defer b2.Close()
-		if err := b2.ApplyBatchRepr(repr1, false /* !sync */); err != nil {
+		if err := b2.ApplyBatchRepr(repr1, false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		repr2 := b2.Repr()
@@ -237,11 +348,11 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b4 := e.NewBatch()
 		defer b4.Close()
-		if err := b4.ApplyBatchRepr(repr, false /* !sync */); err != nil {
+		if err := b4.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		// Intentionally don't call Repr() because the expected user wouldn't.
-		if err := b4.Commit(false /* !sync */); err != nil {
+		if err := b4.Commit(false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 
@@ -299,10 +410,10 @@ func TestBatchGet(t *testing.T) {
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
 	var resultV, expectedV enginepb.MVCCMetadata
-	if err := proto.Unmarshal(result, &resultV); err != nil {
+	if err := protoutil.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}
-	if err := proto.Unmarshal(expected, &expectedV); err != nil {
+	if err := protoutil.Unmarshal(expected, &expectedV); err != nil {
 		t.Fatal(err)
 	}
 	return reflect.DeepEqual(resultV, expectedV)
@@ -403,7 +514,7 @@ func TestBatchProto(t *testing.T) {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
-	if err := b.Commit(false /* !sync */); err != nil {
+	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
@@ -492,7 +603,7 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	// Now, commit batch and re-scan using engine direct to compare results.
-	if err := b.Commit(false /* !sync */); err != nil {
+	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 	for i, scan := range scans {
@@ -616,6 +727,7 @@ func TestBatchBuilder(t *testing.T) {
 	stopper.AddCloser(e)
 
 	batch := e.NewBatch().(*rocksDBBatch)
+	batch.ensureBatch()
 	// Ensure that, even though we reach into the batch's internals with
 	// dbPut etc, asking for the batch's Repr will get data from C++ and
 	// not its unused builder.
@@ -671,6 +783,7 @@ func TestBatchBuilderStress(t *testing.T) {
 
 		func() {
 			batch := e.NewBatch().(*rocksDBBatch)
+			batch.ensureBatch()
 			// Ensure that, even though we reach into the batch's internals with
 			// dbPut etc, asking for the batch's Repr will get data from C++ and
 			// not its unused builder.
@@ -766,7 +879,7 @@ func TestBatchDistinct(t *testing.T) {
 
 	// Similarly, for distinct batch iterators we will see previous writes to the
 	// batch.
-	iter := distinct.NewIterator(false)
+	iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid; err=%v", err)
@@ -817,7 +930,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 	// Verify that reads on the distinct batch go to the underlying engine, not
 	// to the write-only batch.
-	iter := distinct.NewIterator(false)
+	iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -863,7 +976,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 		func() { _, _ = batch.Get(a) },
 		func() { _, _, _, _ = batch.GetProto(a, nil) },
 		func() { _ = batch.Iterate(a, a, nil) },
-		func() { _ = batch.NewIterator(false) },
+		func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
 	}
 	for i, f := range testCases {
 		func() {
@@ -892,6 +1005,7 @@ func TestBatchIteration(t *testing.T) {
 
 	k1 := MakeMVCCMetadataKey(roachpb.Key("c"))
 	k2 := MakeMVCCMetadataKey(roachpb.Key("d"))
+	k3 := MakeMVCCMetadataKey(roachpb.Key("e"))
 	v1 := []byte("value1")
 	v2 := []byte("value2")
 
@@ -901,8 +1015,11 @@ func TestBatchIteration(t *testing.T) {
 	if err := b.Put(k2, v2); err != nil {
 		t.Fatal(err)
 	}
+	if err := b.Put(k3, []byte("doesn't matter")); err != nil {
+		t.Fatal(err)
+	}
 
-	iter := b.NewIterator(false)
+	iter := b.NewIterator(IterOptions{UpperBound: k3.Key})
 	defer iter.Close()
 
 	// Forward iteration
@@ -1033,7 +1150,7 @@ func TestDecodeKey(t *testing.T) {
 			if !r.Next() {
 				t.Fatalf("could not get the first entry: %+v", r.Error())
 			}
-			decodedKey, err := DecodeKey(r.UnsafeKey())
+			decodedKey, err := DecodeMVCCKey(r.Key())
 			if err != nil {
 				t.Fatalf("unexpected err: %+v", err)
 			}

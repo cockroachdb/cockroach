@@ -11,25 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Timothy Chen
 
 package storage_test
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const channelServerBrokenRangeMessage = "channelServer broken range"
@@ -112,10 +113,11 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		transports: map[roachpb.NodeID]*storage.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		rttc.stopper,
+		&cluster.MakeTestingClusterSettings().Version,
 	)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(
@@ -145,17 +147,18 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper,
 ) (*storage.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
+	transport := storage.NewRaftTransport(
+		log.AmbientContext{Tracer: tracing.NewTracer()},
+		cluster.MakeTestingClusterSettings(),
+		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
+		grpcServer,
+		rttc.stopper,
+	)
+	rttc.transports[nodeID] = transport
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		rttc.t.Fatal(err)
 	}
-	transport := storage.NewRaftTransport(
-		log.AmbientContext{},
-		storage.GossipAddressResolver(rttc.gossip),
-		grpcServer,
-		rttc.nodeRPCContext,
-	)
-	rttc.transports[nodeID] = transport
 	return transport, ln.Addr()
 }
 
@@ -418,14 +421,8 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	}
 	clientTransport := rttc.AddNode(clientReplica.NodeID)
 
-	// The transport is set up asynchronously, so we expect the first
-	// Send to return true here.
-	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
-		t.Errorf("unexpectedly failed sending while connection is being asynchronously established")
-	}
-
-	// However, sending repeated messages should begin dropping once
-	// the circuit breaker does trip.
+	// Sending repeated messages should begin dropping once the circuit breaker
+	// does trip.
 	testutils.SucceedsSoon(t, func() error {
 		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
 			return errors.Errorf("expected circuit breaker to trip")
@@ -533,55 +530,68 @@ func TestReopenConnection(t *testing.T) {
 	serverTransport.Stop(serverReplica.StoreID)
 	serverStopper.Stop(context.TODO())
 
+	// With the old server down, nothing is listening no the address right now
+	// so the circuit breaker should trip.
+	testutils.SucceedsSoon(t, func() error {
+		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+			return errors.New("expected circuit breaker to trip")
+		}
+		return nil
+	})
+
 	replacementReplica := roachpb.ReplicaDescriptor{
 		NodeID:    3,
 		StoreID:   3,
 		ReplicaID: 3,
 	}
+
 	rttc.AddNodeWithoutGossip(replacementReplica.NodeID, serverAddr, rttc.stopper)
 	replacementChannel := rttc.ListenStore(replacementReplica.NodeID, replacementReplica.StoreID)
 
 	// Try sending a message to the old server's store (at the address its
 	// replacement is now running at) before its replacement has been gossiped.
 	// We just want to ensure that doing so doesn't deadlock the client transport.
-	// Successive attempts should instead trip the circuit breaker.
-	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
-		t.Errorf("unexpectedly failed sending first message to recently downed node")
+	if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+		t.Fatal("unexpectedly managed to send to recently downed node")
 	}
-	testutils.SucceedsSoon(t, func() error {
-		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
-			return errors.Errorf("expected circuit breaker to trip")
-		}
-		return nil
-	})
 
 	// Then, to ensure the client hasn't been deadlocked, add the replacement node
-	// to the gossip network and send it a request.
+	// to the gossip network and send it a request. Note that this will remove the
+	// gossip record for serverReplica.NodeID (n2) since they share the same address.
+	// This explains why we we can't really assert whether n2 becomes unreachable or
+	// not. If a healthy connection makes it into the rpc context before gossip
+	// makes the node unresolvable, it's possible. In the other case, it's not.
 	rttc.GossipNode(replacementReplica.NodeID, serverAddr)
 
-	// Sending messages to the old store should still be safe.
 	testutils.SucceedsSoon(t, func() error {
-		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
-			return errors.Errorf("expected circuit breaker to trip")
+		// Sending messages to the old store does not deadlock. See the comment above
+		// to understand why we don't check the returned value.
+		rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1})
+		// It won't be long until we can send to the new replica. The only reason
+		// this might fail is that the failed connection is still in the RPC
+		// connection pool and we have to wait out a health check interval.
+		if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 1}) {
+			return errors.New("unable to send to replacement replica")
 		}
 		return nil
 	})
 
-	// Keep sending commit=2 until breaker resets and we receive the
-	// first instance. It's possible an earlier message for commit=1
-	// snuck in.
+	// Send commit=2 to the replacement replica. This should work now because we've
+	// just used it successfully above and didn't change anything about the networking.
+	if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 2}) {
+		t.Fatal("replacement node still unhealthy")
+
+	}
 	testutils.SucceedsSoon(t, func() error {
-		if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 2}) {
-			t.Error("unexpectedly failed sending to replacement replica")
-		}
 		select {
 		case req := <-replacementChannel.ch:
-			if req.Message.Commit == 2 {
+			// There could be a few stray messages with `c==1` in the channel,
+			// so throw those away.
+			if c := req.Message.Commit; c == 2 {
 				return nil
 			}
-			return errors.Errorf("expected message commit=2, got %+v", req)
 		default:
 		}
-		return errors.Errorf("expected message commit=2, got nothing")
+		return errors.New("still waiting")
 	})
 }

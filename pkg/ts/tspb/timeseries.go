@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package tspb
 
@@ -52,17 +50,10 @@ import (
 // For more information on how time series data is stored, see
 // InternalTimeSeriesData and its related structures.
 func (ts TimeSeriesData) ToInternal(
-	keyDuration, sampleDuration int64,
+	keyDuration, sampleDuration int64, columnar bool,
 ) ([]roachpb.InternalTimeSeriesData, error) {
-	if keyDuration%sampleDuration != 0 {
-		return nil, fmt.Errorf(
-			"sample duration %d does not evenly divide key duration %d",
-			sampleDuration, keyDuration)
-	}
-	if keyDuration < sampleDuration {
-		return nil, fmt.Errorf(
-			"sample duration %d is not less than or equal to key duration %d",
-			sampleDuration, keyDuration)
+	if err := VerifySlabAndSampleDuration(keyDuration, sampleDuration); err != nil {
+		return nil, err
 	}
 
 	// This slice must be preallocated to avoid reallocation on `append` because
@@ -87,12 +78,35 @@ func (ts TimeSeriesData) ToInternal(
 
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
-		itsd.Samples = append(itsd.Samples, roachpb.InternalTimeSeriesSample{
-			Offset: int32((dp.TimestampNanos - keyTime) / sampleDuration),
-			Count:  1,
-			Sum:    dp.Value,
-		})
+		if columnar {
+			itsd.Offset = append(itsd.Offset, itsd.OffsetForTimestamp(dp.TimestampNanos))
+			itsd.Last = append(itsd.Last, dp.Value)
+		} else {
+			itsd.Samples = append(itsd.Samples, roachpb.InternalTimeSeriesSample{
+				Offset: itsd.OffsetForTimestamp(dp.TimestampNanos),
+				Count:  1,
+				Sum:    dp.Value,
+			})
+		}
 	}
 
 	return result, nil
+}
+
+// VerifySlabAndSampleDuration verifies that he supplied slab resolution is
+// compatible with the supplied sample resolution, returning an error if they
+// are not compatible.
+func VerifySlabAndSampleDuration(slabDuration, sampleDuration int64) error {
+	if slabDuration%sampleDuration != 0 {
+		return fmt.Errorf(
+			"sample duration %d does not evenly divide key duration %d",
+			sampleDuration, slabDuration)
+	}
+	if slabDuration < sampleDuration {
+		return fmt.Errorf(
+			"sample duration %d is not less than or equal to key duration %d",
+			sampleDuration, slabDuration)
+	}
+
+	return nil
 }

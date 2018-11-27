@@ -1,0 +1,239 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+query error unsupported multiple use of CTE clause "a"
+WITH a AS (SELECT 1) SELECT * FROM a CROSS JOIN a
+
+statement ok
+CREATE TABLE x(a) AS SELECT generate_series(1, 3)
+
+statement ok
+CREATE TABLE y(a) AS SELECT generate_series(2, 4)
+
+query I rowsort
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+2
+
+query I
+WITH t AS (SELECT * FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+2
+
+# Using a CTE inside a subquery
+query I rowsort
+WITH t(x) AS (SELECT a FROM x)
+  SELECT * FROM y WHERE a IN (SELECT x FROM t)
+----
+2
+3
+
+# Using a subquery inside a CTE
+query I
+SELECT * FROM x WHERE a IN
+  (WITH t AS (SELECT * FROM y WHERE a < 3) SELECT * FROM t)
+----
+2
+
+# Rename columns
+query II rowsort
+WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
+----
+1 1
+2 2
+3 3
+
+query BB
+WITH t(a, b) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+true  false
+
+query BB
+WITH t(b, a) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+false  true
+
+statement error WITH query name t specified more than once
+WITH
+    t AS (SELECT true),
+    t AS (SELECT false)
+SELECT * FROM t
+
+query error source "t" has 1 columns available but 2 columns specified
+WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
+
+# Ensure you can't reference the original table name
+query error no data source matches prefix: x
+WITH t AS (SELECT a FROM x) SELECT a, x.t FROM t
+
+# Nested WITH, name shadowing
+query I
+WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
+----
+12
+
+# CTEs with DMLs
+
+query error pgcode 42P01 relation "t" does not exist
+WITH t AS (SELECT * FROM x) INSERT INTO t VALUES (1)
+
+query I rowsort
+WITH t AS (SELECT a FROM x) INSERT INTO x SELECT a + 20 FROM t RETURNING *
+----
+21
+22
+23
+
+query I rowsort
+SELECT * from x
+----
+1
+2
+3
+21
+22
+23
+
+query I rowsort
+WITH t AS (
+    UPDATE x SET a = a * 100 RETURNING a
+)
+SELECT * FROM t
+----
+100
+200
+300
+2100
+2200
+2300
+
+query I rowsort
+SELECT * from x
+----
+100
+200
+300
+2100
+2200
+2300
+
+query I rowsort
+WITH t AS (
+    DELETE FROM x RETURNING a
+)
+SELECT * FROM t
+----
+100
+200
+300
+2100
+2200
+2300
+
+query I rowsort
+SELECT * from x
+----
+
+# #22420: ensure okay error message for CTE clause without output columns
+query error WITH clause "t" does not have a RETURNING clause
+WITH t AS (
+    INSERT INTO x(a) VALUES(0)
+)
+SELECT * FROM t
+
+# Regression test for #24307 until CockroachDB learns how to execute
+# side effects no matter what.
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   INSERT INTO x(a) VALUES(0) RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   SELECT * FROM (
+      WITH b AS (INSERT INTO x(a) VALUES(0) RETURNING a)
+	  TABLE b
+   )
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   DELETE FROM x RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   UPSERT INTO x(a) VALUES(0) RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   UPDATE x SET a = 0 RETURNING a
+)
+SELECT 1
+
+# however if there are no side effects, no errors are required.
+query I
+WITH t AS (SELECT 1) SELECT 2
+----
+2
+
+# Regression tests for #24303.
+
+statement ok
+CREATE TABLE a(x INT);
+
+statement count 3
+INSERT INTO a(x)
+        (WITH b(z) AS (VALUES (1),(2),(3)) SELECT z+1 AS w FROM b)
+
+statement count 1
+INSERT INTO a(x)
+      (WITH a(z) AS (VALUES (1)) SELECT z+1 AS w FROM a);
+
+# When #24303 is fixed, the following query should succeed.
+query error unimplemented: multiple WITH clauses in parentheses
+(WITH woo AS (VALUES (1))
+    (WITH waa AS (VALUES (2))
+	   TABLE waa))
+
+
+# When #24303 is fixed, the following query should fail with
+# error "no such relation woo".
+query error unimplemented: multiple WITH clauses in parentheses
+(WITH woo AS (VALUES (1))
+    (WITH waa AS (VALUES (2))
+	   TABLE woo))
+
+statement ok
+CREATE TABLE lim(x) AS SELECT 0
+
+# This is an oddity in PostgreSQL: even though the WITH clause
+# occurs in the inside parentheses, the scope of the alias `lim`
+# extends to the outer parentheses.
+query I
+((WITH lim(x) AS (SELECT 1) SELECT 123)
+ LIMIT (
+    SELECT x FROM lim -- intuitively this should refer to the real table lim defined above
+                      -- and use LIMIT 0;
+                      -- however, postgres flattens the inner WITH and outer LIMIT
+                      -- at the same scope so the limit becomes 1.
+ ))
+----
+123
+
+# Ditto if table `lim` did not even exist.
+statement ok
+DROP TABLE lim
+
+query I
+((WITH lim(x) AS (SELECT 1) SELECT 123) LIMIT (SELECT x FROM lim))
+----
+123

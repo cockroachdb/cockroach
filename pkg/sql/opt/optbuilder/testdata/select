@@ -1,0 +1,1244 @@
+# tests adapted from logictest -- select
+
+# This statement must be first for the numeric references tests.
+# The numeric references test assume that this is the first table.
+exec-ddl
+CREATE TABLE numeric_references (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
+----
+TABLE numeric_references
+ ├── a int not null
+ ├── y int
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null
+
+exec-ddl
+CREATE TABLE num_ref_hidden (x INT, y INT)
+----
+TABLE num_ref_hidden
+ ├── x int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# SELECT with no table.
+
+build
+SELECT 1
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 1 [type=int]
+
+build
+SELECT NULL
+----
+project
+ ├── columns: "?column?":1(unknown)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── null [type=unknown]
+
+build
+SELECT 1+1 AS two, 2+2 AS four
+----
+project
+ ├── columns: two:1(int!null) four:2(int!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      ├── const: 2 [type=int]
+      └── const: 4 [type=int]
+
+# SELECT expression tests.
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT * FROM abc WHERE 'hello'
+----
+error (22P02): could not parse "hello" as type bool: invalid bool value
+
+build
+SELECT * FROM abc
+----
+scan abc
+ └── columns: a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT NULL AS r, * FROM abc
+----
+project
+ ├── columns: r:4(unknown) a:1(int!null) b:2(int) c:3(int)
+ ├── scan abc
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── projections
+      └── null [type=unknown]
+
+
+# synonym for SELECT * FROM abc
+build
+TABLE abc
+----
+scan abc
+ └── columns: a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT * FROM abc WHERE NULL
+----
+select
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── scan abc
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── filters
+      └── null [type=bool]
+
+build
+SELECT * FROM abc WHERE a = NULL
+----
+select
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── scan abc
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── filters
+      └── null [type=bool]
+
+build
+SELECT *,* FROM abc
+----
+scan abc
+ └── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT a,a,a,a FROM abc
+----
+project
+ ├── columns: a:1(int!null) a:1(int!null) a:1(int!null) a:1(int!null)
+ └── scan abc
+      └── columns: a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT a,c FROM abc
+----
+project
+ ├── columns: a:1(int!null) c:3(int)
+ └── scan abc
+      └── columns: a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT a+b+c AS foo FROM abc
+----
+project
+ ├── columns: foo:4(int)
+ ├── scan abc
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── projections
+      └── plus [type=int]
+           ├── plus [type=int]
+           │    ├── variable: a [type=int]
+           │    └── variable: b [type=int]
+           └── variable: c [type=int]
+
+build allow-unsupported
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+----
+project
+ ├── columns: a:1(int!null) b:2(int)
+ └── select
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int) c:3(int)
+      └── filters
+           └── case [type=bool]
+                ├── true [type=bool]
+                ├── when [type=bool]
+                │    ├── ne [type=bool]
+                │    │    ├── variable: a [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── gt [type=bool]
+                │         ├── div [type=decimal]
+                │         │    ├── variable: b [type=int]
+                │         │    └── variable: a [type=int]
+                │         └── const: 1.5 [type=decimal]
+                └── false [type=bool]
+
+# SELECT of NULL value.
+
+exec-ddl
+CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
+----
+TABLE kv
+ ├── k string not null
+ ├── v string
+ └── INDEX primary
+      └── k string not null
+
+build
+SELECT * FROM kv
+----
+scan kv
+ └── columns: k:1(string!null) v:2(string)
+
+build
+SELECT k,v FROM kv
+----
+scan kv
+ └── columns: k:1(string!null) v:2(string)
+
+build
+SELECT v||'foo' AS r FROM kv
+----
+project
+ ├── columns: r:3(string)
+ ├── scan kv
+ │    └── columns: k:1(string!null) v:2(string)
+ └── projections
+      └── concat [type=string]
+           ├── variable: v [type=string]
+           └── const: 'foo' [type=string]
+
+build
+SELECT lower(v) FROM kv
+----
+project
+ ├── columns: lower:3(string)
+ ├── scan kv
+ │    └── columns: k:1(string!null) v:2(string)
+ └── projections
+      └── function: lower [type=string]
+           └── variable: v [type=string]
+
+build
+SELECT k FROM kv
+----
+project
+ ├── columns: k:1(string!null)
+ └── scan kv
+      └── columns: k:1(string!null) v:2(string)
+
+build
+SELECT kv.K,KV.v FROM kv
+----
+scan kv
+ └── columns: k:1(string!null) v:2(string)
+
+build
+SELECT kv.* FROM kv
+----
+scan kv
+ └── columns: k:1(string!null) v:2(string)
+
+build
+SELECT (kv.*) AS r FROM kv
+----
+project
+ ├── columns: r:3(tuple{string AS k, string AS v})
+ ├── scan kv
+ │    └── columns: k:1(string!null) v:2(string)
+ └── projections
+      └── tuple [type=tuple{string AS k, string AS v}]
+           ├── variable: k [type=string]
+           └── variable: v [type=string]
+
+build
+SELECT foo.* FROM kv
+----
+error (42P01): no data source matches pattern: foo.*
+
+build
+SELECT *
+----
+error (42602): cannot use "*" without a FROM clause
+
+build
+SELECT kv.* AS foo FROM kv
+----
+error (42601): "kv.*" cannot be aliased
+
+build
+SELECT bar.kv.* FROM kv
+----
+error (42P01): no data source matches pattern: bar.kv.*
+
+# Don't panic with invalid names (#8024)
+build
+SELECT kv.*[1] FROM kv
+----
+error (42804): cannot subscript type tuple{string AS k, string AS v} because it is not an array
+
+build
+SELECT ARRAY[]
+----
+error (42P18): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY[]:::int[]
+
+build
+SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: k:1(string!null)
+ └── select
+      ├── columns: k:1(string!null) v:2(string)
+      ├── scan kv
+      │    └── columns: k:1(string!null) v:2(string)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: k [type=string]
+                └── const: 'a' [type=string]
+
+build
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: v:2(string)
+ └── select
+      ├── columns: k:1(string!null) v:2(string)
+      ├── scan kv
+      │    └── columns: k:1(string!null) v:2(string)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: k [type=string]
+                └── const: 'a' [type=string]
+
+exec-ddl
+CREATE TABLE kw ("from" INT PRIMARY KEY)
+----
+TABLE kw
+ ├── from int not null
+ └── INDEX primary
+      └── from int not null
+
+build
+SELECT *, "from", kw."from" FROM kw
+----
+scan kw
+ └── columns: from:1(int!null) from:1(int!null) from:1(int!null)
+
+exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+TABLE xyzw
+ ├── x int not null
+ ├── y int
+ ├── z int
+ ├── w int
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX foo
+      ├── z int
+      ├── y int
+      └── x int not null
+
+build
+SELECT * FROM xyzw LIMIT x
+----
+error (42703): column "x" does not exist
+
+build
+SELECT * FROM xyzw OFFSET 1 + y
+----
+error (42703): column "y" does not exist
+
+build
+SELECT * FROM xyzw LIMIT 3.3
+----
+error (42804): argument of LIMIT must be type int, not type decimal
+
+build
+SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw OFFSET 1.5
+----
+error (42804): argument of OFFSET must be type int, not type decimal
+
+# At execution time, this will cause the error: negative value for LIMIT
+build
+SELECT * FROM xyzw LIMIT -100
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── const: -100 [type=int]
+
+# At execution time, this will cause the error: negative value for OFFSET
+build
+SELECT * FROM xyzw OFFSET -100
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── const: -100 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT (x,y) AS r FROM xyzw
+----
+project
+ ├── columns: r:5(tuple{int, int})
+ ├── scan xyzw
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── projections
+      └── tuple [type=tuple{int, int}]
+           ├── variable: x [type=int]
+           └── variable: y [type=int]
+
+build
+SELECT * FROM xyzw LIMIT 0
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── const: 0 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── internal-ordering: +1
+ │    ├── ordering: +1
+ │    ├── scan xyzw
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    │    └── ordering: +1
+ │    └── const: 1 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── ordering: +2
+ │    └── scan xyzw
+ │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── offset
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── internal-ordering: +2
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan xyzw
+ │    │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── const: 1 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw LIMIT (SELECT count(*) FROM abc) * 2 OFFSET (SELECT count(*) FROM abc) * 3
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── offset
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── scan xyzw
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── mult [type=int]
+ │         ├── subquery [type=int]
+ │         │    └── max1-row
+ │         │         ├── columns: count_rows:8(int)
+ │         │         └── scalar-group-by
+ │         │              ├── columns: count_rows:8(int)
+ │         │              ├── project
+ │         │              │    └── scan abc
+ │         │              │         └── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
+ │         │              └── aggregations
+ │         │                   └── count-rows [type=int]
+ │         └── const: 3 [type=int]
+ └── mult [type=int]
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: count_rows:12(int)
+      │         └── scalar-group-by
+      │              ├── columns: count_rows:12(int)
+      │              ├── project
+      │              │    └── scan abc
+      │              │         └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
+      │              └── aggregations
+      │                   └── count-rows [type=int]
+      └── const: 2 [type=int]
+
+build
+((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
+----
+error (42601): multiple LIMIT clauses not allowed
+
+build
+SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── limit
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── scan xyzw
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── const: 5 [type=int]
+ └── const: 5 [type=int]
+
+build
+SELECT * FROM xyzw@foo
+----
+scan xyzw
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: force-index=foo
+
+exec-ddl
+CREATE TABLE boolean_table (
+  id INTEGER PRIMARY KEY NOT NULL,
+  value BOOLEAN
+)
+----
+TABLE boolean_table
+ ├── id int not null
+ ├── value bool
+ └── INDEX primary
+      └── id int not null
+
+build
+SELECT value FROM boolean_table
+----
+project
+ ├── columns: value:2(bool)
+ └── scan boolean_table
+      └── columns: id:1(int!null) value:2(bool)
+
+build allow-unsupported
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+project
+ ├── columns: case:1(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── case [type=int]
+           ├── true [type=bool]
+           ├── when [type=int]
+           │    ├── null [type=unknown]
+           │    └── const: 1 [type=int]
+           └── const: 2 [type=int]
+
+build
+SELECT 0 * b AS r, b % 1 AS s, 0 % b AS t from abc
+----
+project
+ ├── columns: r:4(int) s:5(int) t:6(int)
+ ├── scan abc
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── projections
+      ├── mult [type=int]
+      │    ├── const: 0 [type=int]
+      │    └── variable: b [type=int]
+      ├── mod [type=int]
+      │    ├── variable: b [type=int]
+      │    └── const: 1 [type=int]
+      └── mod [type=int]
+           ├── const: 0 [type=int]
+           └── variable: b [type=int]
+
+# Regression tests for #22670.
+build
+SELECT 1 IN (1, 2) AS r
+----
+project
+ ├── columns: r:1(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── in [type=bool]
+           ├── const: 1 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+build
+SELECT NULL IN (1, 2) AS r
+----
+project
+ ├── columns: r:1(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── in [type=bool]
+           ├── null [type=unknown]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+build
+SELECT 1 IN (NULL, 2) AS r
+----
+project
+ ├── columns: r:1(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── in [type=bool]
+           ├── const: 1 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── null [type=unknown]
+                └── const: 2 [type=int]
+
+build
+SELECT (1, NULL) IN ((1, 1)) AS r
+----
+project
+ ├── columns: r:1(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── in [type=bool]
+           ├── tuple [type=tuple{int, int}]
+           │    ├── const: 1 [type=int]
+           │    └── null [type=unknown]
+           └── tuple [type=tuple{tuple{int, int}}]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 1 [type=int]
+
+# Tests with a tuple coming from a subquery.
+build
+ SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── any: eq [type=bool]
+           ├── values
+           │    ├── columns: column1:1(int)
+           │    └── tuple [type=tuple{int}]
+           │         └── const: 1 [type=int]
+           └── cast: INT [type=int]
+                └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── values
+           │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    └── tuple [type=tuple{int, int}]
+           │    │         ├── const: 1 [type=int]
+           │    │         └── const: 1 [type=int]
+           │    └── projections
+           │         └── tuple [type=tuple{int, int}]
+           │              ├── variable: column1 [type=int]
+           │              └── variable: column2 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── values
+                │    ├── columns: column1:1(int)
+                │    └── tuple [type=tuple{int}]
+                │         └── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── values
+                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    └── tuple [type=tuple{int, int}]
+                │    │         ├── const: 1 [type=int]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: INT [type=int]
+                          └── null [type=unknown]
+
+# Tests with an empty IN tuple.
+build
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── any: eq [type=bool]
+           ├── select
+           │    ├── columns: column1:1(int!null)
+           │    ├── values
+           │    │    ├── columns: column1:1(int)
+           │    │    └── tuple [type=tuple{int}]
+           │    │         └── const: 1 [type=int]
+           │    └── filters
+           │         └── gt [type=bool]
+           │              ├── variable: column1 [type=int]
+           │              └── const: 1 [type=int]
+           └── cast: INT [type=int]
+                └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── select
+           │    │    ├── columns: column1:1(int!null) column2:2(int)
+           │    │    ├── values
+           │    │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    │    └── tuple [type=tuple{int, int}]
+           │    │    │         ├── const: 1 [type=int]
+           │    │    │         └── const: 1 [type=int]
+           │    │    └── filters
+           │    │         └── gt [type=bool]
+           │    │              ├── variable: column1 [type=int]
+           │    │              └── const: 1 [type=int]
+           │    └── projections
+           │         └── tuple [type=tuple{int, int}]
+           │              ├── variable: column1 [type=int]
+           │              └── variable: column2 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── filters
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── filters
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: INT [type=int]
+                          └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── filters
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── filters
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: INT [type=int]
+                          └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── filters
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
+                └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── filters
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: INT [type=int]
+                          └── null [type=unknown]
+
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT * FROM a
+----
+scan a
+ └── columns: x:1(int!null) y:2(float)
+
+build
+SELECT * FROM a WHERE x > 10
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── filters
+      └── gt [type=bool]
+           ├── variable: x [type=int]
+           └── const: 10 [type=int]
+
+build
+SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── filters
+      └── and [type=bool]
+           ├── gt [type=bool]
+           │    ├── variable: x [type=int]
+           │    └── const: 10 [type=int]
+           └── and [type=bool]
+                ├── lt [type=bool]
+                │    ├── variable: x [type=int]
+                │    └── const: 20 [type=int]
+                └── ne [type=bool]
+                     ├── variable: x [type=int]
+                     └── const: 13 [type=int]
+
+build
+SELECT * FROM a WHERE x IN (1, 2, 3)
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── filters
+      └── in [type=bool]
+           ├── variable: x [type=int]
+           └── tuple [type=tuple{int, int, int}]
+                ├── const: 1 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
+
+build
+SELECT * FROM a AS A(X, Y)
+----
+scan a
+ └── columns: x:1(int!null) y:2(float)
+
+build
+SELECT @1 AS r, @2 AS s FROM a
+----
+project
+ ├── columns: r:3(int) s:4(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── projections
+      ├── variable: x [type=int]
+      └── variable: y [type=float]
+
+build
+SELECT * FROM a WHERE (x > 10)::bool
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── filters
+      └── cast: BOOL [type=bool]
+           └── gt [type=bool]
+                ├── variable: x [type=int]
+                └── const: 10 [type=int]
+
+build
+SELECT * FROM a WHERE (x > 10)::INT[]
+----
+error (42846): invalid cast: bool -> INT[]
+
+build
+SELECT * FROM a WHERE x = $1
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(float)
+ └── filters
+      └── eq [type=bool]
+           ├── variable: x [type=int]
+           └── placeholder: $1 [type=int]
+
+# This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets
+# interpreted by the executor, which obviously is not at play in these tests.
+build
+SELECT * FROM a AS OF SYSTEM TIME '10ns'
+----
+error: AS OF SYSTEM TIME must be provided on a top-level statement
+
+build
+SELECT * FROM a AS t(a, b, c)
+----
+error (42P10): source "t" has 2 columns available but 3 columns specified
+
+build
+SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+project
+ ├── columns: e:2(int) f:3(string) g:4(bool)
+ ├── project
+ │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g})
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── tuple [type=tuple{int AS e, string AS f, bool AS g}]
+ │              ├── const: 1 [type=int]
+ │              ├── const: '2' [type=string]
+ │              └── true [type=bool]
+ └── projections
+      ├── column-access: 0 [type=int]
+      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+      ├── column-access: 1 [type=string]
+      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+      └── column-access: 2 [type=bool]
+           └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+
+build
+SELECT (((x, y) AS x, y)).x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ └── scan a
+      └── columns: x:1(int!null) y:2(float)
+
+
+# Numeric Reference Tests
+# Cockroach numeric references start after 53 for user tables.
+# See opt/testutils/testcat/create_table.go:117 for more info on
+# 53 as a magic number.
+
+build
+SELECT * FROM [53 AS t]
+----
+scan numeric_references
+ └── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
+
+build
+SELECT * FROM [53(1) AS t]
+----
+scan numeric_references
+ └── columns: a:1(int!null)
+
+build
+SELECT * FROM [53(1,2) AS t]
+----
+scan numeric_references
+ └── columns: a:1(int!null) y:2(int)
+
+build
+SELECT * FROM [53(4) AS t]
+----
+scan numeric_references
+ └── columns: c:4(int)
+
+build
+SELECT * FROM [53(5) AS t]
+----
+error (42703): column [5] does not exist
+
+build
+SELECT * FROM [53(2,4) AS t]
+----
+scan numeric_references
+ └── columns: y:2(int) c:4(int)
+
+build
+SELECT * FROM [53(2,3) AS t(col1,col2)]
+----
+scan numeric_references
+ └── columns: col1:2(int) col2:3(int)
+
+build
+SELECT * FROM [53() AS t]
+----
+error (42601): an explicit list of column IDs must include at least one column
+
+# Test that hidden columns are not presented
+build
+SELECT * FROM [54 AS t]
+----
+project
+ ├── columns: x:1(int) y:2(int)
+ └── scan num_ref_hidden
+      └── columns: x:1(int) y:2(int) rowid:3(int!null)
+
+# Verify that we force the given index.
+build
+SELECT * FROM [53 AS t]@[1]
+----
+scan numeric_references
+ ├── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
+ └── flags: force-index=primary
+
+build
+SELECT * FROM [53 AS t]@[2]
+----
+scan numeric_references
+ ├── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
+ └── flags: force-index=bc
+
+# Test that hidden columns are not presented
+build
+SELECT * FROM [54(1,3) AS t]
+----
+project
+ ├── columns: x:1(int)
+ └── scan num_ref_hidden
+      └── columns: x:1(int) rowid:3(int!null)
+
+build
+SELECT rowid FROM [54(3) as t]
+----
+scan num_ref_hidden
+ └── columns: rowid:3(int!null)
+
+# Regression test for #28388. Ensure that selecting from a table with no
+# columns does not cause a panic.
+exec-ddl
+CREATE TABLE no_cols_table ()
+----
+TABLE no_cols_table
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM no_cols_table
+----
+project
+ └── scan no_cols_table
+      └── columns: rowid:1(int!null)
+
+build
+SELECT * FROM [54(3) as t]
+----
+project
+ └── scan num_ref_hidden
+      └── columns: rowid:3(int!null)

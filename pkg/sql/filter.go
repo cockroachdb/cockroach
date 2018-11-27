@@ -11,19 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package sql
 
 import (
-	"bytes"
-	"fmt"
+	"context"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -31,89 +26,55 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
-	p          *planner
 	source     planDataSource
-	filter     parser.TypedExpr
-	ivarHelper parser.IndexedVarHelper
-	// support attributes for EXPLAIN(DEBUG)
-	explain   explainMode
-	debugVals debugValues
+	filter     tree.TypedExpr
+	ivarHelper tree.IndexedVarHelper
+	props      physicalProps
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// filterNode implements tree.IndexedVarContainer
+var _ tree.IndexedVarContainer = &filterNode{}
+
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return f.source.plan.Values()[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarResolvedType(idx int) parser.Type {
-	return f.source.info.sourceColumns[idx].Typ
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarResolvedType(idx int) types.T {
+	return f.source.info.SourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx int) {
-	f.source.info.FormatVar(buf, fl, idx)
-}
-
-// Start implements the planNode interface.
-func (f *filterNode) Start(ctx context.Context) error {
-	return f.source.plan.Start(ctx)
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return f.source.info.NodeFormatter(idx)
 }
 
 // Next implements the planNode interface.
-func (f *filterNode) Next(ctx context.Context) (bool, error) {
+func (f *filterNode) Next(params runParams) (bool, error) {
 	for {
-		if next, err := f.source.plan.Next(ctx); !next {
+		if next, err := f.source.plan.Next(params); !next {
 			return false, err
 		}
 
-		if f.explain == explainDebug {
-			f.debugVals = f.source.plan.DebugValues()
-
-			if f.debugVals.output != debugValueRow {
-				// Let the debug values pass through.
-				return true, nil
-			}
-		}
-
-		passesFilter, err := sqlbase.RunFilter(f.filter, &f.p.evalCtx)
+		params.extendedEvalCtx.PushIVarContainer(f)
+		passesFilter, err := sqlbase.RunFilter(f.filter, params.EvalContext())
+		params.extendedEvalCtx.PopIVarContainer()
 		if err != nil {
 			return false, err
 		}
 
 		if passesFilter {
 			return true, nil
-		} else if f.explain == explainDebug {
-			// Mark the row as filtered out.
-			f.debugVals.output = debugValueFiltered
-			return true, nil
 		}
 		// Row was filtered out; grab the next row.
 	}
 }
 
-func (f *filterNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	f.explain = mode
-	f.source.plan.MarkDebug(mode)
-}
+func (f *filterNode) Values() tree.Datums       { return f.source.plan.Values() }
+func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
 
-func (f *filterNode) DebugValues() debugValues {
-	if f.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", f.explain))
-	}
-	return f.debugVals
-}
-
-func (f *filterNode) Close(ctx context.Context) {
-	f.source.plan.Close(ctx)
-}
-func (f *filterNode) Values() parser.Datums          { return f.source.plan.Values() }
-func (f *filterNode) Columns() sqlbase.ResultColumns { return f.source.plan.Columns() }
-func (f *filterNode) Ordering() orderingInfo         { return f.source.plan.Ordering() }
-
-func (f *filterNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return f.source.plan.Spans(ctx)
+func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
+	f.props = planPhysicalProps(f.source.plan)
+	f.props.applyExpr(evalCtx, f.filter)
 }

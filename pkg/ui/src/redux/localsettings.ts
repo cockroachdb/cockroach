@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 /**
  * The local settings reducer is designed to store local-only UI settings in
  * redux state. These settings are maintained within a session, but not saved
@@ -12,7 +26,7 @@
 import _ from "lodash";
 import { createSelector, Selector } from "reselect";
 import { Action } from "redux";
-import { PayloadAction } from "../interfaces/action";
+import { PayloadAction } from "src/interfaces/action";
 
 const SET_UI_VALUE = "cockroachui/ui/SET_UI_VALUE";
 
@@ -24,21 +38,21 @@ export interface LocalSettingData {
 /**
  * Local settings are stored in a simple string-keyed dictionary.
  */
-export interface LocalSettingsDict {
+export interface LocalSettingsState {
   [key: string]: any;
 }
 
 /**
  * reducer function which handles local settings, storing them in a dictionary.
  */
-export default function reducer(state: LocalSettingsDict = {}, action: Action): LocalSettingsDict {
+export function localSettingsReducer(state: LocalSettingsState = {}, action: Action): LocalSettingsState {
   if (_.isNil(action)) {
     return state;
   }
 
   switch (action.type) {
     case SET_UI_VALUE:
-      let { payload } = action as PayloadAction<LocalSettingData>;
+      const { payload } = action as PayloadAction<LocalSettingData>;
       state = _.clone(state);
       state[payload.key] = payload.value;
       return state;
@@ -77,7 +91,7 @@ export class LocalSetting<S, T> {
   }
 
   /**
-   * Selector which retrieves this setting from the LocalSettingsDict
+   * Selector which retrieves this setting from the LocalSettingsState
    * @param state The current top-level redux state of the application.
    */
   selector = (state: S) => {
@@ -87,12 +101,12 @@ export class LocalSetting<S, T> {
   /**
    * Construct a new LocalSetting manager.
    * @param key The unique key of the setting.
-   * @param innerSelector A selector which retrieves the LocalSettingsDict from
+   * @param innerSelector A selector which retrieves the LocalSettingsState from
    * the top-level redux state of the application.
    * @param defaultValue Optional default value of the setting when it has not
    * yet been set.
    */
-  constructor(public key: string, innerSelector: Selector<S, LocalSettingsDict>, defaultValue?: T) {
+  constructor(public key: string, innerSelector: Selector<S, LocalSettingsState>, defaultValue?: T) {
     this._value = createSelector(
       innerSelector,
       (uiSettings) => {

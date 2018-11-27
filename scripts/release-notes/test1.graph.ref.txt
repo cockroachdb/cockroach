@@ -1,0 +1,10 @@
+*   884025a61241672a11272adfd5dfd71dfec465e6 Merge pull request #100 from foo/bar
+|\  
+| * 75127f3da8ebc69048085b95915d8fb65004857f merge pr canary
+|/  
+*   c95ebe8263cf5ff7261314a16db5ab24e24b874a Merge #1
+|\  
+| * 20a33aaf1a454f99c2489d814601c5b5eea5fea2 feature A
+* | e3a1f2c94ae32eb079bfa558213ed3c6de161dca master update
+|/  
+* 44620da62c54d491c3e707e844ec2c8cddd08e65 initial

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package keys
 
@@ -20,8 +18,10 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// For a high-level overview of the keyspace layout, see the package comment in
+// doc.go.
 
 // These constants are single bytes for performance. They allow single-byte
 // comparisons which are considerably faster than bytes.HasPrefix.
@@ -39,27 +39,7 @@ const (
 //
 // Note: preserve group-wise ordering when adding new constants.
 var (
-	// localPrefix is the prefix for keys which hold data local to a
-	// RocksDB instance, such as store and range-specific metadata which
-	// must not pollute the user key space, but must be collocated with
-	// the store and/or ranges which they refer to. Storing this
-	// information in the normal system keyspace would place the data on
-	// an arbitrary set of stores, with no guarantee of collocation.
-	// Local data includes store metadata, range metadata, abort
-	// cache values, transaction records, range-spanning binary tree
-	// node pointers, and message queues.
-	//
-	// The local key prefix has been deliberately chosen to sort before
-	// the SystemPrefix, because these local keys are not addressable
-	// via the meta range addressing indexes.
-	//
-	// Some local data are not replicated, such as the store's 'ident'
-	// record. Most local data are replicated, such as abort cache
-	// entries and transaction rows, but are not addressable as normal
-	// MVCC values as part of transactions. Finally, some local data are
-	// stored as MVCC values and are addressable as part of distributed
-	// transactions, such as range metadata, range-spanning binary tree
-	// node pointers, and message queues.
+	// localPrefix is the prefix for all local keys.
 	localPrefix = roachpb.Key{localPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global
 	// key.
@@ -80,51 +60,75 @@ var (
 	// localStoreGossipSuffix stores gossip bootstrap metadata for this
 	// store, updated any time new gossip hosts are encountered.
 	localStoreGossipSuffix = []byte("goss")
+	// localStoreClusterVersionSuffix stores the cluster-wide version
+	// information for this store, updated any time the operator
+	// updates the minimum cluster version.
+	localStoreClusterVersionSuffix = []byte("cver")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localHLCUpperBoundSuffix stores an upper bound to the wall time used by
+	// the HLC.
+	localHLCUpperBoundSuffix = []byte("hlcu")
+	// localStoreSuggestedCompactionSuffix stores suggested compactions to
+	// be aggregated and processed on the store.
+	localStoreSuggestedCompactionSuffix = []byte("comp")
+
+	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent reuse.
+	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
+	_                                   = localRemovedLeakedRaftEntriesSuffix
+
+	// LocalStoreSuggestedCompactionsMin is the start of the span of
+	// possible suggested compaction keys for a store.
+	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
+	// LocalStoreSuggestedCompactionsMax is the end of the span of
+	// possible suggested compaction keys for a store.
+	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,
 	// encoded using EncodeUvarint. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
-	// case of abort cache entry.
+	// case of AbortSpan entry.
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 
-	// localRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
+	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
 	// keys will be sorted directly before the local unreplicated keys for the
 	// same Range ID, so they can be manipulated either together or individually
 	// in a single scan.
-	localRangeIDReplicatedInfix = []byte("r")
-	// LocalAbortCacheSuffix is the suffix for abort cache entries. The
-	// abort cache protects a transaction from re-reading its own intents
+	LocalRangeIDReplicatedInfix = []byte("r")
+	// LocalAbortSpanSuffix is the suffix for AbortSpan entries. The
+	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
-	LocalAbortCacheSuffix = []byte("abc-")
+	LocalAbortSpanSuffix = []byte("abc-")
 	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
 	// No longer used; exists only to reserve the key so we don't use it.
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
-	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
-	LocalRaftAppliedIndexSuffix = []byte("rfta")
+	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
+	// key.
+	LocalRangeAppliedStateSuffix = []byte("rask")
+	// LocalRaftAppliedIndexLegacySuffix is the suffix for the raft applied index.
+	LocalRaftAppliedIndexLegacySuffix = []byte("rfta")
 	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
 	LocalRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
-	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
-	LocalLeaseAppliedIndexSuffix = []byte("rlla")
-	// LocalRangeStatsSuffix is the suffix for range statistics.
-	LocalRangeStatsSuffix = []byte("stat")
+	// LocalLeaseAppliedIndexLegacySuffix is the suffix for the applied lease index.
+	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
+	// LocalRangeStatsLegacySuffix is the suffix for range statistics.
+	LocalRangeStatsLegacySuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
@@ -198,26 +202,30 @@ var (
 	SystemPrefix = roachpb.Key{systemPrefixByte}
 	SystemMax    = roachpb.Key{systemMaxByte}
 
-	// MigrationPrefix specifies the key prefix to store all migration details.
-	MigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
-
-	// MigrationKeyMax is the maximum value for any system migration key.
-	MigrationKeyMax = MigrationPrefix.PrefixEnd()
-
-	// MigrationLease is the key that nodes must take a lease on in order to run
-	// system migrations on the cluster.
-	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
-
 	// NodeLivenessPrefix specifies the key prefix for the node liveness
 	// table.  Note that this should sort before the rest of the system
 	// keyspace in order to limit the number of ranges which must use
 	// expiration-based range leases instead of the more efficient
 	// node-liveness epoch-based range leases (see
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/range_leases.md)
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160210_range_leases.md)
 	NodeLivenessPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("\x00liveness-")))
 
 	// NodeLivenessKeyMax is the maximum value for any node liveness key.
 	NodeLivenessKeyMax = NodeLivenessPrefix.PrefixEnd()
+
+	// BootstrapVersion is the key at which clusters bootstrapped with a version
+	// > 1.0 persist the version at which they were bootstrapped.
+	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+
+	// MigrationPrefix specifies the key prefix to store all migration details.
+	MigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
+
+	// MigrationLease is the key that nodes must take a lease on in order to run
+	// system migrations on the cluster.
+	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
+
+	// MigrationKeyMax is the maximum value for any system migration key.
+	MigrationKeyMax = MigrationPrefix.PrefixEnd()
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
@@ -236,20 +244,23 @@ var (
 
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
+	// TimeseriesKeyMax is the maximum value for any timeseries data.
+	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
+	TableDataMin = roachpb.Key(MakeTablePrefix(0))
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MaxInt64))
+	TableDataMax = roachpb.Key(MakeTablePrefix(math.MaxUint32))
 
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
-	SystemConfigSplitKey = MakeRowSentinelKey(TableDataMin)
+	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
+	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
+	UserTableDataMin = roachpb.Key(MakeTablePrefix(MinUserDescID))
 
 	// MaxKey is the infinity marker which is larger than any other key.
 	MaxKey = roachpb.KeyMax
@@ -270,6 +281,15 @@ const (
 	// cockroach.
 	MaxReservedDescID = 49
 
+	// MinUserDescID is the first descriptor ID available for user
+	// structured data.
+	MinUserDescID = MaxReservedDescID + 1
+
+	// MinNonPredefinedUserDescID is the first descriptor ID used by
+	// user-level objects that are not created automatically on empty
+	// clusters (default databases).
+	MinNonPredefinedUserDescID = MinUserDescID + 2
+
 	// VirtualDescriptorID is the ID used by all virtual descriptors.
 	VirtualDescriptorID = math.MaxUint32
 
@@ -286,19 +306,26 @@ const (
 	ZonesTableID      = 5
 	SettingsTableID   = 6
 
-	// Reserved IDs for other system tables. If you're adding a new system table,
-	// it probably belongs here.
-	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID      = 11
-	EventLogTableID   = 12
-	RangeEventTableID = 13
-	UITableID         = 14
-	JobsTableID       = 15
+	// IDs for the important columns and indexes in the zones table live here to
+	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
+	ZonesTablePrimaryIndexID = 1
+	ZonesTableConfigColumnID = 2
 
-	// Reserved IDs used to refer to certain parts of the system ranges that
-	// come before the system config span and user table ranges.
+	// Reserved IDs for other system tables. Note that some of these IDs refer
+	// to "Ranges" instead of a Table - these IDs are needed to store custom
+	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	MetaRangesID       = 16
-	SystemRangesID     = 17
-	TimeseriesRangesID = 18
+	LeaseTableID           = 11
+	EventLogTableID        = 12
+	RangeEventTableID      = 13
+	UITableID              = 14
+	JobsTableID            = 15
+	MetaRangesID           = 16
+	SystemRangesID         = 17
+	TimeseriesRangesID     = 18
+	WebSessionsTableID     = 19
+	TableStatisticsTableID = 20
+	LocationsTableID       = 21
+	LivenessRangesID       = 22
+	RoleMembersTableID     = 23
 )

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package roachpb
 
@@ -37,12 +35,17 @@ const (
 	// Increment will continue to be a valid command. The value must be
 	// deleted before it can be reset using Put.
 	Increment
-	// Delete removes the value for the specified key.
+	// Delete creates a tombstone value for the specified key, indicating
+	// the value has been deleted.
 	Delete
-	// DeleteRange removes all values for keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
-	// the latter endpoint excluded.
+	// DeleteRange creates tombstone values for keys which fall between
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with the
+	// latter endpoint excluded.
 	DeleteRange
+	// ClearRange removes all values (including all of their versions)
+	// for keys which fall between args.RequestHeader.Key and
+	// args.RequestHeader.EndKey, with the latter endpoint excluded.
+	ClearRange
 	// Scan fetches the values for all keys which fall between
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
@@ -67,6 +70,9 @@ const (
 	AdminTransferLease
 	// AdminChangeReplicas is called to add or remove replicas for a range.
 	AdminChangeReplicas
+	// AdminRelocateRange is called to relocate the replicas for a range onto a
+	// specified list of stores.
+	AdminRelocateRange
 	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.
@@ -88,15 +94,12 @@ const (
 	PushTxn
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
-	// RangeLookup looks up range descriptors, containing the
-	// locations of replicas for the range containing the specified key.
-	RangeLookup
+	// QueryIntent checks whether the specified intent exists.
+	QueryIntent
 	// ResolveIntent resolves existing write intents for a key.
 	ResolveIntent
 	// ResolveIntentRange resolves existing write intents for a key range.
 	ResolveIntentRange
-	// Noop is a no-op.
-	Noop
 	// Merge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not
@@ -115,8 +118,6 @@ const (
 	LeaseInfo
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
-	// DeprecatedVerifyChecksum is no longer used.
-	DeprecatedVerifyChecksum
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
@@ -133,4 +134,20 @@ const (
 	// AdminScatter moves replicas and leaseholders for a selection of ranges.
 	// Best-effort.
 	AdminScatter
+	// AddSSTable links a file into the RocksDB log-structured merge-tree.
+	AddSSTable
+	// RecomputeStats applies a delta to a Range's MVCCStats to fix computational errors.
+	RecomputeStats
+	// Refresh verifies no writes to a key have occurred since the
+	// transaction orig timestamp and sets a new entry in the timestamp
+	// cache at the current transaction timestamp.
+	Refresh
+	// RefreshRange verifies no writes have occurred to a span of keys
+	// since the transaction orig timestamp and sets a new span in the
+	// timestamp cache at the current transaction timestamp.
+	RefreshRange
+	// Subsume freezes a range for merging with its left-hand neighbor.
+	Subsume
+	// RangeStats returns the MVCC statistics for a range.
+	RangeStats
 )

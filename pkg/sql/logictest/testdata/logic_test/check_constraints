@@ -1,0 +1,349 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+#### column CHECK constraints
+
+statement ok
+CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0) CHECK (b > -100))
+
+statement error could not parse "3.3" as type int
+INSERT INTO t1 VALUES ('3.3', 0, -1)
+
+statement ok
+INSERT INTO t1 VALUES ('3', 0, -1)
+
+statement ok
+INSERT INTO t1 VALUES (3, 0, -1)
+
+statement ok
+ALTER TABLE t1 DROP COLUMN to_delete
+
+statement ok
+INSERT INTO t1 (a, b) VALUES (4, -2)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a > 0\)
+INSERT INTO t1 VALUES (-3, -1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < 0\)
+INSERT INTO t1 VALUES (3, 1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > -100\)
+INSERT INTO t1 VALUES (3, -101)
+
+statement ok
+INSERT INTO t1 (b, a) VALUES (-2, 4)
+
+statement ok
+INSERT INTO t1 (a) VALUES (10)
+
+statement ok
+INSERT INTO t1 (b) VALUES (-1)
+
+statement ok
+CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a >= 0), b INT CHECK (b <= 0), CHECK (b < a))
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a >= 0\)
+INSERT INTO t2 (b) VALUES (-2)
+
+### Rename column with check constraint
+
+statement ok
+ALTER TABLE t2 RENAME COLUMN b TO c
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c <= 0\)
+INSERT INTO t2 (a, c) VALUES (2, 1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c < a\)
+INSERT INTO t2 (a, c) VALUES (0, 0)
+
+statement ok
+INSERT INTO t2 (a, c) VALUES (2, -1)
+
+statement ok
+CREATE TABLE t3 (a INT, b INT CHECK (b < a))
+
+statement ok
+INSERT INTO t3 (a, b) VALUES (3, 2)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < a\)
+INSERT INTO t3 (a, b) VALUES (2, 3)
+
+# Verify we don't accept count(*)
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t4 (a INT, b INT CHECK (count(*) = 1))
+
+# no subqueries either.
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t4 (a INT, b INT CHECK (EXISTS (SELECT * FROM t2)))
+
+# non-boolean expressions are errors
+statement error pq: expected CHECK expression to have type bool, but '1' has type int
+CREATE TABLE t4 (a INT CHECK(1))
+
+statement error pq: expected CHECK expression to have type bool, but 'a' has type int
+CREATE TABLE t4 (a INT CHECK(a))
+
+# Function calls in CHECK are okay.
+statement ok
+CREATE TABLE calls_func (a INT CHECK(abs(a) < 2))
+
+statement ok
+INSERT INTO calls_func VALUES (1), (-1)
+
+statement error failed to satisfy CHECK
+INSERT INTO calls_func VALUES (-5)
+
+# Aggregate function calls in CHECK are not ok.
+statement error aggregate functions are not allowed in CHECK
+CREATE TABLE bad (a INT CHECK(sum(a) > 1))
+
+# Window function calls in CHECK are not ok.
+statement error window functions are not allowed in CHECK
+CREATE TABLE bad (a INT CHECK(sum(a) OVER () > 1))
+
+# fail on bad check types
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE t4 (a INT CHECK (false - true))
+
+statement error column "b" not found, referenced in "a < b"
+CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
+
+statement ok
+CREATE TABLE t4 (a INT, b INT DEFAULT 5, c INT, d INT, CHECK (a < b), CONSTRAINT "all" CHECK (a+b+c+d < 20))
+
+statement ok
+INSERT INTO t4 (a, b) VALUES (2, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t4 (a) VALUES (6)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2, 3, 4)
+
+statement ok
+INSERT INTO t4 VALUES (NULL, 2, 22, NULL)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t4 VALUES (1, 2, 3, 19)
+
+query II
+SELECT * from t3
+----
+3 2
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPDATE t3 SET b = 3 WHERE a = 3
+
+statement ok
+UPDATE t3 SET b = 1 WHERE a = 3
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPDATE t4 SET a = 2 WHERE c = 3
+
+statement ok
+UPDATE t4 SET a = 0 WHERE c = 3
+
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# n.b. the fully-qualified name below is required, as there are two providers of
+# the column named `k` here, the original table and the `excluded` pseudo-table.
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 10)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  10
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 9)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE t5.k = 2
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t6 (x INT CHECK (x = $1))
+
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
+
+# Check auto-generated constraint names.
+
+statement ok
+CREATE TABLE t7 (
+  x INT,
+  y INT,
+  z INT,
+  CHECK (x > 0),
+  CHECK (x + y > 0),
+  CHECK (y + z > 0),
+  CHECK (y + z = 0),
+  CONSTRAINT named_constraint CHECK (z = 1)
+)
+
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE t7 (
+      x INT NULL,
+      y INT NULL,
+      z INT NULL,
+      FAMILY "primary" (x, y, z, rowid),
+      CONSTRAINT check_x CHECK (x > 0),
+      CONSTRAINT check_x_y CHECK ((x + y) > 0),
+      CONSTRAINT check_y_z CHECK ((y + z) > 0),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
+      CONSTRAINT named_constraint CHECK (z = 1)
+    )
+
+# Check that table references are dequalified in their stored representation.
+
+statement error no data source matches prefix: different_table
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_table.a > 0)
+)
+
+statement error no data source matches prefix: different_database.t8
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_database.t8.a > 0)
+)
+
+statement ok
+CREATE TABLE t8 (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t8.a > 0),
+  CHECK (test.t8.a > 0)
+)
+
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE t8 (
+      a INT NULL,
+      FAMILY "primary" (a, rowid),
+      CONSTRAINT check_a CHECK (a > 0),
+      CONSTRAINT check_a1 CHECK (a > 0),
+      CONSTRAINT check_a2 CHECK (a > 0)
+    )
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+CREATE TABLE test2.t (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t.a > 0),
+  CHECK (test2.t.a > 0)
+)
+
+# Use multiple column families.
+
+statement ok
+CREATE TABLE t9 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d, e),
+  CHECK (a > b),
+  CHECK (d IS NULL)
+)
+
+statement ok
+INSERT INTO t9 VALUES (5, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+INSERT INTO t9 VALUES (6, 7)
+
+statement ok
+UPDATE t9 SET b = 4 WHERE a = 5
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET b = 6 WHERE a = 5
+
+# Only column families that are needed to validate check constraints are fetched.
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE t9 SET b = 2 WHERE a = 5
+----
+count                ·         ·                          ()                                 ·
+ └── update          ·         ·                          ()                                 ·
+      │              table     t9                         ·                                  ·
+      │              set       b                          ·                                  ·
+      │              check 0   t9.a > t9.b                ·                                  ·
+      │              check 1   t9.d IS NULL               ·                                  ·
+      └── render     ·         ·                          (a, b, d, "?column?")              a=CONST; "?column?"=CONST; key()
+           │         render 0  test.public.t9.a           ·                                  ·
+           │         render 1  test.public.t9.b           ·                                  ·
+           │         render 2  test.public.t9.d           ·                                  ·
+           │         render 3  2                          ·                                  ·
+           └── scan  ·         ·                          (a, b, c[omitted], d, e[omitted])  a=CONST; key()
+·                    table     t9@primary                 ·                                  ·
+·                    spans     /5/0-/5/1/2 /5/3/1-/5/3/2  ·                                  ·
+
+statement ok
+UPDATE t9 SET a = 7 WHERE a = 4
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET a = 2 WHERE a = 5
+
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
+----
+count                ·         ·                 ()                           ·
+ └── update          ·         ·                 ()                           ·
+      │              table     t9                ·                            ·
+      │              set       a                 ·                            ·
+      │              check 0   t9.a > t9.b       ·                            ·
+      │              check 1   t9.d IS NULL      ·                            ·
+      └── render     ·         ·                 (a, b, c, d, e, "?column?")  a=CONST; "?column?"=CONST; key()
+           │         render 0  test.public.t9.a  ·                            ·
+           │         render 1  test.public.t9.b  ·                            ·
+           │         render 2  test.public.t9.c  ·                            ·
+           │         render 3  test.public.t9.d  ·                            ·
+           │         render 4  test.public.t9.e  ·                            ·
+           │         render 5  2                 ·                            ·
+           └── scan  ·         ·                 (a, b, c, d, e)              a=CONST; key()
+·                    table     t9@primary        ·                            ·
+·                    spans     /5-/5/#           ·                            ·

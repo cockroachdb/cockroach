@@ -16,7 +16,6 @@ package settings
 
 import (
 	"math"
-	"sync/atomic"
 
 	"github.com/pkg/errors"
 )
@@ -25,25 +24,43 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "float" is updated.
 type FloatSetting struct {
+	common
 	defaultValue float64
-	v            uint64
 	validateFn   func(float64) error
 }
 
 var _ Setting = &FloatSetting{}
 
 // Get retrieves the float value in the setting.
-func (f *FloatSetting) Get() float64 {
-	return math.Float64frombits(atomic.LoadUint64(&f.v))
+func (f *FloatSetting) Get(sv *Values) float64 {
+	return math.Float64frombits(uint64(sv.getInt64(f.slotIdx)))
 }
 
-func (f *FloatSetting) String() string {
-	return EncodeFloat(f.Get())
+func (f *FloatSetting) String(sv *Values) string {
+	return EncodeFloat(f.Get(sv))
+}
+
+// Encoded returns the encoded value of the current value of the setting.
+func (f *FloatSetting) Encoded(sv *Values) string {
+	return f.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (f *FloatSetting) EncodedDefault() string {
+	return EncodeFloat(f.defaultValue)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*FloatSetting) Typ() string {
 	return "f"
+}
+
+// Override changes the setting, panicking when validation fails.
+// For testing usage only.
+func (f *FloatSetting) Override(sv *Values, v float64) {
+	if err := f.set(sv, v); err != nil {
+		panic(err)
+	}
 }
 
 // Validate that a value conforms with the validation function.
@@ -56,23 +73,38 @@ func (f *FloatSetting) Validate(v float64) error {
 	return nil
 }
 
-func (f *FloatSetting) set(v float64) error {
+func (f *FloatSetting) set(sv *Values, v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&f.v, math.Float64bits(v))
+	sv.setInt64(f.slotIdx, int64(math.Float64bits(v)))
 	return nil
 }
 
-func (f *FloatSetting) setToDefault() {
-	if err := f.set(f.defaultValue); err != nil {
+func (f *FloatSetting) setToDefault(sv *Values) {
+	if err := f.set(sv, f.defaultValue); err != nil {
 		panic(err)
 	}
+}
+
+// Default returns the default value.
+func (f *FloatSetting) Default() float64 {
+	return f.defaultValue
 }
 
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
 	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterNonNegativeFloatSetting defines a new setting with type float.
+func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
+	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
+		}
+		return nil
+	})
 }
 
 // RegisterValidatedFloatSetting defines a new setting with type float.
@@ -90,28 +122,4 @@ func RegisterValidatedFloatSetting(
 	}
 	register(key, desc, setting)
 	return setting
-}
-
-// RegisterNonNegativeFloatSetting defines a new setting with type float.
-func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
-		}
-		return nil
-	})
-}
-
-// TestingSetFloat returns a mock, unregistered float setting for testing. See
-// TestingSetBool for more details.
-func TestingSetFloat(s **FloatSetting, v float64) func() {
-	saved := *s
-	tmp := &FloatSetting{}
-	if err := tmp.set(v); err != nil {
-		panic(err)
-	}
-	*s = tmp
-	return func() {
-		*s = saved
-	}
 }

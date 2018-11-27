@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 // This file defines structures and basic functionality that is useful when
 // building distsql plans. It does not contain the actual physical planning
@@ -27,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -201,16 +199,19 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.IndexedVar{Idx: 10},
-						&parser.IndexedVar{Idx: 11},
-						&parser.IndexedVar{Idx: 12},
-						&parser.IndexedVar{Idx: 13},
+				if err := p.AddRendering(
+					[]tree.TypedExpr{
+						&tree.IndexedVar{Idx: 10},
+						&tree.IndexedVar{Idx: 11},
+						&tree.IndexedVar{Idx: 12},
+						&tree.IndexedVar{Idx: 13},
 					},
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost:        distsqlrun.PostProcessSpec{},
@@ -223,15 +224,19 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.IndexedVar{Idx: 11},
-						&parser.IndexedVar{Idx: 13},
-						&parser.IndexedVar{Idx: 12},
+				if err := p.AddRendering(
+					[]tree.TypedExpr{
+						&tree.IndexedVar{Idx: 11},
+						&tree.IndexedVar{Idx: 13},
+						&tree.IndexedVar{Idx: 12},
 					},
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("B"), strToType("D"), strToType("C")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
+
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
@@ -248,17 +253,20 @@ func TestProjectionAndRendering(t *testing.T) {
 			ordering:    "3",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.BinaryExpr{
-							Operator: parser.Plus,
-							Left:     &parser.IndexedVar{Idx: 1},
-							Right:    &parser.IndexedVar{Idx: 2},
+				if err := p.AddRendering(
+					[]tree.TypedExpr{
+						&tree.BinaryExpr{
+							Operator: tree.Plus,
+							Left:     &tree.IndexedVar{Idx: 1},
+							Right:    &tree.IndexedVar{Idx: 2},
 						},
 					},
+					fakeExprContext{},
 					[]int{0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
@@ -278,18 +286,21 @@ func TestProjectionAndRendering(t *testing.T) {
 			ordering:    "0,-3",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.BinaryExpr{
-							Operator: parser.Plus,
-							Left:     &parser.IndexedVar{Idx: 11},
-							Right:    &parser.IndexedVar{Idx: 12},
+				if err := p.AddRendering(
+					[]tree.TypedExpr{
+						&tree.BinaryExpr{
+							Operator: tree.Plus,
+							Left:     &tree.IndexedVar{Idx: 11},
+							Right:    &tree.IndexedVar{Idx: 12},
 						},
-						&parser.IndexedVar{Idx: 10},
+						&tree.IndexedVar{Idx: 10},
 					},
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X"), strToType("A")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
@@ -352,5 +363,46 @@ func TestProjectionAndRendering(t *testing.T) {
 		if o := strings.Join(ord, ","); o != tc.expOrdering {
 			t.Errorf("%d: incorrect ordering: '%s' expected '%s'", testIdx, o, tc.expOrdering)
 		}
+	}
+}
+
+func TestMergeResultTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	empty := []sqlbase.ColumnType{}
+	null := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_NULL}}
+	typeInt := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+
+	testData := []struct {
+		name     string
+		left     []sqlbase.ColumnType
+		right    []sqlbase.ColumnType
+		expected *[]sqlbase.ColumnType
+		err      bool
+	}{
+		{"both empty", empty, empty, &empty, false},
+		{"left empty", empty, typeInt, nil, true},
+		{"right empty", typeInt, empty, nil, true},
+		{"both null", null, null, &null, false},
+		{"left null", null, typeInt, &typeInt, false},
+		{"right null", typeInt, null, &typeInt, false},
+		{"both int", typeInt, typeInt, &typeInt, false},
+	}
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			result, err := MergeResultTypes(td.left, td.right)
+			if td.err {
+				if err == nil {
+					t.Fatalf("expected error, got %+v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if !reflect.DeepEqual(*td.expected, result) {
+				t.Fatalf("expected %+v, got %+v", *td.expected, result)
+			}
+		})
 	}
 }

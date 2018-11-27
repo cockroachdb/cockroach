@@ -11,34 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf
 
 package log
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/petermattis/goid"
 )
 
-const httpLogLevelPrefix = "/debug/vmodule/"
-
-func handleVModule(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	spec := r.RequestURI[len(httpLogLevelPrefix):]
-	if err := logging.vmodule.Set(spec); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	Infof(context.Background(), "vmodule changed to: %s", spec)
-	fmt.Fprint(w, "ok: "+spec)
-}
-
 func init() {
-	http.Handle(httpLogLevelPrefix, http.HandlerFunc(handleVModule))
 	copyStandardLogTo("INFO")
 }
 
@@ -53,11 +40,25 @@ func FatalOnPanic() {
 }
 
 // SetExitFunc allows setting a function that will be called to exit the
-// process when a Fatal message is generated.
-func SetExitFunc(f func(int)) {
+// process when a Fatal message is generated. The supplied bool, if true,
+// suppresses the stack trace, which is useful for test callers wishing
+// to keep the logs reasonably clean.
+//
+// Call with a nil function to undo.
+func SetExitFunc(hideStack bool, f func(int)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
-	logging.exitFunc = f
+	logging.exitOverride.f = f
+	logging.exitOverride.hideStack = hideStack
+}
+
+// ResetExitFunc undoes any prior call to SetExitFunc.
+func ResetExitFunc() {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	logging.exitOverride.f = nil
+	logging.exitOverride.hideStack = false
 }
 
 // logDepth uses the PrintWith to format the output string and
@@ -92,6 +93,15 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // appended.
 func Info(ctx context.Context, args ...interface{}) {
 	logDepth(ctx, 1, Severity_INFO, "", args)
+}
+
+// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
+// 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Print; a newline is
+// appended.
+func InfoDepth(ctx context.Context, depth int, args ...interface{}) {
+	logDepth(ctx, depth+1, Severity_INFO, "", args)
 }
 
 // InfofDepth logs to the INFO log, offsetting the caller's stack frame by
@@ -183,8 +193,57 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 
 // V returns true if the logging verbosity is set to the specified level or
 // higher.
-func V(level level) bool {
+//
+// See also ExpensiveLogEnabled().
+//
+// TODO(andrei): Audit uses of V() and see which ones should actually use the
+// newer ExpensiveLogEnabled().
+func V(level int32) bool {
 	return VDepth(level, 1)
+}
+
+// ExpensiveLogEnabled is used to test whether effort should be used to produce
+// log messages whose construction has a measurable cost. It returns true if
+// either the current context is recording the trace, or if the caller's
+// verbosity is above level.
+//
+// NOTE: This doesn't take into consideration whether tracing is generally
+// enabled or whether a trace.EventLog or a trace.Trace (i.e. sp.netTr) is
+// attached to ctx. In particular, if some OpenTracing collection is enabled
+// (e.g. LightStep), that, by itself, does NOT cause the expensive messages to
+// be enabled. "SET tracing" and friends, on the other hand, does cause
+// these messages to be enabled, as it shows that a user has expressed
+// particular interest in a trace.
+//
+// Usage:
+//
+// if ExpensiveLogEnabled(ctx, 2) {
+//   msg := constructExpensiveMessage()
+//   log.VEventf(ctx, 2, msg)
+// }
+//
+func ExpensiveLogEnabled(ctx context.Context, level int32) bool {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		if tracing.IsRecording(sp) {
+			return true
+		}
+	}
+	if VDepth(level, 1 /* depth */) {
+		return true
+	}
+	return false
+}
+
+// MakeEntry creates an Entry.
+func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
+	return Entry{
+		Severity:  s,
+		Time:      t,
+		Goroutine: goid.Get(),
+		File:      file,
+		Line:      int64(line),
+		Message:   msg,
+	}
 }
 
 // Format writes the log entry to the specified writer.
@@ -193,4 +252,9 @@ func (e Entry) Format(w io.Writer) error {
 	defer logging.putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// SetVModule alters the vmodule logging level to the passed in value.
+func SetVModule(value string) error {
+	return logging.vmodule.Set(value)
 }

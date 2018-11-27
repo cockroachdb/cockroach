@@ -1,0 +1,5 @@
+show_trace_stmt ::=
+	'SHOW' 'COMPACT' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW'  'TRACE' 'FOR' 'SESSION'
+	| 'SHOW' 'COMPACT' 'KV' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW'  'KV' 'TRACE' 'FOR' 'SESSION'

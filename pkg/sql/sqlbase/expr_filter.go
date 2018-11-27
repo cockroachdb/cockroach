@@ -12,15 +12,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(filter parser.TypedExpr, evalCtx *parser.EvalContext) (bool, error) {
+func RunFilter(filter tree.TypedExpr, evalCtx *tree.EvalContext) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}
@@ -30,5 +28,5 @@ func RunFilter(filter parser.TypedExpr, evalCtx *parser.EvalContext) (bool, erro
 		return false, err
 	}
 
-	return d == parser.DBoolTrue, nil
+	return d == tree.DBoolTrue, nil
 }

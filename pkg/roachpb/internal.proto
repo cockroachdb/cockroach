@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
@@ -39,6 +37,24 @@ import "gogoproto/gogo.proto";
 // mind, this message does not identify the variable which is actually being
 // measured; that information is expected be encoded in the key where this
 // message is stored.
+//
+// The actual samples can be stored in one of two formats: a Row-based format in
+// the "samples" repeated field, or a columnar format spread across several
+// different repeated columns. The row-based format will eventually be
+// deprecated, but is maintained for backwards compatibility. There is no flag
+// that indicates whether the data is stored as rows or columns; columnar data
+// is indicated by the presence of a non-zero-length "offset" collection, while
+// row data is indicated by a non-zero-length "samples" collection. Each data
+// message must have all of its data either row format or column format.
+//
+// One feature of the columnar layout is that it is "sparse", and columns
+// without useful information are elided. Specifically, the "offset" and "last"
+// columns will always be populated, but the other columns are only populated
+// for resolutions which contain detailed "rollup" information about long sample
+// periods. In the case of non-rollup data there is only one measurement per
+// sample period, and the value of all optional columns can be directly inferred
+// from the "last" column. Eliding those columns represents a significant memory
+// and on-disk savings for our highest resolution data.
 message InternalTimeSeriesData {
   // Holds a wall time, expressed as a unix epoch time in nanoseconds. This
   // represents the earliest possible timestamp for a sample within the
@@ -46,8 +62,40 @@ message InternalTimeSeriesData {
   optional int64 start_timestamp_nanos = 1 [(gogoproto.nullable) = false];
   // The duration of each sample interval, expressed in nanoseconds.
   optional int64 sample_duration_nanos = 2 [(gogoproto.nullable) = false];
-  // The actual data samples for this metric.
-  repeated InternalTimeSeriesSample samples = 3 [(gogoproto.nullable) = false];
+  // The data samples for this metric if this data was written in the old
+  // row format.
+  repeated InternalTimeSeriesSample samples = 3 [(gogoproto.nullable) = false, deprecated=true];
+  // Columnar array containing the ordered offsets of the samples in this
+  // data set.
+  repeated int32 offset = 4 [packed=true];
+  // Columnar array containing the last value of the samples in this data set;
+  // the "last" value is the most recent individual measurement during a sample
+  // period.
+  repeated double last = 5 [packed=true];
+  // Columnar array containing the total number of measurements that were taken
+  // during this sample period.
+  repeated uint32 count = 6 [packed=true];
+  // Columnar array containing the sum of measurements that were taken during
+  // this sample period. If this column is elided, its value for all samples is
+  // 1.
+  repeated double sum = 7 [packed=true];
+  // Columnar array containing the maximum value of any single measurement taken
+  // during this sample period. If this column is elided, its value for all
+  // samples is equal to "last".
+  repeated double max = 8 [packed=true];
+  // Columnar array containing the minimum value of any single measurements
+  // taken during this sample period. If this column is elided, its value for
+  // all samples is equal to "last".
+  repeated double min = 9 [packed=true];
+  // Columnar array containing the first value of the samples in this data set;
+  // the "first" value is the earliest individual measurement during a sample
+  // period. If this column is elided, its value for all samples is equal to
+  // "last".
+  repeated double first = 10 [packed=true];
+  // Columnar array containing the variance of measurements that were taken
+  // during this sample period. If this column is elided, its value for all
+  // samples is zero.
+  repeated double variance = 11 [packed=true];
 }
 
 // A InternalTimeSeriesSample represents data gathered from multiple

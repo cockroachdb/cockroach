@@ -1,0 +1,836 @@
+# scalar.opt contains Optgen language definitions for all of Cockroach's
+# physical and logical operators that return a single result value having a
+# simple scalar type like string or float, rather than a table-valued type.
+#
+# Tags
+#
+# Scalar - All operators in this file are marked with the Scalar tag, so they
+#          can be easily distinguished from Relational and Enforcer operators.
+
+
+# Subquery is a subquery in a single-row context. Here are some examples:
+#
+#   SELECT 1 = (SELECT 1)
+#   SELECT (1, 'a') = (SELECT 1, 'a')`
+#
+# In a single-row context, the outer query is only valid if the subquery returns
+# at most one row. Subqueries in a multi-row context can be transformed to a
+# single row context using the Any operator. See the comment above the Any
+# operator for more details.
+#
+# The Input field contains the subquery itself, which should be wrapped in a
+# Max1Row operator to enforce that the subquery can return at most one row
+# (Max1Row may be removed by the optimizer later if it can determine statically
+# that the subquery will always return at most one row). In addition, the
+# subquery must project exactly one output column. If the subquery returns one
+# row, then that column is bound to the single column value in that row. If the
+# subquery returns zero rows, then that column is bound to NULL.
+[Scalar]
+define Subquery {
+    Input RelExpr
+
+    _ SubqueryPrivate
+}
+
+# SubqueryPrivate contains information related to a subquery (Subquery, Any,
+# Exists). It is shared between the operators so that the same rules can be used
+# across all the subquery operators.
+[Private]
+define SubqueryPrivate {
+	OriginalExpr Subquery
+
+	# Cmp is only used for AnyOp.
+	Cmp Operator
+}
+
+# Any is a SQL operator that applies a comparison to every row of an input
+# subquery and returns true if any of the comparisons are true, else returns
+# null if any of the comparisons are null, else returns false. The following
+# transformations map from various SQL operators into the Any operator:
+#
+#   <scalar> IN (<subquery>)
+#   ==> (Any <subquery> <scalar> EqOp)
+#
+#   <scalar> NOT IN (<subquery>)
+#   ==> (Not (Any <subquery> <scalar> EqOp))
+#
+#   <scalar> <cmp> {SOME|ANY}(<subquery>)
+#   ==> (Any <subquery> <scalar> <cmp>)
+#
+#   <scalar> <cmp> ALL(<subquery>)
+#   ==> (Not (Any <subquery> <scalar> <negated-cmp>))
+#
+# Any expects the input subquery to return a single column of any data type. The
+# scalar value is compared with that column using the specified comparison
+# operator.
+[Scalar]
+define Any {
+    Input  RelExpr
+    Scalar ScalarExpr
+
+    _ SubqueryPrivate
+}
+
+# Exists takes a relational query as its input, and evaluates to true if the
+# query returns at least one row.
+[Scalar]
+define Exists {
+    Input RelExpr
+
+    _ SubqueryPrivate
+}
+
+# Variable is the typed scalar value of a column in the query. The Col field is
+# a metadata ColumnID value that references the column by index.
+[Scalar]
+define Variable {
+    Col ColumnID
+}
+
+# Const is a typed scalar constant value. The Value field is a tree.Datum value
+# having any datum type that's legal in the expression's context.
+[Scalar, ConstValue]
+define Const {
+    Value Datum
+}
+
+# Null is the constant SQL null value that has "unknown value" semantics. If
+# the Typ field is not types.Unknown, then the value is known to be in the
+# domain of that type. This is important for preserving correct types in
+# replacement patterns. For example:
+#   (Plus (Function ...) (Const 1))
+#
+# If the function in that expression has a static type of Int, but then it gets
+# constant folded to (Null), then its type must remain as Int. Any other type
+# violates logical equivalence of the expression, breaking type inference and
+# possibly changing the results of execution. The solution is to tag the null
+# with the correct type:
+#   (Plus (Null (Int)) (Const 1))
+#
+# Null is its own operator rather than a Const datum in order to make matching
+# and replacement easier and more efficient, as patterns can contain (Null)
+# expressions.
+[Scalar, ConstValue]
+define Null {
+    Typ DatumType
+}
+
+# True is the boolean true value that is equivalent to the tree.DBoolTrue datum
+# value. It is a separate operator to make matching and replacement simpler and
+# more efficient, as patterns can contain (True) expressions.
+[Scalar, Boolean, ConstValue]
+define True {
+}
+
+# False is the boolean false value that is equivalent to the tree.DBoolFalse
+# datum value. It is a separate operator to make matching and replacement
+# simpler and more efficient, as patterns can contain (False) expressions.
+[Scalar, Boolean, ConstValue]
+define False {
+}
+
+[Scalar]
+define Placeholder {
+    Value TypedExpr
+}
+
+[Scalar]
+define Tuple {
+    Elems ScalarListExpr
+    Typ   DatumType
+}
+
+# Projections is a set of ProjectionsItem expressions that specify the ColumnIDs
+# and scalar expressions for the synthesized output columns projected by a
+# containing Project operator. It is legal for the set to be empty. See the
+# Project and ProjectionsItem headers for more details.
+[Scalar, List]
+define Projections {
+}
+
+# ProjectionsItem encapsulates the information needed to synthesize an output
+# column, including its ColumnID and the scalar expression that produces its
+# value. In addition, the ProjectionsItem caches a set of scalar properties that
+# are lazily calculated by traversing the Element scalar expression. This allows
+# the properties for the entire expression subtree to be calculated once and
+# then repeatedly reused.
+#
+# The Element scalar expression cannot contain a simple VariableOp with the same
+# ColumnID as the one stored in the ColPrivate field, since that would make it a
+# pass-through column. Pass-through columns are always stored on the containing
+# Project operator instead. However, the Element field can contain a VariableOp
+# when a new ColumnID is being assigned, such as in the case of an outer column
+# reference.
+[Scalar, ListItem]
+define ProjectionsItem {
+    Element ScalarExpr
+
+    _ ColPrivate
+}
+
+# ColPrivate contains the ColumnID of a synthesized projection or aggregation
+# column, as well as a set of lazily-populated scalar properties that apply to
+# the column. ColPrivate is shared by ProjectionsItem and AggregationsItem so
+# that they can be treated polymorphically.
+[Private]
+define ColPrivate {
+    Col ColumnID
+
+    # Lazily populated.
+    scalar ScalarProps
+}
+
+# Aggregations is a set of AggregationsItem expressions that specify the
+# ColumnIDs and aggregation expression for output columns projected by a
+# containing grouping operator (GroupBy, ScalarGroupBy, or DistinctOn). It is
+# legal for the set to be empty. See the AggregationsItem header for more
+# details.
+[Scalar, List]
+define Aggregations {
+}
+
+# AggregationsItem encapsulates the information for constructing an aggregate
+# output column, including its ColumnID and the aggregate expression that
+# produces its value. In addition, the AggregationsItem caches a set of scalar
+# properties that are lazily calculated by traversing the Agg scalar expression.
+# This allows the properties for the aggregate expression to be calculated once
+# and then repeatedly reused.
+#
+# The aggregate expression can only consist of aggregate functions, variable
+# references, and modifiers like AggDistinct. Examples of valid expressions:
+#
+#   (Min (Variable 1))
+#   (Count (AggDistinct (Variable 1)))
+#
+# More complex arguments must be formulated using a Project operator as input to
+# the grouping operator.
+[Scalar, ListItem]
+define AggregationsItem {
+    Agg ScalarExpr
+
+    _ ColPrivate
+}
+
+# Filters is a set of FiltersItem expressions that specify a set of conjuncts
+# that filter rows selected by a containing Select or Join operator. A row is
+# filtered only if all conditions evaluate to true. If the set is empty, then
+# it never filters rows. See the Select and FiltersItem headers for more
+# details.
+[Scalar, Boolean, List]
+define Filters {
+}
+
+# FiltersItem contains a filter condition that's evaluated to determine whether
+# Select or Join rows should be filtered. In addition, the FiltersItem caches a
+# set of scalar properties that are lazily calculated by traversing the
+# Condition scalar expression. This allows the properties for the entire
+# expression subtree to be calculated once and then repeatedly reused.
+[Scalar, Boolean, ListItem]
+define FiltersItem {
+    Condition ScalarExpr
+
+    scalar ScalarProps
+}
+
+# Zip represents a functional zip over generators a,b,c, which returns tuples of
+# values from a,b,c picked "simultaneously". NULLs are used when a generator is
+# "shorter" than another. In SQL, these generators can be either generator
+# functions such as generate_series(), or scalar functions or expressions such
+# as upper() or CAST. For example, consider this query:
+#
+#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#
+# It is equivalent to:
+#
+#    (Zip [
+#            (ZipItem (Function generate_series)),
+#            (ZipItem (Function upper))
+#         ]
+#    )
+#
+# It produces:
+#
+#     generate_series | upper
+#    -----------------+-------
+#                   0 | ABC
+#                   1 | NULL
+#
+[Scalar, List]
+define Zip {
+}
+
+# ZipItem contains a generator function or scalar expression that is contained
+# in a Zip. See the Zip header for more details.
+[Scalar, ListItem]
+define ZipItem {
+    Func ScalarExpr
+
+    _ ZipItemPrivate
+}
+
+# ZipItemPrivate contains the list of output columns for the generator function
+# or scalar expression in a ZipItem, as well as a set of lazily-populated
+# scalar properties that apply to the ZipItem. Cols is a list since a single
+# function may output multiple columns (e.g., pg_get_keywords() outputs three
+# columns).
+[Private]
+define ZipItemPrivate {
+    Cols ColList
+
+    # Lazily populated.
+    scalar ScalarProps
+}
+
+# And is the boolean conjunction operator that evalutes to true only if both of
+# its conditions evaluate to true.
+[Scalar, Boolean]
+define And {
+    Left  ScalarExpr
+    Right ScalarExpr
+}
+
+# Or is the boolean disjunction operator that evaluates to true if either one of
+# its conditions evaluates to true.
+[Scalar, Boolean]
+define Or {
+    Left  ScalarExpr
+    Right ScalarExpr
+}
+
+# Not is the boolean negation operator that evaluates to true if its input
+# evaluates to false.
+[Scalar, Boolean]
+define Not {
+    Input ScalarExpr
+}
+
+[Scalar, Comparison]
+define Eq {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Lt {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Gt {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Le {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Ge {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Ne {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define In {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotIn {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Like {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotLike {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define ILike {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotILike {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define SimilarTo {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotSimilarTo {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define RegMatch {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotRegMatch {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define RegIMatch {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define NotRegIMatch {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Is {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define IsNot {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define Contains {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define JsonExists {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define JsonAllExists {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Comparison]
+define JsonSomeExists {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+# AnyScalar is the form of ANY which refers to an ANY operation on a
+# tuple or array, as opposed to Any which operates on a subquery.
+[Scalar]
+define AnyScalar {
+   Left  ScalarExpr
+   Right ScalarExpr
+
+   Cmp   Operator
+}
+
+[Scalar, Binary]
+define Bitand {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Bitor {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Bitxor {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Plus {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Minus {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Mult {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Div {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define FloorDiv {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Mod {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Pow {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define Concat {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define LShift {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define RShift {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Binary]
+define FetchVal {
+   Json  ScalarExpr
+   Index ScalarExpr
+}
+
+[Scalar, Binary]
+define FetchText {
+   Json  ScalarExpr
+   Index ScalarExpr
+}
+
+[Scalar, Binary]
+define FetchValPath {
+   Json ScalarExpr
+   Path ScalarExpr
+}
+
+[Scalar, Binary]
+define FetchTextPath {
+   Json ScalarExpr
+   Path ScalarExpr
+}
+
+[Scalar, Unary]
+define UnaryMinus {
+    Input ScalarExpr
+}
+
+[Scalar, Unary]
+define UnaryComplement {
+    Input ScalarExpr
+}
+
+# Cast converts the input expression into an expression of the target type.
+# While the input's type is restricted to the datum types in the types package,
+# the target type can be any of the column types in the coltypes package. For
+# example, this is a legal cast:
+#
+#   'hello'::VARCHAR(2)
+#
+# That expression has the effect of truncating the string to just 'he', since
+# the target data type allows a maximum of two characters. This is one example
+# of a "lossy" cast.
+[Scalar]
+define Cast {
+    Input     ScalarExpr
+    TargetTyp ColType
+}
+
+# Case is a CASE statement of the form:
+#
+#   CASE [ <Input> ]
+#       WHEN <condval1> THEN <expr1>
+#     [ WHEN <condval2> THEN <expr2> ] ...
+#     [ ELSE <expr> ]
+#   END
+#
+# The Case operator evaluates <Input> (if not provided, Input is set to True),
+# then picks the WHEN branch where <condval> is equal to <Input>, then evaluates
+# and returns the corresponding THEN expression. If no WHEN branch matches, the
+# ELSE expression is evaluated and returned, if any. Otherwise, NULL is
+# returned.
+#
+# Note that the Whens list inside Case is used to represent all the WHEN
+# branches as well as the ELSE statement if it exists. It is of the form:
+#
+#   [(When <condval1> <expr1>),(When <condval2> <expr2>),...,<expr>]
+#
+[Scalar]
+define Case {
+    Input  ScalarExpr
+    Whens  ScalarListExpr
+    OrElse ScalarExpr
+}
+
+# When represents a single WHEN ... THEN ... condition inside a CASE statement.
+# It is the type of each list item in Whens (except for the last item which is
+# a raw expression for the ELSE statement).
+[Scalar]
+define When {
+    Condition ScalarExpr
+    Value     ScalarExpr
+}
+
+# Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+[Scalar]
+define Array {
+    Elems ScalarListExpr
+    Typ   DatumType
+}
+
+# Indirection is a subscripting expression of the form <expr>[<index>].
+# Input must be an Array type and Index must be an int. Multiple indirections
+# and slicing are not supported.
+[Scalar]
+define Indirection {
+    Input ScalarExpr
+    Index ScalarExpr
+}
+
+# Function invokes a builtin SQL function like CONCAT or NOW, passing the given
+# arguments. The FunctionPrivate field contains the name of the function as well
+# as pointers to its type and properties.
+[Scalar]
+define Function {
+    Args ScalarListExpr
+
+    _ FunctionPrivate
+}
+
+[Private]
+define FunctionPrivate {
+	Name       string
+	Typ        DatumType
+	Properties FuncProps
+	Overload   FuncOverload
+}
+
+# Collate is an expression of the form
+#
+#     x COLLATE y
+#
+# Where x is a "string type" (meaning either a normal string or a collated string),
+# and y is a locale. It evaluates to the string collated to the given locale.
+[Scalar]
+define Collate {
+    Input  ScalarExpr
+    Locale string
+}
+
+[Scalar]
+define Coalesce {
+    Args ScalarListExpr
+}
+
+# ColumnAccess is a scalar expression that returns a column from the given
+# input expression (which is assumed to be of type Tuple). Idx is the ordinal
+# index of the column in Input.
+[Scalar]
+define ColumnAccess {
+    Input ScalarExpr
+
+    Idx TupleOrdinal
+}
+
+# UnsupportedExpr is used for interfacing with the old planner code. It can
+# encapsulate a TypedExpr that is otherwise not supported by the optimizer.
+[Scalar]
+define UnsupportedExpr {
+    Value TypedExpr
+}
+
+[Scalar, Aggregate]
+define ArrayAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define Avg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define BoolAnd {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define BoolOr {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define ConcatAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define Count {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define CountRows {
+}
+
+[Scalar, Aggregate]
+define Max {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define Min {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define SumInt {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define Sum {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define SqrDiff {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define Variance {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define StdDev {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define XorAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define JsonAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define JsonbAgg {
+    Input ScalarExpr
+}
+
+# ConstAgg is used in the special case when the value of a column is known to be
+# constant within a grouping set; it returns that value. If there are no rows
+# in the grouping set, then ConstAgg returns NULL.
+#
+# ConstAgg is not part of SQL, but it's used internally to rewrite correlated
+# subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define ConstAgg {
+    Input ScalarExpr
+}
+
+# ConstNotNullAgg is used in the special case when the value of a column is
+# known to be constant within a grouping set, except on some rows where it can
+# have a NULL value; it returns the non-NULL constant value. If there are no
+# rows in the grouping set, or all rows have a NULL value, then ConstNotNullAgg
+# returns NULL.
+#
+# ConstNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define ConstNotNullAgg {
+    Input ScalarExpr
+}
+
+# AnyNotNullAgg returns any non-NULL value it receives, with no other guarantees.
+# If it does not receive any values, it returns NULL.
+#
+# AnyNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define AnyNotNullAgg {
+    Input ScalarExpr
+}
+
+# FirstAgg is used only by DistinctOn; it returns the value on the first row
+# according to an ordering; if the ordering is unspecified (or partially
+# specified), it is an arbitrary ordering but it must be the same across all
+# FirstAggs in a DistinctOn.
+[Scalar, Aggregate]
+define FirstAgg {
+    Input ScalarExpr
+}
+
+# AggDistinct is used as a modifier that wraps the input of an aggregate
+# function. It causes the respective aggregation to only process each distinct
+# value once.
+[Scalar]
+define AggDistinct {
+    Input ScalarExpr
+}
+
+# ScalarList is a list expression that has scalar expression items of type
+# opt.ScalarExpr. opt.ScalarExpr is an external type that is defined outside of
+# Optgen. It is hard-coded in the code generator to be the item type for
+# ScalarList.
+#
+# TODO(andyk): Consider adding Optgen syntax like:
+#                define ScalarList []ScalarExpr
+[Scalar, List]
+define ScalarList {
+}

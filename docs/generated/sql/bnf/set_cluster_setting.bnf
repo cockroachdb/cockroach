@@ -1,0 +1,3 @@
+preparable_set_stmt ::=
+	'SET' 'CLUSTER' 'SETTING' var_name '=' var_value
+	| 'SET' 'CLUSTER' 'SETTING' var_name 'TO' var_value

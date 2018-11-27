@@ -1,0 +1,63 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+
+.sort-table
+  @extend $table-base
+
+  &__row--header
+    // Display the sort direction arrow in header cells.
+    .sort-table__cell
+      padding 18px 20px
+      color $tooltip-color
+
+      &--sortable:after
+        display inline-block
+        width 20px
+        line-height 12px
+        font-size 10px
+        vertical-align middle
+        text-align center
+        content "▼"
+
+      &--descending
+        color $body-color
+
+      &--ascending
+        color $body-color
+        &:after
+          content "▲"
+
+  &__unbounded-column
+    white-space normal
+    word-break break-all
+
+  &__row
+    &--expandable
+      border-top: none
+      cursor pointer
+
+    &--expanded-area
+      background-color #E2E5EE !important // TODO(vilterp): palette-ize
+
+  &__cell__expansion-control
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+/Edge */
+    user-select: none; /* Standard */
+
+    div
+      width 15px

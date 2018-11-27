@@ -1,0 +1,276 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
+----
+1
+2
+3
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
+----
+1
+1
+1
+1
+1
+2
+2
+3
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
+----
+1
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
+----
+1
+1
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
+----
+2
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
+----
+1
+2
+2
+
+query II rowsort
+VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+1 1
+1 2
+1 3
+2 1
+3 4
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+query I
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# UNION with NULL columns in operands works.
+query I
+VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+----
+NULL
+1
+
+query I
+VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
+----
+NULL
+1
+
+query I
+VALUES (NULL) UNION ALL VALUES (NULL)
+----
+NULL
+NULL
+
+query IT rowsort
+SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
+----
+1  unknown
+2  int
+
+query IT rowsort
+SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
+----
+1  int
+2  unknown
+
+# INTERSECT with NULL columns in operands works.
+query I
+VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (1) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (NULL)
+----
+NULL
+
+# EXCEPT with NULL columns in operands works.
+query I
+VALUES (1) EXCEPT VALUES (NULL) ORDER BY 1
+----
+1
+
+query I
+VALUES (NULL) EXCEPT VALUES (1) ORDER BY 1
+----
+NULL
+
+query I
+VALUES (NULL) EXCEPT VALUES (NULL)
+----
+
+statement ok
+CREATE TABLE uniontest (
+  k INT,
+  v INT
+)
+
+statement OK
+INSERT INTO uniontest VALUES
+(1, 1),
+(1, 1),
+(1, 1),
+(1, 2),
+(1, 2),
+(2, 1),
+(2, 3),
+(2, 1)
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
+----
+1
+2
+3
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+1
+1
+1
+1
+2
+2
+3
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
+----
+1
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+1
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
+----
+2
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+2
+2
+
+query I
+(SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+query I
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+query II
+SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
+----
+1 1
+
+query II
+SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
+----
+1 1
+
+query error pgcode 42601 each UNION query must have the same number of columns: 2 vs 1
+SELECT 1, 2 UNION SELECT 3
+
+query error pgcode 42601 each INTERSECT query must have the same number of columns: 2 vs 1
+SELECT 1, 2 INTERSECT SELECT 3
+
+query error pgcode 42601 each EXCEPT query must have the same number of columns: 2 vs 1
+SELECT 1, 2 EXCEPT SELECT 3
+
+query error pgcode 42804 UNION types int and string cannot be matched
+SELECT 1 UNION SELECT '3'
+
+query error pgcode 42804 INTERSECT types int and string cannot be matched
+SELECT 1 INTERSECT SELECT '3'
+
+query error pgcode 42804 EXCEPT types int and string cannot be matched
+SELECT 1 EXCEPT SELECT '3'
+
+query error pgcode 42703 column \"z\" does not exist
+SELECT 1 UNION SELECT 3 ORDER BY z
+
+query error UNION types int\[] and string\[] cannot be matched
+SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
+
+# Check that UNION permits columns of different visible types
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (a INTEGER PRIMARY KEY)
+
+query I
+SELECT * FROM a UNION ALL SELECT * FROM b
+
+
+# Make sure that UNION ALL doesn't crash when its two children have different
+# post-processing stages.
+
+statement ok
+CREATE TABLE c (a INT PRIMARY KEY, b INT)
+
+query I
+SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
+----
+
+statement ok
+INSERT INTO a VALUES (1)
+
+statement ok
+INSERT INTO c VALUES (1,2)
+
+statement ok
+INSERT INTO c VALUES (3,4)
+
+# Check that UNION ALL columns are mapped correctly - even if one side gets optimized out
+query I
+SELECT a FROM (SELECT a FROM a UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM a WHERE a > 3 AND a < 1 UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a WHERE a > 3 AND a < 1) ORDER BY a
+----
+1
+3

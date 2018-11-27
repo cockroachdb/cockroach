@@ -1,0 +1,47 @@
+# =============================================================================
+# limit.opt contains normalization rules for the Limit and Offset operators.
+# =============================================================================
+
+
+# EliminateLimit discards a Limit operator if its constant limit is greater than
+# or equal to the maximum number of rows that can be returned by the input. In
+# this case, the Limit is just a no-op, because the rows are already limited.
+[EliminateLimit, Normalize]
+(Limit
+    $input:*
+    (Const $limit:*) & (LimitGeMaxRows $limit $input)
+)
+=>
+$input
+
+# PushLimitIntoProject pushes the Limit operator into its Project input. It is
+# desirable to push the Limit operator as low in the query as possible, in order
+# to minimize the number of rows that other operators need to process.
+[PushLimitIntoProject, Normalize]
+(Limit
+    (Project $input:* $projections:* $passthrough:*)
+    $limit:*
+    $ordering:* & (HasColsInOrdering $input $ordering)
+)
+=>
+(Project
+    (Limit $input $limit (PruneOrdering $ordering (OutputCols $input)))
+    $projections
+    $passthrough
+)
+
+# PushOffsetIntoProject pushes the Offset operator into its Project input. It is
+# desirable to push the Offset operator as low in the query as possible, in
+# order to minimize the number of rows that other operators need to process.
+[PushOffsetIntoProject, Normalize]
+(Offset
+    (Project $input:* $projections:* $passthrough:*)
+    $offset:*
+    $ordering:* & (HasColsInOrdering $input $ordering)
+)
+=>
+(Project
+    (Offset $input $offset (PruneOrdering $ordering (OutputCols $input)))
+    $projections
+    $passthrough
+)

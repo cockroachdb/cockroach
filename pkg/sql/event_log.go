@@ -12,16 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package sql
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +29,7 @@ import (
 type EventLogType string
 
 // NOTE: When you add a new event type here. Please manually add it to
-// ui/app/util/eventTypes.ts so that it will be recognized in the UI.
+// pkg/ui/src/util/eventTypes.ts so that it will be recognized in the UI.
 const (
 	// EventLogCreateDatabase is recorded when a database is created.
 	EventLogCreateDatabase EventLogType = "create_database"
@@ -42,6 +40,8 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+	// EventLogTruncateTable is recorded when a table is truncated.
+	EventLogTruncateTable EventLogType = "truncate_table"
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
 
@@ -49,11 +49,20 @@ const (
 	EventLogCreateIndex EventLogType = "create_index"
 	// EventLogDropIndex is recorded when an index is dropped.
 	EventLogDropIndex EventLogType = "drop_index"
+	// EventLogAlterIndex is recorded when an index is altered.
+	EventLogAlterIndex EventLogType = "alter_index"
 
 	// EventLogCreateView is recorded when a view is created.
 	EventLogCreateView EventLogType = "create_view"
 	// EventLogDropView is recorded when a view is dropped.
 	EventLogDropView EventLogType = "drop_view"
+
+	// EventLogCreateSequence is recorded when a sequence is created.
+	EventLogCreateSequence EventLogType = "create_sequence"
+	// EventLogDropSequence is recorded when a sequence is dropped.
+	EventLogDropSequence EventLogType = "drop_sequence"
+	// EventLogAlterSequence is recorded when a sequence is altered.
+	EventLogAlterSequence EventLogType = "alter_sequence"
 
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
@@ -61,25 +70,46 @@ const (
 	// EventLogFinishSchemaChange is recorded when a previously initiated schema
 	// change has completed.
 	EventLogFinishSchemaChange EventLogType = "finish_schema_change"
+	// EventLogFinishSchemaRollback is recorded when a previously
+	// initiated schema change rollback has completed.
+	EventLogFinishSchemaRollback EventLogType = "finish_schema_change_rollback"
 
 	// EventLogNodeJoin is recorded when a node joins the cluster.
 	EventLogNodeJoin EventLogType = "node_join"
 	// EventLogNodeRestart is recorded when an existing node rejoins the cluster
 	// after being offline.
 	EventLogNodeRestart EventLogType = "node_restart"
+	// EventLogNodeDecommissioned is recorded when a node is marked as
+	// decommissioning.
+	EventLogNodeDecommissioned EventLogType = "node_decommissioned"
+	// EventLogNodeRecommissioned is recorded when a decommissioned node is
+	// recommissioned.
+	EventLogNodeRecommissioned EventLogType = "node_recommissioned"
+
+	// EventLogSetClusterSetting is recorded when a cluster setting is changed.
+	EventLogSetClusterSetting EventLogType = "set_cluster_setting"
+
+	// EventLogSetZoneConfig is recorded when a zone config is changed.
+	EventLogSetZoneConfig EventLogType = "set_zone_config"
+	// EventLogRemoveZoneConfig is recorded when a zone config is removed.
+	EventLogRemoveZoneConfig EventLogType = "remove_zone_config"
 )
+
+// EventLogSetClusterSettingDetail is the json details for a settings change.
+type EventLogSetClusterSettingDetail struct {
+	SettingName string
+	Value       string
+	User        string
+}
 
 // An EventLogger exposes methods used to record events to the event table.
 type EventLogger struct {
-	InternalExecutor
+	*InternalExecutor
 }
 
-// MakeEventLogger constructs a new EventLogger. A LeaseManager is required in
-// order to correctly execute SQL statements.
-func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
-	return EventLogger{InternalExecutor{
-		LeaseManager: leaseMgr,
-	}}
+// MakeEventLogger constructs a new EventLogger.
+func MakeEventLogger(execCfg *ExecutorConfig) EventLogger {
+	return EventLogger{InternalExecutor: execCfg.InternalExecutor}
 }
 
 // InsertEventRecord inserts a single event into the event log as part of the
@@ -92,7 +122,7 @@ func (ev EventLogger) InsertEventRecord(
 	info interface{},
 ) error {
 	// Record event record insertion in local log output.
-	txn.AddCommitTrigger(func() {
+	txn.AddCommitTrigger(func(ctx context.Context) {
 		log.Infof(
 			ctx, "Event: %q, target: %d, info: %+v",
 			eventType,
@@ -103,7 +133,7 @@ func (ev EventLogger) InsertEventRecord(
 
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
-  timestamp, eventType, targetID, reportingID, info
+  timestamp, "eventType", "targetID", "reportingID", info
 )
 VALUES(
   now(), $1, $2, $3, $4
@@ -123,8 +153,7 @@ VALUES(
 		args[3] = string(infoBytes)
 	}
 
-	rows, err := ev.ExecuteStatementInTransaction(
-		ctx, "log-event", txn, insertEventTableStmt, args...)
+	rows, err := ev.Exec(ctx, "log-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}

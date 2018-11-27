@@ -11,15 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package storage
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,13 +34,17 @@ import (
 type replicaQueue interface {
 	// Start launches a goroutine to process the contents of the queue.
 	// The provided stopper is used to signal that the goroutine should exit.
-	Start(*hlc.Clock, *stop.Stopper)
+	Start(*stop.Stopper)
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
 	MaybeAdd(*Replica, hlc.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
+	// Name returns the name of the queue.
+	Name() string
+	// NeedsLease returns whether the queue requires a replica to be leaseholder.
+	NeedsLease() bool
 }
 
 // A replicaSet provides access to a sequence of replicas to consider
@@ -65,10 +66,12 @@ type replicaSet interface {
 // prioritized replica queues.
 type replicaScanner struct {
 	log.AmbientContext
+	clock *hlc.Clock
 
 	targetInterval time.Duration  // Target duration interval for scan loop
+	minIdleTime    time.Duration  // Min idle time for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
-	waitTimer      timeutil.Timer // Shared timer to avoid allocations.
+	waitTimer      timeutil.Timer // Shared timer to avoid allocations
 	replicas       replicaSet     // Replicas to be scanned
 	queues         []replicaQueue // Replica queues managed by this scanner
 	removed        chan *Replica  // Replicas to remove from queues
@@ -90,14 +93,19 @@ type replicaScanner struct {
 // nil, after a complete loop that function will be called. If the
 // targetInterval is 0, the scanner is disabled.
 func newReplicaScanner(
-	ambient log.AmbientContext, targetInterval, maxIdleTime time.Duration, replicas replicaSet,
+	ambient log.AmbientContext,
+	clock *hlc.Clock,
+	targetInterval, minIdleTime, maxIdleTime time.Duration,
+	replicas replicaSet,
 ) *replicaScanner {
 	if targetInterval < 0 {
 		panic("scanner interval must be greater than or equal to zero")
 	}
 	rs := &replicaScanner{
 		AmbientContext: ambient,
+		clock:          clock,
 		targetInterval: targetInterval,
+		minIdleTime:    minIdleTime,
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
 		removed:        make(chan *Replica, 10),
@@ -116,11 +124,11 @@ func (rs *replicaScanner) AddQueues(queues ...replicaQueue) {
 }
 
 // Start spins up the scanning loop.
-func (rs *replicaScanner) Start(clock *hlc.Clock, stopper *stop.Stopper) {
+func (rs *replicaScanner) Start(stopper *stop.Stopper) {
 	for _, queue := range rs.queues {
-		queue.Start(clock, stopper)
+		queue.Start(stopper)
 	}
-	rs.scanLoop(clock, stopper)
+	rs.scanLoop(stopper)
 }
 
 // scanCount returns the number of times the scanner has cycled through
@@ -188,6 +196,9 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 		count = 1
 	}
 	interval := time.Duration(remainingNanos / int64(count))
+	if rs.minIdleTime > 0 && interval < rs.minIdleTime {
+		interval = rs.minIdleTime
+	}
 	if rs.maxIdleTime > 0 && interval > rs.maxIdleTime {
 		interval = rs.maxIdleTime
 	}
@@ -199,7 +210,7 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 // to be stopped. The method also removes a replica from queues when it
 // is signaled via the removed channel.
 func (rs *replicaScanner) waitAndProcess(
-	ctx context.Context, start time.Time, clock *hlc.Clock, stopper *stop.Stopper, repl *Replica,
+	ctx context.Context, stopper *stop.Stopper, start time.Time, repl *Replica,
 ) bool {
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
@@ -221,7 +232,7 @@ func (rs *replicaScanner) waitAndProcess(
 				log.Infof(ctx, "replica scanner processing %s", repl)
 			}
 			for _, q := range rs.queues {
-				q.MaybeAdd(repl, clock.Now())
+				q.MaybeAdd(repl, rs.clock.Now())
 			}
 			return false
 
@@ -250,7 +261,7 @@ func (rs *replicaScanner) removeReplica(repl *Replica) {
 // scanLoop loops endlessly, scanning through replicas available via
 // the replica set, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
-func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
+func (rs *replicaScanner) scanLoop(stopper *stop.Stopper) {
 	ctx := rs.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		start := timeutil.Now()
@@ -269,27 +280,29 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			count := 0
 			rs.replicas.Visit(func(repl *Replica) bool {
 				count++
-				shouldStop = rs.waitAndProcess(ctx, start, clock, stopper, repl)
+				shouldStop = rs.waitAndProcess(ctx, stopper, start, repl)
 				return !shouldStop
 			})
 			if count == 0 {
 				// No replicas processed, just wait.
-				shouldStop = rs.waitAndProcess(ctx, start, clock, stopper, nil)
+				shouldStop = rs.waitAndProcess(ctx, stopper, start, nil)
 			}
 
-			shouldStop = shouldStop || nil != stopper.RunTask(ctx, func(ctx context.Context) {
-				// Increment iteration count.
-				rs.mu.Lock()
-				defer rs.mu.Unlock()
-				rs.mu.scanCount++
-				rs.mu.total += timeutil.Since(start)
-				if log.V(6) {
-					log.Infof(ctx, "reset replica scan iteration")
-				}
+			shouldStop = shouldStop || nil != stopper.RunTask(
+				ctx, "storage.replicaScanner: scan loop",
+				func(ctx context.Context) {
+					// Increment iteration count.
+					rs.mu.Lock()
+					defer rs.mu.Unlock()
+					rs.mu.scanCount++
+					rs.mu.total += timeutil.Since(start)
+					if log.V(6) {
+						log.Infof(ctx, "reset replica scan iteration")
+					}
 
-				// Reset iteration and start time.
-				start = timeutil.Now()
-			})
+					// Reset iteration and start time.
+					start = timeutil.Now()
+				})
 			if shouldStop {
 				return
 			}

@@ -1,0 +1,2 @@
+column_def ::=
+	column_name typename  ( ( col_qualification ) )*

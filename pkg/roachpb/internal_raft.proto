@@ -11,21 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "roachpb/metadata.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
 // Raft requires access to the term of the last truncated log entry even after the
 // rest of the entry has been discarded.
 message RaftTruncatedState {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // The highest index that has been removed from the log.
@@ -41,7 +40,7 @@ message RaftTombstone {
 }
 
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
-// all of the range's data and metadata, including the raft log, sequence cache, etc.
+// all of the range's data and metadata, including the raft log, abort span, etc.
 message RaftSnapshotData {
   message KeyValue {
     optional bytes key = 1;

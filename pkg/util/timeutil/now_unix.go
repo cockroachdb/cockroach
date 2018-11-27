@@ -20,4 +20,7 @@ import (
 	"time"
 )
 
-var now = time.Now
+// Now returns the current UTC time.
+func Now() time.Time {
+	return time.Now().UTC()
+}

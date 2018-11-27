@@ -1,0 +1,145 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+query T
+SHOW bytea_output
+----
+hex
+
+query T
+SELECT 'non-escaped-string':::BYTES::STRING
+----
+\x6e6f6e2d657363617065642d737472696e67
+
+query T
+SELECT '\Xabcd':::BYTES::STRING
+----
+\xabcd
+
+query T
+SELECT b'\x5c\x78':::BYTES
+----
+\x
+
+query T
+SELECT b'\x5c\x78':::BYTES::STRING
+----
+\x5c78
+
+query T
+SELECT b'\x5c\x58':::BYTES::STRING
+----
+\x5c58
+
+query T
+SELECT e'\x5c\x78'::STRING
+----
+\x
+
+query T
+SELECT '\X':::BYTES::STRING
+----
+\x
+
+query T
+SELECT e'a\\134b\nc\'e'::STRING::BYTES::STRING
+----
+\x615c620a632765
+
+
+query T
+SELECT '日本語':::STRING::BYTES::STRING
+----
+\xe697a5e69cace8aa9e
+
+statement ok
+SET bytea_output = escape
+
+query T
+SELECT 'non-escaped-string':::BYTES::STRING
+----
+non-escaped-string
+
+query T
+SELECT '\Xabcd':::BYTES::STRING
+----
+\253\315
+
+query T
+SELECT b'\x5c\x78':::BYTES
+----
+\x
+
+query T
+SELECT b'\x5c\x78':::BYTES::STRING
+----
+\\x
+
+query T
+SELECT b'\x5c\x58':::BYTES::STRING
+----
+\\X
+
+query T
+SELECT e'\x5c\x78'::STRING
+----
+\x
+
+query T
+SELECT '\X':::BYTES::STRING
+----
+·
+
+query T
+SELECT e'a\\134b\nc\'e'::STRING::BYTES::STRING
+----
+a\\b\012c'e
+
+query T
+SELECT '日本語':::STRING::BYTES::STRING
+----
+\346\227\245\346\234\254\350\252\236
+
+subtest Regression_25841
+
+statement ok
+set bytea_output = hex
+
+query T
+SELECT e'a\\\\b'::STRING::BYTEA
+----
+a\b
+
+query I
+SELECT length(e'a\\\\b'::STRING::BYTEA)
+----
+3
+
+query error invalid bytea escape sequence
+SELECT e'a\\bcde'::STRING::BYTEA
+
+query error bytea encoded value ends with incomplete escape sequence
+SELECT e'a\\01'::STRING::BYTEA
+
+subtest Regression_27950
+
+statement ok
+set bytea_output = hex
+
+statement ok
+CREATE TABLE t(b BYTES); INSERT INTO t(b) VALUES ('\xe697a5e69cace8aa9e'::BYTES)
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \xe697a5e69cace8aa9e
+
+statement ok
+set bytea_output = escape
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \346\227\245\346\234\254\350\252\236
+
+statement ok
+DROP TABLE t

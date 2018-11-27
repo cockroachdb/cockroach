@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package storage_test
 
@@ -23,8 +21,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 
+	"go.etcd.io/etcd/raft/raftpb"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -41,12 +42,6 @@ func verifyHash(b []byte, expectedSum uint64) error {
 	return nil
 }
 
-func marshalTo(pb proto.Message, b []byte) (int, error) {
-	return pb.(interface {
-		MarshalTo([]byte) (int, error)
-	}).MarshalTo(b)
-}
-
 // An arbitrary number chosen to seed the PRNGs used to populate the tested
 // protos.
 const goldenSeed = 1337
@@ -58,20 +53,72 @@ const goldenSeed = 1337
 const itersPerProto = 20
 
 type fixture struct {
-	populatedConstructor   func(*rand.Rand) proto.Message
+	populatedConstructor   func(*rand.Rand) protoutil.Message
 	emptySum, populatedSum uint64
 }
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCMetadata(r, false) },
-		emptySum:             7551962144604783939,
-		populatedSum:         16635523155996652761,
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			m := enginepb.NewPopulatedMVCCMetadata(r, false)
+			m.Txn = nil // never populated below Raft
+			return m
+		},
+		emptySum:     7551962144604783939,
+		populatedSum: 3716674106872807900,
 	},
+	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return enginepb.NewPopulatedRangeAppliedState(r, false)
+		},
+		emptySum:     615555020845646359,
+		populatedSum: 94706924697857278,
+	},
+	// MVCCStats is still serialized beneath Raft in tests that use old cluster
+	// versions before the RangeAppliedState key.
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
-		emptySum:             18064891702890239528,
-		populatedSum:         4287370248246326846,
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return enginepb.NewPopulatedMVCCStats(r, false)
+		},
+		emptySum:     18064891702890239528,
+		populatedSum: 4287370248246326846,
+	},
+	reflect.TypeOf(&raftpb.HardState{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			type expectedHardState struct {
+				Term             uint64
+				Vote             uint64
+				Commit           uint64
+				XXX_unrecognized []byte
+			}
+			// Conversion fails if new fields are added to `HardState`, in which case this method
+			// and the expected sums should be updated.
+			var _ = expectedHardState(raftpb.HardState{})
+
+			n := r.Uint64()
+			return &raftpb.HardState{
+				Term:             n % 3,
+				Vote:             n % 7,
+				Commit:           n % 11,
+				XXX_unrecognized: nil,
+			}
+		},
+		emptySum:     13621293256077144893,
+		populatedSum: 13375098491754757572,
+	},
+	reflect.TypeOf(&roachpb.RangeDescriptor{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedRangeDescriptor(r, false)
+		},
+		emptySum:     5524024218313206949,
+		populatedSum: 12732942749596030124,
+	},
+	reflect.TypeOf(&storagepb.Liveness{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return storagepb.NewPopulatedLiveness(r, false)
+		},
+		emptySum:     892800390935990883,
+		populatedSum: 16231745342114354146,
 	},
 }
 
@@ -85,7 +132,7 @@ func TestBelowRaftProtos(t *testing.T) {
 
 	slice := make([]byte, 1<<20)
 	for typ, fix := range belowRaftGoldenProtos {
-		if b, err := protoutil.Marshal(reflect.New(typ.Elem()).Interface().(proto.Message)); err != nil {
+		if b, err := protoutil.Marshal(reflect.New(typ.Elem()).Interface().(protoutil.Message)); err != nil {
 			t.Fatal(err)
 		} else if err := verifyHash(b, fix.emptySum); err != nil {
 			t.Errorf("%s (empty): %s\n", typ, err)
@@ -96,7 +143,7 @@ func TestBelowRaftProtos(t *testing.T) {
 		bytes := slice
 		numBytes := 0
 		for i := 0; i < itersPerProto; i++ {
-			if n, err := marshalTo(fix.populatedConstructor(randGen), bytes); err != nil {
+			if n, err := fix.populatedConstructor(randGen).MarshalTo(bytes); err != nil {
 				t.Fatal(err)
 			} else {
 				bytes = bytes[n:]

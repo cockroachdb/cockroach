@@ -11,42 +11,51 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrew Bonventre (andybons@gmail.com)
 
 package server
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
@@ -60,6 +69,57 @@ func TestSelfBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stopper().Stop(context.TODO())
+
+	if s.RPCContext().ClusterID.Get() == uuid.Nil {
+		t.Error("cluster ID failed to be set on the RPC context")
+	}
+}
+
+// TestHealthCheck runs a basic sanity check on the health checker.
+func TestHealthCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = proto.Int32(1)
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx := context.Background()
+
+	recorder := s.(*TestServer).Server.recorder
+
+	{
+		summary := *recorder.GenerateNodeStatus(ctx)
+		result := recorder.CheckHealth(ctx, summary)
+		if len(result.Alerts) != 0 {
+			t.Fatal(result)
+		}
+	}
+
+	store, err := s.(*TestServer).Server.node.stores.GetStore(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.Metrics().UnavailableRangeCount.Inc(100)
+
+	{
+		summary := *recorder.GenerateNodeStatus(ctx)
+		result := recorder.CheckHealth(ctx, summary)
+		expAlerts := []statuspb.HealthAlert{
+			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
+		}
+		if !reflect.DeepEqual(expAlerts, result.Alerts) {
+			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)
+		}
+	}
 }
 
 // TestServerStartClock tests that a server's clock is not pushed out of thin
@@ -86,10 +146,10 @@ func TestServerStartClock(t *testing.T) {
 	// actually not needed because other commands run during server
 	// initialization, but we cannot guarantee that's going to stay that way.
 	get := &roachpb.GetRequest{
-		Span: roachpb.Span{Key: roachpb.Key("a")},
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
 	}
 	if _, err := client.SendWrapped(
-		context.Background(), s.KVClient().(*client.DB).GetSender(), get,
+		context.Background(), s.DB().NonTransactionalSender(), get,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -114,15 +174,36 @@ func TestPlainHTTPServer(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.TODO())
 
+	// First, make sure that the TestServer's built-in client interface
+	// still works in insecure mode.
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
 		return getStatusJSONProto(s, "metrics/local", &data)
 	})
 
-	ctx := s.RPCContext()
-	ctx.Insecure = false
-	if err := getStatusJSONProto(s, "metrics/local", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
-		t.Fatalf("unexpected error %v", err)
+	// Now make a couple of direct requests using both http and https.
+	// They won't succeed because we're not jumping through
+	// authentication hoops, but they verify that the server is using
+	// the correct protocol.
+	url := s.AdminURL()
+	if !strings.HasPrefix(url, "http://") {
+		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
+	}
+	if resp, err := http.Get(url); err != nil {
+		t.Error(err)
+	} else {
+		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+			t.Error(err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Attempting to connect to the insecure server with HTTPS doesn't work.
+	secureURL := strings.Replace(url, "http://", "https://", 1)
+	if _, err := http.Get(secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+		t.Error(err)
 	}
 }
 
@@ -148,8 +229,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusPermanentRedirect {
-			t.Errorf("expected status code %d; got %d", http.StatusPermanentRedirect, resp.StatusCode)
+		if resp.StatusCode != http.StatusTemporaryRedirect {
+			t.Errorf("expected status code %d; got %d", http.StatusTemporaryRedirect, resp.StatusCode)
 		}
 		if redirectURL, err := resp.Location(); err != nil {
 			t.Error(err)
@@ -162,8 +243,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusPermanentRedirect {
-			t.Errorf("expected status code %d; got %d", http.StatusPermanentRedirect, resp.StatusCode)
+		if resp.StatusCode != http.StatusTemporaryRedirect {
+			t.Errorf("expected status code %d; got %d", http.StatusTemporaryRedirect, resp.StatusCode)
 		}
 		if redirectURL, err := resp.Location(); err != nil {
 			t.Error(err)
@@ -180,7 +261,7 @@ func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	client, err := s.GetHTTPClient()
+	client, err := s.GetAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,30 +313,39 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	ts := s.(*TestServer)
-	tds := db.GetSender()
+	ctx := context.Background()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Prevent the merge queue from immediately discarding our splits.
+				DisableMergeQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	ts := s.(*TestServer)
+	tds := db.NonTransactionalSender()
+
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
 	get := &roachpb.GetRequest{
-		Span: roachpb.Span{Key: writes[0]},
+		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
+	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(context.Background(), tds, scan)
+		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,13 +361,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	del := &roachpb.DeleteRangeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    writes[0],
-			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
+			EndKey: writes[len(writes)-1].Next(),
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,16 +379,22 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
+	txn := client.NewTxnWithProto(ctx, db, s.NodeID(), client.RootTxn, txnProto)
+
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-	txn := roachpb.NewTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	reply, err = client.SendWrappedWith(context.Background(), tds, roachpb.Header{Txn: txn}, scan)
-	if err != nil {
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txnProto}
+	ba.Add(scan)
+	br, pErr := txn.Send(ctx, ba)
+	if pErr != nil {
 		t.Fatal(err)
 	}
-	sr := reply.(*roachpb.ScanResponse)
-	if txn := sr.Txn; txn == nil || txn.Name != "MyTxn" {
+	replyTxn := br.Txn
+	if replyTxn == nil || replyTxn.Name != "MyTxn" {
 		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}
+	sr := br.Responses[0].GetInner().(*roachpb.ScanResponse)
 	if rows := sr.Rows; len(rows) > 0 {
 		t.Fatalf("scan after delete returned rows: %v", rows)
 	}
@@ -320,49 +416,59 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(context.TODO())
-		ts := s.(*TestServer)
-		tds := db.GetSender()
+		t.Run("", func(t *testing.T) {
+			ctx := context.Background()
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			})
+			defer s.Stopper().Stop(ctx)
+			ts := s.(*TestServer)
+			tds := db.NonTransactionalSender()
 
-		for _, sk := range tc.splitKeys {
-			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		for _, k := range tc.keys {
-			put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-			if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		// Try every possible ScanRequest startKey.
-		for start := 0; start < len(tc.keys); start++ {
-			// Try every possible maxResults, from 1 to beyond the size of key array.
-			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
-				reply, err := client.SendWrappedWith(
-					context.Background(), tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
-				)
-				if err != nil {
+			for _, sk := range tc.splitKeys {
+				if err := ts.node.storeCfg.DB.AdminSplit(ctx, sk, sk); err != nil {
 					t.Fatal(err)
 				}
-				rows := reply.(*roachpb.ScanResponse).Rows
-				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
-					t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
-				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
-					t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
+			}
+
+			for _, k := range tc.keys {
+				put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
+				if _, err := client.SendWrapped(ctx, tds, put); err != nil {
+					t.Fatal(err)
 				}
 			}
-		}
+
+			// Try every possible ScanRequest startKey.
+			for start := 0; start < len(tc.keys); start++ {
+				// Try every possible maxResults, from 1 to beyond the size of key array.
+				for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
+					scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
+					reply, err := client.SendWrappedWith(
+						ctx, tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+					rows := reply.(*roachpb.ScanResponse).Rows
+					if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
+						t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
+					} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
+						t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
+					}
+				}
+			}
+
+		})
 	}
 }
 
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12351")
 
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
@@ -400,10 +506,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	// wrote.
 	testutils.SucceedsSoon(t, func() error {
 		// New system config received.
-		var systemConfig config.SystemConfig
+		var systemConfig *config.SystemConfig
 		select {
 		case <-resultChan:
-			systemConfig, _ = ts.gossip.GetSystemConfig()
+			systemConfig = ts.gossip.GetSystemConfig()
 
 		case <-time.After(500 * time.Millisecond):
 			return errors.Errorf("did not receive gossip message")
@@ -433,88 +539,474 @@ func TestSystemConfigGossip(t *testing.T) {
 	})
 }
 
-func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	resolvedAddr := util.NewUnresolvedAddr(network, newAddrString)
-
-	if unresolvedAddr, err := officialAddr(oldAddrString, resolvedAddr); err != nil {
-		t.Fatal(err)
-	} else if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
-		t.Errorf("officialAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
-	}
-}
-
-func TestOfficializeAddr(t *testing.T) {
+func TestListenerFileCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
-		checkOfficialize(t, network, "hellow.world:0", "127.0.0.1:1234", "hellow.world:1234")
-		checkOfficialize(t, network, "hellow.world:1234", "127.0.0.1:2345", "hellow.world:1234")
-		checkOfficialize(t, network, ":1234", "127.0.0.1:2345", net.JoinHostPort(hostname, "1234"))
-		checkOfficialize(t, network, ":0", "127.0.0.1:2345", net.JoinHostPort(hostname, "2345"))
-	}
-}
-
-func TestClusterStores(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
-
-	testutils.SucceedsSoon(t, func() error {
-		stores := tc.Server(0).(*TestServer).ClusterStores()
-		if len(stores) != 2 {
-			return errors.Errorf("expected 2 stores, got %v", stores)
-		}
-		n1 := tc.Server(0).NodeID()
-		n2 := tc.Server(1).NodeID()
-		s1 := stores[0].NodeID
-		s2 := stores[1].NodeID
-		if !(n1 == s1 && n2 == s2) && !(n1 == s2 && n2 == s1) {
-			return errors.Errorf("expected stores for nodes %d, %d, got %v", n1, n2, stores)
-		}
-		return nil
-	})
-}
-
-func TestListenURLFileCreation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	file, err := ioutil.TempFile(os.TempDir(), t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
-		ListeningURLFile: file.Name(),
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Stopper().Stop(context.TODO())
-	defer func() {
-		if err := os.Remove(file.Name()); err != nil {
-			t.Error(err)
+
+	files, err := filepath.Glob(filepath.Join(dir, "cockroach.*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	li := listenerInfo{
+		advertise: s.ServingAddr(),
+		http:      s.HTTPAddr(),
+		listen:    s.Addr(),
+	}
+	expectedFiles := li.Iter()
+
+	for _, file := range files {
+		base := filepath.Base(file)
+		expVal, ok := expectedFiles[base]
+		if !ok {
+			t.Fatalf("unexpected file %s", file)
 		}
-	}()
+		delete(expectedFiles, base)
 
-	data, err := ioutil.ReadFile(file.Name())
-	if err != nil {
-		t.Fatal(err)
+		data, err := ioutil.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := string(data)
+
+		if addr != expVal {
+			t.Fatalf("expected %s %s to match host %s", base, addr, expVal)
+		}
 	}
 
-	u, err := url.Parse(string(data))
-	if err != nil {
-		t.Fatal(err)
+	for f := range expectedFiles {
+		t.Errorf("never saw expected file %s", f)
+	}
+}
+
+func TestClusterIDMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	engines := make([]engine.Engine, 2)
+	for i := range engines {
+		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer e.Close()
+
+		sIdent := roachpb.StoreIdent{
+			ClusterID: uuid.MakeV4(),
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+		}
+		if err := engine.MVCCPutProto(
+			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+
+			t.Fatal(err)
+		}
+		engines[i] = e
 	}
 
-	if s.ServingAddr() != u.Host {
-		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
+	_, _, _, err := inspectEngines(
+		context.TODO(), engines, roachpb.Version{}, roachpb.Version{}, &base.ClusterIDContainer{})
+	expected := "conflicting store cluster IDs"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected %s error, got %v", expected, err)
 	}
+}
+
+func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name              string
+		prevHLCUpperBound int64
+		clockStartTime    int64
+		checkPersist      bool
+	}{
+		{
+			name:              "lower upper bound time",
+			prevHLCUpperBound: 100,
+			clockStartTime:    1000,
+			checkPersist:      true,
+		},
+		{
+			name:              "higher upper bound time",
+			prevHLCUpperBound: 10000,
+			clockStartTime:    1000,
+			checkPersist:      true,
+		},
+		{
+			name:              "significantly higher upper bound time",
+			prevHLCUpperBound: int64(3 * time.Hour),
+			clockStartTime:    int64(1 * time.Hour),
+			checkPersist:      true,
+		},
+		{
+			name:              "equal upper bound time",
+			prevHLCUpperBound: int64(time.Hour),
+			clockStartTime:    int64(time.Hour),
+			checkPersist:      true,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+
+			const maxOffset = 500 * time.Millisecond
+			m := hlc.NewManualClock(test.clockStartTime)
+			c := hlc.NewClock(m.UnixNano, maxOffset)
+
+			sleepUntilFn := func(until int64, currentTime func() int64) {
+				delta := until - currentTime()
+				if delta > 0 {
+					m.Increment(delta)
+				}
+			}
+
+			wallTime1 := c.Now().WallTime
+			if test.clockStartTime < test.prevHLCUpperBound {
+				a.True(
+					wallTime1 < test.prevHLCUpperBound,
+					fmt.Sprintf(
+						"expected wall time %d < prev upper bound %d",
+						wallTime1,
+						test.prevHLCUpperBound,
+					),
+				)
+			}
+
+			ensureClockMonotonicity(
+				context.TODO(),
+				c,
+				c.PhysicalTime(),
+				test.prevHLCUpperBound,
+				sleepUntilFn,
+			)
+
+			wallTime2 := c.Now().WallTime
+			// After ensuring monotonicity, wall time should be greater than
+			// persisted upper bound
+			a.True(
+				wallTime2 > test.prevHLCUpperBound,
+				fmt.Sprintf(
+					"expected wall time %d > prev upper bound %d",
+					wallTime2,
+					test.prevHLCUpperBound,
+				),
+			)
+		})
+	}
+}
+
+func TestPersistHLCUpperBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var fatal bool
+	defer log.ResetExitFunc()
+	log.SetExitFunc(true /* hideStack */, func(r int) {
+		defer log.Flush()
+		if r != 0 {
+			fatal = true
+		}
+	})
+
+	testCases := []struct {
+		name            string
+		persistInterval time.Duration
+	}{
+		{
+			name:            "persist default delta",
+			persistInterval: 200 * time.Millisecond,
+		},
+		{
+			name:            "persist 100ms delta",
+			persistInterval: 50 * time.Millisecond,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			m := hlc.NewManualClock(int64(1))
+			c := hlc.NewClock(m.UnixNano, time.Nanosecond)
+
+			var persistErr error
+			var persistedUpperBound int64
+			var tickerDur time.Duration
+			persistUpperBoundFn := func(i int64) error {
+				if persistErr != nil {
+					return persistErr
+				}
+				persistedUpperBound = i
+				return nil
+			}
+
+			tickerCh := make(chan time.Time)
+			tickProcessedCh := make(chan struct{})
+			persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
+			stopCh := make(chan struct{}, 1)
+			defer close(persistHLCUpperBoundIntervalCh)
+
+			go periodicallyPersistHLCUpperBound(
+				c,
+				persistHLCUpperBoundIntervalCh,
+				persistUpperBoundFn,
+				func(d time.Duration) *time.Ticker {
+					ticker := time.NewTicker(d)
+					ticker.Stop()
+					ticker.C = tickerCh
+					tickerDur = d
+					return ticker
+				},
+				stopCh,
+				func() {
+					tickProcessedCh <- struct{}{}
+				},
+			)
+
+			fatal = false
+			// persist an upper bound
+			m.Increment(100)
+			wallTime3 := c.Now().WallTime
+			persistHLCUpperBoundIntervalCh <- test.persistInterval
+			<-tickProcessedCh
+
+			a.True(
+				test.persistInterval == tickerDur,
+				fmt.Sprintf(
+					"expected persist interval %d = ticker duration %d",
+					test.persistInterval,
+					tickerDur,
+				),
+			)
+
+			// Updating persistInterval should have triggered a persist
+			firstPersist := persistedUpperBound
+			a.True(
+				persistedUpperBound > wallTime3,
+				fmt.Sprintf(
+					"expected persisted wall time %d > wall time %d",
+					persistedUpperBound,
+					wallTime3,
+				),
+			)
+			// ensure that in memory value and persisted value are same
+			a.Equal(c.WallTimeUpperBound(), persistedUpperBound)
+
+			// Increment clock by 100 and tick the timer.
+			// A persist should have happened
+			m.Increment(100)
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			secondPersist := persistedUpperBound
+			a.True(
+				secondPersist == firstPersist+100,
+				fmt.Sprintf(
+					"expected persisted wall time %d to be 100 more than earlier persisted value %d",
+					secondPersist,
+					firstPersist,
+				),
+			)
+			a.Equal(c.WallTimeUpperBound(), persistedUpperBound)
+			a.False(fatal)
+			fatal = false
+
+			// After disabling persistHLCUpperBound, a value of 0 should be persisted
+			persistHLCUpperBoundIntervalCh <- 0
+			<-tickProcessedCh
+			a.Equal(
+				int64(0),
+				c.WallTimeUpperBound(),
+			)
+			a.Equal(int64(0), persistedUpperBound)
+			a.Equal(int64(0), c.WallTimeUpperBound())
+			a.False(fatal)
+			fatal = false
+
+			persistHLCUpperBoundIntervalCh <- test.persistInterval
+			<-tickProcessedCh
+			m.Increment(100)
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			// If persisting fails, a fatal error is expected
+			persistErr = errors.New("test err")
+			fatal = false
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			a.True(fatal)
+		})
+	}
+}
+
+func TestServeIndexHTML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const htmlTemplate = `<!DOCTYPE html>
+<html>
+	<head>
+		<title>Cockroach Console</title>
+		<meta charset="UTF-8">
+		<link href="favicon.ico" rel="shortcut icon">
+	</head>
+	<body>
+		<div id="react-layout"></div>
+
+		<script>
+			window.dataFromServer = %s;
+		</script>
+
+		<script src="protos.dll.js" type="text/javascript"></script>
+		<script src="vendor.dll.js" type="text/javascript"></script>
+		<script src="bundle.js" type="text/javascript"></script>
+	</body>
+</html>
+`
+
+	linkInFakeUI := func() {
+		ui.Asset = func(string) (_ []byte, _ error) { return }
+		ui.AssetDir = func(name string) (_ []string, _ error) { return }
+		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+	}
+	unlinkFakeUI := func() {
+		ui.Asset = nil
+		ui.AssetDir = nil
+		ui.AssetInfo = nil
+	}
+
+	t.Run("Insecure mode", func(t *testing.T) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Insecure: true,
+			// This test server argument has the same effect as setting the environment variable
+			// `COCKROACH_EXPERIMENTAL_REQUIRE_WEB_SESSION` to false, or not setting it.
+			// In test servers, web sessions are required by default.
+			DisableWebSessionAuthentication: true,
+		})
+		defer s.Stopper().Stop(context.TODO())
+		tsrv := s.(*TestServer)
+
+		client, err := tsrv.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("short build", func(t *testing.T) {
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(`<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>`,
+				build.GetInfo().Short())
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
+
+		t.Run("non-short build", func(t *testing.T) {
+			linkInFakeUI()
+			defer unlinkFakeUI()
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(
+				htmlTemplate,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+					1,
+				),
+			)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
+	})
+
+	t.Run("Secure mode", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(context.TODO())
+		tsrv := s.(*TestServer)
+
+		loggedInClient, err := tsrv.GetAuthenticatedHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		loggedOutClient, err := tsrv.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cases := []struct {
+			client http.Client
+			json   string
+		}{
+			{
+				loggedInClient,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+					1,
+				),
+			},
+			{
+				loggedOutClient,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+					1,
+				),
+			},
+		}
+
+		for _, testCase := range cases {
+			resp, err := testCase.client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(htmlTemplate, testCase.json)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		}
+	})
 }

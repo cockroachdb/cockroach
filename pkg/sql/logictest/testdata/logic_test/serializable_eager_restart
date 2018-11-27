@@ -1,0 +1,60 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+# Demonstrates late restarting of a serializable transaction when its
+# commit timestamp has moved forward.
+# TODO(tschottdorf): implement eager restart for CLI.
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+GRANT ALL on t TO testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+# Without client-directed retries, the serializability violation would be detected early.
+statement ok
+SAVEPOINT cockroach_restart
+
+# The SELECT forces the timestamp to be chosen.
+query I
+SELECT * FROM t
+----
+
+user testuser
+
+# A select alone would not be enough to cause a restart; we also write
+# a key at a later timestamp than the transaction's, which will cause
+# the transaction to retry at the clint level, after trying to update
+# previously read spans.
+statement ok
+INSERT INTO t(a) VALUES (2)
+
+# Touch all (relevant) keys with a timestamp ahead of the Transaction. This
+# means that its future attempts to write will increase its timestamp.
+query I
+SELECT * FROM t
+----
+2
+
+user root
+
+# The insert increases the candidate timestamp, but a restart won't occur
+# until an EndTransaction.
+statement ok
+INSERT INTO t(a) VALUES (1)
+
+# RELEASE will send an EndTransaction which will result in a retriable error.
+statement error pgcode 40001 retry txn.*
+RELEASE SAVEPOINT cockroach_restart
+
+#ROLLBACK TO SAVEPOINT
+statement OK
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+# Check that the connection is usable after the failed COMMIT.
+query I
+SELECT * FROM t
+----
+2

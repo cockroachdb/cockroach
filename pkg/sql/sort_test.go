@@ -11,16 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package sql_test
 
 import (
+	"context"
 	"testing"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,14 +26,14 @@ import (
 func TestOrderByRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	seenOne := false
 	seenTwo := false
 	for {
-		row := sqlDB.QueryRow("SELECT * FROM (VALUES (1),(2)) ORDER BY RANDOM() LIMIT 1")
+		row := sqlDB.QueryRow("SELECT * FROM (VALUES (1),(2)) ORDER BY random() LIMIT 1")
 		var val int
 		if err := row.Scan(&val); err != nil {
 			t.Fatal(err)

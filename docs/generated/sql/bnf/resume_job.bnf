@@ -1,0 +1,3 @@
+resume_stmt ::=
+	'RESUME' 'JOB' job_id
+	| 'RESUME' 'JOBS' select_stmt

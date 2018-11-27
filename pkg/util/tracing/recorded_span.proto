@@ -1,0 +1,64 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.util.tracing;
+option go_package = "tracing";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// RecordedSpan is a span that is part of a recording. It can be transferred
+// over the wire for snowball tracing.
+message RecordedSpan {
+  // ID of the trace; spans that are part of the same hierarchy share
+  // the same trace ID.
+  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  // ID of the span.
+  uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  // Span ID of the parent span.
+  uint64 parent_span_id = 3 [(gogoproto.customname) = "ParentSpanID"];
+  // Operation name.
+  string operation = 4;
+  // Baggage items get passed from parent to child spans (even through gRPC).
+  // Notably, snowball tracing uses a special `sb` baggage item.
+  map<string, string> baggage = 5;
+  // Tags associated with the span.
+  map<string, string> tags = 6;
+  // Time when the span was started.
+  google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
+                                            (gogoproto.stdtime) = true];
+  // Duration in nanoseconds; 0 if the span is not finished.
+  google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
+
+  message LogRecord {
+    // Time of the log record.
+    google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdtime) = true];
+    message Field {
+      string key = 1;
+      string value = 2;
+    }
+    // Fields with values converted to strings.
+    repeated Field fields = 2 [(gogoproto.nullable) = false];
+  }
+  // Events logged in the span.
+  repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+
+  // Stats collected in this span.
+  google.protobuf.Any stats = 10;
+}

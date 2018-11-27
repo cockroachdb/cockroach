@@ -8,14 +8,14 @@ for pkg in ${pkgs}; do
     # skip packages without _test.go files.
     continue
   fi
-    
+
   awk -F'[ (]' '
 /func Test.*testing.T\) {/ {
   test = $2
   next
 }
 
-/defer leaktest.AfterTest/ {
+/defer leaktest.AfterTest\(.+\)\(\)/ {
   test = 0
   next
 }

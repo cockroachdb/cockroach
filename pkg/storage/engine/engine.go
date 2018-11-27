@@ -11,33 +11,28 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrew Bonventre (andybons@gmail.com)
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 
 package engine
 
 import (
-	"github.com/gogo/protobuf/proto"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// Iterator is an interface for iterating over key/value pairs in an
-// engine. Iterator implementations are thread safe unless otherwise
-// noted.
-type Iterator interface {
+// SimpleIterator is an interface for iterating over key/value pairs in an
+// engine. SimpleIterator implementations are thread safe unless otherwise
+// noted. SimpleIterator is a subset of the functionality offered by Iterator.
+type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// Seek advances the iterator to the first key in the engine which
 	// is >= the provided key.
 	Seek(key MVCCKey)
-	// SeekReverse advances the iterator to the first key in the engine which
-	// is <= the provided key.
-	SeekReverse(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -50,15 +45,38 @@ type Iterator interface {
 	// iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the last key.
 	Next()
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the first key.
-	Prev()
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key.
 	NextKey()
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
+	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeKey() MVCCKey
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeValue() []byte
+}
+
+// IteratorStats is returned from (Iterator).Stats.
+type IteratorStats struct {
+	InternalDeleteSkippedCount int
+	TimeBoundNumSSTs           int
+}
+
+// Iterator is an interface for iterating over key/value pairs in an
+// engine. Iterator implementations are thread safe unless otherwise
+// noted.
+type Iterator interface {
+	SimpleIterator
+
+	// SeekReverse advances the iterator to the first key in the engine which
+	// is <= the provided key.
+	SeekReverse(key MVCCKey)
+	// Prev moves the iterator backward to the previous key/value
+	// in the iteration. After this call, Valid() will be true if the
+	// iterator was not positioned at the first key.
+	Prev()
 	// PrevKey moves the iterator backward to the previous MVCC key. This
 	// operation is distinct from Prev which moves the iterator backward to the
 	// prev version of the current key or the prev key if the iterator is
@@ -70,16 +88,7 @@ type Iterator interface {
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
-	ValueProto(msg proto.Message) error
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	UnsafeKey() MVCCKey
-	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	UnsafeValue() []byte
-	// Less returns true if the key the iterator is currently positioned at is
-	// less than the specified key.
-	Less(key MVCCKey) bool
+	ValueProto(msg protoutil.Message) error
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
@@ -88,6 +97,68 @@ type Iterator interface {
 	// The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents.
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
+	// FindSplitKey finds a key from the given span such that the left side of
+	// the split is roughly targetSize bytes. The returned key will never be
+	// chosen from the key ranges listed in keys.NoSplitSpans and will always
+	// sort equal to or after minSplitKey.
+	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
+	// MVCCGet retrieves the value for the key at the specified timestamp. The
+	// value is returned in batch repr format with the key being present as the
+	// empty string. If an intent exists at the specified key, it will be
+	// returned in batch repr format in the separate intent return value.
+	// Specify true for tombstones to return a value if the key has been
+	// deleted (Value.RawBytes will be empty).
+	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
+		txn *roachpb.Transaction, consistent, tombstones bool,
+	) (*roachpb.Value, []roachpb.Intent, error)
+	// MVCCScan is the internal implementation of the family of package-level
+	// MVCCScan functions. The notable difference is that key/value pairs are
+	// returned raw, as a buffer of varint-prefixed slices, alternating from key
+	// to value, where numKVs specifies the number of pairs in the buffer.
+	//
+	// There is little reason to use this function directly. Use the package-level
+	// MVCCScan, or one of its variants, instead.
+	MVCCScan(
+		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+
+	Stats() IteratorStats
+}
+
+// IterOptions contains options used to create an Iterator.
+//
+// For performance, every Iterator must specify either Prefix or UpperBound.
+type IterOptions struct {
+	// If Prefix is true, Seek will use the user-key prefix of
+	// the supplied MVCC key to restrict which sstables are searched,
+	// but iteration (using Next) over keys without the same user-key
+	// prefix will not work correctly (keys may be skipped).
+	Prefix bool
+	// LowerBound gives this iterator an inclusive lower bound. Attempts to
+	// SeekReverse or Prev to a key that is strictly less than the bound will
+	// invalidate the iterator.
+	LowerBound roachpb.Key
+	// UpperBound gives this iterator an exclusive upper bound. Attempts to Seek
+	// or Next to a key that is greater than or equal to the bound will invalidate
+	// the iterator. UpperBound must be provided unless Prefix is true, in which
+	// case the end of the prefix will be used as the upper bound.
+	UpperBound roachpb.Key
+	// If WithStats is true, the iterator accumulates RocksDB performance
+	// counters over its lifetime which can be queried via `Stats()`.
+	WithStats bool
+	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
+	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
+	// need to be presented by the iterator. The underlying iterator may be able
+	// to efficiently skip over keys outside of the hinted time range, e.g., when
+	// an SST indicates that it contains no keys within the time range.
+	//
+	// Note that time bound hints are strictly a performance optimization, and
+	// iterators with time bounds hints will frequently return keys outside of the
+	// [start, end] time range. If you must guarantee that you never see a key
+	// outside of the time bounds, perform your own filtering.
+	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
 // Reader is the read interface to an engine's data.
@@ -103,25 +174,26 @@ type Reader interface {
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
 	// Get returns the value for the given key, nil otherwise.
+	//
+	// Deprecated: use MVCCGet instead.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
-	GetProto(key MVCCKey, msg proto.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from start to end keys, visiting at most max
-	// key/value pairs. On each key value pair, the function f is
-	// invoked. If f returns an error or if the scan itself encounters
-	// an error, the iteration will stop and return the error.
-	// If the first result of f is true, the iteration stops.
-	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
-	// NewIterator returns a new instance of an Iterator over this engine. When
-	// prefix is true, Seek will use the user-key prefix of the supplied MVCC key
-	// to restrict which sstables are searched, but iteration (using Next) over
-	// keys without the same user-key prefix will not work correctly (keys may be
-	// skipped). The caller must invoke Iterator.Close() when finished with the
-	// iterator to free resources.
-	NewIterator(prefix bool) Iterator
+	//
+	// Deprecated: use Iterator.ValueProto instead.
+	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	// Iterate scans from the start key to the end key (exclusive), invoking the
+	// function f on each key value pair. If f returns an error or if the scan
+	// itself encounters an error, the iteration will stop and return the error.
+	// If the first result of f is true, the iteration stops and returns a nil
+	// error.
+	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
+	// NewIterator returns a new instance of an Iterator over this
+	// engine. The caller must invoke Iterator.Close() when finished
+	// with the iterator to free resources.
+	NewIterator(opts IterOptions) Iterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -162,6 +234,15 @@ type Writer interface {
 	Merge(key MVCCKey, value []byte) error
 	// Put sets the given key to the value provided.
 	Put(key MVCCKey, value []byte) error
+	// LogData adds the specified data to the RocksDB WAL. The data is
+	// uninterpreted by RocksDB (i.e. not added to the memtable or
+	// sstables). Currently only used for performance testing of appending to the
+	// RocksDB WAL.
+	LogData(data []byte) error
+	// LogLogicalOp logs the specified logical mvcc operation with the provided
+	// details to the writer, if it has logical op logging enabled. For most
+	// Writer implementations, this is a no-op.
+	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -182,12 +263,20 @@ type Engine interface {
 	Flush() error
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
-	// GetTempDir returns a path under which tempdirs or tempfiles can be created.
-	GetTempDir() string
+	// GetAuxiliaryDir returns a path under which files can be stored
+	// persistently, and from which data can be ingested by the engine.
+	//
+	// Not thread safe.
+	GetAuxiliaryDir() string
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
+	// NewReadOnly returns a new instance of a ReadWriter that wraps
+	// this engine. This wrapper panics when unexpected operations (e.g., write
+	// operations) are executed on it and caches iterators to avoid the overhead
+	// of creating multiple iterators for batched reads.
+	NewReadOnly() ReadWriter
 	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
 	// this engine. A write-only batch accumulates all mutations and applies them
 	// atomically on a call to Commit(). Read operations return an error.
@@ -203,8 +292,49 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// SetTempDir overrides the tempdir path returned by GetTempDir.
-	SetTempDir(dir string) error
+	// IngestExternalFiles atomically links a slice of files into the RocksDB
+	// log-structured merge-tree. May modify the files (including the underlying
+	// file in the case of hard-links) if allowFileModifications is passed as
+	// well. See additional comments in db.cc's IngestExternalFile explaining
+	// modification behavior.
+	IngestExternalFiles(ctx context.Context, paths []string, allowFileModifications bool) error
+	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
+	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
+	// CompactRange ensures that the specified range of key value pairs is
+	// optimized for space efficiency. The forceBottommost parameter ensures
+	// that the key range is compacted all the way to the bottommost level of
+	// SSTables, which is necessary to pick up changes to bloom filters.
+	CompactRange(start, end roachpb.Key, forceBottommost bool) error
+	// OpenFile opens a DBFile with the given filename.
+	OpenFile(filename string) (DBFile, error)
+	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
+	ReadFile(filename string) ([]byte, error)
+	// DeleteFile deletes the file with the given filename from this RocksDB's env.
+	// If the file with given filename doesn't exist, return os.ErrNotExist.
+	DeleteFile(filename string) error
+	// DeleteDirAndFiles deletes the directory and any files it contains but
+	// not subdirectories from this RocksDB's env. If dir does not exist,
+	// DeleteDirAndFiles returns nil (no error).
+	DeleteDirAndFiles(dir string) error
+	// LinkFile creates 'newname' as a hard link to 'oldname'. This is done using
+	// the engine implementation. For RocksDB, this means using the Env responsible for the file
+	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
+	LinkFile(oldname, newname string) error
+}
+
+// MapProvidingEngine is an Engine that also provides facilities for making a
+// sorted map that's persisted by the Engine.
+type MapProvidingEngine interface {
+	Engine
+	diskmap.Factory
+}
+
+// WithSSTables extends the Engine interface with a method to get info
+// on all SSTables in use.
+type WithSSTables interface {
+	Engine
+	// GetSSTables retrieves metadata about this engine's live sstables.
+	GetSSTables() SSTableInfos
 }
 
 // Batch is the interface for batch specific operations.
@@ -223,6 +353,13 @@ type Batch interface {
 	// situations where we know all of the batched operations are for distinct
 	// keys.
 	Distinct() ReadWriter
+	// Empty returns whether the batch has been written to or not.
+	Empty() bool
+	// Len returns the size of the underlying representation of the batch.
+	// Because of the batch header, the size of the batch is never 0 and should
+	// not be used interchangeably with Empty. The method avoids the memory copy
+	// that Repr imposes, but it still may require flushing the batch's mutations.
+	Len() int
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
@@ -239,24 +376,52 @@ type Batch interface {
 // This is a good resource describing RocksDB's memory-related stats:
 // https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
 type Stats struct {
-	BlockCacheHits           int64
-	BlockCacheMisses         int64
-	BlockCacheUsage          int64
-	BlockCachePinnedUsage    int64
-	BloomFilterPrefixChecked int64
-	BloomFilterPrefixUseful  int64
-	MemtableHits             int64
-	MemtableMisses           int64
-	MemtableTotalSize        int64
-	Flushes                  int64
-	Compactions              int64
-	TableReadersMemEstimate  int64
+	BlockCacheHits                 int64
+	BlockCacheMisses               int64
+	BlockCacheUsage                int64
+	BlockCachePinnedUsage          int64
+	BloomFilterPrefixChecked       int64
+	BloomFilterPrefixUseful        int64
+	MemtableTotalSize              int64
+	Flushes                        int64
+	Compactions                    int64
+	TableReadersMemEstimate        int64
+	PendingCompactionBytesEstimate int64
+}
+
+// EnvStats is a set of RocksDB env stats, including encryption status.
+type EnvStats struct {
+	// TotalFiles is the total number of files reported by rocksdb.
+	TotalFiles uint64
+	// TotalBytes is the total size of files reported by rocksdb.
+	TotalBytes uint64
+	// ActiveKeyFiles is the number of files using the active data key.
+	ActiveKeyFiles uint64
+	// ActiveKeyBytes is the size of files using the active data key.
+	ActiveKeyBytes uint64
+	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
+	EncryptionStatus []byte
+}
+
+// EncryptionRegistries contains the encryption-related registries:
+// Both are serialized protobufs.
+type EncryptionRegistries struct {
+	// FileRegistry is the list of files with encryption status.
+	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
+	FileRegistry []byte
+	// KeyRegistry is the list of keys, scrubbed of actual key data.
+	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
+	KeyRegistry []byte
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Writer, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
+//
+// Deprecated: use MVCCPutProto instead.
+func PutProto(
+	engine Writer, key MVCCKey, msg protoutil.Message,
+) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err

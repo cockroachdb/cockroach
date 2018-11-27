@@ -1,0 +1,109 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE VIEW av AS SELECT k, i, s FROM a
+----
+VIEW av
+ └── SELECT k, i, s FROM a
+
+build
+SELECT * FROM av
+----
+project
+ ├── columns: k:1(int!null) i:2(int) s:4(string)
+ └── scan a
+      └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+
+build
+SELECT av.i, s, t.public.av.s AS s2 FROM t.av
+----
+project
+ ├── columns: i:2(int) s:4(string) s2:4(string)
+ └── project
+      ├── columns: k:1(int!null) i:2(int) s:4(string)
+      └── scan a
+           └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+
+# Self view join (multiple references to view).
+build
+SELECT av.k, av2.s FROM av, av AS av2 WHERE av.k=av2.k
+----
+project
+ ├── columns: k:1(int!null) s:9(string)
+ └── select
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string) a.k:6(int!null) a.i:7(int) a.s:9(string)
+      ├── inner-join
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string) a.k:6(int!null) a.i:7(int) a.s:9(string)
+      │    ├── project
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    │    └── scan a
+      │    │         └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+      │    ├── project
+      │    │    ├── columns: a.k:6(int!null) a.i:7(int) a.s:9(string)
+      │    │    └── scan a
+      │    │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+      │    └── filters (true)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: a.k [type=int]
+                └── variable: a.k [type=int]
+
+# View with aliased column names, filter, and ORDER BY.
+exec-ddl
+CREATE VIEW av2 (x, y) AS SELECT k, f FROM a WHERE i=10 ORDER BY s
+----
+VIEW av2 (x, y)
+ └── SELECT k, f FROM a WHERE i = 10 ORDER BY s
+
+# Result is not ordered.
+build
+SELECT * FROM av2
+----
+project
+ ├── columns: x:1(int!null) y:3(float)
+ └── project
+      ├── columns: k:1(int!null) f:3(float) s:4(string)
+      └── select
+           ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+           ├── scan a
+           │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: i [type=int]
+                     └── const: 10 [type=int]
+
+# Sort used by group by because of presence of ARRAY_AGG.
+build
+SELECT array_agg(y) FROM av2
+----
+scalar-group-by
+ ├── columns: array_agg:6(float[])
+ ├── internal-ordering: +4
+ ├── sort
+ │    ├── columns: f:3(float) s:4(string)
+ │    ├── ordering: +4
+ │    └── project
+ │         ├── columns: f:3(float) s:4(string)
+ │         └── project
+ │              ├── columns: k:1(int!null) f:3(float) s:4(string)
+ │              └── select
+ │                   ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │                   ├── scan a
+ │                   │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │                   └── filters
+ │                        └── eq [type=bool]
+ │                             ├── variable: i [type=int]
+ │                             └── const: 10 [type=int]
+ └── aggregations
+      └── array-agg [type=float[]]
+           └── variable: f [type=float]

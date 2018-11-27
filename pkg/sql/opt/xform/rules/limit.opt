@@ -1,0 +1,52 @@
+# =============================================================================
+# limit.opt contains exploration rules for the Limit and Offset operators.
+# =============================================================================
+
+
+# GenerateLimitedScans generates a set of limited Scan operators, one for each
+# matching index on the scanned table. If the secondary index cannot provide all
+# the output columns, an IndexJoin is introduced to supply them. Pushing a limit
+# into Scan operators can substantially reduce the cost of execution, as rows
+# are never fetched to begin with, rather than fetched only to be discarded by
+# a Limit operator.
+[GenerateLimitedScans, Explore]
+(Limit
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:*
+)
+=>
+(GenerateLimitedScans $scanPrivate $limit $ordering)
+
+# PushLimitIntoConstrainedScan constructs a new Scan operator that adds a hard
+# row limit to an existing Scan operator that already has a constraint
+# associated with it (added by the ConstrainScans rule). The Scan operator
+# always applies the limit after any constraint.
+[PushLimitIntoConstrainedScan, Explore]
+(Limit
+    (Scan $scanPrivate:*)
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:* & (CanLimitConstrainedScan $scanPrivate $ordering)
+)
+=>
+(Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+
+# PushLimitIntoIndexJoin pushes a limit through an index join and constructs a
+# new Scan operator that incorporates it. Since index lookup can be expensive,
+# it's always better to discard rows beforehand.
+#
+# TODO(radu): we can similarly push Offset too.
+[PushLimitIntoIndexJoin, Explore]
+(Limit
+    (IndexJoin
+      (Scan $scanPrivate:*)
+      $indexJoinPrivate:*
+    )
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:* & (CanLimitConstrainedScan $scanPrivate $ordering)
+)
+=>
+(IndexJoin
+  (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+  $indexJoinPrivate
+)

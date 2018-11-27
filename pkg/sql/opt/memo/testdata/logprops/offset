@@ -1,0 +1,188 @@
+exec-ddl
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
+----
+TABLE xyzs
+ ├── x int not null
+ ├── y int
+ ├── z float not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+build
+SELECT * FROM xyzs OFFSET 1
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
+ ├── scan xyzs
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzs OFFSET (SELECT 1)
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
+ ├── scan xyzs
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── subquery [type=int]
+      └── max1-row
+           ├── columns: "?column?":5(int!null)
+           ├── cardinality: [1 - 1]
+           ├── key: ()
+           ├── fd: ()-->(5)
+           └── project
+                ├── columns: "?column?":5(int!null)
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                ├── prune: (5)
+                ├── values
+                │    ├── cardinality: [1 - 1]
+                │    ├── key: ()
+                │    └── tuple [type=tuple]
+                └── projections
+                     └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzs OFFSET 0
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
+ ├── scan xyzs
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── const: 0 [type=int]
+
+# Propagate outer columns.
+build
+SELECT (SELECT x FROM kuv OFFSET y) FROM xyzs
+----
+project
+ ├── columns: x:9(int)
+ ├── prune: (9)
+ ├── scan xyzs
+ │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── projections
+      └── subquery [type=int, outer=(1,2)]
+           └── max1-row
+                ├── columns: x:8(int)
+                ├── outer: (1,2)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(8)
+                └── offset
+                     ├── columns: x:8(int)
+                     ├── outer: (1,2)
+                     ├── fd: ()-->(8)
+                     ├── prune: (8)
+                     ├── project
+                     │    ├── columns: x:8(int)
+                     │    ├── outer: (1)
+                     │    ├── fd: ()-->(8)
+                     │    ├── prune: (8)
+                     │    ├── scan kuv
+                     │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+                     │    │    ├── key: (5)
+                     │    │    ├── fd: (5)-->(6,7)
+                     │    │    ├── prune: (5-7)
+                     │    │    └── interesting orderings: (+5)
+                     │    └── projections
+                     │         └── variable: xyzs.x [type=int, outer=(1)]
+                     └── variable: y [type=int]
+
+# Reduce cardinality of input set.
+build
+SELECT *
+FROM ((SELECT x FROM xyzs LIMIT 10) UNION ALL (SELECT * FROM (VALUES (1), (2), (3))))
+OFFSET 2
+----
+offset
+ ├── columns: x:6(int)
+ ├── cardinality: [1 - 11]
+ ├── union-all
+ │    ├── columns: x:6(int)
+ │    ├── left columns: xyzs.x:1(int)
+ │    ├── right columns: column1:5(int)
+ │    ├── cardinality: [3 - 13]
+ │    ├── limit
+ │    │    ├── columns: xyzs.x:1(int!null)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── prune: (1)
+ │    │    ├── interesting orderings: (+1)
+ │    │    ├── project
+ │    │    │    ├── columns: xyzs.x:1(int!null)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── prune: (1)
+ │    │    │    ├── interesting orderings: (+1)
+ │    │    │    └── scan xyzs
+ │    │    │         ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │    │         ├── key: (1)
+ │    │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    │         ├── prune: (1-4)
+ │    │    │         └── interesting orderings: (+1) (-4,+3,+1)
+ │    │    └── const: 10 [type=int]
+ │    └── values
+ │         ├── columns: column1:5(int)
+ │         ├── cardinality: [3 - 3]
+ │         ├── prune: (5)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 1 [type=int]
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 2 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 3 [type=int]
+ └── const: 2 [type=int]
+
+# Test very high offset (> max uint32).
+opt
+SELECT s, x FROM (SELECT * FROM xyzs LIMIT 100) WHERE s='foo' OFFSET 4294967296
+----
+values
+ ├── columns: s:4(string) x:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(1,4)
+ └── prune: (1,4)

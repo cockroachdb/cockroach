@@ -32,7 +32,7 @@ family as needed (see subsection NULL below). CRDB stores primary key
 data in KV keys and other data in KV values so that it can use the KV
 layer to prevent duplicate primary keys. For encoding, see
 [pkg/sql/rowwriter.go]. For decoding, see
-[pkg/sql/sqlbase/rowfetcher.go].
+[pkg/sql/sqlbase/multirowfetcher.go].
 
 ### Key encoding
 
@@ -102,6 +102,20 @@ datum encoding type. The rest contain the column ID difference. As an
 alternative for datum encoding types greater than 14, `encodeValueTag`
 sets the low four bits to `SentinelType` (15) and emits the actual datum
 encoding type next.
+
+**Note:** Values for sequences are a special case: the sequence value is
+encoded as if the sequence were a one-row, one-column table, with the
+key structured in the usual way: `/Table/<id>/<index>/<pk val>/<family>`.
+However, the value is a bare int64; it doesn't use the encoding
+specified here. This is because it is incremented using the KV
+`Increment` operation so that the increment can be done in one
+roundtrip, not a read followed by a write as would be required by a
+normal SQL `UPDATE`.
+
+An alternative design would be to teach the KV Inc operation to
+understand SQL value encoding so that the sequence could be encoded
+consistently with tables, but that would break the KV/SQL abstraction
+barrier.
 
 ### Sentinel KV pairs
 
@@ -549,11 +563,11 @@ Example dump:
   [pkg/util/encoding/encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/util/encoding/encoding.go
   [SQL in CockroachDB: Mapping Table Data to Key-Value Storage]: https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/
   [Implementing Column Families in CockroachDB]: https://www.cockroachlabs.com/blog/sql-cockroachdb-column-families/
-  [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md
-  [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_interleaved_tables.md
+  [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20151214_sql_column_families.md
+  [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
   [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
-  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowwriter.go
-  [pkg/sql/sqlbase/rowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowfetcher.go
+  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
+  [pkg/sql/sqlbase/multirowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/multirowfetcher.go
   [prefix-free]: https://en.wikipedia.org/wiki/Prefix_code
   [new `DECIMAL` encoding]: https://github.com/cockroachdb/cockroach/issues/13384#issuecomment-277120394
   [pkg/sql/sqlbase/table.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/table.go

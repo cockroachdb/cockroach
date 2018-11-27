@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf
 
 package log
 
@@ -25,8 +23,8 @@ import (
 func init() {
 	logflags.InitFlags(
 		&logging.noStderrRedirect,
-		&logDir, &showLogs, &logging.nocolor, &logging.verbosity,
-		&logging.vmodule, &logging.traceLocation,
+		&logging.logDir, &showLogs, &noColor,
+		&logging.vmodule,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)
 	// We define these flags here because they have the type Severity

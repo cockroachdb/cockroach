@@ -1,0 +1,96 @@
+/**
+Copyright 2015 The Cockroach Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License.
+*/
+
+@require nib
+@require "~styl/base/palette.styl"
+
+$viz-bottom = 65px
+$viz-sides = 62px
+
+.visualization
+  position relative
+  background-color white
+  color $headings-color
+  border-radius 5px
+  border 1px solid rgba(0, 0, 0, .1)
+  // prevents borders from doubling up
+  margin-bottom 10px
+
+  &__content
+    padding 0 10px 15px
+    height 200px
+    &.visualization--loading
+      display flex
+      justify-content center
+      align-items center
+
+  &__header
+    display flex
+    justify-content center
+    align-items center
+    padding 15px 25px 0
+
+  &__title
+    font-size 14px
+    font-family Lato-Bold
+    color $body-color
+
+  &__subtitle
+    color $tooltip-color
+    margin-left 5px
+    font-size 12px
+    font-family Lato-Regular
+
+  &__spinner
+    width 40px
+    height 40px
+
+  &__tooltip
+    width 36px  // Reserve space for 10px padding around centered 16px icon
+    height 16px
+
+  &__tooltip-hover-area
+    width 100%
+    padding 0px 10px
+
+  &__info-icon
+    width 16px
+    height 16px
+    border-radius 50%
+    border 1px solid $tooltip-color
+    font-size 12px
+    line-height 14px  // Visual tweak to vertically center the "i"
+    text-align center
+    color $tooltip-color
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $body-color
+    color $body-color
+
+  .icon-warning
+    color $warning-color
+
+.linegraph
+  height 100%
+
+.visualization--faded
+  .visualization .number
+  .nv-group
+  .nv-areaWrap
+    opacity .2
+
+.linked-guideline__line
+  stroke $link-color

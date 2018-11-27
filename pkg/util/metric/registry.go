@@ -11,17 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package metric
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"regexp"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -82,7 +79,7 @@ func (r *Registry) AddMetric(metric Iterable) {
 }
 
 // AddMetricStruct examines all fields of metricStruct and adds
-// all Iterable or metricGroup objects to the registry.
+// all Iterable or metric.Struct objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	v := reflect.ValueOf(metricStruct)
 	if v.Kind() == reflect.Ptr {
@@ -109,6 +106,14 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)
 			}
 		}
+	}
+}
+
+// WriteMetricsMetadata writes metadata from all tracked metrics to the
+// parameter map.
+func (r *Registry) WriteMetricsMetadata(dest map[string]Metadata) {
+	for _, v := range r.tracked {
+		dest[v.GetName()] = v.GetMetadata()
 	}
 }
 

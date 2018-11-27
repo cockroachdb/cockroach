@@ -1,0 +1,1191 @@
+#
+# Simple case.
+#
+compile
+# Join comment.
+define Join {
+    # Left comment.
+    Left  Expr
+
+    # Right comment.
+    Right Expr
+}
+
+# CommuteJoin comment.
+[CommuteJoin]
+(Join $left:* $right:*) => (Join $right $left)
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments # Join comment.)
+			Tags=(Tags)
+			Name="Join"
+			Fields=(DefineFields
+				(DefineField
+					Comments=(Comments # Left comment.)
+					Name="Left"
+					Type="Expr"
+					Src=<test.opt:4:5>
+				)
+				(DefineField
+					Comments=(Comments # Right comment.)
+					Name="Right"
+					Type="Expr"
+					Src=<test.opt:7:5>
+				)
+			)
+			Src=<test.opt:2:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments # CommuteJoin comment.)
+			Name="CommuteJoin"
+			Tags=(Tags)
+			Match=(Func
+				Name=Join
+				Args=(Slice
+					(Bind Label="left" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:12:7>)
+					(Bind Label="right" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:12:15>)
+				)
+				Typ=Join
+				Src=<test.opt:12:1>
+			)
+			Replace=(Func
+				Name=Join
+				Args=(Slice
+					(Ref Label="right" Typ=Expr Src=<test.opt:12:34>)
+					(Ref Label="left" Typ=Expr Src=<test.opt:12:41>)
+				)
+				Typ=Join
+				Src=<test.opt:12:28>
+			)
+			Src=<test.opt:11:1>
+		)
+	)
+)
+
+#
+# Expand multiple match names into multiple rules and use OpName function with
+# no arguments.
+#
+compile
+[Join]
+define InnerJoin {
+    Left  Expr
+    Right Expr
+}
+[Join]
+define LeftJoin {
+    Left  Expr
+    Right Expr
+}
+define Project {
+    Input Expr
+}
+
+# Name rule comment.
+[Name]
+(Join | Project * & (Func (OpName))) => ((OpName) (OpName))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags Join)
+			Name="InnerJoin"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:4:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+		(Define
+			Comments=(Comments)
+			Tags=(Tags Join)
+			Name="LeftJoin"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:8:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:9:5>)
+			)
+			Src=<test.opt:6:1>
+		)
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Project"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:12:5>)
+			)
+			Src=<test.opt:11:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments # Name rule comment.)
+			Name="Name"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(And
+						Left=(Any Typ=Expr)
+						Right=(CustomFunc
+							Name=Func
+							Args=(Slice InnerJoin)
+							Typ=Expr
+							Src=<test.opt:17:21>
+						)
+						Typ=Expr
+						Src=<test.opt:17:17>
+					)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:17:1>
+			)
+			Replace=(Func
+				Name=InnerJoin
+				Args=(Slice InnerJoin)
+				Typ=InnerJoin
+				Src=<test.opt:17:41>
+			)
+			Src=<test.opt:16:1>
+		)
+		(Rule
+			Comments=(Comments # Name rule comment.)
+			Name="Name"
+			Tags=(Tags)
+			Match=(Func
+				Name=LeftJoin
+				Args=(Slice
+					(And
+						Left=(Any Typ=Expr)
+						Right=(CustomFunc
+							Name=Func
+							Args=(Slice LeftJoin)
+							Typ=Expr
+							Src=<test.opt:17:21>
+						)
+						Typ=Expr
+						Src=<test.opt:17:17>
+					)
+				)
+				Typ=LeftJoin
+				Src=<test.opt:17:1>
+			)
+			Replace=(Func
+				Name=LeftJoin
+				Args=(Slice LeftJoin)
+				Typ=LeftJoin
+				Src=<test.opt:17:41>
+			)
+			Src=<test.opt:16:1>
+		)
+		(Rule
+			Comments=(Comments # Name rule comment.)
+			Name="Name"
+			Tags=(Tags)
+			Match=(Func
+				Name=Project
+				Args=(Slice
+					(And
+						Left=(Any Typ=Expr)
+						Right=(CustomFunc
+							Name=Func
+							Args=(Slice Project)
+							Typ=Expr
+							Src=<test.opt:17:21>
+						)
+						Typ=Expr
+						Src=<test.opt:17:17>
+					)
+				)
+				Typ=Project
+				Src=<test.opt:17:1>
+			)
+			Replace=(Func
+				Name=Project
+				Args=(Slice Project)
+				Typ=Project
+				Src=<test.opt:17:41>
+			)
+			Src=<test.opt:16:1>
+		)
+	)
+)
+
+#
+# Compile OpName functions with arguments.
+#
+compile
+define Op {
+    Input Expr
+}
+define SubOp1 {}
+define SubOp2 {}
+
+[SingleName]
+(Op $input:(SubOp1) & ^(Func (OpName $input))) => ((OpName $input))
+
+[MultipleNames]
+(Op $input:(SubOp1 | SubOp2) & (Func (OpName $input))) => ((OpName $input))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+		(Define Comments=(Comments) Tags=(Tags) Name="SubOp1" Fields=(DefineFields) Src=<test.opt:4:1>)
+		(Define Comments=(Comments) Tags=(Tags) Name="SubOp2" Fields=(DefineFields) Src=<test.opt:5:1>)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="SingleName"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left=(Func Name=SubOp1 Args=(Slice) Typ=SubOp1 Src=<test.opt:8:12>)
+							Right=(Not
+								Input=(CustomFunc
+									Name=Func
+									Args=(Slice
+										(CustomFunc
+											Name=OpName
+											Args=(Slice
+												(Ref Label="input" Src=<test.opt:8:38>)
+											)
+											Src=<test.opt:8:30>
+										)
+									)
+									Typ=Expr
+									Src=<test.opt:8:24>
+								)
+								Typ=Expr
+								Src=<test.opt:8:23>
+							)
+							Typ=SubOp1
+							Src=<test.opt:8:12>
+						)
+						Typ=SubOp1
+						Src=<test.opt:8:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:8:1>
+			)
+			Replace=(Func Name=SubOp1 Args=(Slice) Typ=SubOp1 Src=<test.opt:8:51>)
+			Src=<test.opt:7:1>
+		)
+		(Rule
+			Comments=(Comments)
+			Name="MultipleNames"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left=(Func
+								Name=(Names SubOp1 SubOp2)
+								Args=(Slice)
+								Typ=[SubOp1 | SubOp2]
+								Src=<test.opt:11:12>
+							)
+							Right=(CustomFunc
+								Name=Func
+								Args=(Slice
+									(CustomFunc
+										Name=OpName
+										Args=(Slice
+											(Ref Label="input" Src=<test.opt:11:46>)
+										)
+										Src=<test.opt:11:38>
+									)
+								)
+								Typ=Expr
+								Src=<test.opt:11:32>
+							)
+							Typ=[SubOp1 | SubOp2]
+							Src=<test.opt:11:12>
+						)
+						Typ=[SubOp1 | SubOp2]
+						Src=<test.opt:11:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:11:1>
+			)
+			Replace=(Func
+				Name=(CustomFunc
+					Name=OpName
+					Args=(Slice
+						(Ref Label="input" Typ=[SubOp1 | SubOp2] Src=<test.opt:11:68>)
+					)
+					Src=<test.opt:11:60>
+				)
+				Args=(Slice)
+				Typ=[SubOp1 | SubOp2]
+				Src=<test.opt:11:59>
+			)
+			Src=<test.opt:10:1>
+		)
+	)
+)
+
+#
+# Compile custom match function.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[CustomFunc]
+(Op $input:* & (Func $input (SubFunc $input (SubSubFunc)))) => $input
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="CustomFunc"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left=(Any Typ=Expr)
+							Right=(CustomFunc
+								Name=Func
+								Args=(Slice
+									(Ref Label="input" Src=<test.opt:6:22>)
+									(CustomFunc
+										Name=SubFunc
+										Args=(Slice
+											(Ref Label="input" Src=<test.opt:6:38>)
+											(CustomFunc Name=SubSubFunc Args=(Slice) Src=<test.opt:6:45>)
+										)
+										Src=<test.opt:6:29>
+									)
+								)
+								Typ=Expr
+								Src=<test.opt:6:16>
+							)
+							Typ=Expr
+							Src=<test.opt:6:12>
+						)
+						Typ=Expr
+						Src=<test.opt:6:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:1>
+			)
+			Replace=(Ref Label="input" Typ=Expr Src=<test.opt:6:64>)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
+# Use string expressions with op matcher, construct, and custom functions.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Strings]
+(Op $input:"foo" & (Func "bar")) => (Op (Func "bar"))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Strings"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left="foo"
+							Right=(CustomFunc
+								Name=Func
+								Args=(Slice "bar")
+								Typ=Expr
+								Src=<test.opt:6:20>
+							)
+							Typ=<string>
+							Src=<test.opt:6:12>
+						)
+						Typ=<string>
+						Src=<test.opt:6:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(CustomFunc
+						Name=Func
+						Args=(Slice "bar")
+						Typ=Expr
+						Src=<test.opt:6:41>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:37>
+			)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
+# Use list expressions with match and replace functions.
+#
+compile
+define Op {
+    Input1 Expr
+    Input2 Expr
+    Input3 Expr
+    Input4 Expr
+    Input5 Expr
+    Input6 Expr
+}
+
+[Lists]
+(Op
+    [ ... (Op) ... ]
+    [ (Op) ... ]
+    [ ... (Op) ]
+    [ ... ... ]
+    [ (Op) ]
+    [ ]
+)
+=>
+(Op
+    [ (Op) (Op) ]
+    [ (Op) ]
+    [ ]
+    (Func [ (Op) (Op) ])
+)
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input1" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Input2" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Input3" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="Input4" Type="Expr" Src=<test.opt:5:5>)
+				(DefineField Comments=(Comments) Name="Input5" Type="Expr" Src=<test.opt:6:5>)
+				(DefineField Comments=(Comments) Name="Input6" Type="Expr" Src=<test.opt:7:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Lists"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(List
+						Items=(Slice
+							(ListAny)
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:12:11>)
+							(ListAny)
+						)
+						Typ=Expr
+						Src=<test.opt:12:5>
+					)
+					(List
+						Items=(Slice
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:13:7>)
+							(ListAny)
+						)
+						Typ=Expr
+						Src=<test.opt:13:5>
+					)
+					(List
+						Items=(Slice
+							(ListAny)
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:14:11>)
+						)
+						Typ=Expr
+						Src=<test.opt:14:5>
+					)
+					(List
+						Items=(Slice (ListAny) (ListAny))
+						Typ=Expr
+						Src=<test.opt:15:5>
+					)
+					(List
+						Items=(Slice
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:16:7>)
+						)
+						Typ=Expr
+						Src=<test.opt:16:5>
+					)
+					(List Items=(Slice) Typ=Expr Src=<test.opt:17:5>)
+				)
+				Typ=Op
+				Src=<test.opt:11:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(List
+						Items=(Slice
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:21:7>)
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:21:12>)
+						)
+						Typ=Expr
+						Src=<test.opt:21:5>
+					)
+					(List
+						Items=(Slice
+							(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:22:7>)
+						)
+						Typ=Expr
+						Src=<test.opt:22:5>
+					)
+					(List Items=(Slice) Typ=Expr Src=<test.opt:23:5>)
+					(CustomFunc
+						Name=Func
+						Args=(Slice
+							(List
+								Items=(Slice
+									(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:24:13>)
+									(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:24:18>)
+								)
+								Typ=<list>
+								Src=<test.opt:24:11>
+							)
+						)
+						Typ=Expr
+						Src=<test.opt:24:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:20:1>
+			)
+			Src=<test.opt:10:1>
+		)
+	)
+)
+
+#
+# Bind expressions in all parts of rule.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op $matchOp:(Op (Func $matchArg:"foo")))
+=>
+(Op $replaceOp:(Op (Func $replaceArg:"foo")))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="matchOp"
+						Target=(Func
+							Name=Op
+							Args=(Slice
+								(CustomFunc
+									Name=Func
+									Args=(Slice
+										(Bind Label="matchArg" Target="foo" Typ=<string> Src=<test.opt:6:24>)
+									)
+									Typ=Expr
+									Src=<test.opt:6:18>
+								)
+							)
+							Typ=Op
+							Src=<test.opt:6:14>
+						)
+						Typ=Op
+						Src=<test.opt:6:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="replaceOp"
+						Target=(Func
+							Name=Op
+							Args=(Slice
+								(CustomFunc
+									Name=Func
+									Args=(Slice
+										(Bind Label="replaceArg" Target="foo" Typ=<string> Src=<test.opt:8:26>)
+									)
+									Typ=Expr
+									Src=<test.opt:8:20>
+								)
+							)
+							Typ=Op
+							Src=<test.opt:8:16>
+						)
+						Typ=Op
+						Src=<test.opt:8:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:8:1>
+			)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
+# Test type inference.
+#
+compile
+[Join]
+define InnerJoin {
+    Left  Expr
+    Right Expr
+    On    FiltersExpr
+}
+
+[Join]
+define LeftJoin {
+    Left  Expr
+    Right Expr
+    On    FiltersExpr
+}
+
+# Test AndExpr with left type as a subset of right type.
+[AndExpr1]
+(InnerJoin $left:(LeftJoin) & (InnerJoin | LeftJoin)) => $left
+
+# Test AndExpr with right type as a subset of left type.
+[AndExpr2]
+(InnerJoin $left:(LeftJoin | InnerJoin) & (LeftJoin)) => $left
+
+# Test NotExpr.
+[NotExpr]
+(InnerJoin $left:* & ^(LeftJoin | InnerJoin)) => $left
+
+# Test list matching and construction.
+[ListExpr]
+(InnerJoin $left:* $right:* $on:[ ... $item:* ... ]) => (LeftJoin $left $right [ $item ])
+
+# Test custom match function and custom construct function.
+[CustomFunction]
+(InnerJoin $left:* & (MatchFunc $left) $right:* $on:*) => (ConstructFunc $left $on)
+
+# Test construction with dynamic choice of names.
+[DynamicName]
+(InnerJoin $left:* $right:(Join $innerLeft:*) $on:*) => ((OpName $right) $left $innerLeft $on)
+
+# Test strings + numbers.
+[Values]
+(InnerJoin $left:"foo" $right:5) => (LeftJoin $left $right)
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags Join)
+			Name="InnerJoin"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Comments=(Comments) Name="On" Type="FiltersExpr" Src=<test.opt:5:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+		(Define
+			Comments=(Comments)
+			Tags=(Tags Join)
+			Name="LeftJoin"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Left" Type="Expr" Src=<test.opt:10:5>)
+				(DefineField Comments=(Comments) Name="Right" Type="Expr" Src=<test.opt:11:5>)
+				(DefineField Comments=(Comments) Name="On" Type="FiltersExpr" Src=<test.opt:12:5>)
+			)
+			Src=<test.opt:8:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments # Test AndExpr with left type as a subset of right type.)
+			Name="AndExpr1"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind
+						Label="left"
+						Target=(And
+							Left=(Func Name=LeftJoin Args=(Slice) Typ=LeftJoin Src=<test.opt:17:18>)
+							Right=(Func
+								Name=(Names InnerJoin LeftJoin)
+								Args=(Slice)
+								Typ=[InnerJoin | LeftJoin]
+								Src=<test.opt:17:31>
+							)
+							Typ=LeftJoin
+							Src=<test.opt:17:18>
+						)
+						Typ=LeftJoin
+						Src=<test.opt:17:12>
+					)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:17:1>
+			)
+			Replace=(Ref Label="left" Typ=LeftJoin Src=<test.opt:17:58>)
+			Src=<test.opt:16:1>
+		)
+		(Rule
+			Comments=(Comments # Test AndExpr with right type as a subset of left type.)
+			Name="AndExpr2"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind
+						Label="left"
+						Target=(And
+							Left=(Func
+								Name=(Names LeftJoin InnerJoin)
+								Args=(Slice)
+								Typ=[LeftJoin | InnerJoin]
+								Src=<test.opt:21:18>
+							)
+							Right=(Func Name=LeftJoin Args=(Slice) Typ=LeftJoin Src=<test.opt:21:43>)
+							Typ=LeftJoin
+							Src=<test.opt:21:18>
+						)
+						Typ=LeftJoin
+						Src=<test.opt:21:12>
+					)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:21:1>
+			)
+			Replace=(Ref Label="left" Typ=LeftJoin Src=<test.opt:21:58>)
+			Src=<test.opt:20:1>
+		)
+		(Rule
+			Comments=(Comments # Test NotExpr.)
+			Name="NotExpr"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind
+						Label="left"
+						Target=(And
+							Left=(Any Typ=Expr)
+							Right=(Not
+								Input=(Func
+									Name=(Names LeftJoin InnerJoin)
+									Args=(Slice)
+									Typ=[LeftJoin | InnerJoin]
+									Src=<test.opt:25:23>
+								)
+								Typ=Expr
+								Src=<test.opt:25:22>
+							)
+							Typ=Expr
+							Src=<test.opt:25:18>
+						)
+						Typ=Expr
+						Src=<test.opt:25:12>
+					)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:25:1>
+			)
+			Replace=(Ref Label="left" Typ=Expr Src=<test.opt:25:50>)
+			Src=<test.opt:24:1>
+		)
+		(Rule
+			Comments=(Comments # Test list matching and construction.)
+			Name="ListExpr"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind Label="left" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:29:12>)
+					(Bind Label="right" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:29:20>)
+					(Bind
+						Label="on"
+						Target=(List
+							Items=(Slice
+								(ListAny)
+								(Bind Label="item" Target=(Any) Src=<test.opt:29:39>)
+								(ListAny)
+							)
+							Typ=FiltersExpr
+							Src=<test.opt:29:33>
+						)
+						Typ=FiltersExpr
+						Src=<test.opt:29:29>
+					)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:29:1>
+			)
+			Replace=(Func
+				Name=LeftJoin
+				Args=(Slice
+					(Ref Label="left" Typ=Expr Src=<test.opt:29:67>)
+					(Ref Label="right" Typ=Expr Src=<test.opt:29:73>)
+					(List
+						Items=(Slice
+							(Ref Label="item" Src=<test.opt:29:82>)
+						)
+						Typ=FiltersExpr
+						Src=<test.opt:29:80>
+					)
+				)
+				Typ=LeftJoin
+				Src=<test.opt:29:57>
+			)
+			Src=<test.opt:28:1>
+		)
+		(Rule
+			Comments=(Comments # Test custom match function and custom construct function.)
+			Name="CustomFunction"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind
+						Label="left"
+						Target=(And
+							Left=(Any Typ=Expr)
+							Right=(CustomFunc
+								Name=MatchFunc
+								Args=(Slice
+									(Ref Label="left" Src=<test.opt:33:33>)
+								)
+								Typ=Expr
+								Src=<test.opt:33:22>
+							)
+							Typ=Expr
+							Src=<test.opt:33:18>
+						)
+						Typ=Expr
+						Src=<test.opt:33:12>
+					)
+					(Bind Label="right" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:33:40>)
+					(Bind Label="on" Target=(Any Typ=FiltersExpr) Typ=FiltersExpr Src=<test.opt:33:49>)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:33:1>
+			)
+			Replace=(CustomFunc
+				Name=ConstructFunc
+				Args=(Slice
+					(Ref Label="left" Typ=Expr Src=<test.opt:33:74>)
+					(Ref Label="on" Typ=FiltersExpr Src=<test.opt:33:80>)
+				)
+				Src=<test.opt:33:59>
+			)
+			Src=<test.opt:32:1>
+		)
+		(Rule
+			Comments=(Comments # Test construction with dynamic choice of names.)
+			Name="DynamicName"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind Label="left" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:37:12>)
+					(Bind
+						Label="right"
+						Target=(Func
+							Name=Join
+							Args=(Slice
+								(Bind Label="innerLeft" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:37:33>)
+							)
+							Typ=[InnerJoin | LeftJoin]
+							Src=<test.opt:37:27>
+						)
+						Typ=[InnerJoin | LeftJoin]
+						Src=<test.opt:37:20>
+					)
+					(Bind Label="on" Target=(Any Typ=FiltersExpr) Typ=FiltersExpr Src=<test.opt:37:47>)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:37:1>
+			)
+			Replace=(Func
+				Name=(CustomFunc
+					Name=OpName
+					Args=(Slice
+						(Ref Label="right" Typ=[InnerJoin | LeftJoin] Src=<test.opt:37:66>)
+					)
+					Src=<test.opt:37:58>
+				)
+				Args=(Slice
+					(Ref Label="left" Typ=Expr Src=<test.opt:37:74>)
+					(Ref Label="innerLeft" Typ=Expr Src=<test.opt:37:80>)
+					(Ref Label="on" Typ=FiltersExpr Src=<test.opt:37:91>)
+				)
+				Typ=[InnerJoin | LeftJoin]
+				Src=<test.opt:37:57>
+			)
+			Src=<test.opt:36:1>
+		)
+		(Rule
+			Comments=(Comments # Test strings + numbers.)
+			Name="Values"
+			Tags=(Tags)
+			Match=(Func
+				Name=InnerJoin
+				Args=(Slice
+					(Bind Label="left" Target="foo" Typ=<string> Src=<test.opt:41:12>)
+					(Bind Label="right" Target=5 Typ=<int64> Src=<test.opt:41:24>)
+				)
+				Typ=InnerJoin
+				Src=<test.opt:41:1>
+			)
+			Replace=(Func
+				Name=LeftJoin
+				Args=(Slice
+					(Ref Label="left" Typ=<string> Src=<test.opt:41:47>)
+					(Ref Label="right" Typ=<int64> Src=<test.opt:41:53>)
+				)
+				Typ=LeftJoin
+				Src=<test.opt:41:37>
+			)
+			Src=<test.opt:40:1>
+		)
+	)
+)
+
+#
+# Compile errors.
+#
+compile
+[Tag]
+define Op {
+    Input Expr
+}
+define Op {
+    Input1 Expr
+    Input2 Expr
+    Input3 Expr
+}
+
+[UnrecognizedName]
+(Unknown) => (Unknown)
+
+[TooManyOpNameArgs]
+(Op) => ((OpName "foo" "bar"))
+
+[InvalidOpNameArg]
+(Op) => ((OpName "foo"))
+
+[DuplicateLabel]
+(Op $input:"foo" $input:"bar") => (Op)
+
+[DuplicateLabel2]
+(Op $input:"foo") => (Op $input:"bar")
+
+[UnrecognizedLabel]
+(Op $input:* & (Func $unknown)) => (Op)
+
+[DuplicateName]
+(Op) => (Op)
+
+[DuplicateName]
+(Op) => (Op)
+
+[MatchRef]
+(Op $ref) => (Op)
+
+[CustomMultiNames]
+(Op (Func | Func2)) => (Op)
+
+[CustomList]
+(Op (Func [])) => (Op)
+
+[CustomList2]
+(Op (Func [ ... (SubFunc) ... ])) => (Op)
+
+[CustomBool]
+(Op (Func (SubFunc) & (SubFunc))) => (Op)
+
+[CustomWildcard]
+(Op (Func *)) => (Op)
+
+[OpInCustom]
+(Op (Func (Op))) => (Op)
+
+[ConstructTag]
+(Op) => (Tag)
+
+[MatchLiteralName]
+(Op (Op $bind:Op)) => (Op Op (Func Op))
+
+[IllegalLiteralName]
+(Op) => (Op Op (Func Unknown))
+
+[IllegalLiteralName2]
+(Op) => (Op Op (Func Op) Unknown)
+
+[DynamicMatchName]
+((Op)) => (Op)
+
+[DynamicMatchName2]
+(Op ((Op))) => (Op)
+
+[MultipleCustomFuncNames]
+(Op (Func | Func2)) => (Op)
+
+[MultipleCustomFuncNames2]
+(Op) => (Op (Func | Func2))
+
+[ListMatcher]
+(Op [ ... (SubFunc) ... (SubFunc) ]) => (Op)
+
+[ListConstructor]
+(Op) => (Op [ (SubFunc) ... ])
+
+[ConstructorMultipleNames]
+(Op) => (Op | Op)
+
+[NotEnoughMatchFields]
+(Op * * * *) => (Op)
+----
+test.opt:5:1: duplicate 'Op' define statement
+test.opt:12:1: unrecognized match name 'Unknown'
+test.opt:15:10: too many arguments to OpName function
+test.opt:18:10: invalid OpName argument: argument must be a variable reference
+test.opt:21:18: duplicate bind label 'input'
+test.opt:24:26: duplicate bind label 'input'
+test.opt:27:22: unrecognized variable name 'unknown'
+test.opt:32:1: duplicate rule name 'DuplicateName'
+test.opt:36:5: match pattern cannot use variable references
+test.opt:39:5: custom function cannot have multiple names
+test.opt:42:11: custom match function cannot use lists
+test.opt:45:11: custom match function cannot use lists
+test.opt:48:11: custom match function cannot use boolean expressions
+test.opt:51:11: custom match function cannot use wildcard matcher
+test.opt:54:11: custom function name cannot be an operator name
+test.opt:57:9: construct name cannot be a tag
+test.opt:60:5: cannot match literal name 'Op'
+test.opt:63:16: Unknown is not an operator name
+test.opt:66:9: Unknown is not an operator name
+test.opt:69:1: cannot match dynamic name
+test.opt:72:5: cannot match dynamic name
+test.opt:75:5: custom function cannot have multiple names
+test.opt:78:13: constructor cannot have multiple names
+test.opt:81:25: list matcher cannot contain multiple expressions
+test.opt:84:13: list constructor cannot use '...'
+test.opt:87:9: constructor cannot have multiple names
+test.opt:90:1: Op has only 3 fields
+
+# Type inference errors.
+compile
+[Tag]
+define Op {
+    Input1 Expr
+    Input2 Expr
+}
+
+define SubOp {
+    Input Expr
+    def SubOpDef
+}
+
+define SubOp2 {
+    Input Expr
+}
+
+[CannotInferConstructOps]
+(Op $input1:*) => ((OpName $input))
+
+[ConstructOpsNotEquivalent]
+(Op $input1:(SubOp2 | SubOp $input:* $def:*)) => ((OpName $input1))
+
+[ConstructOpsNotEquivalent2]
+(Op $input1:(Op | SubOp $input:* $def:*)) => ((OpName $input1))
+
+[MatchPatternsContradict]
+(Op $input1:(Op) & (SubOp)) => $input1
+----
+test.opt:17:28: unrecognized variable name 'input'
+test.opt:20:13: SubOp2 has only 1 fields
+test.opt:23:13: SubOp and Op fields do not have same types
+test.opt:26:13: match patterns contradict one another; both cannot match

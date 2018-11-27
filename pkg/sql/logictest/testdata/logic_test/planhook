@@ -1,0 +1,7 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+# The placeholder returns one row with one value: the string 'planhook'.
+query T
+SHOW planhook
+----
+planhook

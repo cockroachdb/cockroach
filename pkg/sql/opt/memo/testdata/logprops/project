@@ -1,0 +1,395 @@
+exec-ddl
+CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE xysd
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE ab (a INT, b INT, UNIQUE (a, b))
+----
+TABLE ab
+ ├── a int
+ ├── b int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX secondary
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden) (storing)
+
+build
+SELECT y, x+1 AS a, 1 AS b, x FROM xysd
+----
+project
+ ├── columns: y:2(int) a:5(int) b:6(int!null) x:1(int!null)
+ ├── key: (1)
+ ├── fd: ()-->(6), (1)-->(2,5)
+ ├── prune: (1,2,5,6)
+ ├── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── projections
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: x [type=int]
+      │    └── const: 1 [type=int]
+      └── const: 1 [type=int]
+
+build
+SELECT s FROM xysd
+----
+project
+ ├── columns: s:3(string)
+ ├── prune: (3)
+ ├── interesting orderings: (-3)
+ └── scan xysd
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── prune: (1-4)
+      └── interesting orderings: (+1) (-3,+4,+1)
+
+# Propagate outer columns.
+build
+SELECT * FROM xysd WHERE (SELECT (SELECT y) FROM kuv WHERE k=x) > 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (3,4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── filters
+      └── gt [type=bool, outer=(1,2)]
+           ├── subquery [type=int]
+           │    └── max1-row
+           │         ├── columns: y:9(int)
+           │         ├── outer: (1,2)
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(9)
+           │         └── project
+           │              ├── columns: y:9(int)
+           │              ├── outer: (1,2)
+           │              ├── cardinality: [0 - 1]
+           │              ├── key: ()
+           │              ├── fd: ()-->(9)
+           │              ├── prune: (9)
+           │              ├── select
+           │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+           │              │    ├── outer: (1)
+           │              │    ├── cardinality: [0 - 1]
+           │              │    ├── key: ()
+           │              │    ├── fd: ()-->(5-7)
+           │              │    ├── prune: (6,7)
+           │              │    ├── interesting orderings: (+5)
+           │              │    ├── scan kuv
+           │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+           │              │    │    ├── key: (5)
+           │              │    │    ├── fd: (5)-->(6,7)
+           │              │    │    ├── prune: (5-7)
+           │              │    │    └── interesting orderings: (+5)
+           │              │    └── filters
+           │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           │              │              ├── variable: k [type=int]
+           │              │              └── variable: x [type=int]
+           │              └── projections
+           │                   └── subquery [type=int, outer=(2)]
+           │                        └── max1-row
+           │                             ├── columns: y:8(int)
+           │                             ├── outer: (2)
+           │                             ├── cardinality: [1 - 1]
+           │                             ├── key: ()
+           │                             ├── fd: ()-->(8)
+           │                             └── project
+           │                                  ├── columns: y:8(int)
+           │                                  ├── outer: (2)
+           │                                  ├── cardinality: [1 - 1]
+           │                                  ├── key: ()
+           │                                  ├── fd: ()-->(8)
+           │                                  ├── prune: (8)
+           │                                  ├── values
+           │                                  │    ├── cardinality: [1 - 1]
+           │                                  │    ├── key: ()
+           │                                  │    └── tuple [type=tuple]
+           │                                  └── projections
+           │                                       └── variable: xysd.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+# Pass through cardinality.
+build
+SELECT x, y FROM (SELECT * FROM xysd LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── limit
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── prune: (1-4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
+      └── const: 10 [type=int]
+
+# Constant null and not-null columns.
+build
+SELECT 1 AS a, 'foo' AS b, NULL AS c, 1::decimal + NULL AS d, NULL::STRING AS e FROM xysd
+----
+project
+ ├── columns: a:5(int!null) b:6(string!null) c:7(unknown) d:7(unknown) e:8(string)
+ ├── fd: ()-->(5-8)
+ ├── prune: (5-8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── projections
+      ├── const: 1 [type=int]
+      ├── const: 'foo' [type=string]
+      ├── null [type=unknown]
+      └── cast: STRING [type=string]
+           └── null [type=unknown]
+
+# Project constant over input with no needed columns and ensure that there is
+# no key on the output (because it will have duplicates).
+opt
+SELECT 1 FROM (SELECT x FROM xysd)
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── scan xysd@secondary
+ └── projections
+      └── const: 1 [type=int]
+
+# Project correlated subquery.
+build
+SELECT k, (SELECT y FROM xysd WHERE x=k) FROM kuv
+----
+project
+ ├── columns: k:1(int!null) y:8(int)
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── prune: (1,8)
+ ├── interesting orderings: (+1)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── subquery [type=int, outer=(1)]
+           └── max1-row
+                ├── columns: xysd.y:5(int)
+                ├── outer: (1)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── project
+                     ├── columns: xysd.y:5(int)
+                     ├── outer: (1)
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(5)
+                     ├── prune: (5)
+                     └── select
+                          ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
+                          ├── outer: (1)
+                          ├── cardinality: [0 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(4-7)
+                          ├── prune: (5-7)
+                          ├── interesting orderings: (+4) (-6,+7,+4)
+                          ├── scan xysd
+                          │    ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
+                          │    ├── key: (4)
+                          │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
+                          │    ├── prune: (4-7)
+                          │    └── interesting orderings: (+4) (-6,+7,+4)
+                          └── filters
+                               └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+                                    ├── variable: x [type=int]
+                                    └── variable: k [type=int]
+
+# Project nested correlated subquery.
+build
+SELECT k, EXISTS(SELECT EXISTS(SELECT y FROM xysd WHERE x=k) FROM xysd) FROM kuv
+----
+project
+ ├── columns: k:1(int!null) exists:13(bool)
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── prune: (1,13)
+ ├── interesting orderings: (+1)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── exists [type=bool, outer=(1)]
+           └── project
+                ├── columns: exists:12(bool)
+                ├── outer: (1)
+                ├── fd: ()-->(12)
+                ├── prune: (12)
+                ├── scan xysd
+                │    ├── columns: xysd.x:4(int!null) xysd.y:5(int) xysd.s:6(string) xysd.d:7(decimal!null)
+                │    ├── key: (4)
+                │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
+                │    ├── prune: (4-7)
+                │    └── interesting orderings: (+4) (-6,+7,+4)
+                └── projections
+                     └── exists [type=bool, outer=(1)]
+                          └── project
+                               ├── columns: xysd.y:9(int)
+                               ├── outer: (1)
+                               ├── cardinality: [0 - 1]
+                               ├── key: ()
+                               ├── fd: ()-->(9)
+                               ├── prune: (9)
+                               └── select
+                                    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    ├── outer: (1)
+                                    ├── cardinality: [0 - 1]
+                                    ├── key: ()
+                                    ├── fd: ()-->(8-11)
+                                    ├── prune: (9-11)
+                                    ├── interesting orderings: (+8) (-10,+11,+8)
+                                    ├── scan xysd
+                                    │    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    │    ├── key: (8)
+                                    │    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
+                                    │    ├── prune: (8-11)
+                                    │    └── interesting orderings: (+8) (-10,+11,+8)
+                                    └── filters
+                                         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+                                              ├── variable: xysd.x [type=int]
+                                              └── variable: k [type=int]
+
+# We have the FD: y --> y::TEXT.
+build
+SELECT y, y::TEXT FROM xysd
+----
+project
+ ├── columns: y:2(int) y:5(string)
+ ├── fd: (2)-->(5)
+ ├── prune: (2,5)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── projections
+      └── cast: STRING [type=string, outer=(2)]
+           └── variable: xysd.y [type=int]
+
+# We don't have the FD: d --> d::TEXT because d is a composite type.
+# For example, d=1 is equal to d=1.0 but d::TEXT differs.
+build
+SELECT d, d::TEXT FROM xysd
+----
+project
+ ├── columns: d:4(decimal!null) d:5(string)
+ ├── prune: (4,5)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) xysd.d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── projections
+      └── cast: STRING [type=string, outer=(4)]
+           └── variable: xysd.d [type=decimal]
+
+# Verify that a,b form a key.
+norm
+SELECT a, b FROM ab WHERE a IS NOT NULL and b IS NOT NULL
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── key: (1,2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan ab
+ │    ├── columns: a:1(int) b:2(int)
+ │    ├── lax-key: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      ├── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+      │    ├── variable: a [type=int]
+      │    └── null [type=unknown]
+      └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+           ├── variable: b [type=int]
+           └── null [type=unknown]
+
+norm
+SELECT a, b FROM ab WHERE (a, b) IN ((1, 1), (2, 2))
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── key: (1,2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan ab
+ │    ├── columns: a:1(int) b:2(int)
+ │    ├── lax-key: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      └── in [type=bool, outer=(1,2), constraints=(/1/2: [/1/1 - /1/1] [/2/2 - /2/2]; /2: [/1 - /1] [/2 - /2]; tight)]
+           ├── tuple [type=tuple{int, int}]
+           │    ├── variable: a [type=int]
+           │    └── variable: b [type=int]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 1 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 2 [type=int]
+                     └── const: 2 [type=int]

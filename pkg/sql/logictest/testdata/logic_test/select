@@ -1,0 +1,620 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+# SELECT with no table.
+
+query I
+SELECT 1
+----
+1
+
+query T
+SELECT NULL
+----
+NULL
+
+query II colnames
+SELECT 1+1 AS two, 2+2 AS four
+----
+two four
+2   4
+
+# SELECT expression tests.
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+
+query error syntax error at or near "from"
+SELECT FROM abc
+
+query error could not parse "hello" as type bool
+SELECT * FROM abc WHERE 'hello'
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 3)
+
+query III colnames
+SELECT * FROM abc
+----
+a b c
+1 2 3
+
+query TIII colnames
+SELECT NULL AS z, * FROM abc
+----
+z    a  b  c
+NULL 1  2  3
+
+# synonym for SELECT * FROM abc
+query III
+TABLE abc
+----
+1 2 3
+
+query error syntax error at or near "*"
+TABLE abc.*
+
+query III colnames
+SELECT * FROM abc WHERE NULL
+----
+a b c
+
+query III colnames
+SELECT * FROM abc WHERE a = NULL
+----
+a b c
+
+query IIIIII colnames
+SELECT *,* FROM abc
+----
+a b c a b c
+1 2 3 1 2 3
+
+query IIII colnames
+SELECT a,a,a,a FROM abc
+----
+a a a a
+1 1 1 1
+
+query II colnames
+SELECT a,c FROM abc
+----
+a c
+1 3
+
+query I colnames
+SELECT a+b+c AS foo FROM abc
+----
+foo
+6
+
+# Contradiction
+query III
+SELECT * FROM abc WHERE a > 5 AND a < 5
+----
+
+# Contradiction with remainder filter
+query III
+SELECT * FROM abc WHERE a > 5 AND a < 5 AND b>=100
+----
+
+statement ok
+INSERT INTO abc VALUES (0, 1, 2)
+
+query II
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+----
+1 2
+
+# SELECT of NULL value.
+
+statement ok
+CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO kv (k) VALUES ('a')
+
+query TT
+SELECT * FROM kv
+----
+a NULL
+
+query TT
+SELECT k,v FROM kv
+----
+a NULL
+
+query T
+SELECT v||'foo' FROM kv
+----
+NULL
+
+query T
+SELECT lower(v) FROM kv
+----
+NULL
+
+query T
+SELECT k FROM kv
+----
+1 value hashing to 60b725f10c9c85c70d97880dfe8191b3
+
+query TT
+SELECT kv.K,KV.v FROM kv
+----
+a NULL
+
+query TT
+SELECT kv.* FROM kv
+----
+a NULL
+
+# Regression tests for #24169
+query TT
+SELECT test.kv.* FROM kv
+----
+a NULL
+
+query TT
+SELECT test.public.kv.* FROM kv
+----
+a NULL
+
+query TT
+SELECT test.public.kv.* FROM test.kv
+----
+a NULL
+
+query TT
+SELECT test.kv.* FROM test.public.kv
+----
+a NULL
+
+query error no data source matches pattern: foo.\*
+SELECT foo.* FROM kv
+
+query error cannot use "\*" without a FROM clause
+SELECT *
+
+query error "kv.*" cannot be aliased
+SELECT kv.* AS foo FROM kv
+
+query error no data source matches pattern: bar.kv.\*
+SELECT bar.kv.* FROM kv
+
+# Don't panic with invalid names (#8024)
+query error cannot subscript type tuple\{string AS k, string AS v\} because it is not an array
+SELECT kv.*[1] FROM kv
+
+query T colnames
+SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
+----
+k
+a
+
+query T
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
+----
+NULL
+
+statement ok
+CREATE TABLE kw ("from" INT PRIMARY KEY)
+
+statement ok
+INSERT INTO kw VALUES (1)
+
+query III colnames
+SELECT *, "from", kw."from" FROM kw
+----
+from from from
+1    1    1
+
+# SELECT from index.
+
+statement ok
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+INSERT INTO xyzw VALUES (4, 5, 6, 7), (1, 2, 3, 4)
+
+query error pq: column "x" does not exist
+SELECT * FROM xyzw LIMIT x
+
+query error pq: column "y" does not exist
+SELECT * FROM xyzw OFFSET 1 + y
+
+query error argument of LIMIT must be type int, not type decimal
+SELECT * FROM xyzw LIMIT 3.3
+
+query IIII
+SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
+----
+1 2 3 4
+
+query error argument of OFFSET must be type int, not type decimal
+SELECT * FROM xyzw OFFSET 1.5
+
+query error negative value for LIMIT
+SELECT * FROM xyzw LIMIT -100
+
+query error negative value for OFFSET
+SELECT * FROM xyzw OFFSET -100
+
+query IIII
+SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
+----
+4 5 6 7
+
+query T rowsort
+SELECT (x,y) FROM xyzw
+----
+(1,2)
+(4,5)
+
+query IIII
+SELECT * FROM xyzw LIMIT 0
+----
+
+query IIII
+SELECT * FROM xyzw ORDER BY x LIMIT 1
+----
+1 2 3 4
+
+query IIII
+SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
+----
+4 5 6 7
+
+query IIII
+SELECT * FROM xyzw ORDER BY y OFFSET 1
+----
+4 5 6 7
+
+query IIII
+SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
+----
+4 5 6 7
+
+# Multiplying by zero so the result is deterministic.
+query IIII
+SELECT * FROM xyzw LIMIT (random() * 0.0)::int OFFSET (random() * 0.0)::int
+----
+
+query error pgcode 42601 multiple LIMIT clauses not allowed
+((SELECT a FROM t LIMIT 1)) LIMIT 1
+
+query IIII
+SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
+----
+
+query II rowsort
+SELECT z, y FROM xyzw@foo
+----
+3 2
+6 5
+
+query I
+SELECT z FROM test.xyzw@foo WHERE y = 5
+----
+6
+
+query I
+SELECT xyzw.y FROM test.xyzw@foo WHERE z = 3
+----
+2
+
+query error pgcode 42P01 relation "test.unknown" does not exist
+SELECT z FROM test.unknown@foo WHERE y = 5
+
+query error index "unknown" not found
+SELECT z FROM test.xyzw@unknown WHERE y = 5
+
+query I
+SELECT w FROM test.xyzw@foo WHERE y = 5
+----
+7
+
+statement ok
+CREATE TABLE boolean_table (
+  id INTEGER PRIMARY KEY NOT NULL,
+  value BOOLEAN
+)
+
+statement ok
+INSERT INTO boolean_table (id, value) VALUES (1, NULL)
+
+query I
+SELECT value FROM boolean_table
+----
+NULL
+
+query I
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+2
+
+statement ok
+INSERT INTO abc VALUES (42, NULL, NULL)
+
+query III rowsort
+SELECT 0 * b, b % 1, 0 % b from abc
+----
+0 0 0
+0 0 0
+NULL NULL NULL
+
+# Doing an index lookup by MaxInt used to not work.
+# https://github.com/cockroachdb/cockroach/issues/3587
+statement ok
+CREATE TABLE MaxIntTest (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO MaxIntTest VALUES (9223372036854775807)
+
+query I
+SELECT a FROM MaxIntTest WHERE a = 9223372036854775807
+----
+9223372036854775807
+
+query error no value provided for placeholder
+SELECT $1::int
+
+# Regression tests for #22670.
+query B
+SELECT 1 IN (1, 2)
+----
+true
+
+query B
+SELECT NULL IN (1, 2)
+----
+NULL
+
+query B
+SELECT 1 IN (1, NULL)
+----
+true
+
+query B
+SELECT 1 IN (NULL, 2)
+----
+NULL
+
+query B
+SELECT (1, NULL) IN ((1, 1))
+----
+NULL
+
+query B
+SELECT (2, NULL) IN ((1, 1))
+----
+false
+
+query B
+SELECT (1, 1) IN ((1, NULL))
+----
+NULL
+
+query B
+SELECT (1, 1) IN ((2, NULL))
+----
+false
+
+# Tests with a tuple coming from a subquery.
+query B
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+NULL
+
+query B
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (2, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+false
+
+query B
+SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (NULL::int, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+false
+
+query B
+SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+NULL
+
+query B
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (2, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+true
+
+query B
+SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (NULL::int, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+true
+
+query B
+SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+# Tests with an empty IN tuple.
+query B
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+false
+
+query B
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+true
+
+query B
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
+
+query B
+SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
+
+query B
+SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
+
+statement ok
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
+
+query II rowsort
+SELECT * FROM a WHERE x > 1
+----
+2  20
+3  30
+
+query II rowsort
+SELECT * FROM a WHERE y > 1
+----
+1  10
+2  20
+3  30
+
+query II
+SELECT * FROM a WHERE x > 1 AND x < 3
+----
+2  20
+
+query II
+SELECT * FROM a WHERE x > 1 AND y < 30
+----
+2  20
+
+query I rowsort
+SELECT x + 1 FROM a
+----
+2
+3
+4
+
+query IIIII rowsort
+SELECT x, x + 1, y, y + 1, x + y FROM a
+----
+1  2  10  11  11
+2  3  20  21  22
+3  4  30  31  33
+
+query I rowsort
+SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+----
+24
+35
+46
+
+query IIII rowsort
+SELECT x, x, y, x FROM a
+----
+1  1  10  1
+2  2  20  2
+3  3  30  3
+
+query II rowsort
+SELECT x + 1, x + y FROM a WHERE x + y > 20
+----
+3  22
+4  33
+
+# ------------------------------------------------------------------------------
+# Test with a hidden column.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE b (x INT, y INT);
+INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
+
+query II rowsort
+SELECT * FROM b
+----
+1  10
+2  20
+3  30
+
+query I rowsort
+SELECT x FROM b WHERE rowid > 0
+----
+1
+2
+3
+
+# ------------------------------------------------------------------------------
+# String inequality filter.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
+INSERT INTO c SELECT i, to_english(i) FROM generate_series(1, 10) AS g(i)
+
+query IT rowsort
+SELECT * FROM c WHERE str >= 'moo'
+----
+1   one
+2   two
+3   three
+6   six
+7   seven
+9   nine
+10  one-zero
+
+# ------------------------------------------------------------------------------
+# "*" must expand to zero columns if there are zero columns to select.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
+
+query I
+SELECT 1, * FROM nocols
+----

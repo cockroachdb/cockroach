@@ -11,18 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package testutils
 
 import (
+	"context"
 	"io"
 	"net"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -103,14 +101,13 @@ type buf struct {
 }
 
 func makeBuf(name string, capacity int, mu *syncutil.Mutex) buf {
-	b := buf{
-		Mutex:    mu,
-		name:     name,
-		capacity: capacity,
+	return buf{
+		Mutex:        mu,
+		name:         name,
+		capacity:     capacity,
+		readerWait:   sync.NewCond(mu),
+		capacityWait: sync.NewCond(mu),
 	}
-	b.readerWait = sync.NewCond(b.Mutex)
-	b.capacityWait = sync.NewCond(b.Mutex)
-	return b
 }
 
 // Write adds data to the buffer. If there's zero free capacity, it will block
@@ -139,7 +136,7 @@ func (b *buf) Write(data []byte) (int, error) {
 }
 
 // errEAgain is returned by buf.readLocked() when the read was blocked at the
-// time when buf.readerWait was signalled (in particular, after the
+// time when buf.readerWait was signaled (in particular, after the
 // PartitionableConn interrupted the read because of a partition). The caller is
 // expected to try the read again after the partition is gone.
 var errEAgain = errors.New("try read again")

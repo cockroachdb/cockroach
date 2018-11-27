@@ -1,0 +1,201 @@
+# tests adapted from logictest -- values
+
+build
+VALUES (1)
+----
+values
+ ├── columns: column1:1(int)
+ └── tuple [type=tuple{int}]
+      └── const: 1 [type=int]
+
+build
+VALUES (1, 2, 3), (4, 5, 6)
+----
+values
+ ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── tuple [type=tuple{int, int, int}]
+ │    ├── const: 1 [type=int]
+ │    ├── const: 2 [type=int]
+ │    └── const: 3 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 4 [type=int]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
+
+build
+VALUES (1), (2, 3)
+----
+error (42601): VALUES lists must all be the same length, expected 1 columns, found 2
+
+build
+VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
+----
+limit
+ ├── columns: column1:1(int)
+ ├── internal-ordering: -1
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: column1:1(int)
+ │    ├── ordering: -1
+ │    └── values
+ │         ├── columns: column1:1(int)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 1 [type=int]
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 1 [type=int]
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 2 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 3 [type=int]
+ └── const: 3 [type=int]
+
+build
+VALUES (1), (1), (2), (3) ORDER BY z
+----
+error (42703): column "z" does not exist
+
+build
+VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)
+----
+error (42804): VALUES types int and string cannot be matched
+
+build
+VALUES ('one', 1, 1.0), ('two', 2, 2.0)
+----
+values
+ ├── columns: column1:1(string) column2:2(int) column3:3(decimal)
+ ├── tuple [type=tuple{string, int, decimal}]
+ │    ├── const: 'one' [type=string]
+ │    ├── const: 1 [type=int]
+ │    └── const: 1.0 [type=decimal]
+ └── tuple [type=tuple{string, int, decimal}]
+      ├── const: 'two' [type=string]
+      ├── const: 2 [type=int]
+      └── const: 2.0 [type=decimal]
+
+build
+VALUES (true), (true), (false)
+----
+values
+ ├── columns: column1:1(bool)
+ ├── tuple [type=tuple{bool}]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool}]
+ │    └── true [type=bool]
+ └── tuple [type=tuple{bool}]
+      └── false [type=bool]
+
+build
+VALUES (NULL)
+----
+values
+ ├── columns: column1:1(unknown)
+ └── tuple [type=tuple{unknown}]
+      └── null [type=unknown]
+
+build
+VALUES (NULL, 1)
+----
+values
+ ├── columns: column1:1(unknown) column2:2(int)
+ └── tuple [type=tuple{unknown, int}]
+      ├── null [type=unknown]
+      └── const: 1 [type=int]
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── null [type=unknown]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 2 [type=int]
+      └── null [type=unknown]
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── null [type=unknown]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 2 [type=int]
+      └── null [type=unknown]
+
+build
+VALUES (NULL, 1), (2, NULL), (NULL, 'a')
+----
+error (42804): VALUES types string and int cannot be matched
+
+build
+SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
+----
+project
+ ├── columns: coalesce:3(int)
+ ├── values
+ │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 2 [type=int]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 3 [type=int]
+ │    │    └── null [type=unknown]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── null [type=unknown]
+ │    │    └── const: 4 [type=int]
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── null [type=unknown]
+ │         └── null [type=unknown]
+ └── projections
+      └── coalesce [type=int]
+           ├── variable: column1 [type=int]
+           └── variable: column2 [type=int]
+
+# subqueries can be evaluated in VALUES
+build
+VALUES ((SELECT 1 a)), ((SELECT 2 b))
+----
+values
+ ├── columns: column1:3(int)
+ ├── tuple [type=tuple{int}]
+ │    └── subquery [type=int]
+ │         └── max1-row
+ │              ├── columns: a:1(int!null)
+ │              └── project
+ │                   ├── columns: a:1(int!null)
+ │                   ├── values
+ │                   │    └── tuple [type=tuple]
+ │                   └── projections
+ │                        └── const: 1 [type=int]
+ └── tuple [type=tuple{int}]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: b:2(int!null)
+                └── project
+                     ├── columns: b:2(int!null)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── projections
+                          └── const: 2 [type=int]
+
+build
+VALUES (1), ((SELECT 2 a))
+----
+values
+ ├── columns: column1:2(int)
+ ├── tuple [type=tuple{int}]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int}]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: a:1(int!null)
+                └── project
+                     ├── columns: a:1(int!null)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── projections
+                          └── const: 2 [type=int]

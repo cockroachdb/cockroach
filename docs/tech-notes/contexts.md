@@ -15,13 +15,7 @@ an explanation of Context-related topics.
 ## What is a `context.Context` ?
 
 `context.Context` is an interface defined in the `context` package of
-Go’s standard library. Before Go 1.7 it used to live in
-`golang.org/x/net/context` , when it became more broadly blessed by
-the language. CRDB still uses the `x/net` location for technical
-reasons - some of our dependencies (in particular gRPC) use that guy
-and, even though it’s an interface, Go’s duck-typing rules do not
-always let us interchange the two interfaces (e.g. when callbacks
-taking `Context` are involved).
+Go’s standard library.
 
 The package documentation says: *Package context defines the Context
 type, which carries deadlines, cancelation signals, and other
@@ -159,7 +153,7 @@ Let’s look at a Lightstep trace of a SQL query (Lightstep is a
 distributed trace collector and viewer; see section on tracing
 below). Here’s the root span (trimmed):
 
-[contexts/sshot1.png](contexts/sshot1.png)
+![contexts/sshot1.png](contexts/sshot1.png)
 
 We can see log messages coming from the sql module and the kv module:
 the executor starts executing a `SELECT`, acquires a table lease,
@@ -172,7 +166,7 @@ corresponds to time spent in child spans; let’s look at these spans
 below:
 
 
-[contexts/sshot2.png](contexts/sshot2.png)
+![contexts/sshot2.png](contexts/sshot2.png)
 
 We can see two spans, one child of the other, related to performing an
 RPC. The `grpcTransport.SendNext` one corresponds to the client-side
@@ -203,12 +197,12 @@ allows embedding a `trace.EventLog` in a `Context` ; events go to that
 `EventLog` automatically unless a span is also embedded in the
 context.
 
-There’s also `EXPLAIN(TRACE)SELECT …` that uses “snowball tracing” for
+There’s also `SET TRACING = on` that uses “snowball tracing” for
 collecting the distributed trace of one query and displaying it as SQL
 result rows. Snowball tracing is trace mode where trace information is
 stored in-memory, instead of being sent to a trace collector, so that
 the application can inspect its own trace later; this is the
-mechanism used by `EXPLAIN(TRACE)` to present the execution
+mechanism used by session tracing to present the execution
 trace back to the SQL client.
 
 There’s also the
@@ -363,7 +357,7 @@ response protos. We call this **“snowball tracing”** (a high-level
 client enables it by marking a request as “traced”, and then lower
 level rpc clients propagate this marker with their calls, and the
 trace grows like a snowball… Or something.). This mechanism enables
-`EXPLAIN(TRACE)` and all the other trace collection features.
+session tracing and all the other trace collection features.
 
 If the Lightstep integration is enabled, crdb uses both the Lightstep
 and the internal tracers simultaneously - through a
@@ -432,7 +426,7 @@ a single trace, so we do it at the txn level. It hasn’t been a problem
 yet… When you’re using Lightstep for collection (or also the net.trace
 integrations), you’re relying on it to be fast and asynchronous and
 maybe drop log messages when too many have been accumulated.  When we
-talk about other trace collection mechanisms (e.g. `EXPLAIN(TRACE)`),
+talk about other trace collection mechanisms (e.g. session tracing),
 we’re assuming that the user is going to be judicious about not
 tracing operations that are too massive. ]
 
@@ -574,7 +568,7 @@ seem to have stopped doing that for our queues.
 
 As we’ve seen, `Contexts` are hierarchical, which means there has
 to be a root `Context`. There are, in fact, two roots provided by the
-`x/net` package - `context.Background()`and
+`context` package - `context.Background()`and
 `context.TODO()`. These are empty `Contexts` - no values, deadline
 or cancellation.
 

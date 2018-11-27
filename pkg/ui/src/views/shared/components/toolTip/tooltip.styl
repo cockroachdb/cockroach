@@ -1,0 +1,80 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require "~styl/base/palette.styl"
+@require "~styl/base/layout-vars.styl"
+
+.tooltip
+  position absolute
+  z-index $z-index-tooltip
+  padding 35px
+  box-shadow 2px 2px 0 $tooltip-shadow
+  border-radius 4px
+  opacity 0
+  visibility hidden
+  transition opacity .3s ease-in, visibility .5s ease-in
+  background-color white
+  top 20px
+  left 95%
+  right auto
+  white-space normal
+
+  dt
+    margin-top 10px
+    font-family Lato-Bold
+
+&.viz-tooltip
+  width 250px
+
+.viz-info-icon:hover + .tooltip, .tooltip:hover
+  visibility visible
+  opacity 1
+  transition-duration 0s
+
+.hover-tooltip
+  position relative
+  width 100%
+  height 100%
+
+  &__text
+    display none
+    z-index $z-index-tooltip
+    position absolute
+    top -10px
+    left 100%
+    width 400px
+    padding 10px
+    border-radius 5px
+    border 1px solid rgba(0, 0, 0, .1)
+    box-shadow 0 0 4px rgba(0, 0, 0, .2)
+    background rgba(255, 255, 255, .98)
+    font-family Lato-Regular
+    text-align left
+    color $body-color
+
+  &--short &__text
+    width unset
+    max-width 400px
+
+  &--hovered &__text
+    display block
+
+  a
+    color $link-color
+
+  dt
+    font-weight bold
+
+  dd
+    padding-left 5px

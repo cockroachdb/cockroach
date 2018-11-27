@@ -1,0 +1,4 @@
+set_operation ::=
+	select_clause 'UNION' ( 'ALL' | 'DISTINCT' |  ) select_clause
+	| select_clause 'INTERSECT' ( 'ALL' | 'DISTINCT' |  ) select_clause
+	| select_clause 'EXCEPT' ( 'ALL' | 'DISTINCT' |  ) select_clause

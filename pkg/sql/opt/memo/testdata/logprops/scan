@@ -1,0 +1,159 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM a
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ └── interesting orderings: (+1) (-3,+4,+1)
+
+build
+SELECT * FROM b
+----
+project
+ ├── columns: x:1(int) z:2(int!null)
+ ├── prune: (1,2)
+ └── scan b
+      ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
+      ├── key: (3)
+      ├── fd: (3)-->(1,2)
+      ├── prune: (1-3)
+      └── interesting orderings: (+3)
+
+# Select subset of columns.
+opt
+SELECT s, x FROM a
+----
+scan a@secondary
+ ├── columns: s:3(string) x:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── prune: (1,3)
+ └── interesting orderings: (+1) (-3)
+
+# Test constrained scan.
+opt
+SELECT s, x FROM a WHERE x=1
+----
+scan a
+ ├── columns: s:3(string) x:1(int!null)
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,3)
+ ├── prune: (3)
+ └── interesting orderings: (+1) (-3)
+
+# Test limited scan.
+opt
+SELECT s, x FROM a WHERE x > 1 LIMIT 2
+----
+scan a
+ ├── columns: s:3(string) x:1(int!null)
+ ├── constraint: /1: [/2 - ]
+ ├── limit: 2
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── prune: (3)
+ └── interesting orderings: (+1) (-3)
+
+# Test limited scan with 1 row.
+opt
+SELECT s, x FROM a WHERE x > 1 LIMIT 1
+----
+scan a
+ ├── columns: s:3(string) x:1(int!null)
+ ├── constraint: /1: [/2 - ]
+ ├── limit: 1
+ ├── key: ()
+ ├── fd: ()-->(1,3)
+ ├── prune: (3)
+ └── interesting orderings: (+1) (-3)
+
+# Test case where there are no weak keys available.
+opt
+SELECT d FROM a
+----
+scan a@secondary
+ ├── columns: d:4(decimal!null)
+ └── prune: (4)
+
+exec-ddl
+CREATE TABLE t (
+  a INT,
+  b CHAR,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b),
+  INDEX bc (b, c),
+  INDEX dc (d, c),
+  INDEX a_desc (a DESC),
+  FAMILY (a, b),
+  FAMILY (c),
+  FAMILY (d)
+)
+----
+TABLE t
+ ├── a int not null
+ ├── b string not null
+ ├── c int
+ ├── d string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── b string not null
+ ├── INDEX bc
+ │    ├── b string not null
+ │    ├── c int
+ │    └── a int not null
+ ├── INDEX dc
+ │    ├── d string
+ │    ├── c int
+ │    ├── a int not null
+ │    └── b string not null
+ └── INDEX a_desc
+      ├── a int not null desc
+      └── b string not null
+
+# Test case where one of the explorations causes construction of a scan with a
+# contradiction.
+# TODO(rytaft): Range operator
+opt
+SELECT 1 FROM t WHERE a > 1 AND a < 2
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── scan t@a_desc
+ │    ├── columns: a:1(int!null)
+ │    ├── constraint: /-1/2: contradiction
+ │    ├── prune: (1)
+ │    └── interesting orderings: (+1) (-1)
+ └── projections
+      └── const: 1 [type=int]

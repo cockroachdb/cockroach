@@ -1,0 +1,117 @@
+# LogicTest: local local-opt
+
+query T colnames
+SHOW USERS
+----
+user_name
+root
+testuser
+
+statement ok
+CREATE USER user1
+
+query T colnames
+SHOW USERS
+----
+user_name
+root
+testuser
+user1
+
+statement error pgcode 42710 a role named admin already exists
+CREATE USER admin
+
+statement error pgcode 42710 a role named admin already exists
+CREATE USER IF NOT EXISTS admin
+
+statement error pgcode 42710 a user named user1 already exists
+CREATE USER user1
+
+statement ok
+CREATE USER IF NOT EXISTS user1
+
+statement error pgcode 42710 a user named user1 already exists
+CREATE USER UsEr1
+
+statement ok
+CREATE USER Ομηρος
+
+statement error username "node" reserved
+CREATE USER node
+
+statement error empty passwords are not permitted
+CREATE USER test WITH PASSWORD ''
+
+statement ok
+CREATE USER uSEr2 WITH PASSWORD 'cockroach'
+
+statement ok
+CREATE USER user3 WITH PASSWORD '蟑螂'
+
+statement error pq: username "foo☂" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+CREATE USER foo☂
+
+statement error pq: username "-foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+CREATE USER "-foo"
+
+statement error pq: syntax error at or near "-"
+CREATE USER foo-bar
+
+statement ok
+CREATE USER "foo-bar"
+
+statement ok
+PREPARE pcu AS CREATE USER $1 WITH PASSWORD $2;
+  EXECUTE pcu('foo','bar')
+
+statement ok
+ALTER USER foo WITH PASSWORD somepass
+
+statement ok
+PREPARE chpw AS ALTER USER $1 WITH PASSWORD $2;
+  EXECUTE chpw('foo', 'bar')
+
+statement error user blix does not exist
+EXECUTE chpw('blix', 'blah')
+
+query T colnames
+SHOW USERS
+----
+user_name
+foo
+foo-bar
+root
+testuser
+user1
+user2
+user3
+ομηρος
+
+statement error no username specified
+CREATE USER ""
+
+query TTT
+SELECT current_user, session_user, user
+----
+root  root  root
+
+user testuser
+
+statement error pq: user testuser does not have INSERT privilege on relation users
+CREATE USER user4
+
+statement error pq: user testuser does not have INSERT privilege on relation users
+UPSERT INTO system.users VALUES (user1, 'newpassword', false)
+
+statement error pq: user testuser does not have SELECT privilege on relation users
+SHOW USERS
+
+query TTT
+SELECT current_user, session_user, user
+----
+testuser  testuser  testuser
+
+user root
+
+statement error pq: user root cannot use password authentication
+ALTER USER root WITH PASSWORD 'foo'

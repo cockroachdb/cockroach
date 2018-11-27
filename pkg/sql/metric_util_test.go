@@ -11,18 +11,36 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Andrei Matei (andreimatei1@gmail.com)
 
 // Functions used for testing metrics.
 
 package sql_test
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
 )
+
+// initializeQueryCounter returns a queryCounter that accounts for system
+// migrations that may have run DDL statements.
+func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
+	return queryCounter{
+		txnBeginCount:      s.MustGetSQLCounter(sql.MetaTxnBegin.Name),
+		selectCount:        s.MustGetSQLCounter(sql.MetaSelect.Name),
+		optCount:           s.MustGetSQLCounter(sql.MetaSQLOpt.Name),
+		distSQLSelectCount: s.MustGetSQLCounter(sql.MetaDistSQLSelect.Name),
+		updateCount:        s.MustGetSQLCounter(sql.MetaUpdate.Name),
+		insertCount:        s.MustGetSQLCounter(sql.MetaInsert.Name),
+		deleteCount:        s.MustGetSQLCounter(sql.MetaDelete.Name),
+		ddlCount:           s.MustGetSQLCounter(sql.MetaDdl.Name),
+		miscCount:          s.MustGetSQLCounter(sql.MetaMisc.Name),
+		txnCommitCount:     s.MustGetSQLCounter(sql.MetaTxnCommit.Name),
+		txnRollbackCount:   s.MustGetSQLCounter(sql.MetaTxnRollback.Name),
+		txnAbortCount:      s.MustGetSQLCounter(sql.MetaTxnAbort.Name),
+	}
+}
 
 func checkCounterDelta(
 	s serverutils.TestServerInterface, meta metric.Metadata, init, delta int64,
@@ -33,11 +51,6 @@ func checkCounterDelta(
 			meta.Name, actual, init, delta)
 	}
 	return actual, nil
-}
-
-func checkCounterEQ(s serverutils.TestServerInterface, meta metric.Metadata, e int64) error {
-	_, err := checkCounterDelta(s, meta, 0, e)
-	return err
 }
 
 func checkCounterGE(s serverutils.TestServerInterface, meta metric.Metadata, e int64) error {

@@ -11,12 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package retry
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -109,18 +108,37 @@ func TestRetryStop(t *testing.T) {
 func TestRetryNextCh(t *testing.T) {
 	var attempts int
 
-	for r := Start(Options{MaxRetries: 1}); attempts < 2; attempts++ {
+	opts := Options{
+		InitialBackoff: time.Millisecond,
+		Multiplier:     2,
+		MaxRetries:     1,
+	}
+	for r := Start(opts); attempts < 3; attempts++ {
+		c := r.NextCh()
 		if r.currentAttempt != attempts {
 			t.Errorf("expected attempt=%d; got %d", attempts, r.currentAttempt)
 		}
-		if attempts == 0 {
-			if r.NextCh() == nil {
+		switch attempts {
+		case 0:
+			if c == nil {
 				t.Errorf("expected non-nil NextCh() on first attempt")
 			}
-		} else if attempts == 1 {
-			if r.NextCh() != nil {
-				t.Errorf("expected nil NextCh() on second attempt")
+			if _, ok := <-c; ok {
+				t.Errorf("expected closed (immediate) NextCh() on first attempt")
 			}
+		case 1:
+			if c == nil {
+				t.Errorf("expected non-nil NextCh() on second attempt")
+			}
+			if _, ok := <-c; !ok {
+				t.Errorf("expected open (delayed) NextCh() on first attempt")
+			}
+		case 2:
+			if c != nil {
+				t.Errorf("expected nil NextCh() on third attempt")
+			}
+		default:
+			t.Fatalf("unexpected attempt %d", attempts)
 		}
 	}
 }
@@ -141,7 +159,7 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 		return expectedErr
 	}
 
-	actualErr := WithMaxAttempts(nil, opts, maxAttempts, errFn)
+	actualErr := WithMaxAttempts(context.TODO(), opts, maxAttempts, errFn)
 	if actualErr != expectedErr {
 		t.Fatalf("expected err %v, got %v", expectedErr, actualErr)
 	}

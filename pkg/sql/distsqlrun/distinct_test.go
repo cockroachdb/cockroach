@@ -11,21 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsqlrun
 
 import (
-	"math"
+	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-
-	"golang.org/x/net/context"
 )
 
 func TestDistinct(t *testing.T) {
@@ -33,8 +31,8 @@ func TestDistinct(t *testing.T) {
 
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
-			parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []struct {
@@ -108,65 +106,92 @@ func TestDistinct(t *testing.T) {
 				{v[5], v[6]},
 			},
 		},
-		{
-			spec: DistinctSpec{
-				OrderedColumns:  []uint32{1},
-				DistinctColumns: []uint32{},
-			},
-			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[6], v[6]},
-			},
-			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[6], v[6]},
-			},
-		},
 	}
 
-	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
-		ds := c.spec
+		t.Run("", func(t *testing.T) {
+			ds := c.spec
 
-		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
-		out := &RowBuffer{}
+			in := NewRowBuffer(twoIntCols, c.input, RowBufferArgs{})
+			out := &RowBuffer{}
 
-		flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
-
-		d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		d.Run(context.Background(), nil)
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-		var res sqlbase.EncDatumRows
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				Settings: st,
+				EvalCtx:  &evalCtx,
 			}
-			if row == nil {
-				break
-			}
-			res = append(res, row)
-		}
 
-		if result := res.String(); result != c.expected.String() {
-			t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
-		}
+			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &PostProcessSpec{}, out)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			d.Run(context.Background(), nil /* wg */)
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
+			}
+			var res sqlbase.EncDatumRows
+			for {
+				row := out.NextNoMeta(t).Copy()
+				if row == nil {
+					break
+				}
+				res = append(res, row)
+			}
+
+			if result := res.String(twoIntCols); result != c.expected.String(twoIntCols) {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(twoIntCols))
+			}
+		})
 	}
+}
+
+func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
+	const numCols = 2
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+	spec := &DistinctSpec{
+		DistinctColumns: []uint32{0, 1},
+	}
+	spec.OrderedColumns = orderedColumns
+
+	post := &PostProcessSpec{}
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			input := NewRepeatableRowSource(twoIntCols, makeIntRows(numRows, numCols))
+
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(context.Background(), nil /* wg */)
+				input.Reset()
+			}
+		})
+	}
+}
+
+func BenchmarkOrderedDistinct(b *testing.B) {
+	benchmarkDistinct(b, []uint32{0, 1})
+}
+
+func BenchmarkPartiallyOrderedDistinct(b *testing.B) {
+	benchmarkDistinct(b, []uint32{0})
+}
+
+func BenchmarkUnorderedDistinct(b *testing.B) {
+	benchmarkDistinct(b, []uint32{})
 }

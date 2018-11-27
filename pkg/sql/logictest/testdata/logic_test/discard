@@ -1,0 +1,52 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+foo
+
+statement ok
+DISCARD ALL
+
+query T
+SHOW SEARCH_PATH
+----
+public
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
+----
+Europe/Amsterdam
+
+query T
+DISCARD ALL; SHOW TIMEZONE
+----
+UTC
+
+query T
+SET TIME ZONE 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+query T
+DISCARD ALL; SHOW TIME ZONE
+----
+UTC
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+DISCARD ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement ok
+BEGIN
+
+statement error DISCARD ALL cannot run inside a transaction block
+DISCARD ALL

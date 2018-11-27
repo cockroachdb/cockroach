@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 syntax = "proto3";
 package cockroach.pgerror;
@@ -34,4 +32,7 @@ message Error {
       string function = 3;
   }
   Source source = 5;
+
+  // "Internal query: the text of a failed internally-generated command."
+  string internalCommand = 6;
 };

@@ -11,18 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package acceptance
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/http"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,15 +29,19 @@ import (
 func TestDebugRemote(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
+	// TODO(tschottdorf): hard to run this as RunLocal since we need to access
+	// the ui endpoint from a non-local address.
+	RunDocker(t, testDebugRemote)
+}
 
-	SkipUnlessLocal(t)
+func testDebugRemote(t *testing.T) {
 	cfg := cluster.TestConfig{
 		Name:     "TestDebugRemote",
 		Duration: *flagDuration,
-		Nodes:    []cluster.NodeConfig{{Count: 1, Stores: []cluster.StoreConfig{{Count: 1}}}},
+		Nodes:    []cluster.NodeConfig{{Stores: []cluster.StoreConfig{{}}}},
 	}
 	ctx := context.Background()
-	l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
+	l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
 	defer l.AssertAndStop(ctx, t)
 
 	db, err := gosql.Open("postgres", l.PGUrl(ctx, 0))
@@ -67,15 +68,25 @@ func TestDebugRemote(t *testing.T) {
 			if _, err := db.Exec(setStmt); !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
 			}
+			for i, url := range []string{
+				"/debug/",
+				"/debug/pprof",
+				"/debug/requests",
+				"/debug/range?id=1",
+				"/debug/certificates",
+				"/debug/logspy?duration=1ns",
+			} {
+				t.Run(url, func(t *testing.T) {
+					resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + url)
+					if err != nil {
+						t.Fatalf("%d: %v", i, err)
+					}
+					resp.Body.Close()
 
-			resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + "/debug/")
-			if err != nil {
-				t.Fatal(err)
-			}
-			resp.Body.Close()
-
-			if c.status != resp.StatusCode {
-				t.Fatalf("expected %d, but got %d", c.status, resp.StatusCode)
+					if c.status != resp.StatusCode {
+						t.Fatalf("%d: expected %d, but got %d", i, c.status, resp.StatusCode)
+					}
+				})
 			}
 		})
 	}

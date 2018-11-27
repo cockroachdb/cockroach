@@ -1,6 +1,20 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import moment from "moment";
 
-import * as protos from "../js/protos";
+import * as protos from "src/js/protos";
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.
@@ -20,7 +34,7 @@ export function MilliToNano(milli: number): number {
  * TimestampToMoment converts a Timestamp$Properties object, as seen in wire.proto, to
  * a Moment object. If timestamp is null, it returns the current time.
  */
-export function TimestampToMoment(timestamp?: protos.google.protobuf.Timestamp$Properties): moment.Moment {
+export function TimestampToMoment(timestamp?: protos.google.protobuf.ITimestamp): moment.Moment {
   if (!timestamp) {
     return moment.utc();
   }

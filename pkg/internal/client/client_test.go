@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /* Package client_test tests clients against a fully-instantiated
 cockroach cluster (a single node, but bootstrapped, gossiped, etc.).
@@ -21,24 +19,23 @@ package client_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -89,64 +86,8 @@ func checkKVs(t *testing.T, kvs []client.KeyValue, expected ...interface{}) {
 	}
 }
 
-// notifyingSender is a sender which can set up a notification channel
-// (on call to reset()) for clients which need to wait on a command
-// being sent.
-type notifyingSender struct {
-	notify  chan struct{}
-	wrapped client.Sender
-}
-
-func (ss *notifyingSender) reset(notify chan struct{}) {
-	ss.notify = notify
-}
-
-func (ss *notifyingSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, pErr := ss.wrapped.Send(ctx, ba)
-	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(ss.wrapped, br))
-	}
-
-	select {
-	case ss.notify <- struct{}{}:
-	default:
-	}
-
-	return br, pErr
-}
-
 func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
-}
-
-func createTestClientForUser(
-	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
-) *client.DB {
-	cfg := &base.Config{
-		User: user,
-	}
-	testutils.FillCerts(cfg)
-
-	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, s.Clock(), s.Stopper())
-	conn, err := rpcContext.GRPCDial(s.ServingAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client.NewDBWithContext(client.NewSender(conn), s.Clock(), dbCtx)
-}
-
-// createTestNotifyClient creates a new client which connects using an HTTP
-// sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(
-	t *testing.T, s serverutils.TestServerInterface, priority roachpb.UserPriority,
-) (*client.DB, *notifyingSender) {
-	db := createTestClient(t, s)
-	sender := &notifyingSender{wrapped: db.GetSender()}
-	dbCtx := client.DefaultDBContext()
-	dbCtx.UserPriority = priority
-	return client.NewDBWithContext(sender, s.Clock(), dbCtx), sender
+	return s.DB()
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -177,7 +118,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				TestingEvalFilter: filter,
+				EvalKnobs: storagebase.BatchEvalTestingKnobs{
+					TestingEvalFilter: filter,
+				},
 			},
 		},
 	}
@@ -197,7 +140,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, false, 1},
 		// Read/write conflicts.
 		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 2},
+		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 1},
 		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
 		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
 	}
@@ -206,7 +149,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// succeeds iff the test dictates that it does.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		db, sender := createTestNotifyClient(t, s, 1)
+		db := createTestClient(t, s)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
@@ -232,13 +175,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 			if count == 1 {
 				nonTxnCtx := context.TODO()
 
-				// We use a "notifying" sender here, which allows us to know exactly when the
-				// call has been processed; otherwise, we'd be dependent on timing.
-				// The channel lets us pause txn until after the non-txn method has run once.
-				// Use a channel length of size 1 to guarantee a notification through a
-				// non-blocking send.
+				// The channel lets us pause txn until after the non-txn
+				// method has run once. Use a channel length of size 1 to
+				// guarantee a notification through a non-blocking send.
 				notify := make(chan struct{}, 1)
-				sender.reset(notify)
 				// We must try the non-txn put or get in a goroutine because
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
@@ -248,6 +188,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 						_, err = db.Get(nonTxnCtx, key)
 					} else {
 						err = db.Put(nonTxnCtx, key, "value")
+					}
+					notify <- struct{}{}
+					if err != nil {
+						log.Errorf(context.TODO(), "error on non-txn request: %s", err)
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -308,8 +252,7 @@ func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	dbCtx := client.DefaultDBContext()
-	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+	db := createTestClient(t, s)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -369,8 +312,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	dbCtx := client.DefaultDBContext()
-	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+	db := createTestClient(t, s)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -470,10 +412,10 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s)
 
 	zoneConfig := config.ZoneConfig{
-		NumReplicas:   2,
-		Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "mem"}}},
-		RangeMinBytes: 1 << 10, // 1k
-		RangeMaxBytes: 1 << 18, // 256k
+		NumReplicas:   proto.Int32(2),
+		Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "mem"}}}},
+		RangeMinBytes: proto.Int64(1 << 10), // 1k
+		RangeMaxBytes: proto.Int64(1 << 18), // 256k
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
@@ -842,130 +784,69 @@ func TestConcurrentIncrements(t *testing.T) {
 	}
 }
 
-// TestClientPermissions verifies permission enforcement.
-func TestClientPermissions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	// NodeUser certs are required for all KV operations.
-	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
-	rootClient := createTestClientForUser(t, s, security.RootUser, client.DefaultDBContext())
-
-	testCases := []struct {
-		path    string
-		client  *client.DB
-		allowed bool
-	}{
-		{"foo", rootClient, false},
-		{"foo", nodeClient, true},
-
-		{testUser + "/foo", rootClient, false},
-		{testUser + "/foo", nodeClient, true},
-
-		{testUser + "foo", rootClient, false},
-		{testUser + "foo", nodeClient, true},
-
-		{testUser, rootClient, false},
-		{testUser, nodeClient, true},
-
-		{"unknown/foo", rootClient, false},
-		{"unknown/foo", nodeClient, true},
-	}
-
-	value := []byte("value")
-	const matchErr = "is not allowed"
-	for tcNum, tc := range testCases {
-		err := tc.client.Put(context.TODO(), tc.path, value)
-		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
-		}
-		_, err = tc.client.Get(context.TODO(), tc.path)
-		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
-		}
-	}
-}
-
-// TestInconsistentReads tests that the methods that generate inconsistent reads
-// generate outgoing requests with an INCONSISTENT read consistency.
-func TestInconsistentReads(t *testing.T) {
+// TestReadConsistencyTypes tests that the methods that generate reads with
+// different read consistency types generate outgoing requests with the
+// corresponding read consistency type set.
+func TestReadConsistencyTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Mock out DistSender's sender function to check the read consistency for
-	// outgoing BatchRequests and return an empty reply.
-	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if ba.ReadConsistency != roachpb.INCONSISTENT {
-			return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
-		}
-		return ba.CreateReply(), nil
-	}
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-	db := client.NewDB(senderFn, clock)
-	ctx := context.TODO()
+	for _, rc := range []roachpb.ReadConsistencyType{
+		roachpb.CONSISTENT,
+		roachpb.READ_UNCOMMITTED,
+		roachpb.INCONSISTENT,
+	} {
+		t.Run(rc.String(), func(t *testing.T) {
+			// Mock out DistSender's sender function to check the read consistency for
+			// outgoing BatchRequests and return an empty reply.
+			factory := client.NonTransactionalFactoryFunc(
+				func(_ context.Context, ba roachpb.BatchRequest,
+				) (*roachpb.BatchResponse, *roachpb.Error) {
+					if ba.ReadConsistency != rc {
+						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+					}
+					return ba.CreateReply(), nil
+				})
 
-	prepInconsistent := func() *client.Batch {
-		b := &client.Batch{}
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		return b
-	}
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+			ctx := context.TODO()
 
-	// Perform inconsistent reads through the mocked sender function.
-	{
-		key := roachpb.Key([]byte("key"))
-		b := prepInconsistent()
-		b.Get(key)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
+			prepWithRC := func() *client.Batch {
+				b := &client.Batch{}
+				b.Header.ReadConsistency = rc
+				return b
+			}
 
-	{
-		b := prepInconsistent()
-		key1 := roachpb.Key([]byte("key1"))
-		key2 := roachpb.Key([]byte("key2"))
-		b.Scan(key1, key2)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
+			// Perform reads through the mocked sender function.
+			{
+				key := roachpb.Key([]byte("key"))
+				b := prepWithRC()
+				b.Get(key)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	{
-		key := roachpb.Key([]byte("key"))
-		b := &client.Batch{}
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		b.Get(key)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+			{
+				b := prepWithRC()
+				key1 := roachpb.Key([]byte("key1"))
+				key2 := roachpb.Key([]byte("key2"))
+				b.Scan(key1, key2)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-// TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline.
-func TestReadOnlyTxnObeysDeadline(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
-
-	if err := db.Put(context.TODO(), "k", "v"); err != nil {
-		t.Fatal(err)
-	}
-
-	txn := client.NewTxn(db)
-	opts := client.TxnExecOptions{
-		AutoRetry:  false,
-		AutoCommit: true,
-	}
-	if err := txn.Exec(context.TODO(), opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-		// Set deadline to sometime in the past.
-		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
-		_, err := txn.Get(ctx, "k")
-		return err
-	}); !testutils.IsError(err, "txn aborted") {
-		t.Fatal(err)
+			{
+				key := roachpb.Key([]byte("key"))
+				b := &client.Batch{}
+				b.Header.ReadConsistency = rc
+				b.Get(key)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
@@ -987,62 +868,290 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		// Try reverse scans for all keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows,
-				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
-				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+	// Try reverse scans for all keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
+		if err != nil {
+			return err
 		}
-
-		// Try reverse scans for half of the keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		}
-
-		// Try limit maximum rows.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
-		}
-
-		// Try reverse scan with the same start and end key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-			if err == nil {
-				t.Errorf("expected a truncation error, got %s", err)
-			}
-		}
-
-		// Try reverse scan with non-existent key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
-			if err != nil {
-				return err
-			}
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-		}
-
+		checkKVs(t, rows,
+			keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
+			keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
+	}
+
+	// Try reverse scans for half of the keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try limit maximum rows.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try reverse scan with the same start and end key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return err
+	}); err != nil {
+		if err == nil {
+			t.Errorf("expected a truncation error, got %s", err)
+		}
+	}
+
+	// Try reverse scan with non-existent key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNodeIDAndObservedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Mock out sender function to check that created transactions
+	// have the observed timestamp set for the configured node ID.
+	factory := client.MakeMockTxnSenderFactory(
+		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return ba.CreateReply(), nil
+		})
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	dbCtx := client.DefaultDBContext()
+	dbCtx.NodeID = &base.NodeIDContainer{}
+	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
+	ctx := context.Background()
+
+	// Verify direct creation of Txns.
+	directCases := []struct {
+		typ         client.TxnType
+		nodeID      roachpb.NodeID
+		expObserved bool
+	}{
+		{typ: client.RootTxn, nodeID: 0, expObserved: false},
+		{typ: client.RootTxn, nodeID: 1, expObserved: true},
+		{typ: client.LeafTxn, nodeID: 0, expObserved: false},
+		{typ: client.LeafTxn, nodeID: 1, expObserved: false},
+	}
+	for i, test := range directCases {
+		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
+			txn := client.NewTxn(ctx, db, test.nodeID, test.typ)
+			ots := txn.Serialize().ObservedTimestamps
+			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
+			}
+		})
+	}
+
+	// Verify node ID container using DB.Txn().
+	indirectCases := []struct {
+		nodeID      roachpb.NodeID
+		expObserved bool
+	}{
+		{nodeID: 0, expObserved: false},
+		{nodeID: 1, expObserved: true},
+	}
+	for i, test := range indirectCases {
+		t.Run(fmt.Sprintf("indirect-txn-%d", i), func(t *testing.T) {
+			if test.nodeID != 0 {
+				dbCtx.NodeID.Set(ctx, test.nodeID)
+			}
+			if err := db.Txn(
+				ctx, func(_ context.Context, txn *client.Txn) error {
+					ots := txn.Serialize().ObservedTimestamps
+					if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
+					}
+					return nil
+				},
+			); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// Test that a reader unblocks quickly after an intent is cleaned up.
+func TestIntentCleanupUnblocksReaders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx := context.TODO()
+	key := roachpb.Key("a")
+
+	// We're going to repeatedly lay down an intent and then race a reader with
+	// the intent cleanup, and check that the reader was not blocked for too long.
+	for i := 0; i < 100; i++ {
+		block := make(chan struct{})
+		done := make(chan error)
+		var start time.Time
+		go func() {
+			// Wait for the writer to lay down its intent.
+			<-block
+			start = timeutil.Now()
+			if _, err := db.Get(ctx, key); err != nil {
+				done <- err
+			}
+			close(done)
+		}()
+
+		err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := txn.Put(ctx, key, "txn-value"); err != nil {
+				close(block)
+				return err
+			}
+			// Unblock the writer.
+			close(block)
+			return fmt.Errorf("test err causing rollback")
+		})
+		if !testutils.IsError(err, "test err causing rollback") {
+			t.Fatal(err)
+		}
+
+		// Wait for the reader.
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		dur := timeutil.Since(start)
+
+		// It's likely that the get always takes less than 2s (that's when a txn is
+		// considered abandoned by a pusher), so the timeout below needs to stay below
+		// that for this test to be meaningful.
+		if dur > 800*time.Millisecond {
+			t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+		}
+	}
+}
+
+// Test that a transaction can be rolled back even with a canceled context.
+// This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
+func TestRollbackWithCanceledContextBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	key := roachpb.Key("a")
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		cancel()
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+}
+
+// This test is like TestRollbackWithCanceledContextBasic, except that, instead
+// of the ctx being canceled before the rollback is sent, this time it is
+// canceled after the rollback is sent. So, the first rollback is expected to
+// fail, and we're testing that a 2nd one is sent.
+func TestRollbackWithCanceledContextInsidious(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Add a request filter which cancels the ctx when it sees a rollback.
+	var storeKnobs storage.StoreTestingKnobs
+	key := roachpb.Key("a")
+	ctx, cancel := context.WithCancel(context.Background())
+	var rollbacks int
+	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if !ba.IsSingleEndTransactionRequest() {
+			return nil
+		}
+		et := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		if !et.Commit && et.Key.Equal(key) {
+			rollbacks++
+			cancel()
+		}
+		return nil
+	}
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	defer s.Stopper().Stop(context.Background())
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+	if rollbacks != 2 {
+		t.Fatalf("expected 2 rollbacks, got: %d", rollbacks)
 	}
 }

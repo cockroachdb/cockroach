@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
 
 package security
 
@@ -51,8 +49,9 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 		return nil, err
 	}
 
-	notBefore := timeutil.Now().Add(validFrom)
-	notAfter := notBefore.Add(lifetime)
+	now := timeutil.Now()
+	notBefore := now.Add(validFrom)
+	notAfter := now.Add(lifetime)
 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -97,6 +96,20 @@ func GenerateCA(signer crypto.Signer, lifetime time.Duration) ([]byte, error) {
 	return certBytes, nil
 }
 
+func checkLifetimeAgainstCA(cert, ca *x509.Certificate) error {
+	if ca.NotAfter.After(cert.NotAfter) || ca.NotAfter.Equal(cert.NotAfter) {
+		return nil
+	}
+
+	now := timeutil.Now()
+	// Truncate the lifetime to round hours, the maximum "pretty" duration.
+	niceCALifetime := ca.NotAfter.Sub(now).Hours()
+	niceCertLifetime := cert.NotAfter.Sub(now).Hours()
+	return errors.Errorf("CA lifetime is %fh, shorter than the requested %fh. "+
+		"Renew CA certificate, or rerun with --lifetime=%dh for a shorter duration.",
+		niceCALifetime, niceCertLifetime, int64(niceCALifetime))
+}
+
 // GenerateServerCert generates a server certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the node public key, the certificate lifetime,
 // and the list of hosts/ip addresses this certificate applies to.
@@ -107,24 +120,67 @@ func GenerateServerCert(
 	lifetime time.Duration,
 	hosts []string,
 ) ([]byte, error) {
+	// Create template for user "NodeUser".
 	template, err := newTemplate(NodeUser, lifetime)
 	if err != nil {
 		return nil, err
 	}
 
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
 	// Only server authentication is allowed.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
-	if hosts != nil {
-		for _, h := range hosts {
-			if ip := net.ParseIP(h); ip != nil {
-				template.IPAddresses = append(template.IPAddresses, ip)
-			} else {
-				template.DNSNames = append(template.DNSNames, h)
-			}
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
 		}
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, nodePublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
+// GenerateUIServerCert generates a server certificate for the Admin UI and returns the cert bytes.
+// Takes in the CA cert and private key, the UI cert public key, the certificate lifetime,
+// and the list of hosts/ip addresses this certificate applies to.
+func GenerateUIServerCert(
+	caCert *x509.Certificate,
+	caPrivateKey crypto.PrivateKey,
+	certPublicKey crypto.PublicKey,
+	lifetime time.Duration,
+	hosts []string,
+) ([]byte, error) {
+	// Use the first host as the CN. We still place all in the alternative subject name.
+	template, err := newTemplate(hosts[0], lifetime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
+	// Only server authentication is allowed.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, certPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +204,14 @@ func GenerateClientCert(
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
+	// Create template for "user".
 	template, err := newTemplate(user, lifetime)
 	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
 		return nil, err
 	}
 

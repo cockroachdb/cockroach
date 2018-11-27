@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt.r.tracy@gmail.com)
 
 /*
 Package ts provides a basic time series datastore on top of the underlying
@@ -84,7 +82,7 @@ different machines or disks.
 
 This is done by creating a "source key", typically a node or store ID, which is
 an optional identifier that is separate from the series name itself. The source
-key is are appended to the key as a suffix, after the series name and timestamp;
+key is appended to the key as a suffix, after the series name and timestamp;
 this means that data that is from the same series and time period, but from
 different nodes, will be stored contiguously in the key space. Data from all
 sources in a series can thus be queried in a single scan.

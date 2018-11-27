@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package util
 
@@ -23,7 +21,7 @@ import (
 
 func testSmallTrace2(t *testing.T) {
 	s := GetSmallTrace(2)
-	if !strings.Contains(s, "util.testSmallTrace:32,util.TestGenerateSmallTrace:36") {
+	if !strings.Contains(s, "util.testSmallTrace:30,util.TestGenerateSmallTrace:34") {
 		t.Fatalf("trace not generated properly: %q", s)
 	}
 }

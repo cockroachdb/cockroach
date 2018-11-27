@@ -15,11 +15,11 @@
 package storage
 
 import (
+	"context"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -40,14 +40,11 @@ const (
 // replica up with a snapshot to their range.
 type raftSnapshotQueue struct {
 	*baseQueue
-	clock *hlc.Clock
 }
 
 // newRaftSnapshotQueue returns a new instance of raftSnapshotQueue.
-func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raftSnapshotQueue {
-	rq := &raftSnapshotQueue{
-		clock: clock,
-	}
+func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
+	rq := &raftSnapshotQueue{}
 	rq.baseQueue = newBaseQueue(
 		"raftsnapshot", rq, store, g,
 		queueConfig{
@@ -56,6 +53,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raf
 			// leaseholder. Operating on a replica without holding the lease is the
 			// reason Raft snapshots cannot be performed by the replicateQueue.
 			needsLease:           false,
+			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
@@ -67,7 +65,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raf
 }
 
 func (rq *raftSnapshotQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	// If a follower needs a snapshot, enqueue at the highest priority.
 	if status := repl.RaftStatus(); status != nil {
@@ -85,7 +83,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 }
 
 func (rq *raftSnapshotQueue) process(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, _ *config.SystemConfig,
 ) error {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
@@ -113,9 +111,30 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas)
 	}
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
+
+	// NB: if the snapshot fails because of an overlapping replica on the
+	// recipient which is also waiting for a snapshot, the "smart" thing is to
+	// send that other snapshot with higher priority. The problem is that the
+	// leader for the overlapping range may not be this node. This happens
+	// typically during splits and merges when overly aggressive log truncations
+	// occur.
+	//
+	// For splits, the overlapping range will be a replica of the pre-split
+	// range that needs a snapshot to catch it up across the split trigger.
+	//
+	// For merges, the overlapping replicas belong to ranges since subsumed by
+	// this range. In particular, there can be many of them if merges apply in
+	// rapid succession. The leftmost replica is the most important one to catch
+	// up, as it will absorb all of the overlapping replicas when caught up past
+	// all of the merges.
+	//
+	// We're currently not handling this and instead rely on the quota pool to
+	// make sure that log truncations won't require snapshots for healthy
+	// followers.
+
 	// Report the snapshot status to Raft, which expects us to do this once
 	// we finish sending the snapshot.
-	repl.reportSnapshotStatus(uint64(id), err)
+	repl.reportSnapshotStatus(ctx, id, err)
 	return err
 }
 
@@ -123,6 +142,6 @@ func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
 	return raftSnapshotQueueTimerDuration
 }
 
-func (rq *raftSnapshotQueue) purgatoryChan() <-chan struct{} {
+func (rq *raftSnapshotQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }

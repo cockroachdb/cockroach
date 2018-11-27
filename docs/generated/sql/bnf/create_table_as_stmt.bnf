@@ -1,0 +1,5 @@
+create_table_as_stmt ::=
+	'CREATE' 'TABLE' table_name '(' name ( ( ',' name ) )* ')' 'AS' select_stmt
+	| 'CREATE' 'TABLE' table_name  'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' name ( ( ',' name ) )* ')' 'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name  'AS' select_stmt

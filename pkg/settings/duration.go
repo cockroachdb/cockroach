@@ -15,7 +15,6 @@
 package settings
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,20 +24,30 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "duration" is updated.
 type DurationSetting struct {
+	common
 	defaultValue time.Duration
-	v            int64
 	validateFn   func(time.Duration) error
 }
 
 var _ Setting = &DurationSetting{}
 
 // Get retrieves the duration value in the setting.
-func (d *DurationSetting) Get() time.Duration {
-	return time.Duration(atomic.LoadInt64(&d.v))
+func (d *DurationSetting) Get(sv *Values) time.Duration {
+	return time.Duration(sv.getInt64(d.slotIdx))
 }
 
-func (d *DurationSetting) String() string {
-	return EncodeDuration(d.Get())
+func (d *DurationSetting) String(sv *Values) string {
+	return EncodeDuration(d.Get(sv))
+}
+
+// Encoded returns the encoded value of the current value of the setting.
+func (d *DurationSetting) Encoded(sv *Values) string {
+	return d.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (d *DurationSetting) EncodedDefault() string {
+	return EncodeDuration(d.defaultValue)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -56,16 +65,22 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 	return nil
 }
 
-func (d *DurationSetting) set(v time.Duration) error {
+// Override changes the setting without validation.
+// For testing usage only.
+func (d *DurationSetting) Override(sv *Values, v time.Duration) {
+	sv.setInt64(d.slotIdx, int64(v))
+}
+
+func (d *DurationSetting) set(sv *Values, v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreInt64(&d.v, int64(v))
+	sv.setInt64(d.slotIdx, int64(v))
 	return nil
 }
 
-func (d *DurationSetting) setToDefault() {
-	if err := d.set(d.defaultValue); err != nil {
+func (d *DurationSetting) setToDefault(sv *Values) {
+	if err := d.set(sv, d.defaultValue); err != nil {
 		panic(err)
 	}
 }
@@ -102,20 +117,4 @@ func RegisterValidatedDurationSetting(
 	}
 	register(key, desc, setting)
 	return setting
-}
-
-// TestingSetDuration returns a mock, unregistered string setting for testing.
-// See TestingSetBool for more details.
-func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
-	saved := *s
-	*s = &DurationSetting{v: int64(v)}
-	return func() {
-		*s = saved
-	}
-}
-
-// TestingDuration returns a one off, unregistered duration setting for test use
-// only.
-func TestingDuration(v time.Duration) *DurationSetting {
-	return &DurationSetting{v: int64(v)}
 }

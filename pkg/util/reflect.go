@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package util
 
@@ -20,6 +18,8 @@ import "reflect"
 
 // EqualPtrFields uses reflection to check two "mirror" structures for matching pointer fields that
 // point to the same object. Used to verify cloning/deep copy functions.
+//
+// Returns the names of equal pointer fields.
 func EqualPtrFields(src, dst reflect.Value, prefix string) []string {
 	t := dst.Type()
 	if t.Kind() != reflect.Struct {

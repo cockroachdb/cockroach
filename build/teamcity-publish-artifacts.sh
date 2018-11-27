@@ -1,45 +1,36 @@
 #!/usr/bin/env bash
 
 # Any arguments to this script are passed through unmodified to
-# ./pkg/cmd/publish-artifacts.
+# ./build/teamcity-publish-s3-binaries.
 
 set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
-echo 'starting release build'
-cat .buildinfo/tag || true
-cat .buildinfo/rev || true
-build/builder.sh git status
+build/teamcity-publish-s3-binaries.sh "$@"
 
-build/builder.sh go install ./pkg/cmd/publish-artifacts
+# When publishing a release, build and publish a docker image.
+if [ "$TEAMCITY_BUILDCONF_NAME" == 'Publish Releases' ]; then
+  # Unstable releases go to a special cockroach-unstable image name, while
+  # stable releases go to the official cockroachdb/cockroach image name.
+  # According to semver rules, non-final releases can be distinguished
+  # by the presence of a hyphen in the version number.
+  image=docker.io/cockroachdb/cockroach-unstable
+  if [[ "$TC_BUILD_BRANCH" != *-* ]]; then
+    image=docker.io/cockroachdb/cockroach
+  fi
 
-echo 'installed release builder'
-cat .buildinfo/tag || true
-cat .buildinfo/rev || true
-build/builder.sh git status
+  cp cockroach.linux-2.6.32-gnu-amd64 build/deploy/cockroach
+  docker build --no-cache --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
 
-build/builder.sh env \
-	AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-	AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-	TC_BUILD_BRANCH="$TC_BUILD_BRANCH" \
-	publish-artifacts "$@"
+  TYPE=$(go env GOOS)
 
-echo 'built and uploaded artifacts'
-cat .buildinfo/tag || true
-cat .buildinfo/rev || true
-build/builder.sh git status
+  # For the acceptance tests that run without Docker.
+  ln -s cockroach.linux-2.6.32-gnu-amd64 cockroach
+  build/builder.sh mkrelease $TYPE testbuild TAGS=acceptance PKG=./pkg/acceptance
+  (cd pkg/acceptance && ./acceptance.test -l ./artifacts -i $image -b /cockroach/cockroach -test.v -test.timeout -5m) &> ./artifacts/publish-acceptance.log
 
-if [ "$TC_BUILD_BRANCH" != master ]; then
-	image=docker.io/cockroachdb/cockroach
-
-	cp cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
-	docker build --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
-
-	build/builder.sh make TYPE=release-linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
-	(cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m)
-
-	sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
-	docker push "$image:latest"
-	docker push "$image:$TC_BUILD_BRANCH"
+  sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
+  docker push "$image:latest"
+  docker push "$image:$TC_BUILD_BRANCH"
 fi

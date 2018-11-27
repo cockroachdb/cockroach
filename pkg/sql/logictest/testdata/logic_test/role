@@ -1,0 +1,129 @@
+# LogicTest: local local-opt
+
+query T colnames
+SHOW ROLES
+----
+role_name
+admin
+
+query TTB colnames
+SHOW GRANTS ON ROLE
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR root
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin FOR root
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR testuser
+----
+role_name  member  is_admin
+
+query TTB colnames
+SHOW GRANTS ON ROLE testuser,admin FOR testuser,admin
+----
+role_name  member  is_admin
+
+# Test the "public" pseudo-role.
+
+statement error role name "public" is reserved
+CREATE USER public
+
+statement error cannot drop special role public
+DROP USER public
+
+statement ok
+CREATE DATABASE publicdb;
+
+statement ok
+CREATE DATABASE privatedb;
+
+statement ok
+CREATE TABLE publicdb.publictable (k int)
+
+statement ok
+CREATE TABLE publicdb.privatetable (k int)
+
+statement ok
+CREATE TABLE privatedb.publictable (k int)
+
+statement ok
+CREATE TABLE privatedb.privatetable (k int)
+
+statement ok
+GRANT GRANT,SELECT ON DATABASE publicdb TO public
+
+statement ok
+GRANT GRANT,SELECT ON publicdb.publictable TO public
+
+statement ok
+GRANT GRANT,SELECT ON privatedb.publictable TO public
+
+user testuser
+
+query T
+SHOW DATABASES
+----
+publicdb
+
+query T
+SHOW TABLES FROM publicdb
+----
+publictable
+
+query T
+SHOW TABLES FROM privatedb
+----
+publictable
+
+statement ok
+SELECT * FROM publicdb.publictable
+
+statement error user testuser does not have SELECT privilege on relation privatetable
+SELECT * FROM publicdb.privatetable
+
+statement ok
+SELECT * FROM privatedb.publictable
+
+statement error user testuser does not have SELECT privilege on relation privatetable
+SELECT * FROM privatedb.privatetable
+
+statement error user testuser does not have INSERT privilege on relation publictable
+INSERT INTO publicdb.publictable VALUES (1)
+
+# Give ourselves more permissions.
+statement ok
+GRANT INSERT ON publicdb.publictable TO public
+
+statement ok
+INSERT INTO publicdb.publictable VALUES (1)
+
+# Revoke public access.
+statement ok
+REVOKE ALL ON publicdb.publictable FROM public
+
+statement error user testuser does not have SELECT privilege on relation publictable
+SELECT * FROM publicdb.publictable
+
+statement error user testuser does not have INSERT privilege on relation publictable
+INSERT INTO publicdb.publictable VALUES (1)
+
+query T
+SHOW TABLES FROM publicdb
+----

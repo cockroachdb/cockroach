@@ -11,13 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package main
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -30,12 +29,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -65,7 +62,7 @@ func newRand() *rand.Rand {
 // a zipf distribution which tilts towards smaller IDs (and hence more
 // contention).
 type zeroSum struct {
-	*localcluster.Cluster
+	*localcluster.LocalCluster
 	numAccounts int
 	chaosType   string
 	accounts    struct {
@@ -85,11 +82,11 @@ type zeroSum struct {
 	}
 }
 
-func newZeroSum(c *localcluster.Cluster, numAccounts int, chaosType string) *zeroSum {
+func newZeroSum(c *localcluster.LocalCluster, numAccounts int, chaosType string) *zeroSum {
 	z := &zeroSum{
-		Cluster:     c,
-		numAccounts: numAccounts,
-		chaosType:   chaosType,
+		LocalCluster: c,
+		numAccounts:  numAccounts,
+		chaosType:    chaosType,
 	}
 	z.accounts.m = make(map[uint64]struct{})
 	return z
@@ -115,7 +112,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 }
 
 func (z *zeroSum) setup() uint32 {
-	db := z.DB[0]
+	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -132,7 +129,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 	tableIDQuery := `
 SELECT tables.id FROM system.namespace tables
-  JOIN system.namespace dbs ON dbs.id = tables.parentid
+  JOIN system.namespace dbs ON dbs.id = tables."parentID"
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32
@@ -172,8 +169,12 @@ func (z *zeroSum) worker() {
 			continue
 		}
 
-		db := z.DB[z.RandNode(r.Intn)]
-		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
+		db := z.Nodes[z.RandNode(r.Intn)].DB()
+		if db == nil {
+			// Node is currently offline.
+			continue
+		}
+		err := crdb.ExecuteTx(context.Background(), db, nil, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
 				return err
@@ -221,7 +222,6 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 
 		key := keys.MakeTablePrefix(tableID)
 		key = encoding.EncodeVarintAscending(key, int64(zipf.Uint64()))
-		key = keys.MakeRowSentinelKey(key)
 
 		switch r.Intn(2) {
 		case 0:
@@ -253,7 +253,7 @@ func (z *zeroSum) chaosSimple() {
 
 	time.Sleep(d)
 	fmt.Printf("chaos: starting node %d\n", nodeIdx+1)
-	node.Start()
+	node.Start(context.Background())
 }
 
 func (z *zeroSum) chaosFlappy() {
@@ -274,7 +274,7 @@ func (z *zeroSum) chaosFlappy() {
 
 		d = time.Duration(15+r.Intn(30)) * time.Second
 		fmt.Printf("chaos %d: starting node %d, next event in %s\n", i, nodeIdx+1, d)
-		node.Start()
+		node.Start(context.Background())
 	}
 }
 
@@ -294,9 +294,7 @@ func (z *zeroSum) chaos() {
 func (z *zeroSum) check(d time.Duration) {
 	for {
 		time.Sleep(d)
-
-		client := z.Clients[z.RandNode(rand.Intn)]
-		if err := client.CheckConsistency(context.Background(), keys.LocalMax, keys.MaxKey, false); err != nil {
+		if err := cluster.Consistent(context.Background(), z.LocalCluster, z.RandNode(rand.Intn)); err != nil {
 			z.maybeLogError(err)
 		}
 	}
@@ -313,7 +311,7 @@ func (z *zeroSum) verify(d time.Duration) {
 		q := `SELECT count(*), sum(balance) FROM accounts`
 		var accounts uint64
 		var total int64
-		db := z.DB[z.RandNode(rand.Intn)]
+		db := z.Nodes[z.RandNode(rand.Intn)].DB()
 		if err := db.QueryRow(q).Scan(&accounts, &total); err != nil {
 			z.maybeLogError(err)
 			continue
@@ -330,25 +328,32 @@ func (z *zeroSum) verify(d time.Duration) {
 
 func (z *zeroSum) rangeInfo() (int, []int) {
 	replicas := make([]int, len(z.Nodes))
-	client := z.Clients[z.RandNode(rand.Intn)]
-	rows, err := client.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
+	db, err := z.NewDB(context.Background(), z.RandNode(rand.Intn))
 	if err != nil {
 		z.maybeLogError(err)
 		return -1, replicas
 	}
-	for _, row := range rows {
-		desc := &roachpb.RangeDescriptor{}
-		if err := row.ValueProto(desc); err != nil {
-			log.Errorf(context.Background(), "%s: unable to unmarshal range descriptor", row.Key)
-			atomic.AddUint64(&z.stats.errors, 1)
-			continue
+	rows, err := db.Query(`SELECT array_length(replicas, 1) FROM crdb_internal.ranges`)
+	if err != nil {
+		z.maybeLogError(err)
+		return -1, replicas
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		var numReplicas int
+		if err := rows.Scan(&numReplicas); err != nil {
+			z.maybeLogError(err)
+			return -1, replicas
 		}
-		for _, replica := range desc.Replicas {
-			replicas[replica.NodeID-1]++
+		for i := 0; i < numReplicas; i++ {
+			replicas[i]++
 		}
+		count++
 	}
 
-	return len(rows), replicas
+	return count, replicas
 }
 
 func (z *zeroSum) rangeStats(d time.Duration) {
@@ -411,10 +416,32 @@ func (z *zeroSum) monitor(d time.Duration) {
 func main() {
 	flag.Parse()
 
-	c := localcluster.New(*numNodes, false /* separateAddrs */)
+	cockroachBin := func() string {
+		bin := "./cockroach"
+		if _, err := os.Stat(bin); os.IsNotExist(err) {
+			bin = "cockroach"
+		} else if err != nil {
+			panic(err)
+		}
+		return bin
+	}()
+
+	perNodeCfg := localcluster.MakePerNodeFixedPortsCfg(*numNodes)
+
+	cfg := localcluster.ClusterConfig{
+		DataDir:     "cockroach-data-zerosum",
+		Binary:      cockroachBin,
+		NumNodes:    *numNodes,
+		NumWorkers:  *workers,
+		AllNodeArgs: flag.Args(),
+		DB:          "zerosum",
+		PerNodeCfg:  perNodeCfg,
+	}
+
+	c := &localcluster.LocalCluster{Cluster: localcluster.New(cfg)}
 	defer c.Close()
 
-	log.SetExitFunc(func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code int) {
 		c.Close()
 		os.Exit(code)
 	})
@@ -429,7 +456,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	c.Start("zerosum", *workers, localcluster.CockroachBin, flag.Args(), nil, nil)
+	c.Start(context.Background())
 
 	z := newZeroSum(c, *numAccounts, *chaosType)
 	z.run(*workers, *monkeys)

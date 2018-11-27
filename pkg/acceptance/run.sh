@@ -10,4 +10,6 @@ set -euxo pipefail
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
-make test PKG=./pkg/acceptance TAGS=acceptance TESTFLAGS="${TESTFLAGS--v -nodes 3} -l $TMPDIR"
+# For the acceptance tests that run without Docker.
+make build
+make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v} -l $TMPDIR"

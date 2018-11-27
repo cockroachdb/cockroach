@@ -11,16 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Cuong Do (cdo@cockroachlabs.com)
 
 syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "cockroach/pkg/config/config.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
-import "cockroach/pkg/storage/liveness.proto";
+import "config/zone.proto";
+import "jobs/jobspb/jobs.proto";
+import "server/serverpb/status.proto";
+import "storage/engine/enginepb/mvcc.proto";
+import "storage/storagepb/liveness.proto";
+import "storage/storagepb/log.proto";
+import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
@@ -115,6 +117,12 @@ message TableDetailsResponse {
 
     // default_value is the default value of this column.
     string default_value = 4;
+
+    // generation_expression is the generator expression if the column is computed.
+    string generation_expression = 5;
+
+    // hidden is whether this column is hidden.
+    bool hidden = 6;
   }
 
   message Index {
@@ -152,7 +160,7 @@ message TableDetailsResponse {
   // consider removing or renaming this field to reflect that difference. See
   // Github issue #5435 for more information.
   int64 range_count = 4;
-  // create_table_statement is the output of "SHOW CREATE TABLE" for this table;
+  // create_table_statement is the output of "SHOW CREATE" for this table;
   // it is a SQL statement that would re-create the table's current schema if
   // executed.
   string create_table_statement = 5;
@@ -192,6 +200,9 @@ message TableStatsResponse {
   // stats is the summation of MVCCStats for all replicas of this table
   // across the cluster.
   cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  // approximate_disk_bytes is an approximation of the disk space (in bytes)
+  // used for all replicas of this table across the cluster.
+  uint64 approximate_disk_bytes = 6;
   // MissingNode represents information on a node which should contain data
   // for this table, but could not be contacted during this request.
   message MissingNode {
@@ -203,6 +214,21 @@ message TableStatsResponse {
   // A list of nodes which should contain data for this table (according to
   // cluster metadata), but could not be contacted during this request.
   repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
+}
+
+// NonTableStatsRequest requests statistics on cluster data ranges that do not
+// belong to SQL tables.
+message NonTableStatsRequest {
+}
+
+// NonTableStatsResponse returns statistics on various cluster data ranges
+// that do not belong to SQL tables. The statistics for each range are returned
+// as a TableStatsResponse.
+message NonTableStatsResponse {
+  // Information on time series ranges.
+  TableStatsResponse time_series_stats = 1;
+  // Information for remaining (non-table, non-time-series) ranges.
+  TableStatsResponse internal_use_stats = 2;
 }
 
 // UsersRequest requests a list of users.
@@ -225,6 +251,11 @@ message UsersResponse {
 message EventsRequest {
   string type = 1;
   int64 target_id = 2;
+  // limit is the total number of results that are retrieved by the query. If
+  // this is omitted or set to 0, the default maximum number of results are
+  // returned. When set to > 0, at most only that number of results are
+  // returned. When set to < 0, an unlimited number of results are returned.
+  int32 limit = 3;
 }
 
 // EventsResponse contains a set of event log entries. This is always limited
@@ -244,7 +275,7 @@ message EventsResponse {
     int64 reporting_id = 4 [(gogoproto.customname) = "ReportingID"];
 
     // info has more detailed information for the event. The contents vary
-    // depending on the vent.
+    // depending on the event.
     string info = 5;
 
     // unique_id is a unique identifier for this event.
@@ -293,7 +324,12 @@ message ClusterRequest {
 
 // ClusterResponse contains metadata for the cluster.
 message ClusterResponse {
+  // The unique ID used to identify this cluster.
   string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  // True if diagnostics reporting is enabled for the cluster.
+  bool reporting_enabled = 2;
+  // True if enterprise features are enabled for the cluster.
+  bool enterprise_enabled = 3;
 }
 
 enum DrainMode {
@@ -324,6 +360,38 @@ message DrainRequest {
 // modes which are activated after having processing the request.
 message DrainResponse {
   repeated int32 on = 1;
+}
+
+// DecommissionStatusRequest requests the decommissioning status for the
+// specified or, if none are specified, all nodes.
+message DecommissionStatusRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
+// DecommissionRequest requests the server to set the Decommissioning flag on
+// all nodes specified by 'node_id' to the value of 'decommissioning'.
+//
+// If no 'node_id' is given, targets the recipient node.
+message DecommissionRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  bool decommissioning = 2;
+}
+
+// DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
+message DecommissionStatusResponse {
+  message Status {
+    int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    bool is_live = 2;
+    // The number of replicas on the node, computed by scanning meta2 ranges.
+    int64 replica_count = 3;
+    bool decommissioning = 4;
+    bool draining = 5;
+  }
+  // Status of all affected nodes.
+  repeated Status status = 2 [(gogoproto.nullable) = false];
 }
 
 // SettingsRequest inquires what are the current settings in the cluster.
@@ -360,6 +428,184 @@ message LivenessRequest {
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
   repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.storage.NodeLivenessStatus> statuses = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
+// JobsRequest requests system job information of the given status and type.
+message JobsRequest {
+  int32 limit = 1;
+  string status = 2;
+  cockroach.sql.jobs.jobspb.Type type = 3;
+}
+
+// JobsResponse contains the job record for each matching job.
+message JobsResponse {
+  message Job {
+    int64 id = 1 [(gogoproto.customname) = "ID"];
+    string type = 2;
+    string description = 3;
+    string username = 4;
+    repeated uint32 descriptor_ids = 5 [
+      (gogoproto.customname) = "DescriptorIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+    string status = 6;
+    google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp finished = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
+    float fraction_completed = 11;
+    string error = 12;
+    // highwater_timestamp is the highwater timestamp returned as normal
+    // timestamp. This is appropriate for display to humans.
+    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+    // highwater_decimal is the highwater timestamp in the proprietary decimal
+    // form used by logical timestamps internally. This is appropriate to pass
+    // to a "AS OF SYSTEM TIME" SQL statement.
+    string highwater_decimal = 14;
+    string running_status = 15;
+  }
+
+  repeated Job jobs = 1 [(gogoproto.nullable) = false];
+}
+
+// LocationsRequest requests system locality location information.
+message LocationsRequest {
+}
+
+// JobsResponse contains the job record for each matching job.
+message LocationsResponse {
+  message Location {
+    string locality_key = 1;
+    string locality_value = 2;
+    double latitude = 3;
+    double longitude = 4;
+  }
+
+  repeated Location locations = 1 [(gogoproto.nullable) = false];
+}
+
+// RangeLogRequest request the history of a range from the range log.
+message RangeLogRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  // If RangeID is 0, returns range log history without filtering by range.
+  int64 range_id = 1;
+  // limit is the total number of results that are retrieved by the query. If
+  // this is omitted or set to 0, the default maximum number of results are
+  // returned. When set to > 0, at most only that number of results are
+  // returned. When set to < 0, an unlimited number of results are returned.
+  int32 limit = 2;
+}
+
+// RangeLogResponse contains a list of entries from the range log table.
+message RangeLogResponse {
+  // To avoid porting the pretty printing of keys and descriptors to
+  // javascript, they will be precomputed on the serverside.
+  message PrettyInfo {
+    string updated_desc = 1;
+    string new_desc = 2;
+    string added_replica = 3;
+    string removed_replica = 4;
+    string reason = 5;
+    string details = 6;
+  }
+  message Event {
+    storage.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
+  }
+  reserved 1; // Previously used.
+  repeated Event events = 2 [(gogoproto.nullable) = false];
+}
+
+// QueryPlanRequest requests the query plans for a SQL string.
+message QueryPlanRequest {
+  // query is the SQL query string.
+  string query = 1;
+}
+
+// QueryPlanResponse contains the query plans for a SQL string (currently only
+// the distsql physical query plan).
+message QueryPlanResponse {
+  string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
+}
+
+message DataDistributionRequest {
+}
+
+message DataDistributionResponse {
+  message ZoneConfig {
+    // zone_name is ".default" for the default zone config.
+    // Otherwise, it's of the form [database.]table[@index[.partition]]
+    string zone_name = 1;
+
+    config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
+
+    reserved 3;
+
+    // config_sql is the SQL representation of config.
+    string config_sql = 4 [(gogoproto.customname) = "ConfigSQL"];
+  }
+
+  message TableInfo {
+    map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    int64 zone_config_id = 2;
+    google.protobuf.Timestamp dropped_at = 3 [(gogoproto.stdtime) = true];
+  }
+
+  message DatabaseInfo {
+    // By table name.
+    map<string, TableInfo> table_info = 1 [(gogoproto.nullable) = false];
+  }
+
+  // By database name.
+  map<string, DatabaseInfo> database_info = 1 [(gogoproto.nullable) = false];
+
+  reserved 2;
+
+  // By zone name.
+  map<string, ZoneConfig> zone_configs = 3 [(gogoproto.nullable) = false];
+}
+
+  // MetricMetadataRequest requests metadata for all metrics.
+message MetricMetadataRequest {
+}
+
+// MetricMetadataResponse contains the metadata for all metics.
+message MetricMetadataResponse {
+  map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
+}
+
+message EnqueueRangeRequest {
+  // The node on which the queue should process the range. If node_id is 0,
+  // the request will be forwarded to all other nodes.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The name of the replica queue to run the range through. Matched against
+  // each queue's name field. See the implementation of baseQueue for details.
+  string queue = 2;
+  // The ID of the range to run through the queue.
+  int32 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // If set, run the queue's process method without first checking whether the
+  // replica should be processed by calling shouldQueue.
+  bool skip_should_queue = 4;
+}
+
+message EnqueueRangeResponse {
+  message Details {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // All trace events collected while processing the range in the queue.
+    repeated TraceEvent events = 2;
+    // The error message from the queue's processing, if any.
+    string error = 3;
+  }
+  repeated Details details = 1;
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -400,10 +646,21 @@ service Admin {
     };
   }
 
+  // Example URL: /_admin/v1/nontablestats
+  rpc NonTableStats(NonTableStatsRequest) returns (NonTableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/nontablestats"
+    };
+  }
+
   // Example URLs:
-  // - /_admin/v1/events?type=create_table
-  // - /_admin/v1/events?type=drop_table&target_id=4
+  // Example URLs:
   // - /_admin/v1/events
+  // - /_admin/v1/events?limit=100
+  // - /_admin/v1/events?type=create_table
+  // - /_admin/v1/events?type=create_table&limit=100
+  // - /_admin/v1/events?type=drop_table&target_id=4
+  // - /_admin/v1/events?type=drop_table&target_id=4&limit=100
   rpc Events(EventsRequest) returns (EventsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/events"
@@ -474,12 +731,85 @@ service Admin {
     };
   }
 
+  // Jobs returns the job records for all jobs of the given status and type.
+  rpc Jobs(JobsRequest) returns (JobsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/jobs"
+    };
+  }
+
+  // Locations returns the locality location records.
+  rpc Locations(LocationsRequest) returns (LocationsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/locations"
+    };
+  }
+
+  // QueryPlan returns the query plans for a SQL string.
+  rpc QueryPlan(QueryPlanRequest) returns (QueryPlanResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queryplan"
+    };
+  }
+
   // Drain puts the node into the specified drain mode(s) and optionally
   // instructs the process to terminate.
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/drain"
       body: "*"
+    };
+  }
+
+  // Decommission puts the node(s) into the specified decommissioning state.
+  rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // DecommissionStatus retrieves the decommissioning status of the specified nodes.
+  rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // URL: /_admin/v1/rangelog
+  // URL: /_admin/v1/rangelog?limit=100
+  // URL: /_admin/v1/rangelog/1
+  // URL: /_admin/v1/rangelog/1?limit=100
+  rpc RangeLog(RangeLogRequest) returns (RangeLogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/rangelog"
+      additional_bindings {
+        get: "/_admin/v1/rangelog/{range_id}"
+     }
+    };
+  }
+
+  rpc DataDistribution(DataDistributionRequest) returns (DataDistributionResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/data_distribution"
+    };
+  }
+
+  // URL: /_admin/v1/metricmetadata
+  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/metricmetadata"
+    };
+  }
+
+
+  // EnqueueRange runs the specified range through the specified queue on the
+  // range's leaseholder store, returning the detailed trace and error
+  // information from doing so. Parameters must be provided in the body of the
+  // POST request.
+  // For example:
+  //
+  // {
+  //   "queue": "raftlog",
+  //   "rangeId": 10
+  // }
+  rpc EnqueueRange(EnqueueRangeRequest) returns (EnqueueRangeResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/enqueue_range"
+      body : "*"
     };
   }
 }

@@ -11,35 +11,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package storage_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestComputeStatsForKeySpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
 	// Create a number of ranges using splits.
 	splitKeys := []string{"a", "c", "e", "g", "i"}
 	for _, k := range splitKeys {
-		key := []byte(k)
-		repl := mtc.stores[0].LookupReplica(key, roachpb.RKeyMin)
-		args := adminSplitArgs(key, key)
+		key := roachpb.Key(k)
+		repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
+		args := adminSplitArgs(key)
 		header := roachpb.Header{
 			RangeID: repl.RangeID,
 		}
@@ -50,7 +53,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 
 	// Wait for splits to finish.
 	testutils.SucceedsSoon(t, func() error {
-		repl := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
+		repl := mtc.stores[0].LookupReplica(roachpb.RKey("z"))
 		if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Key.Equal(roachpb.RKey("i")) {
 			return errors.Errorf("expected range %s to begin at key 'i'", repl)
 		}
@@ -78,12 +81,15 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		{"e", "i", 2, 1},
 	} {
 		start, end := tcase.startKey, tcase.endKey
-		stats, count := mtc.stores[0].ComputeStatsForKeySpan(
+		result, err := mtc.stores[0].ComputeStatsForKeySpan(
 			roachpb.RKey(start), roachpb.RKey(end))
-		if a, e := count, tcase.expectedRanges; a != e {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a, e := result.ReplicaCount, tcase.expectedRanges; a != e {
 			t.Errorf("Expected %d ranges in span [%s - %s], found %d", e, start, end, a)
 		}
-		if a, e := stats.LiveCount, tcase.expectedKeys; a != e {
+		if a, e := result.MVCC.LiveCount, tcase.expectedKeys; a != e {
 			t.Errorf("Expected %d keys in span [%s - %s], found %d", e, start, end, a)
 		}
 	}

@@ -11,16 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
 
 package privilege
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=Kind
@@ -57,6 +56,18 @@ func (k Kind) Mask() uint32 {
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
 	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
+}
+
+// ByName is a map of string -> kind value.
+var ByName = map[string]Kind{
+	"ALL":    ALL,
+	"CREATE": CREATE,
+	"DROP":   DROP,
+	"GRANT":  GRANT,
+	"SELECT": SELECT,
+	"INSERT": INSERT,
+	"DELETE": DELETE,
+	"UPDATE": UPDATE,
 }
 
 // List is a list of privileges.
@@ -140,31 +151,17 @@ func ListFromBitField(m uint32) List {
 	return ret
 }
 
-// Lists is a list of privilege lists
-type Lists []List
-
-// Contains returns whether the list of privilege lists contains exactly the
-// privilege list represented by bitfield m. This intentionally treats ALL and
-// {CREATE, ..., UPDATE} as distinct privilege lists.
-func (pls Lists) Contains(m uint32) bool {
-	for _, pl := range pls {
-		if pl.ToBitField() == m {
-			return true
+// ListFromStrings takes a list of strings and attempts to build a list of Kind.
+// We convert each string to uppercase and search for it in the ByName map.
+// If an entry is not found in ByName, an error is returned.
+func ListFromStrings(strs []string) (List, error) {
+	ret := make(List, len(strs))
+	for i, s := range strs {
+		k, ok := ByName[strings.ToUpper(s)]
+		if !ok {
+			return nil, errors.Errorf("not a valid privilege: %q", s)
 		}
+		ret[i] = k
 	}
-	return false
-}
-
-// String stringifies each constituent list of privileges, groups each inside of
-// {} braces, and joins them with " or ".
-//
-// Examples:
-//   {{SELECT}}.String() -> "{SELECT}"
-//   {{SELECT}, {SELECT, GRANT}}.String() -> "{SELECT} or {SELECT, GRANT}"
-func (pls Lists) String() string {
-	ret := make([]string, len(pls))
-	for i, pl := range pls {
-		ret[i] = fmt.Sprintf("{%s}", pl)
-	}
-	return strings.Join(ret, " or ")
+	return ret, nil
 }

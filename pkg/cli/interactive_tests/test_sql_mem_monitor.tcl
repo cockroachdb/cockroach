@@ -25,7 +25,7 @@ start_server $argv
 
 # Make some initial request to check the data is there and define the
 # baseline memory consumption.
-system "echo 'select * from information_schema.columns;' | $argv sql >/dev/null"
+system "echo 'select * from system.information_schema.columns;' | $argv sql >/dev/null"
 
 # What memory is currently consumed by the server?
 set vmem [ exec ps --no-headers o vsz -p [ exec cat server_pid ] ]
@@ -40,11 +40,11 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 # Set the max memory usage to the baseline plus some margin.
-send "ulimit -v [ expr {2*$vmem+400} ]\r"
+send "ulimit -v [ expr {3*$vmem/2} ]\r"
 eexpect ":/# "
 
 # Start a server with this limit set. The server will now run in the foreground.
-send "$argv start --insecure --no-redirect-stderr -s=path=logs/db \r"
+send "$argv start --insecure --max-sql-memory=25% --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 1
 
@@ -58,13 +58,17 @@ send "select 1;\r"
 eexpect "1 row"
 eexpect root@
 
+start_test "Ensure that memory over-allocation without monitoring crashes the server"
 # Now try to run a large-ish query on the client.
 # The query is a 4-way cross-join on information_schema.columns,
 # resulting in ~8 million rows loaded into memory when run on an
 # empty database.
-send "set database=information_schema;\r"
+send "set database=system;\r"
 eexpect root@
-send "select * from columns as a, columns as b, columns as c, columns as d limit 10;\r"
+# Disable query distribution to force in-memory computation.
+send "set distsql=off;\r"
+eexpect SET
+send "select * from (select * from information_schema.columns as a, information_schema.columns as b) full join (select * from information_schema.columns as c, information_schema.columns as d) on true limit 10;\r"
 
 # Check that the query crashed the server
 set spawn_id $shell_spawn_id
@@ -73,6 +77,7 @@ expect {
     "out of memory" {}
     "cannot allocate memory" {}
     "std::bad_alloc" {}
+    "Resource temporarily unavailable" {}
     timeout { handle_timeout "memory allocation error" }
 }
 eexpect ":/# "
@@ -81,10 +86,12 @@ eexpect ":/# "
 set spawn_id $client_spawn_id
 eexpect "bad connection"
 eexpect root@
+end_test
 
+start_test "Ensure that memory monitoring prevents crashes"
 # Re-launch a server with relatively lower limit for SQL memory
 set spawn_id $shell_spawn_id
-send "$argv start --insecure --max-sql-memory=150K --no-redirect-stderr -s=path=logs/db \r"
+send "$argv start --insecure --max-sql-memory=1000K --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 2
 
@@ -92,9 +99,9 @@ sleep 2
 set spawn_id $client_spawn_id
 send "select 1;\r"
 eexpect root@
-send "set database=information_schema;\r"
+send "set database=system;\r"
 eexpect root@
-send "select * from columns as a, columns as b, columns as c, columns as d limit 10;\r"
+send "select * from (select * from information_schema.columns as a, information_schema.columns as b) full join (select * from information_schema.columns as c, information_schema.columns as d) on true limit 10;\r"
 eexpect "memory budget exceeded"
 eexpect root@
 
@@ -102,5 +109,14 @@ eexpect root@
 send "select 1;\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# We just terminate, this will kill both server and client.
+interrupt
+eexpect eof
+
+set spawn_id $shell_spawn_id
+interrupt
+interrupt
+eexpect ":/# "
+send "exit\r"
+eexpect eof

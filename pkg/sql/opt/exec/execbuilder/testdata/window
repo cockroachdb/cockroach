@@ -1,0 +1,202 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE kv (
+  -- don't add column "a"
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
+)
+
+statement OK
+INSERT INTO kv VALUES
+(1, 2, 3, 1.0, 1, 'a', true),
+(3, 4, 5, 2, 8, 'a', true),
+(5, NULL, 5, 9.9, -321, NULL, false),
+(6, 2, 3, 4.4, 4.4, 'b', true),
+(7, 2, 2, 6, 7.9, 'b', true),
+(8, 4, 2, 3, 3, 'A', false)
+
+query TTT
+EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+sort                 ·      ·
+ │                   order  +variance,+k
+ └── window          ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL
+
+statement ok
+SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /kv/primary/1/v -> /2
+fetched: /kv/primary/1/d -> 1
+fetched: /kv/primary/1/s -> 'a'
+fetched: /kv/primary/3/v -> /4
+fetched: /kv/primary/3/d -> 8
+fetched: /kv/primary/3/s -> 'a'
+fetched: /kv/primary/5 -> NULL
+fetched: /kv/primary/5/d -> -321
+fetched: /kv/primary/6/v -> /2
+fetched: /kv/primary/6/d -> 4.4
+fetched: /kv/primary/6/s -> 'b'
+fetched: /kv/primary/7/v -> /2
+fetched: /kv/primary/7/d -> 7.9
+fetched: /kv/primary/7/s -> 'b'
+fetched: /kv/primary/8/v -> /4
+fetched: /kv/primary/8/d -> 3
+fetched: /kv/primary/8/s -> 'A'
+output row: [5 NULL]
+output row: [1 3.4501207708330056852]
+output row: [6 3.4501207708330056852]
+output row: [7 3.4501207708330056852]
+output row: [3 3.5355339059327376220]
+output row: [8 3.5355339059327376220]
+
+query TTTTT
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+sort                 ·         ·                                         (k int, stddev decimal)                                                                          ·
+ │                   order     +variance,+k                              ·                                                                                                ·
+ └── window          ·         ·                                         (k int, stddev decimal, variance decimal)                                                        ·
+      │              window 0  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
+      │              window 1  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
+      │              render 1  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
+      │              render 2  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
+      └── render     ·         ·                                         (k int, d decimal, d decimal, v int)                                                             d=d; k!=NULL; key(k)
+           │         render 0  (k)[int]                                  ·                                                                                                ·
+           │         render 1  (d)[decimal]                              ·                                                                                                ·
+           │         render 2  (d)[decimal]                              ·                                                                                                ·
+           │         render 3  (v)[int]                                  ·                                                                                                ·
+           └── scan  ·         ·                                         (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                    table     kv@primary                                ·                                                                                                ·
+·                    spans     ALL                                       ·                                                                                                ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
+----
+sort                 ·         ·                                                                            (k int, stddev decimal)                                                                          ·
+ │                   order     +variance,+k                                                                 ·                                                                                                ·
+ └── window          ·         ·                                                                            (k int, stddev decimal, variance decimal)                                                        ·
+      │              window 0  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      │              window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]   ·                                                                                                ·
+      │              render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      │              render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]   ·                                                                                                ·
+      └── render     ·         ·                                                                            (k int, d decimal, d decimal, "?column?" int, "?column?" string, "?column?" int)                 d=d; "?column?"=CONST; "?column?"=CONST; k!=NULL; key(k)
+           │         render 0  (k)[int]                                                                     ·                                                                                                ·
+           │         render 1  (d)[decimal]                                                                 ·                                                                                                ·
+           │         render 2  (d)[decimal]                                                                 ·                                                                                                ·
+           │         render 3  (v)[int]                                                                     ·                                                                                                ·
+           │         render 4  ('a')[string]                                                                ·                                                                                                ·
+           │         render 5  (100)[int]                                                                   ·                                                                                                ·
+           └── scan  ·         ·                                                                            (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                    table     kv@primary                                                                   ·                                                                                                ·
+·                    spans     ALL                                                                          ·                                                                                                ·
+
+query TTTTT
+EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
+----
+sort                 ·         ·                                                                            (k int, stddev decimal)                                                                          +k
+ │                   order     +k                                                                           ·                                                                                                ·
+ └── window          ·         ·                                                                            (k int, stddev decimal)                                                                          ·
+      │              window 0  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      │              render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      └── render     ·         ·                                                                            (k int, d decimal, "?column?" int, "?column?" string)                                            "?column?"=CONST; k!=NULL; key(k)
+           │         render 0  (k)[int]                                                                     ·                                                                                                ·
+           │         render 1  (d)[decimal]                                                                 ·                                                                                                ·
+           │         render 2  (v)[int]                                                                     ·                                                                                                ·
+           │         render 3  ('a')[string]                                                                ·                                                                                                ·
+           └── scan  ·         ·                                                                            (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                    table     kv@primary                                                                   ·                                                                                                ·
+·                    spans     ALL                                                                          ·                                                                                                ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
+----
+sort                 ·         ·                                                                                                  (k int, "?column?" decimal)                                                                      ·
+ │                   order     +variance,+k                                                                                       ·                                                                                                ·
+ └── window          ·         ·                                                                                                  (k int, "?column?" decimal, variance decimal)                                                    ·
+      │              window 0  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]                        ·                                                                                                ·
+      │              window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]                         ·                                                                                                ·
+      │              render 1  ((k)[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]  ·                                                                                                ·
+      │              render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]                         ·                                                                                                ·
+      └── render     ·         ·                                                                                                  (k int, d decimal, d decimal, "?column?" int, "?column?" string, "?column?" int, k int)          k=k; d=d; "?column?"=CONST; "?column?"=CONST; k!=NULL; key(k)
+           │         render 0  (k)[int]                                                                                           ·                                                                                                ·
+           │         render 1  (d)[decimal]                                                                                       ·                                                                                                ·
+           │         render 2  (d)[decimal]                                                                                       ·                                                                                                ·
+           │         render 3  (v)[int]                                                                                           ·                                                                                                ·
+           │         render 4  ('a')[string]                                                                                      ·                                                                                                ·
+           │         render 5  (100)[int]                                                                                         ·                                                                                                ·
+           │         render 6  (k)[int]                                                                                           ·                                                                                                ·
+           └── scan  ·         ·                                                                                                  (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                    table     kv@primary                                                                                         ·                                                                                                ·
+·                    spans     ALL                                                                                                ·                                                                                                ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
+----
+sort                           ·            ·                                                                                                              (max int, "?column?" decimal)                                                                    ·
+ │                             order        +variance                                                                                                      ·                                                                                                ·
+ └── window                    ·            ·                                                                                                              (max int, "?column?" decimal, variance decimal)                                                  ·
+      │                        window 0     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]                                    ·                                                                                                ·
+      │                        window 1     (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]                                     ·                                                                                                ·
+      │                        render 1     ((max((k)[int]))[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]  ·                                                                                                ·
+      │                        render 2     (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]                                     ·                                                                                                ·
+      └── render               ·            ·                                                                                                              (max int, d decimal, d decimal, "?column?" int, "?column?" string, "?column?" int)               d=d; "?column?"=CONST; "?column?"=CONST; weak-key(d,"?column?")
+           │                   render 0     (agg0)[int]                                                                                                    ·                                                                                                ·
+           │                   render 1     (agg1)[decimal]                                                                                                ·                                                                                                ·
+           │                   render 2     (agg1)[decimal]                                                                                                ·                                                                                                ·
+           │                   render 3     (agg2)[int]                                                                                                    ·                                                                                                ·
+           │                   render 4     ('a')[string]                                                                                                  ·                                                                                                ·
+           │                   render 5     (100)[int]                                                                                                     ·                                                                                                ·
+           └── group           ·            ·                                                                                                              (agg0 int, agg1 decimal, agg2 int)                                                               weak-key(agg1,agg2)
+                │              aggregate 0  max(k)                                                                                                         ·                                                                                                ·
+                │              aggregate 1  d                                                                                                              ·                                                                                                ·
+                │              aggregate 2  v                                                                                                              ·                                                                                                ·
+                │              group by     @1-@2                                                                                                          ·                                                                                                ·
+                └── render     ·            ·                                                                                                              (d decimal, v int, k int)                                                                        k!=NULL; key(k)
+                     │         render 0     (d)[decimal]                                                                                                   ·                                                                                                ·
+                     │         render 1     (v)[int]                                                                                                       ·                                                                                                ·
+                     │         render 2     (k)[int]                                                                                                       ·                                                                                                ·
+                     └── scan  ·            ·                                                                                                              (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                              table        kv@primary                                                                                                     ·                                                                                                ·
+·                              spans        ALL                                                                                                            ·                                                                                                ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
+----
+sort                           ·            ·                                                                            (max int, stddev decimal)                                                                        +max
+ │                             order        +max                                                                         ·                                                                                                ·
+ └── window                    ·            ·                                                                            (max int, stddev decimal)                                                                        ·
+      │                        window 0     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      │                        render 1     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]  ·                                                                                                ·
+      └── render               ·            ·                                                                            (max int, d decimal, "?column?" int, "?column?" string)                                          "?column?"=CONST; weak-key(d,"?column?")
+           │                   render 0     (agg0)[int]                                                                  ·                                                                                                ·
+           │                   render 1     (agg1)[decimal]                                                              ·                                                                                                ·
+           │                   render 2     (agg2)[int]                                                                  ·                                                                                                ·
+           │                   render 3     ('a')[string]                                                                ·                                                                                                ·
+           └── group           ·            ·                                                                            (agg0 int, agg1 decimal, agg2 int)                                                               weak-key(agg1,agg2)
+                │              aggregate 0  max(k)                                                                       ·                                                                                                ·
+                │              aggregate 1  d                                                                            ·                                                                                                ·
+                │              aggregate 2  v                                                                            ·                                                                                                ·
+                │              group by     @1-@2                                                                        ·                                                                                                ·
+                └── render     ·            ·                                                                            (d decimal, v int, k int)                                                                        k!=NULL; key(k)
+                     │         render 0     (d)[decimal]                                                                 ·                                                                                                ·
+                     │         render 1     (v)[int]                                                                     ·                                                                                                ·
+                     │         render 2     (k)[int]                                                                     ·                                                                                                ·
+                     └── scan  ·            ·                                                                            (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
+·                              table        kv@primary                                                                   ·                                                                                                ·
+·                              spans        ALL                                                                          ·                                                                                                ·

@@ -1,0 +1,131 @@
+# LogicTest: 5node-dist 5node-dist-metadata 5node-dist-opt 5node-dist-disk
+
+statement ok
+CREATE TABLE xyz (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  z INT
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 1, 1, NULL),
+  (2, 1, 1, 2),
+  (3, 1, 1, 2),
+  (4, 1, 2, 1),
+  (5, 2, 2, 3),
+  (6, 4, 5, 6),
+  (7, 4, 1, 6)
+
+statement ok
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b, c)
+)
+
+statement ok
+INSERT INTO abc VALUES
+  ('1', '1', '1'),
+  ('1', '1', '2'),
+  ('1', '2', '2'),
+  ('2', '3', '4'),
+  ('3', '4', '5')
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
+
+statement ok
+ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], 0),
+  (ARRAY[2], 2),
+  (ARRAY[3], 4),
+  (ARRAY[4], 6),
+  (ARRAY[5], 7)
+
+statement ok
+ALTER TABLE abc SPLIT AT VALUES
+  (NULL, NULL, NULL),
+  ('1', '1', '2'),
+  ('1', '2', '2'),
+  ('2', '3', '4'),
+  ('3', '4', '5')
+
+statement ok
+ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], NULL, NULL, NULL),
+  (ARRAY[2], '1', '1', '2'),
+  (ARRAY[3], '1', '2', '2'),
+  (ARRAY[4], '2', '3', '4'),
+  (ARRAY[5], '3', '4', '5')
+
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /2       1         {1}       1
+/2         /4       2         {2}       2
+/4         /6       3         {3}       3
+/6         /7       4         {4}       4
+/7         NULL     5         {5}       5
+
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE abc
+----
+start_key        end_key          range_id  replicas  lease_holder
+NULL             /NULL/NULL/NULL  5         {5}       5
+/NULL/NULL/NULL  /"1"/"1"/"2"     21        {1}       1
+/"1"/"1"/"2"     /"1"/"2"/"2"     22        {2}       2
+/"1"/"2"/"2"     /"2"/"3"/"4"     23        {3}       3
+/"2"/"3"/"4"     /"3"/"4"/"5"     24        {4}       4
+/"3"/"4"/"5"     NULL             25        {5}       5
+
+query III rowsort
+SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
+----
+1 1 NULL
+1 1 2
+1 2 1
+2 2 3
+4 5 6
+4 1 6
+
+query III partialsort(1)
+SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
+----
+1 1 NULL
+1 1 2
+1 2 1
+2 2 3
+4 5 6
+4 1 6
+
+query II
+SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
+----
+1 1
+1 2
+4 5
+
+query TTT rowsort
+SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
+----
+1  1  1
+1  1  2
+1  2  2
+2  3  4
+3  4  5
+
+query TT
+SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
+----
+1 1
+1 2
+2 3
+3 4

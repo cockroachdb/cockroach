@@ -1,0 +1,762 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+# Grandparent table
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+# Two tables interleaved at the same level
+statement ok
+CREATE TABLE p1_0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1),
+  FAMILY (i, s1, s2),
+  FAMILY (d)
+) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+CREATE TABLE p1_1 (
+  i INT PRIMARY KEY,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL
+) INTERLEAVE IN PARENT p2 (i)
+
+# Two level deep interleave
+statement ok
+CREATE TABLE p0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1, s2)
+) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+statement ok
+INSERT INTO p2 VALUES (2, '2'), (3, '3'), (5, '5'), (7, '7')
+
+statement ok
+INSERT INTO p1_0 VALUES (2, '2', '2.01', 2), (3, '3', '3.01', 3), (5, '5', NULL, NULL)
+
+statement ok
+INSERT INTO p1_1 VALUES (2, '2', '2.11', 2), (3, '3', '3.11', 3)
+
+statement ok
+INSERT INTO p0 VALUES (2, '2', '2.0', 2), (3, '3', '3.0', 3), (5, '5', '5.0', 5)
+
+query IT rowsort
+SELECT * FROM p2
+----
+2  2
+3  3
+5  5
+7  7
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+3  3  3.01  3
+5  5  NULL  NULL
+
+query ITTT rowsort
+SELECT * FROM p1_1
+----
+2  2  2.11  2
+3  3  3.11  3
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+CREATE INDEX p0i ON p0 (i) INTERLEAVE IN PARENT p1_1 (i)
+
+statement ok
+CREATE INDEX p1_id ON p1_1 (i, d) INTERLEAVE IN PARENT p1_1 (i)
+
+query ITTT rowsort
+SELECT * FROM p0@p0i WHERE i BETWEEN 2 AND 4
+----
+2  2  2.0  2
+3  3  3.0  3
+
+query ITTT rowsort
+SELECT * FROM p1_1@p1_id WHERE d BETWEEN 1.5 AND 4.0
+----
+2  2  2.11  2
+3  3  3.11  3
+
+statement ok
+DELETE FROM p1_0 WHERE i = 3
+
+statement ok
+INSERT INTO p1_0 (i, s1) VALUES (5, '5') ON CONFLICT (i, s1) DO UPDATE SET i = 7, s2 = '7.01', d = 7.0
+
+statement ok
+DELETE FROM p2 WHERE i = 2 OR i = 7
+
+query IT rowsort
+SELECT * FROM p2
+----
+3  3
+5  5
+
+# Check that we're skipping first/last row of a block of interleaved data correctly
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+# Check that fast delete is disabled when run on a table with child interleaves
+statement ok
+DELETE FROM p2
+
+query IT rowsort
+SELECT * FROM p2
+----
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7.0
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+DROP INDEX p0@p0i
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+DROP TABLE p0
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7.0
+
+statement error "p2" is interleaved by table "p1_0"
+TRUNCATE TABLE p2
+
+statement ok
+TRUNCATE TABLE p2 CASCADE
+
+statement error unimplemented
+DROP TABLE p2
+
+statement ok
+CREATE INDEX p1_s2 ON p1_1 (s2)
+
+# p1_0 is truncated when p2 is truncated.
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+
+statement ok
+DROP TABLE p2 CASCADE
+
+statement error pgcode 42P01 relation "p0" does not exist
+SELECT * FROM p0
+
+# Validation and descriptor bookkeeping
+
+# TODO(dan): Interleave these two indexes once we support the syntax.
+statement ok
+CREATE TABLE all_interleaves (
+  b INT PRIMARY KEY,
+  c INT,
+  d INT,
+  INDEX (c),
+  UNIQUE INDEX (d)
+) INTERLEAVE IN PARENT p1_1 (b)
+
+statement ok
+CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
+
+statement ok
+CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
+
+query TT
+SHOW CREATE TABLE all_interleaves
+----
+all_interleaves   CREATE TABLE all_interleaves (
+                    b INT NOT NULL,
+                    c INT NULL,
+                    d INT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (b ASC),
+                    INDEX all_interleaves_c_idx (c ASC),
+                    UNIQUE INDEX all_interleaves_d_key (d ASC),
+                    INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
+                    UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
+                    FAMILY "primary" (b, c, d)
+                  ) INTERLEAVE IN PARENT p1_1 (b)
+
+statement error pgcode 42P01 relation "missing" does not exist
+CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
+
+# Check that interleaved columns match in length to parent's primary columns.
+
+statement error pq: declared interleaved columns \(s1, d\) must match the parent's primary index \(i\)
+CREATE INDEX ON p1_0 (s1, d) INTERLEAVE IN PARENT p1_1 (s1, d)
+
+# Check that interleaved columns are prefix of index's columns.
+
+statement error pq: declared interleaved columns \(i, s1\) must be a prefix of the primary key columns being interleaved \(i\)
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+statement error pq: declared interleaved columns \(i, s1\) must be a prefix of the index columns being interleaved \(i\)
+CREATE INDEX ON p1_1 (i) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+# Check that interleaved columns are referencing a valid prefix of names
+# of the index's columns.
+
+statement error pq: declared interleaved columns \(j\) must refer to a prefix of the primary key column names being interleaved \(i, j\)
+CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
+
+statement error pq: declared interleaved columns \(i\) must refer to a prefix of the index column names being interleaved \(d\)
+CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (i)
+
+# Check that interleaved columns are of the same type AND direction as parent's
+# primary columns.
+
+statement error pq: declared interleaved columns \(f\) must match type and sort direction of the parent's primary index \(i\)
+CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
+
+statement error pq: declared interleaved columns \(d\) must match type and sort direction of the parent's primary index \(i\)
+CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
+
+statement error pq: declared interleaved columns \(i\) must match type and sort direction of the parent's primary index \(i\)
+CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
+
+
+statement error unimplemented
+CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
+
+statement error unimplemented
+CREATE TABLE err (i INT PRIMARY KEY, UNIQUE INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
+
+statement error unimplemented: unsupported shorthand CASCADE
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) CASCADE
+
+statement error unimplemented: unsupported shorthand RESTRICT
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) RESTRICT
+
+# Regression test for #13451
+
+statement ok
+CREATE TABLE customers (
+  id INT PRIMARY KEY,
+  name STRING (50)
+)
+
+statement ok
+CREATE TABLE orders (
+  customer INT,
+  id INT,
+  total DECIMAL (20, 5),
+  PRIMARY KEY (customer, id),
+  CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers
+) INTERLEAVE IN PARENT customers (customer)
+
+statement ok
+INSERT INTO customers
+  (id, name) VALUES
+  (1, 'Ha-Yun'),
+  (2, 'Emanuela')
+
+statement ok
+INSERT INTO orders
+  (customer, id, total) VALUES
+  (1, 1000, 100.00),
+  (2, 1001, 90.00),
+  (1, 1002, 80.00),
+  (2, 1003, 70.00)
+
+query IIR
+SELECT * FROM orders WHERE customer = 1 AND id = 1000
+----
+1 1000 100.00000
+
+# Check that interleaving can occur across databases
+statement ok
+CREATE DATABASE other; CREATE TABLE other.foo(x INT PRIMARY KEY);
+  CREATE TABLE interdb (x INT PRIMARY KEY) INTERLEAVE IN PARENT other.foo (x)
+
+query TT
+SHOW CREATE TABLE interdb
+----
+interdb                                      CREATE TABLE interdb (
+                                             x INT NOT NULL,
+                                             CONSTRAINT "primary" PRIMARY KEY (x ASC),
+                                             FAMILY "primary" (x)
+) INTERLEAVE IN PARENT other.public.foo (x)
+
+statement ok
+CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
+
+statement ok
+CREATE INDEX c on t1 (id2)
+   STORING (id3)
+   INTERLEAVE in PARENT t1 (id2);
+
+statement ok
+DROP INDEX t1@c;
+
+statement ok
+DROP TABLE t1
+
+# Regression test for #20067.
+
+statement ok
+CREATE TABLE p20067 (
+  p_id INT PRIMARY KEY,
+  name STRING NOT NULL
+)
+
+statement ok
+CREATE TABLE c20067 (
+  p_id INT,
+  c_id INT,
+  name STRING NOT NULL,
+  PRIMARY KEY (p_id, c_id),
+  CONSTRAINT uq_name UNIQUE(name)
+) INTERLEAVE IN PARENT p20067 (p_id)
+
+statement ok
+BEGIN;
+INSERT INTO p20067 VALUES (1, 'John Doe');
+INSERT INTO c20067 VALUES (1, 1, 'John Doe Junior');
+COMMIT;
+
+statement error duplicate key value \(name\)=\('John Doe Junior'\) violates unique constraint "uq_name"
+INSERT INTO c20067 VALUES (2, 1, 'John Doe Junior')
+
+statement error duplicate key value \(name\)=\('John Doe Junior'\) violates unique constraint "uq_name"
+BEGIN; INSERT INTO p20067 VALUES (2, 'John Doe'); INSERT INTO c20067 VALUES (2, 1, 'John Doe Junior'); END;
+
+# End the last transaction.
+statement ok
+END
+
+statement error duplicate key value \(p_id,c_id\)=\(1,1\) violates unique constraint "primary"
+INSERT INTO c20067 VALUES (1, 1, 'John Doe')
+
+# Regression test for #26756: ensure that interleaved table joins don't get
+# planned incorrectly given a merge join ordering caused by a constant value
+# constraint on a non-interleaved column.
+
+subtest interleaved_join_on_other_columns
+statement ok
+CREATE TABLE users (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE documents (id INT PRIMARY KEY, user_id INT NOT NULL) INTERLEAVE IN PARENT users (id)
+
+statement ok
+INSERT INTO users(id) VALUES(1)
+
+statement ok
+INSERT INTO documents(id, user_id) VALUES (0, 1)
+
+query I
+SELECT count(*) FROM users JOIN documents ON users.id=documents.user_id WHERE documents.id=0
+----
+1
+
+subtest InterleavedDeleteFastPath
+statement ok
+CREATE TABLE a (
+    a_id INT PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b(
+    b_id INT,
+    a_id INT,
+    FOREIGN KEY (a_id) REFERENCES a(a_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    PRIMARY KEY(a_id, b_id)
+) INTERLEAVE IN PARENT a(a_id)
+
+statement ok
+CREATE TABLE c(
+    c_id INT,
+    a_id INT,
+    b_id INT,
+    FOREIGN KEY (a_id, b_id) REFERENCES b(a_id, b_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    PRIMARY KEY(a_id, b_id, c_id)
+) INTERLEAVE IN PARENT b(a_id, b_id)
+
+statement ok
+INSERT INTO a SELECT generate_series(1,10);
+INSERT INTO b(a_id, b_id) SELECT generate_series(1,10), 1
+
+statement ok
+DELETE FROM a WHERE a_id <= 2
+
+query I
+SELECT count(*) from a
+----
+8
+
+query I
+SELECT count(*) from b
+----
+8
+
+query I colnames
+SELECT * from a order by a_id
+----
+a_id
+3
+4
+5
+6
+7
+8
+9
+10
+
+query II colnames
+SELECT * from b order by a_id, b_id
+----
+b_id  a_id
+1     3
+1     4
+1     5
+1     6
+1     7
+1     8
+1     9
+1     10
+
+statement ok
+INSERT INTO b(a_id, b_id) select a.a_id, 2 from a;
+INSERT INTO c(a_id, b_id, c_id) select a.a_id, b.b_id, 1 from a, b where a.a_id = b.a_id
+
+query III colnames
+SELECT * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+1     3     1
+1     3     2
+1     4     1
+1     4     2
+1     5     1
+1     5     2
+1     6     1
+1     6     2
+1     7     1
+1     7     2
+1     8     1
+1     8     2
+1     9     1
+1     9     2
+1     10    1
+1     10    2
+
+statement ok
+SET TRACING = on,kv,results; DELETE FROM a where a_id <= 7 and a_id >= 5; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+----
+Scan /Table/79/1/{5-7/#}
+querying next range at /Table/79/1/5
+r1: sending batch 1 Scan to (n1,s1):1
+DelRange /Table/79/1/5 - /Table/79/1/7/NULL
+querying next range at /Table/79/1/5
+r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 3
+
+query II colnames
+select * from b order by a_id, b_id
+----
+b_id  a_id
+1     3
+2     3
+1     4
+2     4
+1     8
+2     8
+1     9
+2     9
+1     10
+2     10
+
+query III colnames
+select * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+1     3     1
+1     3     2
+1     4     1
+1     4     2
+1     8     1
+1     8     2
+1     9     1
+1     9     2
+1     10    1
+1     10    2
+
+statement ok
+SET TRACING = on,kv,results; DELETE FROM a; SET tracing = off
+
+query T
+select message FROM [SHOW KV TRACE FOR SESSION]
+----
+Scan /Table/79/{1-2}
+querying next range at /Table/79/1
+r1: sending batch 1 Scan to (n1,s1):1
+DelRange /Table/79/1 - /Table/79/3
+querying next range at /Table/79/1
+r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 5
+
+query II colnames
+select * from b order by a_id, b_id
+----
+b_id  a_id
+
+query III colnames
+select * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+
+statement ok
+INSERT INTO a SELECT generate_series(1,10);
+INSERT INTO b(a_id, b_id) SELECT generate_series(1,10), 1
+
+statement ok
+SET TRACING = on,kv,results; 
+
+query I
+delete from a returning *
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+statement ok
+SET TRACING=off;
+
+query T
+select message FROM [SHOW KV TRACE FOR SESSION];
+----
+Scan /Table/79/{1-2}
+querying next range at /Table/79/1
+r1: sending batch 1 Scan to (n1,s1):1
+fetched: /a/primary/1 -> NULL
+Del /Table/79/1/1/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/1/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/1/#/80/1/1/0
+querying next range at /Table/79/1/1/#/80/1/1/0
+r1: sending batch 1 Del, 1 BeginTxn to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/1/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/2 -> NULL
+Del /Table/79/1/2/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/2/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/2/#/80/1/1/0
+querying next range at /Table/79/1/2/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/2/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/3 -> NULL
+Del /Table/79/1/3/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/3/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/3/#/80/1/1/0
+querying next range at /Table/79/1/3/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/3/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/4 -> NULL
+Del /Table/79/1/4/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/4/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/4/#/80/1/1/0
+querying next range at /Table/79/1/4/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/4/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/5 -> NULL
+Del /Table/79/1/5/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/5/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/5/#/80/1/1/0
+querying next range at /Table/79/1/5/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/5/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/6 -> NULL
+Del /Table/79/1/6/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/6/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/6/#/80/1/1/0
+querying next range at /Table/79/1/6/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/6/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/7 -> NULL
+Del /Table/79/1/7/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/7/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/7/#/80/1/1/0
+querying next range at /Table/79/1/7/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/7/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/8 -> NULL
+Del /Table/79/1/8/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/8/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/8/#/80/1/1/0
+querying next range at /Table/79/1/8/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/8/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/9 -> NULL
+Del /Table/79/1/9/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/9/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/9/#/80/1/1/0
+querying next range at /Table/79/1/9/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/9/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/10 -> NULL
+Del /Table/79/1/10/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/10/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/10/#/80/1/1/0
+querying next range at /Table/79/1/10/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/10/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+querying next range at /Table/79/1/1/0
+r1: sending batch 10 Del, 1 EndTxn to (n1,s1):1
+output row: [1]
+output row: [2]
+output row: [3]
+output row: [4]
+output row: [5]
+output row: [6]
+output row: [7]
+output row: [8]
+output row: [9]
+output row: [10]
+rows affected: 10
+
+statement ok
+DROP TABLE c; DROP TABLE b; DROP TABLE a

@@ -11,40 +11,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package storage_test
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-func checkGauge(t *testing.T, g *metric.Gauge, e int64) {
+func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
+	t.Helper()
 	if a := g.Value(); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", g.GetName(), a, e))
-	}
-}
-
-func checkCounter(t *testing.T, c *metric.Counter, e int64) {
-	if a := c.Count(); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", c.GetName(), a, e))
+		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))
 	}
 }
 
 func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
+	t.Helper()
 	var stores []*storage.Store
 	var wg sync.WaitGroup
 
@@ -89,17 +87,13 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	wg.Wait()
 
 	for _, s := range stores {
-		fatalf := func(msg string, args ...interface{}) {
-			prefix := s.Ident.String() + ": "
-			t.Fatalf(prefix+msg, args...)
-		}
-
+		idString := s.Ident.String()
 		m := s.Metrics()
 
 		// Sanity check: LiveBytes is not zero (ensures we don't have
 		// zeroed out structures.)
 		if liveBytes := m.LiveBytes.Value(); liveBytes == 0 {
-			fatalf("expected livebytes to be non-zero, was zero")
+			t.Errorf("store %s; got zero live bytes, expected non-zero", idString)
 		}
 
 		// Compute real total MVCC statistics from store.
@@ -109,23 +103,23 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 		}
 
 		// Ensure that real MVCC stats match computed stats.
-		checkGauge(t, m.LiveBytes, realStats.LiveBytes)
-		checkGauge(t, m.KeyBytes, realStats.KeyBytes)
-		checkGauge(t, m.ValBytes, realStats.ValBytes)
-		checkGauge(t, m.IntentBytes, realStats.IntentBytes)
-		checkGauge(t, m.LiveCount, realStats.LiveCount)
-		checkGauge(t, m.KeyCount, realStats.KeyCount)
-		checkGauge(t, m.ValCount, realStats.ValCount)
-		checkGauge(t, m.IntentCount, realStats.IntentCount)
-		checkGauge(t, m.SysBytes, realStats.SysBytes)
-		checkGauge(t, m.SysCount, realStats.SysCount)
+		checkGauge(t, idString, m.LiveBytes, realStats.LiveBytes)
+		checkGauge(t, idString, m.KeyBytes, realStats.KeyBytes)
+		checkGauge(t, idString, m.ValBytes, realStats.ValBytes)
+		checkGauge(t, idString, m.IntentBytes, realStats.IntentBytes)
+		checkGauge(t, idString, m.LiveCount, realStats.LiveCount)
+		checkGauge(t, idString, m.KeyCount, realStats.KeyCount)
+		checkGauge(t, idString, m.ValCount, realStats.ValCount)
+		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
+		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
+		checkGauge(t, idString, m.SysCount, realStats.SysCount)
 		// "Ages" will be different depending on how much time has passed. Even with
 		// a manual clock, this can be an issue in tests. Therefore, we do not
 		// verify them in this test.
+	}
 
-		if t.Failed() {
-			fatalf("verifyStats failed, aborting test.")
-		}
+	if t.Failed() {
+		t.Fatalf("verifyStats failed, aborting test.")
 	}
 
 	// Restart all Stores.
@@ -150,8 +144,6 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		{m.RdbBlockCachePinnedUsage, 0},
 		{m.RdbBloomFilterPrefixChecked, 20},
 		{m.RdbBloomFilterPrefixUseful, 20},
-		{m.RdbMemtableHits, 0},
-		{m.RdbMemtableMisses, 0},
 		{m.RdbMemtableTotalSize, 5000},
 		{m.RdbFlushes, 1},
 		{m.RdbCompactions, 0},
@@ -164,11 +156,92 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 	}
 }
 
-func TestStoreMetrics(t *testing.T) {
+// TestStoreResolveMetrics verifies that metrics related to intent resolution
+// are tracked properly.
+func TestStoreResolveMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(mrtracy): #9204")
+
+	// First prevent rot that would result from adding fields without handling
+	// them everywhere.
+	{
+		act := fmt.Sprintf("%+v", result.Metrics{})
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0}"
+		if act != exp {
+			t.Errorf("need to update this test due to added fields: %v", act)
+		}
+	}
 
 	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	ctx := context.Background()
+
+	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+
+	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 999)
+
+	const resolveCommitCount = int64(200)
+	const resolveAbortCount = int64(800)
+	const resolvePoisonCount = int64(2400)
+
+	var ba roachpb.BatchRequest
+	{
+		repl := mtc.stores[0].LookupReplica(keys.MustAddr(span.Key))
+		var err error
+		if ba.Replica, err = repl.GetReplicaDescriptor(); err != nil {
+			t.Fatal(err)
+		}
+		ba.RangeID = repl.RangeID
+	}
+
+	add := func(status roachpb.TransactionStatus, poison bool, n int64) {
+		for i := int64(0); i < n; i++ {
+			key := span.Key
+			endKey := span.EndKey
+			if i > n/2 {
+				req := &roachpb.ResolveIntentRangeRequest{
+					IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+				}
+				req.Key, req.EndKey = key, endKey
+				ba.Add(req)
+				continue
+			}
+			req := &roachpb.ResolveIntentRequest{
+				IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+			}
+			req.Key = key
+			ba.Add(req)
+		}
+	}
+
+	add(roachpb.COMMITTED, false, resolveCommitCount)
+	add(roachpb.ABORTED, false, resolveAbortCount)
+	add(roachpb.ABORTED, true, resolvePoisonCount)
+
+	if _, pErr := mtc.senders[0].Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if exp, act := resolveCommitCount, mtc.stores[0].Metrics().ResolveCommitCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected around %d intent commits, saw %d", exp, act)
+	}
+	if exp, act := resolveAbortCount, mtc.stores[0].Metrics().ResolveAbortCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected around %d intent aborts, saw %d", exp, act)
+	}
+	if exp, act := resolvePoisonCount, mtc.stores[0].Metrics().ResolvePoisonCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected arounc %d abort span poisonings, saw %d", exp, act)
+	}
+}
+
+func TestStoreMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -188,19 +261,19 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Perform a split, which has special metrics handling.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	splitArgs := adminSplitArgs(roachpb.Key("m"))
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify range count is as expected
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Verify all stats on store0 after split.
 	verifyStats(t, mtc, 0)
 
 	// Replicate the "right" range to the other stores.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"))
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	// Verify stats on store1 after replication.
@@ -213,11 +286,10 @@ func TestStoreMetrics(t *testing.T) {
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
 
-	// Verify all stats on store 0 and 1 after addition.
-	verifyStats(t, mtc, 0, 1)
+	// Verify all stats on stores after addition.
+	verifyStats(t, mtc, 0, 1, 2)
 
-	// Create a transaction statement that fails, but will add an entry to the
-	// sequence cache. Regression test for #4969.
+	// Create a transaction statement that fails. Regression test for #4969.
 	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.CPut(dataKey, 7, 6)
@@ -226,23 +298,31 @@ func TestStoreMetrics(t *testing.T) {
 		t.Fatal("Expected transaction error, but none received")
 	}
 
-	// Verify stats after sequence cache addition.
-	verifyStats(t, mtc, 0)
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	// Verify stats after addition.
+	verifyStats(t, mtc, 0, 1, 2)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Unreplicate range from the first store.
-	mtc.unreplicateRange(replica.RangeID, 0)
+	testutils.SucceedsSoon(t, func() error {
+		// This statement can fail if store 0 is not the leaseholder.
+		if err := mtc.transferLeaseNonFatal(context.TODO(), replica.RangeID, 0, 1); err != nil {
+			t.Log(err)
+		}
+		// This statement will fail if store 0 IS the leaseholder. This can happen
+		// even after the previous statement.
+		return mtc.unreplicateRangeNonFatal(replica.RangeID, 0)
+	})
 
 	// Force GC Scan on store 0 in order to fully remove range.
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 1)
-	checkCounter(t, mtc.stores[1].Metrics().ReplicaCount, 1)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 1)
+	checkGauge(t, "store 1", mtc.stores[1].Metrics().ReplicaCount, 1)
 
-	// Verify all stats on store0 and store1 after range is removed.
-	verifyStats(t, mtc, 0, 1)
+	// Verify all stats on all stores after range is removed.
+	verifyStats(t, mtc, 0, 1, 2)
 
 	verifyRocksDBStats(t, mtc.stores[0])
 	verifyRocksDBStats(t, mtc.stores[1])

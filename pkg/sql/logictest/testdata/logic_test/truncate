@@ -1,0 +1,174 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+CREATE VIEW kview AS SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error "kview" is not a table
+TRUNCATE TABLE kview
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+TRUNCATE TABLE kv
+
+query II
+SELECT * FROM kv
+----
+
+query II
+SELECT * FROM kview
+----
+
+query TT
+SELECT status, running_status FROM [SHOW JOBS]
+----
+running  waiting for GC TTL
+
+# Ensure that TRUNCATE works with a self referential FK.
+statement ok
+CREATE TABLE selfref (
+  y INT PRIMARY KEY,
+  Z INT REFERENCES selfref (y)
+)
+
+statement ok
+TRUNCATE table selfref
+
+statement ok
+INSERT INTO selfref VALUES (1, NULL);
+
+statement ok
+DROP TABLE selfref
+
+subtest truncate_interleave
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (a INT, b INT, PRIMARY KEY (a, b), UNIQUE INDEX(b)) INTERLEAVE IN PARENT a(a)
+
+statement error "a" is interleaved by table "b"
+TRUNCATE a
+
+statement ok
+TRUNCATE a CASCADE
+
+statement ok
+TRUNCATE b
+
+statement ok
+TRUNCATE b CASCADE
+
+statement ok
+CREATE TABLE c (c INT PRIMARY KEY, d INT REFERENCES b(b))
+
+statement error "b" is referenced by foreign key from table "c"
+TRUNCATE a, b
+
+statement ok
+INSERT INTO b VALUES(1, 2)
+
+statement ok
+INSERT INTO c VALUES(1, 2)
+
+statement ok
+TRUNCATE a CASCADE
+
+query II
+SELECT * FROM c
+----
+
+statement ok
+CREATE TABLE d (c INT PRIMARY KEY) INTERLEAVE IN PARENT c(c);
+
+statement ok
+TRUNCATE a, b, c, d
+
+statement error "c" is interleaved by table "d"
+TRUNCATE a, b, c
+
+statement error "c" is interleaved by table "d"
+TRUNCATE a, b, c
+
+statement ok
+INSERT INTO b VALUES(1, 2)
+
+statement ok
+INSERT INTO c VALUES(1, 2)
+
+statement ok
+INSERT INTO d VALUES (1)
+
+statement ok
+TRUNCATE a CASCADE
+
+query I
+SELECT * FROM d
+----
+
+subtest truncate_29010
+
+statement ok
+CREATE SEQUENCE foo;
+
+statement ok
+CREATE TABLE bar (
+  id INT NOT NULL DEFAULT nextval('foo':::STRING),
+  description STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  FAMILY "primary" (id, description)
+);
+
+statement ok
+TRUNCATE bar
+
+statement ok
+DROP TABLE bar;
+
+subtest truncate_30547
+
+statement ok
+CREATE TABLE tt AS SELECT 'foo'
+
+query TTT
+EXPLAIN TRUNCATE TABLE tt
+----
+truncate  ·  ·
+
+# Verify that EXPLAIN did not cause the truncate to be performed.
+query T
+SELECT * FROM tt
+----
+foo

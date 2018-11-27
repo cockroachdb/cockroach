@@ -34,8 +34,8 @@ func (*ByteSizeSetting) Typ() string {
 	return "z"
 }
 
-func (b *ByteSizeSetting) String() string {
-	return humanizeutil.IBytes(b.Get())
+func (b *ByteSizeSetting) String(sv *Values) string {
+	return humanizeutil.IBytes(b.Get(sv))
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
@@ -59,14 +59,4 @@ func RegisterValidatedByteSizeSetting(
 	}}
 	register(key, desc, setting)
 	return setting
-}
-
-// TestingSetByteSize returns a mock bytesize setting for testing. See
-// TestingSetBool for more details.
-func TestingSetByteSize(s **ByteSizeSetting, v int64) func() {
-	saved := *s
-	*s = &ByteSizeSetting{IntSetting{v: v}}
-	return func() {
-		*s = saved
-	}
 }

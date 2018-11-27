@@ -1,0 +1,122 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement error expected DEFAULT expression to have type int, but 'false' has type bool
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
+
+statement error variable sub-expressions are not allowed in DEFAULT
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
+
+statement error variable sub-expressions are not allowed in DEFAULT
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
+
+statement error variable sub-expressions are not allowed in DEFAULT
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
+
+# Issue #14308: support tables with DEFAULT NULL columns.
+statement ok
+CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
+
+# Aggregate function calls in CHECK are not ok.
+statement error aggregate functions are not allowed in DEFAULT
+CREATE TABLE bad (a INT DEFAULT count(1))
+
+# Window function calls in CHECK are not ok.
+statement error window functions are not allowed in DEFAULT
+CREATE TABLE bad (a INT DEFAULT count(1) OVER ())
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY DEFAULT 42,
+  b TIMESTAMP DEFAULT now(),
+  c FLOAT DEFAULT random()
+)
+
+query TTBTTTB colnames
+SHOW COLUMNS FROM t
+----
+column_name  data_type  is_nullable  column_default     generation_expression  indices      is_hidden
+a            INT        false        42:::INT           ·                      {"primary"}  false
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}           false
+c            FLOAT8     true         random()           ·                      {}           false
+
+statement ok
+INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t
+----
+42 true true
+
+statement ok
+TRUNCATE TABLE t
+
+statement ok
+INSERT INTO t DEFAULT VALUES
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t
+----
+42 true true
+
+statement ok
+INSERT INTO t (a) VALUES (1)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 1
+----
+1 true true
+
+statement ok
+INSERT INTO t VALUES (2)
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+----
+2 true true
+
+statement ok
+UPDATE t SET (b, c) = ('2015-09-18 00:00:00', -1.0)
+
+statement ok
+UPDATE t SET b = DEFAULT WHERE a = 1
+
+query IBB
+SELECT a, b <= now(), c = -1.0 FROM t WHERE a = 1
+----
+1 true true
+
+statement ok
+UPDATE t SET (b, c) = (DEFAULT, DEFAULT) WHERE a = 2
+
+query IBB
+SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+----
+2 true true
+
+statement ok
+UPDATE t SET b = DEFAULT, c = DEFAULT
+
+statement ok
+UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT)
+
+# Test a table without a default and with a null default
+statement ok
+CREATE TABLE v (
+  a INT PRIMARY KEY,
+  b TIMESTAMP NULL DEFAULT NULL,
+  c INT
+)
+
+statement ok
+UPDATE v SET a = DEFAULT
+
+statement ok
+UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
+
+query TTBTTTB colnames
+SHOW COLUMNS FROM v
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            TIMESTAMP  true         NULL            ·                      {}           false
+c            INT        true         NULL            ·                      {}           false

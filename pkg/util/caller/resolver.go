@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package caller
 
@@ -128,11 +126,8 @@ func (cr *CallResolver) Lookup(depth int) (file string, line int, fun string) {
 	cr.cache[pc] = &cachedLookup{file: file, line: line, fun: dummyLookup.fun}
 	if f := runtime.FuncForPC(pc); f != nil {
 		fun = f.Name()
-		if indSlash := strings.LastIndex(fun, "/"); indSlash != -1 {
-			fun = fun[indSlash+1:]
-			if indDot := strings.Index(fun, "."); indDot != -1 {
-				fun = fun[indDot+1:]
-			}
+		if indDot := strings.LastIndexByte(fun, '.'); indDot != -1 {
+			fun = fun[indDot+1:]
 		}
 		cr.cache[pc].fun = fun
 	}

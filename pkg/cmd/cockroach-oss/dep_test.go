@@ -28,6 +28,9 @@ func TestNoLinkForbidden(t *testing.T) {
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach-oss",
 		true,
 		nil,
-		[]string{"github.com/cockroachdb/cockroach/pkg/ccl"},
+		[]string{
+			"github.com/cockroachdb/cockroach/pkg/ccl",
+			"github.com/cockroachdb/cockroach/pkg/ui/distccl",
+		},
 	)
 }

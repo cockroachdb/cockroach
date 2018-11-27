@@ -1,0 +1,78 @@
+# =============================================================================
+# groupby.opt contains normalization rules for the GroupBy operator.
+# =============================================================================
+
+# ConvertGroupByToDsitinct converts a GroupBy operator that has no aggregations
+# to an equivalent DistinctOn operator.
+[ConvertGroupByToDistinct, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:[]
+    $groupingPrivate:*
+)
+=>
+(DistinctOn $input $aggregations $groupingPrivate)
+
+# EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
+# rows by using grouping columns that are statically known to form a strong key.
+# By definition, a strong key does not allow duplicate values, so the GroupBy is
+# redundant and can be eliminated.
+[EliminateDistinct, Normalize]
+(DistinctOn
+    $input:*
+    *
+    $groupingPrivate:* & (GroupingColsAreKey $groupingPrivate $input)
+)
+=>
+$input
+
+# EliminateGroupByProject discards a nested Project operator that is only
+# removing columns from its input (and not synthesizing new ones). That's
+# something the GroupBy operators can do on their own.
+[EliminateGroupByProject, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(Project $innerInput:*) & (ColsAreSubset (OutputCols $input) (OutputCols $innerInput))
+    $aggregations:*
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    $innerInput
+    $aggregations
+    $groupingPrivate
+)
+
+# ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
+# operator and replaces them by ConstAgg aggregate functions. A grouping
+# column is redundant if it is functionally determined by the other grouping
+# columns. If that's true, then its value must be constant within a group.
+# Therefore, it has no effect on the grouping and can instead be represented as
+# an ConstAgg aggregate, since all rows in the group have the same value for
+# that column.
+[ReduceGroupingCols, Normalize]
+(GroupBy | DistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (CanReduceGroupingCols $input $groupingPrivate)
+)
+=>
+((OpName)
+    $input
+    (AppendReducedGroupingCols $input $aggregations $groupingPrivate)
+    (ReduceGroupingCols $input $groupingPrivate)
+)
+
+# EliminateAggDistinctForKeys eliminates unnecessary AggDistinct modifiers when
+# it is known that the aggregation argument is unique within each group.
+[EliminateAggDistinctForKeys, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
+)
+=>
+((OpName)
+    $input
+    (RemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
+    $groupingPrivate
+)

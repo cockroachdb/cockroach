@@ -11,9 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package roachpb
 
@@ -24,10 +21,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
+// 0 is not a valid NodeID.
 type NodeID int32
 
 // String implements the fmt.Stringer interface.
@@ -60,43 +60,32 @@ func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
 
-// IsSubset returns whether attributes list a is a subset of
-// attributes list b.
-func (a Attributes) IsSubset(b Attributes) bool {
-	m := map[string]struct{}{}
-	for _, s := range b.Attrs {
-		m[s] = struct{}{}
+// Equals returns whether the Attributes lists are equivalent. Attributes lists
+// are treated as sets, meaning that ordering and duplicates are ignored.
+func (a Attributes) Equals(b Attributes) bool {
+	// This is O(n^2), but Attribute lists should never be long enough for that
+	// to matter, and allocating memory every time this is called would be worse.
+	if len(a.Attrs) != len(b.Attrs) {
+		return false
 	}
-	for _, s := range a.Attrs {
-		if _, ok := m[s]; !ok {
+	for _, aAttr := range a.Attrs {
+		var found bool
+		for _, bAttr := range b.Attrs {
+			if aAttr == bAttr {
+				found = true
+				break
+			}
+		}
+		if !found {
 			return false
 		}
 	}
 	return true
 }
 
-func (a Attributes) uniqueAttrs() []string {
-	var attrs []string
-	m := map[string]struct{}{}
-	for _, s := range a.Attrs {
-		if _, ok := m[s]; !ok {
-			m[s] = struct{}{}
-			attrs = append(attrs, s)
-		}
-	}
-	return attrs
-}
-
+// String implements the fmt.Stringer interface.
 func (a Attributes) String() string {
-	return strings.Join(a.uniqueAttrs(), ",")
-}
-
-// SortedString returns a sorted, de-duplicated, comma-separated list
-// of the attributes.
-func (a Attributes) SortedString() string {
-	attrs := a.uniqueAttrs()
-	sort.Strings(attrs)
-	return strings.Join(attrs, ",")
+	return strings.Join(a.Attrs, ",")
 }
 
 // RSpan returns the RangeDescriptor's resolved span.
@@ -109,9 +98,10 @@ func (r RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
 }
 
-// ContainsExclusiveEndKey returns whether this RangeDescriptor contains the specified end key.
-func (r RangeDescriptor) ContainsExclusiveEndKey(key RKey) bool {
-	return r.RSpan().ContainsExclusiveEndKey(key)
+// ContainsKeyInverted returns whether this RangeDescriptor contains the
+// specified key using an inverted range. See RSpan.ContainsKeyInverted.
+func (r RangeDescriptor) ContainsKeyInverted(key RKey) bool {
+	return r.RSpan().ContainsKeyInverted(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
@@ -148,6 +138,22 @@ func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaD
 // TODO(bdarnell): unify this with Validate().
 func (r RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
+}
+
+// GetGeneration returns the generation of this RangeDescriptor.
+func (r RangeDescriptor) GetGeneration() int64 {
+	if r.Generation != nil {
+		return *r.Generation
+	}
+	return 0
+}
+
+// IncrementGeneration increments the generation of this RangeDescriptor.
+func (r *RangeDescriptor) IncrementGeneration() {
+	// Create a new *int64 for the new generation. We permit shallow copies of
+	// RangeDescriptors, so we need to be careful not to mutate the
+	// potentially-shared generation counter.
+	r.Generation = proto.Int64(r.GetGeneration() + 1)
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
@@ -193,7 +199,7 @@ func (r RangeDescriptor) String() string {
 	} else {
 		buf.WriteString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+	fmt.Fprintf(&buf, ", next=%d, gen=%d]", r.NextReplicaID, r.GetGeneration())
 
 	return buf.String()
 }
@@ -227,21 +233,69 @@ func (r ReplicaDescriptor) Validate() error {
 	return nil
 }
 
+// PercentilesFromData derives percentiles from a slice of data points.
+// Sorts the input data if it isn't already sorted.
+func PercentilesFromData(data []float64) Percentiles {
+	sort.Float64s(data)
+
+	return Percentiles{
+		P10:  percentileFromSortedData(data, 10),
+		P25:  percentileFromSortedData(data, 25),
+		P50:  percentileFromSortedData(data, 50),
+		P75:  percentileFromSortedData(data, 75),
+		P90:  percentileFromSortedData(data, 90),
+		PMax: percentileFromSortedData(data, 100),
+	}
+}
+
+func percentileFromSortedData(data []float64, percent float64) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	if percent < 0 {
+		percent = 0
+	}
+	if percent >= 100 {
+		return data[len(data)-1]
+	}
+	// TODO(a-robinson): Use go's rounding function once we're using 1.10.
+	idx := int(float64(len(data)) * percent / 100.0)
+	return data[idx]
+}
+
+// String returns a string representation of the Percentiles.
+func (p Percentiles) String() string {
+	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
+		p.P10, p.P25, p.P50, p.P75, p.P90, p.PMax)
+}
+
+// String returns a string representation of the StoreCapacity.
+func (sc StoreCapacity) String() string {
+	return fmt.Sprintf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
+		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
+		"bytesPerReplica={%s}, writesPerReplica={%s}",
+		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
+		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
+		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
+		sc.BytesPerReplica, sc.WritesPerReplica)
+}
+
 // FractionUsed computes the fraction of storage capacity that is in use.
 func (sc StoreCapacity) FractionUsed() float64 {
 	if sc.Capacity == 0 {
 		return 0
 	}
-	return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
-}
-
-// CombinedAttrs returns the full list of attributes for the store, including
-// both the node and store attributes.
-func (s StoreDescriptor) CombinedAttrs() *Attributes {
-	var a []string
-	a = append(a, s.Node.Attrs.Attrs...)
-	a = append(a, s.Attrs.Attrs...)
-	return &Attributes{Attrs: a}
+	// Prefer computing the fraction of available disk space used by considering
+	// anything on the disk that isn't in the store's data directory just a sunk
+	// cost, not truly part of the disk's capacity. This means that the disk's
+	// capacity is really just the available space plus cockroach's usage.
+	//
+	// Fall back to a more pessimistic calcuation of disk usage if we don't know
+	// how much space the store's data is taking up.
+	if sc.Used == 0 {
+		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
+	}
+	return float64(sc.Used) / float64(sc.Available+sc.Used)
 }
 
 // String returns a string representation of the Tier.
@@ -276,6 +330,26 @@ func (Locality) Type() string {
 	return "Locality"
 }
 
+// Equals returns whether the two Localities are equivalent.
+//
+// Because Locality Tiers are hierarchically ordered, if two Localities contain
+// the same Tiers in different orders, they are not considered equal.
+func (l Locality) Equals(r Locality) bool {
+	if len(l.Tiers) != len(r.Tiers) {
+		return false
+	}
+	for i := range l.Tiers {
+		if l.Tiers[i] != r.Tiers[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// MaxDiversityScore is the largest possible diversity score, indicating that
+// two localities are as different from each other as possible.
+const MaxDiversityScore = 1.0
+
 // DiversityScore returns a score comparing the two localities which ranges from
 // 1, meaning completely diverse, to 0 which means not diverse at all (that
 // their localities match). This function ignores the locality tier key names
@@ -308,7 +382,7 @@ func (l Locality) DiversityScore(other Locality) float64 {
 		}
 	}
 	if len(l.Tiers) != len(other.Tiers) {
-		return 1.0 / float64(length+1)
+		return MaxDiversityScore / float64(length+1)
 	}
 	return 0
 }

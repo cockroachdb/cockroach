@@ -1,0 +1,606 @@
+# LogicTest: local-opt
+
+query TTT colnames
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
+----
+tree    field  description
+norows  ·      ·
+
+query TTT colnames
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
+----
+tree    field  description
+norows  ·      ·
+
+query TTT colnames
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
+----
+tree       field  description
+render     ·      ·
+ └── scan  ·      ·
+·          table  jobs@jobs_status_created_idx
+·          spans  ALL
+
+query TTTTT colnames
+EXPLAIN (PLAN, VERBOSE) SELECT 1 a
+----
+tree           field     description  columns  ordering
+render         ·         ·            (a)      ·
+ │             render 0  1            ·        ·
+ └── emptyrow  ·         ·            ()       ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE,PLAN) SELECT 1 a
+----
+tree           field     description  columns  ordering
+render         ·         ·            (a)      ·
+ │             render 0  1            ·        ·
+ └── emptyrow  ·         ·            ()       ·
+
+
+query TTTTT colnames
+EXPLAIN (TYPES) SELECT 1 a
+----
+tree           field     description  columns  ordering
+render         ·         ·            (a int)  ·
+ │             render 0  (1)[int]     ·        ·
+ └── emptyrow  ·         ·            ()       ·
+
+statement error cannot set EXPLAIN mode more than once
+EXPLAIN (PLAN,PLAN) SELECT 1
+
+statement error cannot set EXPLAIN mode more than once
+EXPLAIN (PLAN,DISTSQL) SELECT 1
+
+statement error unsupported EXPLAIN option
+EXPLAIN (PLAN,UNKNOWN) SELECT 1
+
+statement error could not determine data type of placeholder \$1
+EXPLAIN (TYPES) SELECT $1
+
+# TODO(radu): we don't support placeholders with no values.
+#query TTTTT colnames
+#EXPLAIN (TYPES) SELECT $1::INT AS a
+#----
+#Tree           Field     Description               Columns          Ordering
+#render         ·         ·                         (a int)          a=CONST
+# │             render 0  (($1)[string]::INT)[int]  ·                ·
+# └── emptyrow  ·         ·                         ()               ·
+
+
+# Ensure that all relevant statement types can be explained
+query TTT
+EXPLAIN CREATE DATABASE foo
+----
+create database  ·  ·
+
+query TTT
+EXPLAIN CREATE TABLE foo (x INT)
+----
+create table  ·  ·
+
+statement ok
+CREATE TABLE foo (x INT)
+
+query TTT
+EXPLAIN CREATE INDEX a ON foo(x)
+----
+create index  ·  ·
+
+statement ok
+CREATE DATABASE foo
+
+query TTT
+EXPLAIN DROP DATABASE foo
+----
+drop database  ·  ·
+
+# explain SHOW JOBS - beware to test this before the CREATE INDEX
+# below, otherwise the result becomes non-deterministic.
+# Migrations with backfill will affect the number of rows.
+query TTT
+EXPLAIN SHOW JOBS
+----
+sort              ·      ·
+ │                order  -"coalesce",-started
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   15 columns, 0 rows
+
+statement ok
+CREATE INDEX a ON foo(x)
+
+query TTT
+EXPLAIN DROP INDEX foo@a
+----
+drop index  ·  ·
+
+query TTT
+EXPLAIN ALTER TABLE foo ADD COLUMN y INT
+----
+alter table  ·  ·
+
+query TTT
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
+----
+split        ·              ·
+ └── values  ·              ·
+·            size           1 column, 1 row
+·            row 0, expr 0  42
+
+query TTT
+EXPLAIN DROP TABLE foo
+----
+drop table  ·  ·
+
+query TTT
+EXPLAIN SHOW DATABASES
+----
+distinct               ·          ·
+ │                     order key  database_name
+ └── sort              ·          ·
+      │                order      +database_name
+      └── render       ·          ·
+           └── values  ·          ·
+·                      size       4 columns, 20 rows
+
+query TTT
+EXPLAIN SHOW TABLES
+----
+sort                   ·       ·
+ │                     order   +table_schema,+table_name
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  table_schema = 'public'
+           └── values  ·       ·
+·                      size    6 columns, 92 rows
+
+query TTT
+EXPLAIN SHOW DATABASE
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'database'
+      └── values  ·       ·
+·                 size    2 columns, 36 rows
+
+query TTT
+EXPLAIN SHOW TIME ZONE
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'timezone'
+      └── values  ·       ·
+·                 size    2 columns, 36 rows
+
+query TTT
+EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'default_transaction_isolation'
+      └── values  ·       ·
+·                 size    2 columns, 36 rows
+
+query TTT
+EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_isolation'
+      └── values  ·       ·
+·                 size    2 columns, 36 rows
+
+query TTT
+EXPLAIN SHOW TRANSACTION PRIORITY
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_priority'
+      └── values  ·       ·
+·                 size    2 columns, 36 rows
+
+query TTT
+EXPLAIN SHOW COLUMNS FROM foo
+----
+sort                                       ·            ·
+ │                                         order        +ordinal_position
+ └── render                                ·            ·
+      └── group                            ·            ·
+           │                               aggregate 0  column_name
+           │                               aggregate 1  crdb_sql_type
+           │                               aggregate 2  is_nullable
+           │                               aggregate 3  column_default
+           │                               aggregate 4  generation_expression
+           │                               aggregate 5  ordinal_position
+           │                               aggregate 6  is_hidden
+           │                               aggregate 7  array_agg(index_name)
+           │                               group by     @1-@7
+           └── render                      ·            ·
+                └── join                   ·            ·
+                     │                     type         left outer
+                     │                     equality     (column_name) = (column_name)
+                     ├── render            ·            ·
+                     │    └── filter       ·            ·
+                     │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                     │         └── values  ·            ·
+                     │                     size         20 columns, 929 rows
+                     └── render            ·            ·
+                          └── filter       ·            ·
+                               │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                               └── values  ·            ·
+·                                          size         13 columns, 3 rows
+
+query TTT
+EXPLAIN SHOW GRANTS ON foo
+----
+sort                   ·       ·
+ │                     order   +database_name,+schema_name,+table_name,+grantee,+privilege_type
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+           └── values  ·       ·
+·                      size    8 columns, 585 rows
+
+
+query TTT
+EXPLAIN SHOW INDEX FROM foo
+----
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+      └── values  ·       ·
+·                 size    13 columns, 3 rows
+
+query TTT
+EXPLAIN SHOW CONSTRAINTS FROM foo
+----
+sort                             ·         ·
+ │                               order     +table_name,+constraint_name
+ └── render                      ·         ·
+      └── join                   ·         ·
+           │                     type      inner
+           │                     equality  (relnamespace, oid) = (oid, conrelid)
+           ├── filter            ·         ·
+           │    │                filter    relname = 'foo'
+           │    └── values       ·         ·
+           │                     size      27 columns, 94 rows
+           └── join              ·         ·
+                │                type      cross
+                ├── filter       ·         ·
+                │    │           filter    nspname = 'public'
+                │    └── values  ·         ·
+                │                size      4 columns, 4 rows
+                └── values       ·         ·
+·                                size      26 columns, 0 rows
+
+query TTT
+EXPLAIN SHOW USERS
+----
+render     ·       ·
+ └── scan  ·       ·
+·          table   users@primary
+·          spans   ALL
+·          filter  "isRole" = false
+
+# EXPLAIN selecting from a sequence.
+statement ok
+CREATE SEQUENCE select_test
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM select_test
+----
+tree             field  description  columns                           ordering
+sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
+
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+query TTT
+EXPLAIN INSERT INTO t VALUES (1, 2)
+----
+count             ·     ·
+ └── insert       ·     ·
+      │           into  t(k, v)
+      └── values  ·     ·
+·                 size  2 columns, 1 row
+
+query I
+SELECT max(level) FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
+----
+2
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+query TTT
+EXPLAIN SELECT * FROM t
+----
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t
+----
+scan  ·      ·          (k, v)  ·
+·     table  t@primary  ·       ·
+·     spans  ALL        ·       ·
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
+----
+scan  ·      ·
+·     table  t@primary
+·     spans  /1-/1/# /3-/3/#
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
+----
+scan  ·       ·            (k, v)  ·
+·     table   t@primary    ·       ·
+·     spans   ALL          ·       ·
+·     filter  (k % 2) = 0  ·       ·
+
+query TTT
+EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
+----
+values  ·     ·
+·       size  3 columns, 2 rows
+
+query TTT
+EXPLAIN VALUES (1)
+----
+values  ·     ·
+·       size  1 column, 1 row
+
+query TTT
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
+----
+limit            ·       ·
+ │               count   1
+ │               offset  1
+ └── ordinality  ·       ·
+      └── scan   ·       ·
+·                table   t@primary
+·                spans   ALL
+
+query TTT
+EXPLAIN SELECT DISTINCT v FROM t
+----
+distinct   ·            ·
+ │         distinct on  v
+ └── scan  ·            ·
+·          table        t@primary
+·          spans        ALL
+
+query TTT
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
+----
+limit           ·            ·
+ │              count        1
+ │              offset       1
+ └── distinct   ·            ·
+      │         distinct on  v
+      └── scan  ·            ·
+·               table        t@primary
+·               spans        ALL
+
+statement ok
+CREATE TABLE tc (a INT, b INT, INDEX c(a))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+sort             ·      ·           (a, b)              +b
+ │               order  +b          ·                   ·
+ └── index-join  ·      ·           (a, b)              ·
+      ├── scan   ·      ·           (a, rowid[hidden])  ·
+      │          table  tc@c        ·                   ·
+      │          spans  /10-/11     ·                   ·
+      └── scan   ·      ·           (a, b)              ·
+·                table  tc@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
+----
+tree              field          description       columns                     ordering
+count             ·              ·                 ()                          ·
+ └── insert       ·              ·                 ()                          ·
+      │           into           t(k, v)           ·                           ·
+      └── values  ·              ·                 (column1 int, column2 int)  ·
+·                 size           2 columns, 1 row  ·                           ·
+·                 row 0, expr 0  (1)[int]          ·                           ·
+·                 row 0, expr 1  (2)[int]          ·                           ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT 42 AS a
+----
+render         ·         ·          (a int)  ·
+ │             render 0  (42)[int]  ·        ·
+ └── emptyrow  ·         ·          ()       ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM t
+----
+scan  ·      ·          (k int, v int)  ·
+·     table  t@primary  ·               ·
+·     spans  ALL        ·               ·
+
+query TTTTT
+EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
+----
+scan  ·      ·          (k int)  ·
+·     table  t@primary  ·        ·
+·     spans  ALL        ·        ·
+
+query TTTTT
+EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
+----
+scan  ·      ·          (k int)  ·
+·     table  t@primary  ·        ·
+·     spans  ALL        ·        ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
+----
+scan  ·       ·                              (k int, v int)  ·
+·     table   t@primary                      ·               ·
+·     spans   ALL                            ·               ·
+·     filter  ((v)[int] > (123)[int])[bool]  ·               ·
+
+query TTTTT
+EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
+----
+values  ·              ·                  (column1 int, column2 int, column3 int)  ·
+·       size           3 columns, 2 rows  ·                                        ·
+·       row 0, expr 0  (1)[int]           ·                                        ·
+·       row 0, expr 1  (2)[int]           ·                                        ·
+·       row 0, expr 2  (3)[int]           ·                                        ·
+·       row 1, expr 0  (4)[int]           ·                                        ·
+·       row 1, expr 1  (5)[int]           ·                                        ·
+·       row 1, expr 2  (6)[int]           ·                                        ·
+
+# TODO(rytaft): range operator needed to detect contradiction
+query TTTTT
+EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
+----
+render               ·            ·                                                                          (z int, v int)     ·
+ │                   render 0     ((agg0)[int] * (2)[int])[int]                                              ·                  ·
+ │                   render 1     (v)[int]                                                                   ·                  ·
+ └── filter          ·            ·                                                                          (v int, agg0 int)  ·
+      │              filter       ((agg0)[int] > (1)[int])[bool]                                             ·                  ·
+      └── group      ·            ·                                                                          (v int, agg0 int)  ·
+           │         aggregate 0  v                                                                          ·                  ·
+           │         aggregate 1  count(k)                                                                   ·                  ·
+           │         group by     @2                                                                         ·                  ·
+           └── scan  ·            ·                                                                          (k int, v int)     ·
+·                    table        t@primary                                                                  ·                  ·
+·                    spans        ALL                                                                        ·                  ·
+·                    filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                  ·
+
+query TTTTT
+EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
+----
+count                ·         ·                            ()              ·
+ └── delete          ·         ·                            ()              ·
+      │              from      t                            ·               ·
+      └── render     ·         ·                            (k int)         k!=NULL; key(k)
+           │         render 0  (k)[int]                     ·               ·
+           └── scan  ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
+·                    table     t@primary                    ·               ·
+·                    spans     ALL                          ·               ·
+·                    filter    ((v)[int] > (1)[int])[bool]  ·               ·
+
+query TTTTT
+EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
+----
+count                ·         ·                              ()                              ·
+ └── update          ·         ·                              ()                              ·
+      │              table     t                              ·                               ·
+      │              set       v                              ·                               ·
+      └── render     ·         ·                              (k int, v int, "?column?" int)  k!=NULL; v!=NULL; key(k)
+           │         render 0  (k)[int]                       ·                               ·
+           │         render 1  (v)[int]                       ·                               ·
+           │         render 2  ((k)[int] + (1)[int])[int]     ·                               ·
+           └── scan  ·         ·                              (k int, v int)                  k!=NULL; v!=NULL; key(k)
+·                    table     t@primary                      ·                               ·
+·                    spans     ALL                            ·                               ·
+·                    filter    ((v)[int] > (123)[int])[bool]  ·                               ·
+
+query TTTTT
+EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
+----
+union        ·              ·                (column1 int)  ·
+ ├── values  ·              ·                (column1 int)  ·
+ │           size           1 column, 1 row  ·              ·
+ │           row 0, expr 0  (2)[int]         ·              ·
+ └── values  ·              ·                (column1 int)  ·
+·            size           1 column, 1 row  ·              ·
+·            row 0, expr 0  (1)[int]         ·              ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT DISTINCT k FROM t
+----
+scan  ·      ·          (k int)  ·
+·     table  t@primary  ·        ·
+·     spans  ALL        ·        ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
+----
+sort       ·      ·          (v int)  +v
+ │         order  +v         ·        ·
+ └── scan  ·      ·          (v int)  ·
+·          table  t@primary  ·        ·
+·          spans  ALL        ·        ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
+----
+scan  ·      ·          (v int)  ·
+·     table  t@primary  ·        ·
+·     spans  ALL        ·        ·
+·     limit  1          ·        ·
+
+statement ok
+CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
+----
+scan  ·       ·                                                                          (x int, y int)  ·
+·     table   tt@primary                                                                 ·               ·
+·     spans   ALL                                                                        ·               ·
+·     filter  ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+
+# TODO(radu): we don't support placeholders with no values.
+#query TTTTT
+#EXPLAIN (TYPES) SELECT $1 + 2 AS a
+#----
+#render         ·         ·                            (a int)  a=CONST
+# │             render 0  (($1)[int] + (2)[int])[int]  ·        ·
+# └── emptyrow  ·         ·                            ()       ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT abs(2-3) AS a
+----
+render         ·         ·         (a int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
+
+# Check array subscripts (#13811)
+query TTTTT
+EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
+----
+render         ·         ·         (x int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
+
+query T
+EXPLAIN (OPT) SELECT 1 AS r
+----
+project
+ ├── columns: r:1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.03
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.01
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 1 [type=int]
+
+# Test with an unsupported statement.
+statement error window functions are not supported
+EXPLAIN (OPT) SELECT avg(x) OVER () FROM (VALUES (1)) AS t(x)

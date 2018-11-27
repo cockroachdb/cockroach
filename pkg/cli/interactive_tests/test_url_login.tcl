@@ -12,7 +12,7 @@ spawn $argv sql --url "postgresql://localhost:26257?sslmode=disable"
 eexpect @localhost
 end_test
 
-send "\004"
+send_eof
 eexpect eof
 
 stop_server $argv

@@ -11,20 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package stop_test
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -138,7 +137,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	s := stop.NewStopper()
 	ctx := context.Background()
 
-	if err := s.RunTask(ctx, func(ctx context.Context) {
+	if err := s.RunTask(ctx, "test", func(ctx context.Context) {
 		go s.Stop(ctx)
 
 		select {
@@ -198,7 +197,7 @@ func TestStopperQuiesce(t *testing.T) {
 		thisStopper.RunWorker(ctx, func(ctx context.Context) {
 			// Wait until Quiesce() is called.
 			<-qc
-			err := thisStopper.RunTask(ctx, func(context.Context) {})
+			err := thisStopper.RunTask(ctx, "test", func(context.Context) {})
 			if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
 				t.Error(err)
 			}
@@ -255,6 +254,35 @@ func TestStopperClosers(t *testing.T) {
 	}
 }
 
+func TestStopperCloserConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const trials = 10
+	for i := 0; i < trials; i++ {
+		s := stop.NewStopper()
+		var tc1 testCloser
+
+		// Add Closer and Stop concurrently. There should be
+		// no circumstance where the Closer is not called.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			s.AddCloser(&tc1)
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			s.Stop(context.Background())
+		}()
+		wg.Wait()
+
+		if !tc1 {
+			t.Errorf("expected true; got %t", tc1)
+		}
+	}
+}
+
 func TestStopperNumTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
@@ -262,7 +290,7 @@ func TestStopperNumTasks(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		c := make(chan bool)
 		tasks = append(tasks, c)
-		if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
+		if err := s.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
 			// Wait for channel to close
 			<-c
 		}); err != nil {
@@ -323,14 +351,14 @@ func TestStopperRunTaskPanic(t *testing.T) {
 	ctx := context.Background()
 	for i, test := range []testFn{
 		func() {
-			_ = s.RunTask(ctx, explode)
+			_ = s.RunTask(ctx, "test", explode)
 		},
 		func() {
-			_ = s.RunAsyncTask(ctx, func(ctx context.Context) { explode(ctx) })
+			_ = s.RunAsyncTask(ctx, "test", func(ctx context.Context) { explode(ctx) })
 		},
 		func() {
 			_ = s.RunLimitedAsyncTask(
-				context.Background(),
+				context.Background(), "test",
 				make(chan struct{}, 1),
 				true, /* wait */
 				func(ctx context.Context) { explode(ctx) },
@@ -351,10 +379,89 @@ func TestStopperRunTaskPanic(t *testing.T) {
 func TestStopperWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	ctx := s.WithCancel(context.Background())
+	ctx := context.Background()
+	ctx1, _ := s.WithCancelOnQuiesce(ctx)
+	ctx2, _ := s.WithCancelOnStop(ctx)
+	ctx3, cancel3 := s.WithCancelOnQuiesce(ctx)
+	ctx4, cancel4 := s.WithCancelOnStop(ctx)
+
+	if err := ctx1.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+	if err := ctx2.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+	if err := ctx3.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+	if err := ctx4.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+
+	cancel3()
+	cancel4()
+	if err := ctx1.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+	if err := ctx2.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+	if err := ctx3.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+	if err := ctx4.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+
+	s.Quiesce(ctx)
+	if err := ctx1.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+	if err := ctx2.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
+
 	s.Stop(ctx)
-	if err := ctx.Err(); err != context.Canceled {
-		t.Fatal(err)
+	if err := ctx2.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+}
+
+func TestStopperWithCancelConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const trials = 10
+	for i := 0; i < trials; i++ {
+		s := stop.NewStopper()
+		ctx := context.Background()
+		var ctx1, ctx2 context.Context
+
+		// Tie two contexts to the Stopper and Stop concurrently. There should
+		// be no circumstance where either Context is not canceled.
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			ctx1, _ = s.WithCancelOnQuiesce(ctx)
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			ctx2, _ = s.WithCancelOnStop(ctx)
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			s.Stop(ctx)
+		}()
+		wg.Wait()
+
+		if err := ctx1.Err(); err != context.Canceled {
+			t.Errorf("should be canceled: %v", err)
+		}
+		if err := ctx2.Err(); err != context.Canceled {
+			t.Errorf("should be canceled: %v", err)
+		}
 	}
 }
 
@@ -376,7 +483,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// Run an asynchronous task. A stopper which has been Stop()ed will not
 	// close it's ShouldStop() channel until all tasks have completed. This task
 	// will complete when the "runningTask" channel is closed.
-	if err := s.RunAsyncTask(ctx, func(_ context.Context) {
+	if err := s.RunAsyncTask(ctx, "test", func(_ context.Context) {
 		<-runningTask
 	}); err != nil {
 		t.Fatal(err)
@@ -467,7 +574,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
 		if err := s.RunLimitedAsyncTask(
-			context.Background(), sem, true /* wait */, f,
+			context.Background(), "test", sem, true /* wait */, f,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -484,7 +591,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	sem = make(chan struct{}, 1)
 	sem <- struct{}{}
 	err := s.RunLimitedAsyncTask(
-		context.Background(), sem, false /* wait */, func(_ context.Context) {
+		context.Background(), "test", sem, false /* wait */, func(_ context.Context) {
 		},
 	)
 	if err != stop.ErrThrottled {
@@ -505,7 +612,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	workerStarted := make(chan struct{})
 
 	var workersRun int32
-	var workersCancelled int32
+	var workersCanceled int32
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func(ctx context.Context) {
@@ -515,13 +622,13 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	}
 
 	// This loop will block when the semaphore is filled.
-	if err := s.RunAsyncTask(ctx, func(ctx context.Context) {
+	if err := s.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		for i := 0; i < maxConcurrency*2; i++ {
-			if err := s.RunLimitedAsyncTask(ctx, sem, true, f); err != nil {
+			if err := s.RunLimitedAsyncTask(ctx, "test", sem, true, f); err != nil {
 				if err != context.Canceled {
 					t.Fatal(err)
 				}
-				atomic.AddInt32(&workersCancelled, 1)
+				atomic.AddInt32(&workersCanceled, 1)
 			}
 		}
 		close(workersDone)
@@ -543,8 +650,8 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	if a, e := atomic.LoadInt32(&workersRun), int32(maxConcurrency); a != e {
 		t.Fatalf("%d workers ran before context close, expected exactly %d", a, e)
 	}
-	if a, e := atomic.LoadInt32(&workersCancelled), int32(maxConcurrency); a != e {
-		t.Fatalf("%d workers cancelled after context close, expected exactly %d", a, e)
+	if a, e := atomic.LoadInt32(&workersCanceled), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers canceled after context close, expected exactly %d", a, e)
 	}
 }
 
@@ -570,7 +677,7 @@ func BenchmarkStopper(b *testing.B) {
 	s := stop.NewStopper()
 	defer s.Stop(ctx)
 	for i := 0; i < b.N; i++ {
-		if err := s.RunTask(ctx, maybePrint); err != nil {
+		if err := s.RunTask(ctx, "test", maybePrint); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -594,7 +701,7 @@ func BenchmarkStopperPar(b *testing.B) {
 	defer s.Stop(ctx)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if err := s.RunTask(ctx, maybePrint); err != nil {
+			if err := s.RunTask(ctx, "test", maybePrint); err != nil {
 				b.Fatal(err)
 			}
 		}

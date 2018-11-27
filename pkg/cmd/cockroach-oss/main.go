@@ -11,13 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
+// cockroach-oss is an entry point for a CockroachDB binary that excludes all
+// CCL-licensed code.
 package main
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 )
 
 func main() {

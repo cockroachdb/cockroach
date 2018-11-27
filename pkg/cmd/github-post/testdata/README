@@ -1,0 +1,10 @@
+The files in this directory simulate real failure logs from nightly stress runs.
+They have been truncated for clarity.
+
+To regenerate them, run something like the following command:
+
+    $ make stress PKG=./pkg/XXX TESTS=TestXXX 2>&1 | go tool test2json -t > pkg/cmd/github-post/testdata/FILE
+
+You will likely need to inject a failure into your chosen test ahead of time.
+Please remove irrelevant log lines from the test to keep the file size
+reasonable. Several dozen kilobytes is a good target.

@@ -11,21 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // optimizePlan transforms the query plan into its final form.  This
 // includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
+//
+// The plan returned by optimizePlan *must* be Close()d, even in case
+// of error, because it may contain memory-registered data structures
+// and other things that need clean up.
 func (p *planner) optimizePlan(
 	ctx context.Context, plan planNode, needed []bool,
 ) (planNode, error) {
@@ -50,58 +54,46 @@ func (p *planner) optimizePlan(
 	// the needed columns are properly computed for newly expanded nodes.
 	setNeededColumns(newPlan, needed)
 
-	// Now do the same work for all sub-queries.
-	i := &subqueryInitializer{p: p}
-	observer := planObserver{
-		subqueryNode: i.subqueryNode,
-		enterNode:    i.enterNode,
-	}
-	if err := walkPlan(ctx, newPlan, observer); err != nil {
-		return plan, err
-	}
 	return newPlan, nil
 }
 
-// subqueryInitializer ensures that initNeededColumns() and
-// optimizeFilters() is called on the planNodes of all sub-query
-// expressions.
-type subqueryInitializer struct {
-	p *planner
-}
-
-// subqueryNode implements the planObserver interface.
-func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) error {
-	if sq.plan != nil && !sq.expanded {
-		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
-			numRows := parser.DInt(1)
-			if sq.execMode == execModeOneRow {
-				// When using a sub-query in a scalar context, we must
-				// appropriately reject sub-queries that return more than 1
-				// row.
-				numRows = 2
-			}
-
-			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: parser.NewDInt(numRows)}
-		}
-
-		needed := make([]bool, len(sq.plan.Columns()))
-		if sq.execMode != execModeExists {
-			// EXISTS does not need values; the rest does.
-			for i := range needed {
-				needed[i] = true
-			}
-		}
-
-		var err error
-		sq.plan, err = i.p.optimizePlan(ctx, sq.plan, needed)
-		if err != nil {
-			return err
-		}
-		sq.expanded = true
+// optimizeSubquery ensures plan optimization has been perfomed on the given subquery.
+func (p *planner) optimizeSubquery(ctx context.Context, sq *subquery) error {
+	if sq.expanded {
+		// Already processed. Nothing to do.
+		return nil
 	}
-	return nil
-}
 
-func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ planNode) bool {
-	return true
+	if log.V(2) {
+		log.Infof(ctx, "optimizing subquery %d (%q)", sq.subquery.Idx, sq.subquery)
+	}
+
+	if sq.execMode == distsqlrun.SubqueryExecModeExists ||
+		sq.execMode == distsqlrun.SubqueryExecModeOneRow {
+		numRows := tree.DInt(1)
+		if sq.execMode == distsqlrun.SubqueryExecModeOneRow {
+			// When using a sub-query in a scalar context, we must
+			// appropriately reject sub-queries that return more than 1
+			// row.
+			numRows = 2
+		}
+
+		sq.plan = &limitNode{plan: sq.plan, countExpr: tree.NewDInt(numRows)}
+	}
+
+	needed := make([]bool, len(planColumns(sq.plan)))
+	if sq.execMode != distsqlrun.SubqueryExecModeExists {
+		// EXISTS does not need values; the rest does.
+		for i := range needed {
+			needed[i] = true
+		}
+	}
+
+	var err error
+	sq.plan, err = p.optimizePlan(ctx, sq.plan, needed)
+	if err != nil {
+		return err
+	}
+	sq.expanded = true
+	return nil
 }

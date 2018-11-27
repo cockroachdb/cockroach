@@ -1,0 +1,5 @@
+cancel_queries_stmt ::=
+	'CANCEL' 'QUERY' query_id
+	| 'CANCEL' 'QUERY' 'IF' 'EXISTS' query_id
+	| 'CANCEL' 'QUERIES' select_stmt
+	| 'CANCEL' 'QUERIES' 'IF' 'EXISTS' select_stmt

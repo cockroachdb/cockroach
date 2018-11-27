@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+#
+# -u: we want the variables to be properly assigned.
+# -o pipefail: we want to test the result of pipes.
+# No -e because we have failing commands and that's OK.
+set -uo pipefail
+
+grep=${GREP:-grep}
+awk=${AWK:-awk}
+sed=${SED:-sed}
+
+# Support both terminfo and termcap.
+# We want to check whether stderr is a terminal (to enable
+# printing colors). We want this test to work even if stdin is
+# redirected (e.g. when run from git commit) or stdout is
+# redirected (e.g. in the var assignments below).
+red=$([ -t 2 ] && { tput setaf 1 || tput AF 1; } 2>/dev/null)
+reset=$([ -t 2 ] && { tput sgr0 || tput me; } 2>/dev/null)
+warn() {
+    echo >&2
+    echo "${red}$*${reset}" >&2
+}
+
+# First lint test: give a friendly reminder on long lines.
+
+longlines=$($awk '/^# --* >8 --*/ {exit} /^[^#]/ { if (length() >= 80) print }' <"$1")
+if test -n "$longlines"; then
+    warn "Long line(s) detected:"
+    echo "$longlines" | $sed -e 's/^/   /g' >&2
+    echo >&2
+    echo "Please amend and wrap long lines." >&2
+    echo "(Long lines are OK if inside a preformatted block or a table.)" >&2
+    echo >&2
+fi
+
+# Lint the release notes.
+#
+# It's OK to have multiple entries per commit
+# (e.g. changes in different categories). But that means we need to
+# extract them separately for analysis.
+#
+saveIFS=$IFS
+IFS='
+'
+notes=($($grep -iE '^release note' "$1"))
+IFS=$saveIFS
+
+
+informed=
+inform() {
+    if [ -z "$informed" ]; then
+        info=${rnote:0:40}
+        if [ "$info" != "$rnote" ]; then info="$info..."; fi
+        warn "Warning: malformed release note entry: $info"
+    fi
+    informed=1
+}
+hint() {
+    inform
+    echo "- $*" >&2
+}
+
+if [ 0 = ${#notes[*]} ]; then
+    warn "No release note specified."
+    echo "Try: 'Release note (...): ...'" >&2
+    echo >&2
+else
+    for rnote in "${notes[@]}"; do
+        informed=
+        if echo "$rnote" | $grep -qiE '^release note' && ! echo "$rnote" | $grep -qE '^Release note'; then
+            hint "case matters! Try '${rnote:0:12}' -> 'Release note'"
+        fi
+        if echo "$rnote" | $grep -qiE '^release notes'; then
+            hint "singular please. Use multiple entries if there are multiple notes. Try '${rnote:0:13}' -> 'Release note'"
+        fi
+        if echo "$rnote" | $grep -qiE '^release notes? *: *\('; then
+            entered=$(echo "$rnote" | cut -d')' -f1)\); entered=${entered:0:40}
+            cat=$(echo "$rnote" | cut -d'(' -f2 | cut -d')' -f1)
+            hint "place the category before the colon. Try '$entered' -> 'Release note ($cat):'"
+        fi
+        if echo "$rnote" | $grep -qiE '^release notes? *: *[^ ]* *:'; then
+            cat=$(echo "$rnote" | $sed -e 's/^[^:]*: *//g;s/ *:.*$//g')
+            entered=$(echo "$rnote" | cut -d: -f1-2)
+            hint "place category within parentheses. Try '$entered:' -> 'Release note ($cat):'"
+        fi
+        if echo "$rnote" | $grep -qiE '^release notes?[^:]*: *none' && ! echo "$rnote" | $grep -qE '^Release note: [nN]one'; then
+            entered=$(echo "$rnote" | $sed -e 's/none.*/none/ig')
+            hint "for no release notes use 'none' with no category. Try '$entered' -> 'Release note: none'"
+        fi
+        if ! echo "$rnote" | $grep -qiE '^release notes? *: *none' && echo "$rnote" | $grep -qiE '^release notes? *: *[^( ]'; then
+            entered=$(echo "$rnote" | cut -d: -f2-); entered=${entered:0:40}
+            hint "category missing (can only be omitted if note is 'none'). Try 'Release note (category):$entered'"
+        fi
+        if echo "$rnote" | $grep -qiE '^release notes?[^:]*:([^ ]|   *)' || \
+                echo "$rnote" | $grep -qiE '^release notes?(\(|  +\()' || \
+                echo "$rnote" | $grep -qiE '^release notes? *\( +' || \
+                echo "$rnote" | $grep -qiE '^release notes? *\( *[^)]* +\)' ; then
+            entered=${rnote:0:40}
+            body=$(echo "$rnote"| cut -d: -f2-|cut -c1-40|$sed -e 's/^ *//g')
+            cat=$(echo "$rnote" | cut -d'(' -f2 |cut -d')' -f1|$sed -e 's/^ *//g;s/ *$//g')
+            if test -z "$cat"; then cat=...; fi
+            hint "some space problem. Try '$entered' -> 'Release note ($cat): $body'"
+        fi
+        # Now prune the category
+        if echo "$rnote" | $grep -qiE '^release notes? *\([^)]*\)'; then
+            cat=$(echo "$rnote" | cut -d'(' -f2|cut -d')' -f1|$sed -e 's/^ *//g;s/ *$//g')
+            lower=$(echo "$cat"|tr A-Z a-z)
+            if [ "$cat" != "$lower" ]; then
+                hint "categories in lowercase. Try 'Release note ($cat)' -> 'Release note ($lower)'"
+            fi
+            if echo "$rnote" | $grep -qiE '^release notes? *\([^)/]*/'; then
+                repl=$(echo "$lower"|$sed -e 's| */ *|, |g')
+                hint "use commas to separate categories. Try '($lower)' -> '($repl)'"
+                lower=$repl
+            fi
+            saveIFS=$IFS
+            IFS='
+'
+            cats=($(echo "$lower" | tr ',' '\n' | $sed -e 's/^ *//g'))
+            IFS=$saveIFS
+            for lcat in "${cats[@]}"; do
+                case $lcat in
+                    "cli change") ;;
+                    "sql change") ;;
+                    "admin ui change") ;;
+                    "general change") ;;
+                    "build change") ;;
+                    "enterprise change") ;;
+                    "backward-incompatible change") ;;
+                    "performance improvement") ;;
+                    "bug fix") ;;
+                    bugfix)
+                        hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
+                    sql*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
+                    "backwards-incompatible"*|"backward incompatible"*)
+                        hint "Try '$lcat' -> 'backward-incompatible change'" ;;
+                    *) hint "unknown category '$lcat'" ;;
+                esac
+            done
+        fi
+	# Do some linting on the message itself.
+	msg=$(echo "$rnote" | cut -d':' -f1-)
+	if echo "$msg" | $grep -qiE ' *([cC]loses?|[fF]ix(es)?) *#[0-9]+\.? *'; then
+	    hint "don't just close or fix. Explain."
+	fi
+    done
+    if test -n "$informed"; then echo >&2; fi
+fi

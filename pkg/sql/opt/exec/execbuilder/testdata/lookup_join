@@ -1,0 +1,530 @@
+# LogicTest: 5node-dist-opt
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e))
+
+# Set up the statistics as if the first table is much smaller than the second.
+# This will make lookup join into the second table be the best plan.
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @5 > 1       ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  /2-          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @6 > 1       ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  /2-          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @1 >= @5     ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @1 >= @5     ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+# Verify a distsql plan.
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+----
+render            ·         ·             (a, b, c, d)              ·
+ │                render 0  a             ·                         ·
+ │                render 1  b             ·                         ·
+ │                render 2  c             ·                         ·
+ │                render 3  d             ·                         ·
+ └── lookup-join  ·         ·             (a, b, c, d, a, b, c, d)  ·
+      │           type      inner         ·                         ·
+      ├── scan    ·         ·             (a, b, c, d)              ·
+      │           table     data@primary  ·                         ·
+      │           spans     ALL           ·                         ·
+      │           filter    c = 1         ·                         ·
+      └── scan    ·         ·             (a, b, c, d)              ·
+·                 table     data@primary  ·                         ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElFGrmzAUx9_3KeQ8Z1yjtrc3MPBp0DF6R-nb8CEzh-JmcySJsFH87kMdVEsbhWL3aPTv_8fvhHMGTQp38oQWxHfgwCACBjEwSIDBCjIGlaEcrSXTftIHtuo3iJBBoavatccZg5wMgjiDK1yJIOAgf5S4R6nQvITAQKGTRdnVVKY4SfMnVdJJYPC5KB0aEaRx8CngQojt7gBZw4Bqd_m_dfKIIHjD5jN8oUL_Q1h5Eb4S_aqr4CcVOiAtgpSzNGJpzNJWw3vtxkf34KK7cBemWpNRaFCNgLLmBv6OPlL1wsOrL293x6NuPn84fKnhTDAMhrN-_nCi-YKipQRNMAwEvT5fUDxfULyUoAmGgaDN8wUl8wUlSwmaYBgIevu_--8G3B5tRdrirO0WtvsR1RH7ZWqpNjl-M5R3Nf3je5frDhRa17_l_cNW969awGGYe8PRKMyvw5G_eaI69qYTfzh5hHvlDa_9zetHml-94Y2_efNI85t_VuHENfFfsuvurPnwNwAA__8ZfQMm
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+CREATE TABLE books2 (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+ALTER TABLE books INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE books2 INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+tree                   field        description     columns                       ordering
+distinct               ·            ·               (title)                       weak-key(title)
+ │                     distinct on  title           ·                             ·
+ │                     order key    title           ·                             ·
+ └── render            ·            ·               (title)                       ·
+      │                render 0     title           ·                             ·
+      └── lookup-join  ·            ·               (title, shelf, title, shelf)  ·
+           │           type         inner           ·                             ·
+           │           pred         @2 != @4        ·                             ·
+           ├── scan    ·            ·               (title, shelf)                +title
+           │           table        books@primary   ·                             ·
+           │           spans        ALL             ·                             ·
+           └── scan    ·            ·               (title, shelf)                ·
+·                      table        books2@primary  ·                             ·
+
+statement ok
+CREATE TABLE authors (name STRING PRIMARY KEY, book STRING)
+
+statement ok
+ALTER TABLE authors INJECT STATISTICS '[
+  {
+    "columns": ["name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+tree                      field        description                          columns                                   ordering
+distinct                  ·            ·                                    (name)                                    weak-key(name)
+ │                        distinct on  name                                 ·                                         ·
+ └── render               ·            ·                                    (name)                                    ·
+      │                   render 0     name                                 ·                                         ·
+      └── join            ·            ·                                    (title, shelf, name, book, title, shelf)  ·
+           │              type         inner                                ·                                         ·
+           │              equality     (title) = (title)                    ·                                         ·
+           │              pred         (book = title) AND (shelf != shelf)  ·                                         ·
+           ├── join       ·            ·                                    (title, shelf, name, book)                ·
+           │    │         type         cross                                ·                                         ·
+           │    ├── scan  ·            ·                                    (title, shelf)                            ·
+           │    │         table        books2@primary                       ·                                         ·
+           │    │         spans        ALL                                  ·                                         ·
+           │    └── scan  ·            ·                                    (name, book)                              ·
+           │              table        authors@primary                      ·                                         ·
+           │              spans        ALL                                  ·                                         ·
+           └── scan       ·            ·                                    (title, shelf)                            ·
+·                         table        books@primary                        ·                                         ·
+·                         spans        ALL                                  ·                                         ·
+
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE books
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       NULL     10        {5}       5
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk0-L2zAQxe_9FOqcElCx5X8LhoAKe-j24C1LbyUHrTVNRB3LSDK0hHz3YhuS2I2VP5febGl-8968QXuotcRC7NBC_gMYUEhhTaExukRrtemOh6IX-RvykIKqm9Z1x2sKpTYI-R6cchVCDoX-pJsgAwoSnVBVX3agoFt3gqwTG4T86UDPGjN_4-_ivcI3FBJNEI7aQ2PUTpg__F3rXzYCCq-tywlnlMcwp80e1WaXtUXrtl1Wc3rRrN5Jpq21kWhQTtO7XnLB9Bdht1-1qtEE0djzMZ6I8pjyZNZ0_GhIsWdBt-0n-Z95JWP7Ff50C86WK6M22_6rm6EgC56QFeHpknwunsmCZ-TjivBoeZxwfrz0nmSflXWqLl2Qjn1xNts_G_W_8mbf0Da6tnjTow277FBucNiF1a0p8ZvRZS8z_L72XH8g0brh9mn4eamHq87gOcy8cDyC2RSO7oCjKRx74dSvnNwB_6OceuHMH1jmhcMJvD58-BsAAP__2dLv4w==
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
+----
+tree              field     description      columns              ordering
+render            ·         ·                (name)               +name
+ │                render 0  name             ·                    ·
+ └── lookup-join  ·         ·                (name, book, title)  ·
+      │           type      inner            ·                    ·
+      ├── scan    ·         ·                (name, book)         +name
+      │           table     authors@primary  ·                    ·
+      │           spans     ALL              ·                    ·
+      └── scan    ·         ·                (title)              ·
+·                 table     books2@primary   ·                    ·
+
+# Cross joins should not be planned as lookup joins.
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
+----
+tree            field     description     columns                                         ordering
+render          ·         ·               (title, edition, shelf, title, edition, shelf)  ·
+ │              render 0  title           ·                                               ·
+ │              render 1  edition         ·                                               ·
+ │              render 2  shelf           ·                                               ·
+ │              render 3  title           ·                                               ·
+ │              render 4  edition         ·                                               ·
+ │              render 5  shelf           ·                                               ·
+ └── join       ·         ·               (title, edition, shelf, title, edition, shelf)  ·
+      │         type      cross           ·                                               ·
+      ├── scan  ·         ·               (title, edition, shelf)                         ·
+      │         table     books2@primary  ·                                               ·
+      │         spans     ALL             ·                                               ·
+      └── scan  ·         ·               (title, edition, shelf)                         ·
+·               table     books@primary   ·                                               ·
+·               spans     ALL             ·                                               ·
+
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9r8zAMxu_vpzA666Vx2l4MA187RjpKbyMHNxFd1tYK_gMbJd99OB6sHWu2HfVIPz2P5TNYbqkyJ_KgnkACwhJqhN5xQ96zS3IeWrWvoAqEzvYxJLlGaNgRqDOELhwJFFT8n_tZCQgtBdMdx7EBgWP4hHwwewI1H_BisZxevDW7I23ItORmxdV66F13Mu5NmxieU95bfvIvfvfc2Q87-b3djvng00sfmA-xFy_cWcFWCZ3EdSX0QtwJqZRaVdukxKCElqhL1HPUC9TLm1HLq6g_3HxDvmfr6VdHL4Yagdo95X_1HF1Dj46b0SaX65EbhZZ8yN15LlY2t1LAS1hOwuU0XE7CxRe4Hv69BwAA___eYeIR
+
+####################################
+#  LOOKUP JOIN ON SECONDARY INDEX  #
+####################################
+
+statement ok
+CREATE TABLE small (a INT, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE large (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+statement ok
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE large INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+# Lookup join on covering secondary index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
+----
+render            ·         ·              (a, c)     ·
+ │                render 0  a              ·          ·
+ │                render 1  c              ·          ·
+ └── lookup-join  ·         ·              (a, b, c)  ·
+      │           type      inner          ·          ·
+      ├── scan    ·         ·              (a)        ·
+      │           table     small@primary  ·          ·
+      │           spans     ALL            ·          ·
+      └── scan    ·         ·              (b, c)     ·
+·                 table     large@bc       ·          ·
+
+# Lookup join on non-covering secondary index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
+----
+render                 ·         ·              (a, d)        ·
+ │                     render 0  a              ·             ·
+ │                     render 1  d              ·             ·
+ └── lookup-join       ·         ·              (a, a, b, d)  ·
+      │                type      inner          ·             ·
+      ├── lookup-join  ·         ·              (a, a, b)     ·
+      │    │           type      inner          ·             ·
+      │    ├── scan    ·         ·              (a)           ·
+      │    │           table     small@primary  ·             ·
+      │    │           spans     ALL            ·             ·
+      │    └── scan    ·         ·              (a, b)        ·
+      │                table     large@bc       ·             ·
+      └── scan         ·         ·              (d)           ·
+·                      table     large@primary  ·             ·
+
+############################
+#  LEFT OUTER LOOKUP JOIN  #
+############################
+
+# Left join against primary index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
+----
+lookup-join  ·      ·              (b, a)  ·
+ │           type   left outer     ·       ·
+ ├── scan    ·      ·              (b)     ·
+ │           table  small@primary  ·       ·
+ │           spans  ALL            ·       ·
+ └── scan    ·      ·              (a)     ·
+·            table  large@primary  ·       ·
+
+# Left join against covering secondary index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
+----
+render            ·         ·              (c, c)     ·
+ │                render 0  c              ·          ·
+ │                render 1  c              ·          ·
+ └── lookup-join  ·         ·              (c, b, c)  ·
+      │           type      left outer     ·          ·
+      ├── scan    ·         ·              (c)        ·
+      │           table     small@primary  ·          ·
+      │           spans     ALL            ·          ·
+      └── scan    ·         ·              (b, c)     ·
+·                 table     large@bc       ·          ·
+
+# Left join against non-covering secondary index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
+----
+render                 ·         ·              (c, d)        ·
+ │                     render 0  c              ·             ·
+ │                     render 1  d              ·             ·
+ └── lookup-join       ·         ·              (c, a, b, d)  ·
+      │                type      left outer     ·             ·
+      ├── lookup-join  ·         ·              (c, a, b)     ·
+      │    │           type      left outer     ·             ·
+      │    ├── scan    ·         ·              (c)           ·
+      │    │           table     small@primary  ·             ·
+      │    │           spans     ALL            ·             ·
+      │    └── scan    ·         ·              (a, b)        ·
+      │                table     large@bc       ·             ·
+      └── scan         ·         ·              (d)           ·
+·                      table     large@primary  ·             ·
+
+# Left join with ON filter on covering index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
+----
+render            ·         ·              (c, c)     ·
+ │                render 0  c              ·          ·
+ │                render 1  c              ·          ·
+ └── lookup-join  ·         ·              (c, b, c)  ·
+      │           type      left outer     ·          ·
+      │           pred      @3 < 20        ·          ·
+      ├── scan    ·         ·              (c)        ·
+      │           table     small@primary  ·          ·
+      │           spans     ALL            ·          ·
+      └── scan    ·         ·              (b, c)     ·
+·                 table     large@bc       ·          ·
+
+# Left join with ON filter on non-covering index
+# TODO(radu): this doesn't use lookup join yet, the current rules don't cover
+# left join with ON condition on columns that are not covered by the index.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
+----
+render          ·         ·              (c, d)     ·
+ │              render 0  c              ·          ·
+ │              render 1  d              ·          ·
+ └── join       ·         ·              (b, d, c)  ·
+      │         type      right outer    ·          ·
+      │         equality  (b) = (c)      ·          ·
+      ├── scan  ·         ·              (b, d)     ·
+      │         table     large@primary  ·          ·
+      │         spans     ALL            ·          ·
+      │         filter    d < 30         ·          ·
+      └── scan  ·         ·              (c)        ·
+·               table     small@primary  ·          ·
+·               spans     ALL            ·          ·
+
+###########################################################
+#  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
+#  https://github.com/cockroachdb/cockroach/issues/31777  #
+###########################################################
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)
+
+statement ok
+CREATE TABLE u (a INT, b INT, c INT, d INT, e INT, PRIMARY KEY (a DESC, b, c))
+
+# Test index with all primary key columns implicit.
+statement ok
+CREATE INDEX idx ON u (d)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·
+
+# Test unique version of same index. (Lookup join should not use column a.)
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE UNIQUE INDEX idx ON u (d)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      │           pred      @1 = @4    ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·
+
+# Test index with first primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx CASCADE
+
+statement ok
+CREATE INDEX idx ON u (d, a)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+render            ·         ·          (a)                    ·
+ │                render 0  a          ·                      ·
+ └── lookup-join  ·         ·          (a, b, d, e, a, b, d)  ·
+      │           type      inner      ·                      ·
+      ├── scan    ·         ·          (a, b, d, e)           ·
+      │           table     t@primary  ·                      ·
+      │           spans     ALL        ·                      ·
+      │           filter    e = 5      ·                      ·
+      └── scan    ·         ·          (a, b, d)              ·
+·                 table     u@idx      ·                      ·
+
+# Test index with middle primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, b)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+render            ·         ·          (a)                    ·
+ │                render 0  a          ·                      ·
+ └── lookup-join  ·         ·          (a, b, d, e, a, b, d)  ·
+      │           type      inner      ·                      ·
+      ├── scan    ·         ·          (a, b, d, e)           ·
+      │           table     t@primary  ·                      ·
+      │           spans     ALL        ·                      ·
+      │           filter    e = 5      ·                      ·
+      └── scan    ·         ·          (a, b, d)              ·
+·                 table     u@idx      ·                      ·
+
+# Test index with last primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, c)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      │           pred      @1 = @4    ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·

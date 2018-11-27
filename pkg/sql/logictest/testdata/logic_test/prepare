@@ -1,0 +1,750 @@
+# LogicTest: local local-opt
+
+## Tests for ensuring that prepared statements can't get overwritten and for
+## deallocate and deallocate all.
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement
+PREPARE a AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE a
+----
+1
+
+statement error prepared statement \"a\" already exists
+PREPARE a AS SELECT 1
+
+statement
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement
+PREPARE a AS SELECT 1
+
+statement
+PREPARE b AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE b
+----
+1
+
+statement ok
+DEALLOCATE ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement error prepared statement \"b\" does not exist
+DEALLOCATE b
+
+statement error prepared statement \"b\" does not exist
+EXECUTE b
+
+## Typing tests - no type hints
+#
+query error syntax error at or near \"\)\"
+PREPARE a as ()
+
+statement error could not determine data type of placeholder \$1
+PREPARE a AS SELECT $1
+
+statement
+PREPARE a AS SELECT $1:::int + $2
+
+query I
+EXECUTE a(3, 1)
+----
+4
+
+query error could not parse "foo" as type int
+EXECUTE a('foo', 1)
+
+query error expected EXECUTE parameter expression to have type int, but '3.5' has type decimal
+EXECUTE a(3.5, 1)
+
+query error aggregate functions are not allowed in EXECUTE parameter
+EXECUTE a(max(3), 1)
+
+query error window functions are not allowed in EXECUTE parameter
+EXECUTE a(rank() over (partition by 3), 1)
+
+query error variable sub-expressions are not allowed in EXECUTE parameter
+EXECUTE a((SELECT 3), 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 3
+EXECUTE a(1, 1, 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 0
+EXECUTE a
+
+## Type hints
+
+statement
+PREPARE b (int) AS SELECT $1
+
+query I
+EXECUTE b(3)
+----
+3
+
+query error could not parse "foo" as type int
+EXECUTE b('foo')
+
+statement
+PREPARE allTypes(int, float, string, bytea, date, timestamp, timestamptz, bool, decimal) AS
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+
+query IRTTTTTBR
+EXECUTE allTypes(0, 0.0, 'foo', 'bar', '2017-08-08', '2015-08-30 03:34:45.34567', '2015-08-30 03:34:45.34567', true, 3.4)
+----
+0  0  foo  bar  2017-08-08 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  true  3.4
+
+## Other
+
+statement
+PREPARE c AS SELECT count(*)
+
+query I
+EXECUTE c
+----
+1
+
+statement
+CREATE TABLE t (a int)
+
+statement
+PREPARE i AS INSERT INTO t(a) VALUES($1) RETURNING $1 + 1
+
+statement
+PREPARE s AS SELECT * FROM t
+
+query I
+EXECUTE i(1)
+----
+2
+
+query I
+EXECUTE i(2)
+----
+3
+
+query error could not parse "foo" as type int
+EXECUTE i('foo')
+
+query error expected EXECUTE parameter expression to have type int, but '2.3' has type decimal
+EXECUTE i(2.3)
+
+query I
+EXECUTE i(3.3::int)
+----
+4
+
+query I
+EXECUTE s
+----
+1
+2
+3
+
+statement
+DEALLOCATE ALL
+
+# Regression test for #15970
+
+statement
+PREPARE x AS SELECT avg(column1) OVER (PARTITION BY column2) FROM (VALUES (1, 2), (3, 4))
+
+query R
+EXECUTE x
+----
+1
+3
+
+statement
+PREPARE y AS SELECT avg(a.column1) OVER (PARTITION BY a.column2) FROM (VALUES (1, 2), (3, 4)) a
+
+query R
+EXECUTE y
+----
+1
+3
+
+statement
+DEALLOCATE ALL
+
+# Regression test for #16062
+
+statement
+CREATE TABLE IF NOT EXISTS f (v INT)
+
+statement
+PREPARE x AS SELECT * FROM f
+
+statement
+ALTER TABLE f ADD COLUMN u int
+
+statement
+INSERT INTO f VALUES (1, 2)
+
+statement error cached plan must not change result type
+EXECUTE x
+
+# Ensure that plan changes prevent INSERTs from succeeding.
+
+statement
+PREPARE y AS INSERT INTO f VALUES ($1, $2) RETURNING *
+
+statement
+EXECUTE y (2, 3)
+
+statement
+ALTER TABLE f ADD COLUMN t int
+
+statement error cached plan must not change result type
+EXECUTE y (3, 4)
+
+query III
+SELECT * FROM f
+----
+1 2 NULL
+2 3 NULL
+
+# Ensure that we have a memory monitor for preparing statements
+
+statement
+PREPARE z AS SELECT upper('a')
+
+# Ensure that GROUP BY HAVING doesn't mutate the parsed AST (#16388)
+statement
+CREATE TABLE foo (a int)
+
+statement
+PREPARE groupbyhaving AS SELECT min(1) FROM foo WHERE a = $1 GROUP BY a HAVING count(a) = 0
+
+query I
+EXECUTE groupbyhaving(1)
+----
+
+# Mismatch between expected and hinted types should prepare, but potentially
+# fail to execute if the cast is not possible.
+statement
+PREPARE wrongTypePossibleCast(float) AS INSERT INTO foo VALUES ($1)
+
+statement
+EXECUTE wrongTypePossibleCast(2.3)
+
+statement
+PREPARE wrongTypeImpossibleCast(string) AS INSERT INTO foo VALUES ($1)
+
+statement
+EXECUTE wrongTypeImpossibleCast('3')
+
+statement error could not parse "crabgas" as type int
+EXECUTE wrongTypeImpossibleCast('crabgas')
+
+# Check statement compatibility
+
+statement ok
+PREPARE s AS SELECT a FROM t; PREPARE p1 AS UPSERT INTO t(a) VALUES($1) RETURNING a
+
+query I
+EXECUTE s
+----
+1
+2
+3
+
+query I
+EXECUTE p1(123)
+----
+123
+
+statement ok
+PREPARE p2 AS UPDATE t SET a = a + $1 RETURNING a
+
+query I
+EXECUTE s
+----
+1
+2
+3
+123
+
+query I
+EXECUTE p2(123)
+----
+124
+125
+126
+246
+
+statement ok
+PREPARE p3 AS DELETE FROM t WHERE a = $1 RETURNING a
+
+query I
+EXECUTE s
+----
+124
+125
+126
+246
+
+query I
+EXECUTE p3(124)
+----
+124
+
+statement ok
+PREPARE p4 AS CANCEL JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p4(123)
+
+statement ok
+PREPARE p5 AS PAUSE JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p5(123)
+
+statement ok
+PREPARE p6 AS RESUME JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p6(123)
+
+# Ensure that SET / SET CLUSTER SETTING know about placeholders
+statement ok
+PREPARE setp(string) AS SET application_name = $1
+
+query T
+SET application_name = 'foo'; SHOW application_name
+----
+foo
+
+query T
+EXECUTE setp('hello'); SHOW application_name
+----
+hello
+
+# Note: we can't check the result of SET CLUSTER SETTING synchronously
+# because it doesn't propagate immediately.
+
+statement ok
+PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
+
+statement ok
+EXECUTE sets('hello')
+
+# #19597
+
+statement error could not determine data type of placeholder
+PREPARE x19597 AS SELECT $1 IN ($2, null);
+
+statement ok
+PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
+
+statement error syntax error at or near "execute"
+PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
+
+query error syntax error at or near "execute"
+SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]
+
+statement ok
+PREPARE selectin AS SELECT 1 in ($1, $2)
+
+statement ok
+PREPARE selectin2 AS SELECT $1::int in ($2, $3)
+
+query B
+EXECUTE selectin(5, 1)
+----
+true
+
+query B
+EXECUTE selectin2(1, 5, 1)
+----
+true
+
+# Regression tests for #21701.
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3)
+
+statement ok
+PREPARE x21701a AS SELECT * FROM kv WHERE k = $1
+
+query II
+EXECUTE x21701a(NULL)
+----
+
+statement ok
+PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
+
+query II
+EXECUTE x21701b(NULL)
+----
+1  1
+2  2
+3  3
+
+statement ok
+PREPARE x21701c AS SELECT * FROM kv WHERE k IS NOT DISTINCT FROM $1
+
+query II
+EXECUTE x21701c(NULL)
+----
+
+# Test that a PREPARE statement after a CREATE TABLE in the same TRANSACTION
+# doesn't hang.
+subtest 24578
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+create table bar (id integer)
+
+statement ok
+PREPARE forbar AS insert into bar (id) VALUES (1)
+
+statement ok
+COMMIT TRANSACTION
+
+# Test placeholder in aggregate.
+statement ok
+CREATE TABLE aggtab (a INT PRIMARY KEY);
+INSERT INTO aggtab (a) VALUES (1)
+
+statement ok
+PREPARE aggprep AS SELECT max(a + $1:::int) FROM aggtab
+
+query I
+EXECUTE aggprep(10)
+----
+11
+
+query I
+EXECUTE aggprep(20)
+----
+21
+
+# Test placeholder in subquery, where the placeholder will be constant folded
+# and then used to select an index.
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX(y));
+INSERT INTO abc (a, b, c) VALUES (1, 10, 100);
+INSERT INTO xyz (x, y, z) VALUES (1, 5, 50);
+INSERT INTO xyz (x, y, z) VALUES (2, 6, 60);
+
+statement ok
+PREPARE subqueryprep AS SELECT * FROM abc WHERE EXISTS(SELECT * FROM xyz WHERE y IN ($1 + 1))
+
+query III
+EXECUTE subqueryprep(4)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(5)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(6)
+----
+
+#
+# Test prepared statements that rely on context, and ensure they are invalidated
+# when that context changes.
+#
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+USE otherdb
+
+statement ok
+CREATE TABLE othertable (a INT PRIMARY KEY, b INT); INSERT INTO othertable (a, b) VALUES (1, 10)
+
+## Current database change: Use current_database function, and ensure its return
+## value changes when current database changes.
+statement ok
+PREPARE change_db AS SELECT current_database()
+
+query T
+EXECUTE change_db
+----
+otherdb
+
+statement ok
+USE test
+
+query T
+EXECUTE change_db
+----
+test
+
+statement ok
+USE otherdb
+
+## Name resolution change: Query table in current database. Ensure that it is
+## not visible in another database.
+statement ok
+PREPARE change_db_2 AS SELECT * FROM othertable
+
+query II
+EXECUTE change_db_2
+----
+1  10
+
+statement ok
+USE test
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_db_2
+
+statement ok
+USE otherdb
+
+## Search path change: Change the search path and ensure that the prepared plan
+## is invalidated.
+statement ok
+PREPARE change_search_path AS SELECT * FROM othertable
+
+query II
+EXECUTE change_search_path
+----
+1  10
+
+statement ok
+SET search_path = pg_catalog
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_search_path
+
+statement ok
+RESET search_path
+
+## Functions: Use function which depends on context, and which is constant-
+## folded by the heuristic planner. Ensure that it's not constant folded when
+## part of prepared plan.
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+false
+
+statement ok
+GRANT ALL ON othertable TO testuser
+
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+true
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+## Location change: Change the current location (affects timezone) and make
+## sure the query is invalidated.
+statement ok
+PREPARE change_loc AS SELECT '2000-01-01 18:05:10.123'::timestamptz
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 +0000 UTC
+
+statement ok
+SET TIME ZONE 'EST';
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 -0500 -0500
+
+statement ok
+SET TIME ZONE 'UTC';
+
+## Permissions: Grant and then revoke permission to select from a table. The
+## prepared plan should be invalidated.
+statement ok
+GRANT ALL ON othertable TO testuser
+
+user testuser
+
+statement ok
+USE otherdb
+
+statement ok
+PREPARE change_privileges AS SELECT * FROM othertable
+
+query II
+EXECUTE change_privileges
+----
+1  10
+
+user root
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have SELECT privilege on relation othertable
+EXECUTE change_privileges
+
+user root
+
+## Schema change (rename): Rename column in table and ensure that the prepared
+## statement is updated to incorporate it.
+statement ok
+PREPARE change_rename AS SELECT * FROM othertable
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_rename
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+## Schema change (placeholders): Similar to previous case, but with placeholder
+## present.
+statement ok
+PREPARE change_placeholders AS SELECT * FROM othertable WHERE a=$1
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+## Schema change (view): Change view name and ensure that prepared query is
+## invalidated.
+statement ok
+CREATE VIEW otherview AS SELECT a, b FROM othertable
+
+statement ok
+PREPARE change_view AS SELECT * FROM otherview
+
+query II
+EXECUTE change_view
+----
+1  10
+
+statement ok
+ALTER VIEW otherview RENAME TO otherview2
+
+query error pq: relation "otherview" does not exist
+EXECUTE change_view
+
+statement ok
+DROP VIEW otherview2
+
+## Schema change: Drop column and ensure that correct error is reported.
+statement ok
+PREPARE change_drop AS SELECT * FROM othertable WHERE b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+statement ok
+ALTER TABLE othertable DROP COLUMN b
+
+query error pq: column "b" does not exist
+EXECUTE change_drop
+
+statement ok
+ALTER TABLE othertable ADD COLUMN b INT; UPDATE othertable SET b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+## Uncommitted schema change: Rename column in table in same transaction as
+## execution of prepared statement and make prepared statement incorporates it.
+statement ok
+PREPARE change_schema_uncommitted AS SELECT * FROM othertable
+
+statement ok
+BEGIN TRANSACTION
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  c
+1  10
+
+statement ok
+ROLLBACK TRANSACTION

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package hlc
 
@@ -71,6 +69,38 @@ func TestTimestampPrev(t *testing.T) {
 	for i, c := range testCases {
 		if prev := c.ts.Prev(); prev != c.expPrev {
 			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
+		}
+	}
+}
+
+func TestTimestampFloorPrev(t *testing.T) {
+	testCases := []struct {
+		ts, expPrev Timestamp
+	}{
+		{makeTS(2, 0), makeTS(1, 0)},
+		{makeTS(1, 2), makeTS(1, 1)},
+		{makeTS(1, 1), makeTS(1, 0)},
+		{makeTS(1, 0), makeTS(0, 0)},
+	}
+	for i, c := range testCases {
+		if prev := c.ts.FloorPrev(); prev != c.expPrev {
+			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
+		}
+	}
+}
+
+func TestAsOfSystemTime(t *testing.T) {
+	testCases := []struct {
+		ts  Timestamp
+		exp string
+	}{
+		{makeTS(145, 0), "145.0000000000"},
+		{makeTS(145, 123), "145.0000000123"},
+		{makeTS(145, 1123456789), "145.1123456789"},
+	}
+	for i, c := range testCases {
+		if exp := c.ts.AsOfSystemTime(); exp != c.exp {
+			t.Errorf("%d: expected %s; got %s", i, c.exp, exp)
 		}
 	}
 }

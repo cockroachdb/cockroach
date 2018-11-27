@@ -1,0 +1,76 @@
+# LogicTest: local-v1.1@v1.0-noupgrade
+
+query T
+SHOW CLUSTER SETTING version
+----
+1.0
+
+query T
+SELECT crdb_internal.node_executable_version()
+----
+1.1
+
+user testuser
+
+statement error only superusers are allowed to SET CLUSTER SETTING
+SET CLUSTER SETTING version = '2.0'
+
+user root
+
+statement error invalid version ba.na.na: strconv.ParseInt: parsing "ba": invalid syntax
+SET CLUSTER SETTING version = 'ba.na-na'
+
+statement error invalid version 1.0.0.0
+SET CLUSTER SETTING version = '1.0.0.0'
+
+statement error invalid version 1.0-0.0
+SET CLUSTER SETTING version = '1.0-0.0'
+
+statement error cannot upgrade to 2.0: node running 1.1
+SET CLUSTER SETTING version = '2.0'
+
+statement error cannot upgrade directly from 1.0 to 2.1
+SET CLUSTER SETTING version = '2.1'
+
+statement error cannot downgrade from 1.0 to 0.9
+SET CLUSTER SETTING version = '0.9'
+
+statement ok
+SET CLUSTER SETTING version = '1.0-0'
+
+query T
+SHOW CLUSTER SETTING version
+----
+1.0
+
+# Can skip versions on unstable patch upgrades.
+statement ok
+SET CLUSTER SETTING version = '1.0-500'
+
+query T
+SHOW CLUSTER SETTING version
+----
+1.0-500
+
+statement error cannot upgrade directly from 1.0-500 to 1.2
+SET CLUSTER SETTING version = '1.2'
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+statement error cannot downgrade from 1.1 to 1.0-2
+SET CLUSTER SETTING version = '1.0-2'
+
+query T
+SHOW CLUSTER SETTING version
+----
+1.1
+
+statement ok
+SET CLUSTER SETTING version = '1.1'
+
+statement error cannot upgrade to 1.1-999: node running 1.1
+SET CLUSTER SETTING version = '1.1-999'
+
+statement error cannot RESET this cluster setting
+RESET CLUSTER SETTING version

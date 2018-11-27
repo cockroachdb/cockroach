@@ -1,0 +1,755 @@
+exec-ddl
+CREATE TABLE a
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    INDEX u(u) STORING (v),
+    UNIQUE INDEX v(v) STORING (u)
+)
+----
+TABLE a
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX u
+ │    ├── u int
+ │    ├── k int not null
+ │    └── v int (storing)
+ └── INDEX v
+      ├── v int
+      ├── k int not null (storing)
+      └── u int (storing)
+
+exec-ddl
+CREATE TABLE b
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    j JSONB,
+    INDEX u(u),
+    UNIQUE INDEX v(v),
+    INVERTED INDEX inv_idx(j)
+)
+----
+TABLE b
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── j jsonb
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX u
+ │    ├── u int
+ │    └── k int not null
+ ├── INDEX v
+ │    ├── v int
+ │    └── k int not null (storing)
+ └── INVERTED INDEX inv_idx
+      ├── j jsonb
+      └── k int not null
+
+# --------------------------------------------------
+# GenerateConstrainedScans
+# --------------------------------------------------
+
+opt
+SELECT k FROM a WHERE k = 1
+----
+scan a
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+memo
+SELECT k FROM a WHERE k = 1
+----
+memo (optimized, ~4KB, required=[presentation: k:1])
+ ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
+ │    └── [presentation: k:1]
+ │         ├── best: (scan a,cols=(1),constrained)
+ │         └── cost: 1.04
+ ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
+ │    └── []
+ │         ├── best: (scan a,cols=(1))
+ │         └── cost: 1040.00
+ ├── G3: (filters G4)
+ ├── G4: (eq G5 G6)
+ ├── G5: (variable k)
+ └── G6: (const 1)
+
+opt
+SELECT k FROM a WHERE v > 1
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── scan a@v
+      ├── columns: k:1(int!null) v:3(int!null)
+      ├── constraint: /3: [/2 - ]
+      ├── key: (1)
+      └── fd: (1)-->(3), (3)-->(1)
+
+memo
+SELECT k FROM a WHERE v > 1
+----
+memo (optimized, ~5KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 349.80
+ ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan a@v,cols=(1,3),constrained)
+ │         └── cost: 346.50
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
+ │    └── []
+ │         ├── best: (scan a,cols=(1,3))
+ │         └── cost: 1050.00
+ ├── G5: (filters G6)
+ ├── G6: (gt G7 G8)
+ ├── G7: (variable v)
+ └── G8: (const 1)
+
+opt
+SELECT k FROM a WHERE u = 1 AND k = 5
+----
+project
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── scan a@u
+      ├── columns: k:1(int!null) u:2(int!null)
+      ├── constraint: /2/1: [/1/5 - /1/5]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+memo
+SELECT k FROM a WHERE u = 1 AND k = 5
+----
+memo (optimized, ~6KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 1.05
+ ├── G2: (select G4 G5) (select G6 G7) (scan a@u,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan a@u,cols=(1,2),constrained)
+ │         └── cost: 1.04
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan a,cols=(1,2))
+ │         └── cost: 1050.00
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan a,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan a,cols=(1,2),constrained)
+ │         └── cost: 1.05
+ ├── G7: (filters G8)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G13)
+ ├── G10: (variable u)
+ ├── G11: (const 1)
+ ├── G12: (variable k)
+ └── G13: (const 5)
+
+# Constraint + remaining filter.
+opt
+SELECT k FROM a WHERE u = 1 AND k+u = 1
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) u:2(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan a@u
+      │    ├── columns: k:1(int!null) u:2(int!null)
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── key: (1)
+      │    └── fd: ()-->(2)
+      └── filters
+           └── (k + u) = 1 [type=bool, outer=(1,2)]
+
+memo
+SELECT k FROM a WHERE u = 1 AND k+u = 1
+----
+memo (optimized, ~6KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 10.53
+ ├── G2: (select G4 G5) (select G6 G7)
+ │    └── []
+ │         ├── best: (select G6 G7)
+ │         └── cost: 10.49
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan a,cols=(1,2))
+ │         └── cost: 1050.00
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan a@u,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan a@u,cols=(1,2),constrained)
+ │         └── cost: 10.40
+ ├── G7: (filters G9)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G11)
+ ├── G10: (variable u)
+ ├── G11: (const 1)
+ ├── G12: (plus G13 G10)
+ └── G13: (variable k)
+
+opt
+SELECT k FROM a WHERE u = 1 AND v = 5
+----
+project
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3)
+      ├── scan a@v
+      │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+      │    ├── constraint: /3: [/5 - /5]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(1-3)
+      └── filters
+           └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+memo
+SELECT k FROM a WHERE u = 1 AND v = 5
+----
+memo (optimized, ~5KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 1.07
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
+ │    └── []
+ │         ├── best: (select G8 G9)
+ │         └── cost: 1.07
+ ├── G3: (projections)
+ ├── G4: (scan a) (scan a@u) (scan a@v)
+ │    └── []
+ │         ├── best: (scan a)
+ │         └── cost: 1060.00
+ ├── G5: (filters G10 G11)
+ ├── G6: (scan a@u,constrained)
+ │    └── []
+ │         ├── best: (scan a@u,constrained)
+ │         └── cost: 10.49
+ ├── G7: (filters G11)
+ ├── G8: (scan a@v,constrained)
+ │    └── []
+ │         ├── best: (scan a@v,constrained)
+ │         └── cost: 1.06
+ ├── G9: (filters G10)
+ ├── G10: (eq G12 G13)
+ ├── G11: (eq G14 G15)
+ ├── G12: (variable u)
+ ├── G13: (const 1)
+ ├── G14: (variable v)
+ └── G15: (const 5)
+
+# Only not-null constraint is pushed down.
+opt
+SELECT k FROM a WHERE u=v
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (3)-->(1), (2)==(3), (3)==(2)
+      ├── scan a@u
+      │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+      │    ├── constraint: /2/1: (/NULL - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3), (3)~~>(1,2)
+      └── filters
+           └── u = v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
+# Don't push constraint into already limited scan.
+opt
+SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
+----
+project
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: k:1(int!null) u:2(int)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan a@u
+      │    ├── columns: k:1(int!null) u:2(int)
+      │    ├── limit: 1
+      │    ├── key: ()
+      │    └── fd: ()-->(1,2)
+      └── filters
+           └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+# Constraint + index-join, with no remainder filter.
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10
+----
+index-join b
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ └── scan b@v
+      ├── columns: k:1(int!null) v:3(int!null)
+      ├── constraint: /3: [/1 - /10]
+      ├── key: (1)
+      └── fd: (1)-->(3), (3)-->(1)
+
+memo
+SELECT * FROM b WHERE v >= 1 AND v <= 10
+----
+memo (optimized, ~3KB, required=[presentation: k:1,u:2,v:3,j:4])
+ ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
+ │    └── [presentation: k:1,u:2,v:3,j:4]
+ │         ├── best: (index-join G4 b,cols=(1-4))
+ │         └── cost: 51.30
+ ├── G2: (scan b)
+ │    └── []
+ │         ├── best: (scan b)
+ │         └── cost: 1080.00
+ ├── G3: (filters G5 G6)
+ ├── G4: (scan b@v,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 10.40
+ ├── G5: (ge G7 G8)
+ ├── G6: (le G7 G9)
+ ├── G7: (variable v)
+ ├── G8: (const 1)
+ └── G9: (const 10)
+
+# Don't choose lookup join if it's not beneficial.
+opt
+SELECT * FROM b WHERE v > 1
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ ├── scan b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ └── filters
+      └── v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
+----
+index-join b
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ └── select
+      ├── columns: k:1(int!null) v:3(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(3), (3)-->(1)
+      ├── scan b@v
+      │    ├── columns: k:1(int!null) v:3(int!null)
+      │    ├── constraint: /3: [/1 - /10]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3), (3)-->(1)
+      └── filters
+           └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+memo
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
+----
+memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
+ ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
+ │    └── [presentation: k:1,u:2,v:3,j:4]
+ │         ├── best: (index-join G6 b,cols=(1-4))
+ │         └── cost: 24.13
+ ├── G2: (scan b)
+ │    └── []
+ │         ├── best: (scan b)
+ │         └── cost: 1080.00
+ ├── G3: (filters G7 G8 G9)
+ ├── G4: (scan b,constrained)
+ │    └── []
+ │         ├── best: (scan b,constrained)
+ │         └── cost: 360.00
+ ├── G5: (filters G7 G8)
+ ├── G6: (select G10 G11)
+ │    └── []
+ │         ├── best: (select G10 G11)
+ │         └── cost: 10.50
+ ├── G7: (ge G12 G13)
+ ├── G8: (le G12 G14)
+ ├── G9: (gt G15 G16)
+ ├── G10: (scan b@v,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 10.40
+ ├── G11: (filters G9)
+ ├── G12: (variable v)
+ ├── G13: (const 1)
+ ├── G14: (const 10)
+ ├── G15: (variable k)
+ └── G16: (const 5)
+
+# Ensure the rule doesn't match at all when the first column of the index is
+# not in the filter (i.e. the @v index is not matched by ConstrainScans).
+exploretrace rule=GenerateConstrainedScans
+SELECT k FROM a WHERE u = 1
+----
+----
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k:1(int!null)
+   ├── key: (1)
+   └── select
+        ├── columns: k:1(int!null) u:2(int!null)
+        ├── key: (1)
+        ├── fd: ()-->(2)
+        ├── scan a
+        │    ├── columns: k:1(int!null) u:2(int)
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2)
+        └── filters
+             └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+New expression 1 of 1:
+  project
+   ├── columns: k:1(int!null)
+   ├── key: (1)
+   └── scan a@u
+        ├── columns: k:1(int!null) u:2(int!null)
+        ├── constraint: /2/1: [/1 - /1]
+        ├── key: (1)
+        └── fd: ()-->(2)
+----
+----
+
+# Constraint + index join + remaining filter.
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
+ │    └── scan b@v
+ │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── constraint: /3: [/1 - /10]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3), (3)-->(1)
+ └── filters
+      └── (k + u) = 1 [type=bool, outer=(1,2)]
+
+memo
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
+----
+memo (optimized, ~4KB, required=[presentation: k:1,u:2,v:3,j:4])
+ ├── G1: (select G2 G3) (select G4 G5)
+ │    └── [presentation: k:1,u:2,v:3,j:4]
+ │         ├── best: (select G4 G5)
+ │         └── cost: 51.40
+ ├── G2: (scan b)
+ │    └── []
+ │         ├── best: (scan b)
+ │         └── cost: 1080.00
+ ├── G3: (filters G6 G7 G8)
+ ├── G4: (index-join G9 b,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G9 b,cols=(1-4))
+ │         └── cost: 51.30
+ ├── G5: (filters G8)
+ ├── G6: (ge G10 G11)
+ ├── G7: (le G10 G12)
+ ├── G8: (eq G13 G11)
+ ├── G9: (scan b@v,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 10.40
+ ├── G10: (variable v)
+ ├── G11: (const 1)
+ ├── G12: (const 10)
+ ├── G13: (plus G14 G15)
+ ├── G14: (variable k)
+ └── G15: (variable u)
+
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
+ │    └── select
+ │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(3), (3)-->(1)
+ │         ├── scan b@v
+ │         │    ├── columns: k:1(int!null) v:3(int!null)
+ │         │    ├── constraint: /3: [/1 - /10]
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(3), (3)-->(1)
+ │         └── filters
+ │              └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+ └── filters
+      └── (k + u) = 1 [type=bool, outer=(1,2)]
+
+memo
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
+----
+memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
+ │    └── [presentation: k:1,u:2,v:3,j:4]
+ │         ├── best: (select G6 G7)
+ │         └── cost: 24.17
+ ├── G2: (scan b)
+ │    └── []
+ │         ├── best: (scan b)
+ │         └── cost: 1080.00
+ ├── G3: (filters G8 G9 G10 G11)
+ ├── G4: (scan b,constrained)
+ │    └── []
+ │         ├── best: (scan b,constrained)
+ │         └── cost: 360.00
+ ├── G5: (filters G8 G9 G10)
+ ├── G6: (index-join G12 b,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G12 b,cols=(1-4))
+ │         └── cost: 24.13
+ ├── G7: (filters G10)
+ ├── G8: (ge G13 G14)
+ ├── G9: (le G13 G15)
+ ├── G10: (eq G16 G14)
+ ├── G11: (gt G17 G18)
+ ├── G12: (select G19 G20)
+ │    └── []
+ │         ├── best: (select G19 G20)
+ │         └── cost: 10.50
+ ├── G13: (variable v)
+ ├── G14: (const 1)
+ ├── G15: (const 10)
+ ├── G16: (plus G17 G21)
+ ├── G17: (variable k)
+ ├── G18: (const 5)
+ ├── G19: (scan b@v,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 10.40
+ ├── G20: (filters G11)
+ └── G21: (variable u)
+
+# Constraint + index-join.
+opt
+SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
+----
+select
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@u
+ │         ├── columns: k:1(int!null) u:2(int!null)
+ │         ├── constraint: /2/1: [/1/2 - /8/9]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      ├── (u, k, v) > (1, 2, 3) [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
+      └── (u, k, v) < (8, 9, 10) [type=bool, outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
+
+memo
+SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
+----
+memo (optimized, ~4KB, required=[presentation: k:1,u:2,v:3,j:4])
+ ├── G1: (select G2 G3) (select G4 G3)
+ │    └── [presentation: k:1,u:2,v:3,j:4]
+ │         ├── best: (select G4 G3)
+ │         └── cost: 45.23
+ ├── G2: (scan b)
+ │    └── []
+ │         ├── best: (scan b)
+ │         └── cost: 1080.00
+ ├── G3: (filters G5 G6)
+ ├── G4: (index-join G7 b,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G7 b,cols=(1-4))
+ │         └── cost: 45.14
+ ├── G5: (gt G8 G9)
+ ├── G6: (lt G8 G10)
+ ├── G7: (scan b@u,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan b@u,cols=(1,2),constrained)
+ │         └── cost: 9.15
+ ├── G8: (tuple G11)
+ ├── G9: (tuple G12)
+ ├── G10: (tuple G13)
+ ├── G11: (scalar-list G14 G15 G16)
+ ├── G12: (scalar-list G17 G18 G19)
+ ├── G13: (scalar-list G20 G21 G22)
+ ├── G14: (variable u)
+ ├── G15: (variable k)
+ ├── G16: (variable v)
+ ├── G17: (const 1)
+ ├── G18: (const 2)
+ ├── G19: (const 3)
+ ├── G20: (const 8)
+ ├── G21: (const 9)
+ └── G22: (const 10)
+
+# --------------------------------------------------
+# GenerateInvertedIndexScans
+# --------------------------------------------------
+# TODO(justin): these can be serviced without an index join.
+# Query only the primary key with no remaining filter.
+opt
+SELECT k FROM b WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── index-join b
+      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      └── scan b@inv_idx
+           ├── columns: k:1(int!null)
+           ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+# Query only the primary key with a remaining filter.
+opt
+SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join b
+      │    ├── columns: k:1(int!null) j:4(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@inv_idx
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      │         └── key: (1)
+      └── filters
+           └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+
+# Query requiring an index join with no remaining filter.
+opt
+SELECT u, k FROM b WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: u:2(int) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── index-join b
+      ├── columns: k:1(int!null) u:2(int) j:4(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      └── scan b@inv_idx
+           ├── columns: k:1(int!null)
+           ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+opt
+SELECT j, k FROM b WHERE j @> '{"a": "b"}'
+----
+index-join b
+ ├── columns: j:4(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ └── scan b@inv_idx
+      ├── columns: k:1(int!null)
+      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+opt
+SELECT * FROM b WHERE j @> '{"a": "b"}'
+----
+index-join b
+ ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ └── scan b@inv_idx
+      ├── columns: k:1(int!null)
+      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+# Query requiring an index join with a remaining filter.
+# TODO(justin): push this filter into the index join.
+opt
+SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
+----
+select
+ ├── columns: j:4(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) j:4(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    └── scan b@inv_idx
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+ │         └── key: (1)
+ └── filters
+      └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+
+opt
+SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@inv_idx
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /4/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
+ │         └── key: (1)
+ └── filters
+      └── j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]

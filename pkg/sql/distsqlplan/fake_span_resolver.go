@@ -11,15 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlplan
 
 import (
+	"context"
 	"math/rand"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -75,10 +72,6 @@ func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolv
 func (fit *fakeSpanResolverIterator) Seek(
 	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
 ) {
-	if scanDir != kv.Ascending {
-		panic("descending not implemented")
-	}
-
 	// Scan the range and keep a list of all potential split keys.
 	kvs, err := fit.txn.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
@@ -98,7 +91,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 			fit.err = err
 			return
 		}
-		if !splitKey.Equal(lastKey) {
+		if !splitKey.Equal(lastKey) && span.ContainsKey(splitKey) {
 			splitKeys = append(splitKeys, splitKey)
 			lastKey = splitKey
 		}
@@ -141,6 +134,14 @@ func (fit *fakeSpanResolverIterator) Seek(
 	// Assign nodes randomly.
 	for i := range fit.splits {
 		fit.splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
+	}
+
+	if scanDir == kv.Descending {
+		// Reverse the order of the splits.
+		for i := 0; i < len(fit.splits)/2; i++ {
+			j := len(fit.splits) - i - 1
+			fit.splits[i], fit.splits[j] = fit.splits[j], fit.splits[i]
+		}
 	}
 }
 

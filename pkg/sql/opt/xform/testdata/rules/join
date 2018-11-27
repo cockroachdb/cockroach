@@ -1,0 +1,1244 @@
+exec-ddl
+CREATE TABLE abc
+(
+    a INT,
+    b INT,
+    c INT,
+    INDEX ab (a,b) STORING (c),
+    INDEX bc (b,c) STORING (a)
+)
+----
+TABLE abc
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX ab
+ │    ├── a int
+ │    ├── b int
+ │    ├── rowid int not null (hidden)
+ │    └── c int (storing)
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      ├── rowid int not null (hidden)
+      └── a int (storing)
+
+exec-ddl
+CREATE TABLE stu
+(
+    s INT,
+    t INT,
+    u INT,
+    PRIMARY KEY (s,t,u),
+    INDEX uts (u,t,s)
+)
+----
+TABLE stu
+ ├── s int not null
+ ├── t int not null
+ ├── u int not null
+ ├── INDEX primary
+ │    ├── s int not null
+ │    ├── t int not null
+ │    └── u int not null
+ └── INDEX uts
+      ├── u int not null
+      ├── t int not null
+      └── s int not null
+
+exec-ddl
+CREATE TABLE xyz
+(
+    x INT,
+    y INT,
+    z INT,
+    INDEX xy (x,y) STORING (z),
+    INDEX yz (y,z) STORING (x)
+)
+----
+TABLE xyz
+ ├── x int
+ ├── y int
+ ├── z int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX xy
+ │    ├── x int
+ │    ├── y int
+ │    ├── rowid int not null (hidden)
+ │    └── z int (storing)
+ └── INDEX yz
+      ├── y int
+      ├── z int
+      ├── rowid int not null (hidden)
+      └── x int (storing)
+
+# --------------------------------------------------
+# CommuteJoin
+# --------------------------------------------------
+
+# Verify that the reversed join expressions get added to the memo, and there
+# are no duplicates.
+memo
+SELECT * FROM abc JOIN xyz ON a=z
+----
+memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+7) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,5-7))
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (inner-join G2 G3 G4)
+ │         └── cost: 2270.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1289.32
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable z)
+
+memo
+SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
+----
+memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (full-join G2 G3 G4) (full-join G3 G2 G4) (merge-join G2 G3 G5 full-join,+1,+7)
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (full-join G2 G3 G4)
+ │         └── cost: 2270.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1289.32
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable z)
+
+# Verify that we swap to get the smaller side on the right.
+opt
+SELECT * FROM abc INNER JOIN xyz ON a=c WHERE b=1
+----
+inner-join
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:5(int) y:6(int) z:7(int)
+ ├── fd: ()-->(2), (1)==(3), (3)==(1)
+ ├── scan xyz
+ │    └── columns: x:5(int) y:6(int) z:7(int)
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── fd: ()-->(2), (1)==(3), (3)==(1)
+ │    ├── scan abc@bc
+ │    │    ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ │    │    ├── constraint: /2/3/4: (/1/NULL - /1]
+ │    │    └── fd: ()-->(2)
+ │    └── filters
+ │         └── a = c [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── filters (true)
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
+----
+full-join
+ ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+ ├── fd: ()~~>(2)
+ ├── scan xyz
+ │    └── columns: x:5(int) y:6(int) z:7(int)
+ ├── scan abc@bc
+ │    ├── columns: a:1(int) b:2(int!null) c:3(int)
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# --------------------------------------------------
+# CommuteLeftJoin
+# --------------------------------------------------
+
+memo
+SELECT * FROM abc LEFT OUTER JOIN xyz ON a=z
+----
+memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (merge-join G2 G3 G5 left-join,+1,+7)
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (left-join G2 G3 G4)
+ │         └── cost: 2270.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1289.32
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable z)
+
+opt
+SELECT * FROM abc LEFT OUTER JOIN xyz ON a=z WHERE b=1
+----
+right-join
+ ├── columns: a:1(int) b:2(int!null) c:3(int) x:5(int) y:6(int) z:7(int)
+ ├── fd: ()-->(2)
+ ├── scan xyz
+ │    └── columns: x:5(int) y:6(int) z:7(int)
+ ├── scan abc@bc
+ │    ├── columns: a:1(int) b:2(int!null) c:3(int)
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# --------------------------------------------------
+# CommuteRightJoin
+# --------------------------------------------------
+
+memo
+SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
+----
+memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (right-join G2 G3 G4) (left-join G3 G2 G4) (merge-join G2 G3 G5 right-join,+1,+7) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,5-7))
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (right-join G2 G3 G4)
+ │         └── cost: 2270.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1289.32
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable z)
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE b=1) RIGHT OUTER JOIN xyz ON a=z
+----
+left-join
+ ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+ ├── fd: ()~~>(2)
+ ├── scan xyz
+ │    └── columns: x:5(int) y:6(int) z:7(int)
+ ├── scan abc@bc
+ │    ├── columns: a:1(int) b:2(int!null) c:3(int)
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# --------------------------------------------------
+# GenerateMergeJoins
+# --------------------------------------------------
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── fd: (1)==(5), (5)==(1)
+ ├── scan abc@ab
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── ordering: +1
+ ├── scan xyz@xy
+ │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    └── ordering: +5
+ └── filters (true)
+
+memo
+SELECT * FROM abc JOIN xyz ON a=x
+----
+memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+5) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,5-7)) (merge-join G3 G2 G5 inner-join,+5,+1) (lookup-join G3 G5 abc@ab,keyCols=[5],outCols=(1-3,5-7))
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (merge-join G2="[ordering: +1]" G3="[ordering: +5]" G5 inner-join,+1,+5)
+ │         └── cost: 2260.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    ├── [ordering: +5]
+ │    │    ├── best: (scan xyz@xy,cols=(5-7))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable x)
+
+opt
+SELECT * FROM abc JOIN xyz ON x=a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── fd: (1)==(5), (5)==(1)
+ ├── scan abc@ab
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── ordering: +1
+ ├── scan xyz@xy
+ │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    └── ordering: +5
+ └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND a=x AND x=a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── fd: (1)==(5), (5)==(1)
+ ├── scan abc@ab
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── ordering: +1
+ ├── scan xyz@xy
+ │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    └── ordering: +5
+ └── filters (true)
+
+# Use constraints to force the choice of an index which doesn't help, and
+# verify that we don't prefer a merge-join that has to sort both of its inputs.
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y WHERE b=1 AND y=1
+----
+inner-join
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── fd: ()-->(2,6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── scan abc@bc
+ │    ├── columns: a:1(int) b:2(int!null) c:3(int)
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
+ ├── scan xyz@yz
+ │    ├── columns: x:5(int) y:6(int!null) z:7(int)
+ │    ├── constraint: /6/7/8: [/1 - /1]
+ │    └── fd: ()-->(6)
+ └── filters
+      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Verify case where we generate multiple merge-joins.
+memo
+SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
+----
+memo (optimized, ~9KB, required=[presentation: s:1,t:2,u:3,s:4,t:5,u:6])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+4,+5,+6) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+6,+5,+4) (lookup-join G2 G5 stu,keyCols=[1 2 3],outCols=(1-6)) (lookup-join G2 G5 stu@uts,keyCols=[3 2 1],outCols=(1-6)) (merge-join G3 G2 G5 inner-join,+4,+5,+6,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+6,+5,+4,+3,+2,+1) (lookup-join G3 G5 stu,keyCols=[4 5 6],outCols=(1-6)) (lookup-join G3 G5 stu@uts,keyCols=[6 5 4],outCols=(1-6))
+ │    └── [presentation: s:1,t:2,u:3,s:4,t:5,u:6]
+ │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +4,+5,+6]" G5 inner-join,+1,+2,+3,+4,+5,+6)
+ │         └── cost: 2140.01
+ ├── G2: (scan stu) (scan stu@uts)
+ │    ├── [ordering: +1,+2,+3]
+ │    │    ├── best: (scan stu)
+ │    │    └── cost: 1060.00
+ │    ├── [ordering: +3,+2,+1]
+ │    │    ├── best: (scan stu@uts)
+ │    │    └── cost: 1060.00
+ │    └── []
+ │         ├── best: (scan stu)
+ │         └── cost: 1060.00
+ ├── G3: (scan stu) (scan stu@uts)
+ │    ├── [ordering: +4,+5,+6]
+ │    │    ├── best: (scan stu)
+ │    │    └── cost: 1060.00
+ │    ├── [ordering: +6,+5,+4]
+ │    │    ├── best: (scan stu@uts)
+ │    │    └── cost: 1060.00
+ │    └── []
+ │         ├── best: (scan stu)
+ │         └── cost: 1060.00
+ ├── G4: (filters G6 G7 G8)
+ ├── G5: (filters)
+ ├── G6: (eq G9 G10)
+ ├── G7: (eq G11 G12)
+ ├── G8: (eq G13 G14)
+ ├── G9: (variable stu.s)
+ ├── G10: (variable stu.s)
+ ├── G11: (variable stu.t)
+ ├── G12: (variable stu.t)
+ ├── G13: (variable stu.u)
+ └── G14: (variable stu.u)
+
+exploretrace rule=GenerateMergeJoins
+SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
+----
+----
+================================================================================
+GenerateMergeJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    └── key: (1-3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    └── key: (4-6)
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+
+New expression 1 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +1,+2,+3
+   ├── right ordering: +4,+5,+6
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +1,+2,+3
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +4,+5,+6
+   └── filters (true)
+
+New expression 2 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +3,+2,+1
+   ├── right ordering: +6,+5,+4
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu@uts
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +3,+2,+1
+   ├── scan stu@uts
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +6,+5,+4
+   └── filters (true)
+
+================================================================================
+GenerateMergeJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    └── key: (4-6)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    └── key: (1-3)
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+
+New expression 1 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +4,+5,+6
+   ├── right ordering: +1,+2,+3
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +4,+5,+6
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +1,+2,+3
+   └── filters (true)
+
+New expression 2 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +6,+5,+4
+   ├── right ordering: +3,+2,+1
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu@uts
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +6,+5,+4
+   ├── scan stu@uts
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +3,+2,+1
+   └── filters (true)
+----
+----
+
+# Add statistics to make table stu large (so that sorting abc is relatively cheap).
+exec-ddl
+ALTER TABLE stu INJECT STATISTICS '[
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  }
+]'
+----
+
+# The ordering is coming from the left side.
+opt
+SELECT * FROM stu LEFT OUTER JOIN abc ON (c,b,a) = (s,t,u)
+----
+left-join (merge)
+ ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) a:4(int) b:5(int) c:6(int)
+ ├── left ordering: +1,+2,+3
+ ├── right ordering: +6,+5,+4
+ ├── scan stu
+ │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ ├── sort
+ │    ├── columns: a:4(int) b:5(int) c:6(int)
+ │    ├── ordering: +6,+5,+4
+ │    └── scan abc
+ │         └── columns: a:4(int) b:5(int) c:6(int)
+ └── filters (true)
+
+# The ordering is coming from the right side.
+opt
+SELECT * FROM abc RIGHT OUTER JOIN stu ON (c,b,a) = (s,t,u)
+----
+left-join (merge)
+ ├── columns: a:1(int) b:2(int) c:3(int) s:5(int!null) t:6(int!null) u:7(int!null)
+ ├── left ordering: +5,+6,+7
+ ├── right ordering: +3,+2,+1
+ ├── scan stu
+ │    ├── columns: s:5(int!null) t:6(int!null) u:7(int!null)
+ │    ├── key: (5-7)
+ │    └── ordering: +5,+6,+7
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── ordering: +3,+2,+1
+ │    └── scan abc
+ │         └── columns: a:1(int) b:2(int) c:3(int)
+ └── filters (true)
+
+# In these cases, we shouldn't pick up equivalencies.
+memo
+SELECT * FROM abc JOIN xyz ON a=b
+----
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
+ │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
+ │         ├── best: (inner-join G3 G2 G4)
+ │         └── cost: 2251.88
+ ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
+ │    └── []
+ │         ├── best: (select G7 G6)
+ │         └── cost: 1069.20
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
+ │    └── []
+ │         ├── best: (scan xyz,cols=(5-7))
+ │         └── cost: 1070.00
+ ├── G4: (filters)
+ ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G6: (filters G9)
+ ├── G7: (scan abc@ab,cols=(1-3),constrained)
+ │    └── []
+ │         ├── best: (scan abc@ab,cols=(1-3),constrained)
+ │         └── cost: 1059.30
+ ├── G8: (scan abc@bc,cols=(1-3),constrained)
+ │    └── []
+ │         ├── best: (scan abc@bc,cols=(1-3),constrained)
+ │         └── cost: 1059.30
+ ├── G9: (eq G10 G11)
+ ├── G10: (variable a)
+ └── G11: (variable b)
+
+exec-ddl
+CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
+----
+TABLE kfloat
+ ├── k float not null
+ └── INDEX primary
+      └── k float not null
+
+memo
+SELECT * FROM abc JOIN kfloat ON a=k
+----
+memo (optimized, ~5KB, required=[presentation: a:1,b:2,c:3,k:5])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
+ │    └── [presentation: a:1,b:2,c:3,k:5]
+ │         ├── best: (inner-join G2 G3 G4)
+ │         └── cost: 2130.00
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.00
+ ├── G3: (scan kfloat)
+ │    └── []
+ │         ├── best: (scan kfloat)
+ │         └── cost: 1020.00
+ ├── G4: (filters G5)
+ ├── G5: (eq G6 G7)
+ ├── G6: (variable a)
+ └── G7: (variable k)
+
+# We should only pick up one equivalency.
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND a=y
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+ ├── scan abc@ab
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── ordering: +1
+ ├── scan xyz@xy
+ │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    └── ordering: +5
+ └── filters
+      └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Verify multiple merge-joins can be chained.
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y RIGHT OUTER JOIN stu ON a=s
+----
+right-join (merge)
+ ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int) s:9(int!null) t:10(int!null) u:11(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +9
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── inner-join (merge)
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ │    ├── left ordering: +1,+2
+ │    ├── right ordering: +5,+6
+ │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ │    ├── ordering: +(1|5) [provided: +1]
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    │    └── ordering: +1,+2
+ │    ├── scan xyz@xy
+ │    │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    │    └── ordering: +5,+6
+ │    └── filters (true)
+ ├── scan stu
+ │    ├── columns: s:9(int!null) t:10(int!null) u:11(int!null)
+ │    ├── key: (9-11)
+ │    └── ordering: +9
+ └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y RIGHT OUTER JOIN stu ON a=u AND y=t
+----
+left-join (merge)
+ ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int) s:9(int!null) t:10(int!null) u:11(int!null)
+ ├── left ordering: +11,+10
+ ├── right ordering: +1,+6
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── scan stu@uts
+ │    ├── columns: s:9(int!null) t:10(int!null) u:11(int!null)
+ │    ├── key: (9-11)
+ │    └── ordering: +11,+10
+ ├── inner-join (merge)
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ │    ├── left ordering: +1,+2
+ │    ├── right ordering: +5,+6
+ │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ │    ├── ordering: +(1|5),+(2|6) [provided: +1,+2]
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    │    └── ordering: +1,+2
+ │    ├── scan xyz@xy
+ │    │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    │    └── ordering: +5,+6
+ │    └── filters (true)
+ └── filters (true)
+
+# --------------------------------------------------
+# GenerateLookupJoins
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
+----
+TABLE abcd
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX secondary
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE small (m INT, n INT)
+----
+TABLE small
+ ├── m int
+ ├── n int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+# Covering case.
+opt
+SELECT a,b,n,m FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd@secondary)
+ ├── columns: a:4(int!null) b:5(int) n:2(int) m:1(int!null)
+ ├── key columns: [1] = [4]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters (true)
+
+# Covering case, left-join.
+opt
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m
+----
+left-join (lookup abcd@secondary)
+ ├── columns: a:4(int) b:5(int) n:2(int) m:1(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters (true)
+
+# Non-covering case.
+opt
+SELECT * FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters (true)
+ └── filters (true)
+
+# Non-covering case, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters (true)
+ └── filters (true)
+
+# Non-covering case, extra filter bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b>n
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── filters (true)
+
+# Non-covering case, extra filter bound by index, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── filters (true)
+
+# Non-covering case, extra filter not bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND c>n
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters (true)
+ └── filters
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Non-covering case, extra filter not bound by index, left join.
+# In this case, we can't yet convert to a lookup join (see
+# the GenerateLookupJoins custom func).
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
+----
+right-join
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── scan abcd
+ │    └── columns: a:4(int) b:5(int) c:6(int)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+
+# Verify rule application when we can do a lookup join on both sides.
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc JOIN xyz ON a=x AND a=y
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [1] = [5]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [5] = [1]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+----
+----
+
+# Verify rule application when we can do a lookup join on the left side.
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc JOIN xyz ON a=z
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+No new expressions.
+
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── key columns: [7] = [1]
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters (true)
+----
+----
+
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc RIGHT JOIN xyz ON a=z
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+New expression 1 of 1:
+  left-join (lookup abc@ab)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [7] = [1]
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters (true)
+----
+----
+
+# Verify rule application when we can do a lookup join on the right side.
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc JOIN xyz ON c=x
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── key columns: [3] = [5]
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters (true)
+
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+
+No new expressions.
+----
+----
+
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc LEFT JOIN xyz ON c=x
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+
+New expression 1 of 1:
+  left-join (lookup xyz@xy)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [3] = [5]
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters (true)
+----
+----
+
+# Verify we don't generate a lookup join.
+exploretrace rule=GenerateLookupJoins
+SELECT * FROM abc RIGHT JOIN xyz ON c=x
+----
+----
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+
+No new expressions.
+----
+----
+
+# --------------------------------------------------
+# GenerateLookupJoinsWithFilter
+# --------------------------------------------------
+# 
+# The rule and cases are similar to GenerateLookupJoins, except that we have a
+# filter that was pushed down to the lookup side (which needs to be pulled back
+# into the ON condition).
+
+# Covering case.
+opt
+SELECT a,b,n,m FROM small JOIN abcd ON a=m AND b>1
+----
+inner-join (lookup abcd@secondary)
+ ├── columns: a:4(int!null) b:5(int!null) n:2(int) m:1(int!null)
+ ├── key columns: [1] = [4]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters
+      └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+
+# Covering case, left-join.
+opt
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>1
+----
+left-join (lookup abcd@secondary)
+ ├── columns: a:4(int) b:5(int) n:2(int) m:1(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters
+      └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+
+# Non-covering case.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b>1
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>1
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case, extra filter bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b>n AND b>1
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case, extra filter bound by index, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n AND b>1
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case, extra filter not bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND c>n AND b>1
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Non-covering case, extra filter not bound by index, left join.
+# In this case, we can't yet convert to a lookup join (see
+# the GenerateLookupJoins custom func).
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
+----
+right-join
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── select
+ │    ├── columns: a:4(int) b:5(int!null) c:6(int)
+ │    ├── scan abcd
+ │    │    └── columns: a:4(int) b:5(int) c:6(int)
+ │    └── filters
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]

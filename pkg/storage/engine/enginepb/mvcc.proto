@@ -11,56 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
 package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "storage/engine/enginepb/mvcc3.proto";
+import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";
 
-// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
-// either).
-enum IsolationType {
-  option (gogoproto.goproto_enum_prefix) = false;
-
-  SERIALIZABLE = 0;
-  SNAPSHOT = 1;
-}
-
-// TxnMeta is the metadata of a Transaction record.
-message TxnMeta {
-  option (gogoproto.populate) = true;
-
-  // id is a unique UUID value which identifies the transaction.
-  optional bytes id = 1 [(gogoproto.customname) = "ID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
-  optional IsolationType isolation = 2 [(gogoproto.nullable) = false];
-  // key is the key which anchors the transaction. This is typically
-  // the first key read or written during the transaction and determines which
-  // range in the cluster will hold the transaction record.
-  optional bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
-  // Incremented on txn retry.
-  optional uint32 epoch = 4 [(gogoproto.nullable) = false];
-  // The proposed timestamp for the transaction. This starts as
-  // the current wall time on the txn coordinator.
-  optional util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
-  optional int32 priority = 6 [(gogoproto.nullable) = false];
-  // A one-indexed sequence number which is increased on each batch
-  // sent as part of the transaction. Used to prevent replay and
-  // out-of-order application protection (by means of a transaction
-  // retry).
-  optional int32 sequence = 7 [(gogoproto.nullable) = false];
-  // A zero-indexed sequence number indicating the index of a
-  // command within a batch. This disambiguate Raft replays of a batch
-  // from multiple commands in a batch which modify the same key.
-  optional int32 batch_index = 8 [(gogoproto.nullable) = false];
-}
-
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
+// An MVCCMetadata is stored for a versioned key while there is an intent on
+// that key.
 message MVCCMetadata {
   option (gogoproto.populate) = true;
 
@@ -69,7 +32,7 @@ message MVCCMetadata {
   // value that may have multiple versions. For values which may have
   // only one version, the data is stored inline (via raw_bytes), and
   // timestamp is set to zero.
-  optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.LegacyTimestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
   // The size in bytes of the most recent encoded key.
@@ -85,7 +48,7 @@ message MVCCMetadata {
   optional bytes raw_bytes = 6;
   // This provides a measure of protection against replays caused by
   // Raft duplicating merge commands.
-  optional util.hlc.Timestamp merge_timestamp = 7;
+  optional util.hlc.LegacyTimestamp merge_timestamp = 7;
 }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,
@@ -98,7 +61,15 @@ message MVCCMetadata {
 // don't change last_update_nanos until an update at a timestamp which,
 // truncated to the second, is ahead of last_update_nanos/1e9. Then, that
 // difference in seconds times the base quantity (excluding the currently
-// running update) is added to the age. It gets more complicated when data is
+// running update) is added to the age.
+//
+// To give an example, if an intent is around from `t=2.5s` to `t=4.1s` (the
+// current time), then it contributes an intent age of two seconds (one second
+// picked up when crossing `t=3s`, another one at `t=4s`). Similarly, if a
+// GC'able kv pair is around for this amount of time, it contributes two seconds
+// times its size in bytes.
+//
+// It gets more complicated when data is
 // accounted for with a timestamp behind last_update_nanos. In this case, if
 // more than a second has passed (computed via truncation above), the ages have
 // to be adjusted to account for this late addition. This isn't hard: add the
@@ -111,6 +82,7 @@ message MVCCMetadata {
 // so that it can predict its own impact on the size of the system-local
 // kv-pairs.
 message MVCCStats {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // contains_estimates indicates that the MVCCStats object contains values
@@ -129,13 +101,12 @@ message MVCCStats {
   // data included in key_bytes and val_bytes, but not live_bytes).
   // See the comment on MVCCStats.
   optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
-
   // live_bytes is the number of bytes stored in keys and values which can in
-  // principle be read by means of a Scan or Get, including intents but not
-  // deletion tombstones (or their intents). Note that the size of the meta kv
-  // pair (which could be explicit or implicit) is included in this.
-  // Only the meta kv pair counts for the actual length of the encoded key
-  // (regular pairs only count the timestamp suffix).
+  // principle be read by means of a Scan or Get in the far future, including
+  // intents but not deletion tombstones (or their intents). Note that the
+  // size of the meta kv pair (which could be explicit or implicit) is
+  // included in this. Only the meta kv pair counts for the actual length of
+  // the encoded key (regular pairs only count the timestamp suffix).
   optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false];
   // live_count is the number of meta keys tracked under live_bytes.
   optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];

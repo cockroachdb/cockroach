@@ -1,3 +1,8 @@
 # Do not add environment-specific entries here (see the top-level .gitignore
 # for reasoning and alternatives).
+
+helpmap_test.go
+help_messages.go
+sql.go
 y.output
+gen

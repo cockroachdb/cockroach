@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 export const kibi = 1024;
 const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
 const durationUnits: string[] = ["ns", "µs", "ms", "s"];
@@ -24,11 +38,25 @@ export function ComputePrefixExponent(value: number, prefixMultiple: number, pre
   return prefixScale;
 }
 
-export function BytesToUnitValue(bytes: number): UnitValue {
-  let scale = ComputePrefixExponent(bytes, kibi, byteUnits);
+/**
+ * ComputeByteScale calculates the appropriate scale factor and unit to use to
+ * display a given byte value, without actually converting the value.
+ *
+ * This is used to prescale byte values before passing them to a d3-axis.
+ */
+export function ComputeByteScale(bytes: number): UnitValue {
+  const scale = ComputePrefixExponent(bytes, kibi, byteUnits);
   return {
-    value: bytes / Math.pow(kibi, scale),
+    value: Math.pow(kibi, scale),
     units: byteUnits[scale],
+  };
+}
+
+export function BytesToUnitValue(bytes: number): UnitValue {
+  const scale = ComputeByteScale(bytes);
+  return {
+    value: bytes / scale.value,
+    units: scale.units,
   };
 }
 
@@ -41,11 +69,19 @@ export function BytesToUnitValue(bytes: number): UnitValue {
  * https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
  */
 export function Bytes(bytes: number): string {
-  let unitVal = BytesToUnitValue(bytes);
+  return BytesWithPrecision(bytes, 1);
+}
+
+/**
+ * BytesWithPrecision is like Bytes, but accepts a precision parameter
+ * indicating how many digits after the decimal point are desired.
+ */
+export function BytesWithPrecision(bytes: number, precision: number): string {
+  const unitVal = BytesToUnitValue(bytes);
   if (!unitVal.value) {
     return "0 B";
   }
-  return unitVal.value.toFixed(1) + " " + unitVal.units;
+  return unitVal.value.toFixed(precision) + " " + unitVal.units;
 }
 
 /**
@@ -53,9 +89,21 @@ export function Bytes(bytes: number): string {
  */
 export function Percentage(numerator: number, denominator: number): string {
   if (denominator === 0) {
-    return "100%";
+    return "--%";
   }
   return Math.floor(numerator / denominator * 100).toString() + "%";
+}
+
+/**
+ * ComputeDurationScale calculates an appropriate scale factor and unit to use
+ * to display a given duration value, without actually converting the value.
+ */
+export function ComputeDurationScale(nanoseconds: number): UnitValue {
+  const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
+  return {
+    value: Math.pow(1000, scale),
+    units: durationUnits[scale],
+ };
 }
 
 /**
@@ -64,7 +112,7 @@ export function Percentage(numerator: number, denominator: number): string {
  * be converted into larger units.
  */
 export function Duration(nanoseconds: number): string {
-  let scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
-  let unitVal = nanoseconds / Math.pow(1000, scale);
-  return unitVal.toFixed(1) + " " + durationUnits[scale];
+  const scale = ComputeDurationScale(nanoseconds);
+  const unitVal = nanoseconds / scale.value;
+  return unitVal.toFixed(1) + " " + scale.units;
 }

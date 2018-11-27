@@ -1,0 +1,298 @@
+# =============================================================================
+# scalar.opt contains scalar normalization rules that aren't handled elsewhere.
+# =============================================================================
+
+
+# CommuteVar ensures that variable references are on the left side of
+# commutative comparison and binary operators. Other patterns don't need to
+# handle both combinations.
+[CommuteVar, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+((OpName) $right $left)
+
+# CommuteConst ensures that "constant expression trees" are on the right side
+# of commutative comparison and binary operators. A constant expression tree
+# has no unbound variables that refer to outer columns. It therefore always
+# evaluates to the same result. Note that this is possible even if the tree
+# contains variable expressions, as long as they are bound, such as in
+# uncorrelated subqueries:
+#
+#   SELECT * FROM a WHERE a.x = (SELECT SUM(b.x) FROM b)
+#
+# The right side of the equality expression is a constant expression tree, even
+# though it contains an entire subquery, because it always evalutes to the same
+# result. The left side is not a constant expression tree, even though it
+# contains just a single variable, because its value can be different for each
+# row in the table "a".
+#
+# The goal of this and related patterns is to push constant expression trees to
+# the right side until only a Variable remains on the left (if possible). Other
+# patterns can rely on this normal form and only handle one combination.
+[CommuteConst, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:(ConstValue)
+    $right:^(ConstValue)
+)
+=>
+((OpName) $right $left)
+
+# EliminateCoalesce discards the Coalesce operator if it has a single operand.
+[EliminateCoalesce, Normalize]
+(Coalesce [ $item:* ]) => $item
+
+# SimplifyCoalesce discards any leading null operands, and then if the next
+# operand is a constant, replaces with that constant. Note that ConstValue
+# matches nulls as well as other constants.
+[SimplifyCoalesce, Normalize]
+(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ]) => (SimplifyCoalesce $args)
+
+# EliminateCast discards the cast operator if its input already has a type
+# that's equivalent to the desired static type.
+[EliminateCast, Normalize]
+(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp)) => $input
+
+# FoldNullCast discards the cast operator if it has a null input. The resulting
+# null value has the same type as the Cast operator would have had.
+[FoldNullCast, Normalize]
+(Cast $input:(Null) $targetTyp:*) => (Null (ColTypeToDatumType $targetTyp))
+
+# FoldNullUnary discards any unary operator with a null input, and replaces it
+# with a null value having the same type as the unary expression would have.
+[FoldNullUnary, Normalize]
+(Unary $input:(Null)) => (FoldNullUnary (OpName) $input)
+
+# FoldNullBinaryLeft replaces the binary operator with null if its left input
+# is null and it does not allow null arguments.
+[FoldNullBinaryLeft, Normalize]
+(Binary
+    $left:(Null)
+    $right:* & ^(AllowNullArgs (OpName) $left $right)
+)
+=>
+(FoldNullBinary (OpName) $left $right)
+
+# FoldNullBinaryRight replaces the binary operator with null if its right input
+# is null and it does not allow null arguments.
+[FoldNullBinaryRight, Normalize]
+(Binary
+    $left:*
+    $right:(Null) & ^(AllowNullArgs (OpName) $left $right)
+)
+=>
+(FoldNullBinary (OpName) $left $right)
+
+# FoldNullInNonEmpty replaces the In/NotIn with null when the left input is
+# null and the right input is not empty. Null is the unknown value, and if the
+# set is non-empty, it is unknown whether it's in/not in the set.
+[FoldNullInNonEmpty, Normalize]
+(In | NotIn
+    $left:(Null)
+    (Tuple ^[])
+)
+=>
+(Null (BoolType))
+
+# FoldNullInEmpty replaces the In with False when the left input is null and
+# the right input is empty, since even an unknown value can't be in an empty
+# set.
+[FoldNullInEmpty, Normalize]
+(In
+    $left:(Null)
+    (Tuple [])
+)
+=>
+(False)
+
+# FoldNullNotInEmpty replaces the NotIn with True when the left input is null
+# and the right input is empty, since even an unknown value can't be in an
+# empty set.
+[FoldNullNotInEmpty, Normalize]
+(NotIn
+    $left:(Null)
+    (Tuple [])
+)
+=>
+(True)
+
+# NormalizeInConst ensures that the In operator's tuple operand is sorted with
+# duplicates removed (since duplicates do not change the result).
+[NormalizeInConst, Normalize]
+(In | NotIn
+    $left:*
+    $right:(Tuple $elems:*) & (NeedSortedUniqueList $elems)
+)
+=>
+((OpName) $left (Tuple (ConstructSortedUniqueList $elems)))
+
+# FoldInNull replaces the In/Not operator with Null when the tuple only
+# contains null. The NormalizeInConst pattern will reduce multiple nulls to a
+# single null when it removes duplicates, so this pattern will match that.
+[FoldInNull, Normalize]
+(In | NotIn
+    $left:*
+    (Tuple [ (Null) ])
+)
+=>
+(Null (BoolType))
+
+# UnifyComparisonTypes takes a mixed-type comparison between a non-constant and
+# a constant and, if appropriate, converts the constant to the type of the
+# non-constant to allow constraints to be generated.
+[UnifyComparisonTypes, Normalize]
+(Comparison
+    $left:(Variable)
+    $right:(Const) & (Succeeded $result:(UnifyComparison $left $right))
+)
+=>
+((OpName)
+    $left
+    $result
+)
+
+# EliminateExistsProject discards a Project input to the Exists operator. The
+# Project operator never changes the row cardinality of its input, and row
+# cardinality is the only thing that Exists cares about, so Project is a no-op.
+[EliminateExistsProject, Normalize]
+(Exists (Project $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
+
+# EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
+# operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
+# it always returns a non-empty set if its input is non-empty. Similarly, if its
+# input is empty, then it returns the empty set. Therefore, it's a no-op for
+# Exists.
+[EliminateExistsGroupBy, Normalize]
+(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
+
+# NormalizeJSONFieldAccess transforms field access into a containment with a
+# simpler LHS. This allows inverted index constraints to be generated in some
+# cases.
+# The FetchVal operator also has an overload with integers instead of strings,
+# but this transformation is not valid in that case.
+# This transforms
+#
+#   a->'b' = '"c"'
+#
+# to
+#
+#   a @> '{"b": "c"}'
+#
+# Note that we can't make this transformation in cases like
+#
+#   a->'b' = '["c"]',
+#
+# because containment is not equivalent to equality for non-scalar types.
+[NormalizeJSONFieldAccess, Normalize]
+(Eq
+    (FetchVal
+        $val:*
+        $key:(Const) & (IsString $key)
+    )
+    $right:(Const) & (IsJSONScalar $right)
+)
+=>
+(Contains
+  $val
+  (MakeSingleKeyJSONObject $key $right)
+)
+
+# NormalizeJSONContains contains transforms a field access containment into one
+# with a simpler LHS.  This transformation is only valid if the RHS is not a
+# scalar, since a JSON array "contains" a scalar which is inside of it.
+# This transforms
+#
+#   a->'b' @> '{"x": "c"}'
+#
+# to
+#
+#   a @> '{"b": {"x": "c"}}'
+#
+[NormalizeJSONContains, Normalize]
+(Contains
+    (FetchVal
+        $val:*
+        $key:(Const) & (IsString $key)
+    )
+    $right:(Const) & ^(IsJSONScalar $right)
+)
+=>
+(Contains
+    $val
+    (MakeSingleKeyJSONObject $key $right)
+)
+
+# SimplifyCaseWhenConstValue removes branches known to not match. Any
+# branch known to match is used as the ELSE and further WHEN conditions
+# are skipped. If all WHEN conditions have been removed, the ELSE
+# expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a WHEN true THEN b ELSE c END
+#
+# to
+#
+#   CASE WHEN v THEN 1 ELSE b END
+#
+[SimplifyCaseWhenConstValue, Normalize]
+(Case
+    $condition:(ConstValue)
+    $whens:[
+        ...
+        (When (ConstValue))
+        ...
+    ]
+    $orElse:*
+)
+=>
+(SimplifyWhens $condition $whens $orElse)
+
+# SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
+# It transforms
+#
+#   x = ANY (...)
+#
+# to
+#
+#   x IN (...)
+#
+# Which allows scans to be constrained.
+[SimplifyEqualsAnyTuple, Normalize]
+(AnyScalar
+    $input:*
+    $tuple:(Tuple)
+    $cmp:* & (OpsAreSame $cmp Eq)
+)
+=>
+(In
+    $input
+    $tuple
+)
+
+# SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
+# ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
+# triggered, which allows constraints to be generated.
+[SimplifyAnyScalarArray, Normalize]
+(AnyScalar
+    $input:*
+    $ary:(Const) & (IsConstArray $ary)
+    $cmp:*
+)
+=>
+(AnyScalar
+    $input
+    (ConvertConstArrayToTuple $ary)
+    $cmp
+)
+
+# FoldCollate converts a Collate expr over an uncollated string into a collated string
+# constant.
+[FoldCollate, Normalize]
+(Collate
+    $input:(Const)
+    $locale:*
+)
+=>
+(CastToCollatedString $input $locale)

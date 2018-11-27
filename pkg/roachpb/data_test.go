@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package roachpb
 
@@ -22,19 +20,21 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -114,8 +114,8 @@ func TestKeyPrefixEnd(t *testing.T) {
 		{KeyMax, KeyMax},
 		{Key{0xff, 0xfe}, Key{0xff, 0xff}},
 		{Key{0x00, 0x00}, Key{0x00, 0x01}},
-		{Key{0x00, 0xff}, Key{0x01, 0x00}},
-		{Key{0x00, 0xff, 0xff}, Key{0x01, 0x00, 0x00}},
+		{Key{0x00, 0xff}, Key{0x01}},
+		{Key{0x00, 0xff, 0xff}, Key{0x01}},
 	}
 	for i, c := range testCases {
 		if !bytes.Equal(c.key.PrefixEnd(), c.end) {
@@ -211,6 +211,71 @@ func TestIsPrev(t *testing.T) {
 	}
 }
 
+func TestValueDataEquals(t *testing.T) {
+	strVal := func(s string) *Value {
+		var v Value
+		v.SetString(s)
+		return &v
+	}
+
+	a := strVal("val1")
+
+	b := strVal("val1")
+	b.InitChecksum([]byte("key1"))
+
+	c := strVal("val1")
+	c.InitChecksum([]byte("key2"))
+
+	// Different values.
+	d := strVal("val2")
+
+	e := strVal("val2")
+	e.InitChecksum([]byte("key1"))
+
+	// Different tags.
+	f := strVal("val1")
+	f.setTag(ValueType_INT)
+
+	g := strVal("val1")
+	g.setTag(ValueType_INT)
+	g.InitChecksum([]byte("key1"))
+
+	for i, tc := range []struct {
+		v1, v2 *Value
+		eq     bool
+	}{
+		{v1: a, v2: b, eq: true},
+		{v1: a, v2: c, eq: true},
+		{v1: a, v2: d, eq: false},
+		{v1: a, v2: e, eq: false},
+		{v1: a, v2: f, eq: false},
+		{v1: a, v2: g, eq: false},
+		{v1: b, v2: c, eq: true},
+		{v1: b, v2: d, eq: false},
+		{v1: b, v2: e, eq: false},
+		{v1: b, v2: f, eq: false},
+		{v1: b, v2: g, eq: false},
+		{v1: c, v2: d, eq: false},
+		{v1: c, v2: e, eq: false},
+		{v1: c, v2: f, eq: false},
+		{v1: c, v2: g, eq: false},
+		{v1: d, v2: e, eq: true},
+		{v1: d, v2: f, eq: false},
+		{v1: d, v2: g, eq: false},
+		{v1: e, v2: f, eq: false},
+		{v1: e, v2: g, eq: false},
+		{v1: f, v2: g, eq: true},
+	} {
+		if tc.eq != tc.v1.EqualData(*tc.v2) {
+			t.Errorf("%d: wanted eq=%t", i, tc.eq)
+		}
+		// Test symmetry.
+		if tc.eq != tc.v2.EqualData(*tc.v1) {
+			t.Errorf("%d: wanted eq=%t", i, tc.eq)
+		}
+	}
+}
+
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}
@@ -290,8 +355,8 @@ func TestSetGetChecked(t *testing.T) {
 	}
 	if r, err := v.GetDecimal(); err != nil {
 		t.Fatal(err)
-	} else if dec.Cmp(r) != 0 {
-		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", dec, dec, r)
+	} else if dec.Cmp(&r) != 0 {
+		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", dec, dec, &r)
 	}
 
 	if err := v.SetProto(&Value{}); err != nil {
@@ -320,40 +385,37 @@ func TestSetGetChecked(t *testing.T) {
 	}
 }
 
-func TestTxnEqual(t *testing.T) {
-	u1, u2 := uuid.MakeV4(), uuid.MakeV4()
-	tc := []struct {
-		txn1, txn2 *Transaction
-		eq         bool
-	}{
-		{nil, nil, true},
-		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: &u1}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: &u2}}, false},
+func TestTransactionBumpEpoch(t *testing.T) {
+	origNow := makeTS(10, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	// Advance the txn timestamp.
+	txn.Timestamp.Add(10, 2)
+	txn.BumpEpoch()
+	if a, e := txn.Epoch, uint32(1); a != e {
+		t.Errorf("expected epoch %d; got %d", e, a)
 	}
-	for i, c := range tc {
-		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
-			t.Errorf("%d: wanted %t", i, c.eq)
-		}
+	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {
+		t.Errorf("expected non-nil epoch zero timestamp")
+	} else if txn.EpochZeroTimestamp != origNow {
+		t.Errorf("expected zero timestamp == origNow; %s != %s", txn.EpochZeroTimestamp, origNow)
 	}
 }
 
-func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	txn1Copy := txn1
-
-	testCases := []struct {
-		a, b     *uuid.UUID
-		expEqual bool
-	}{
-		{&txn1, &txn1, true},
-		{&txn1, &txn2, false},
-		{&txn1, &txn1Copy, true},
-	}
-	for i, test := range testCases {
-		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
-			t.Errorf("%d: expected %q == %q: %t; got %t", i, test.a, test.b, test.expEqual, eq)
+func TestTransactionInclusiveTimeBounds(t *testing.T) {
+	verify := func(txn Transaction, expMin, expMax hlc.Timestamp) {
+		if min, max := txn.InclusiveTimeBounds(); min != expMin || max != expMax {
+			t.Errorf("expected (%s-%s); got (%s-%s)", expMin, expMax, min, max)
 		}
 	}
+	origNow := makeTS(1, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	verify(txn, origNow, origNow)
+	txn.Timestamp.Forward(makeTS(1, 2))
+	verify(txn, origNow, makeTS(1, 2))
+	txn.Restart(1, 1, makeTS(2, 1))
+	verify(txn, origNow, makeTS(2, 1))
+	txn.Timestamp.Forward(makeTS(3, 1))
+	verify(txn, origNow, makeTS(3, 1))
 }
 
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
@@ -394,30 +456,47 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 }
 
+func TestFastPathObservedTimestamp(t *testing.T) {
+	var txn Transaction
+	nodeID := NodeID(1)
+	if _, ok := txn.GetObservedTimestamp(nodeID); ok {
+		t.Errorf("fetched observed timestamp where none should exist")
+	}
+	expTS := hlc.Timestamp{WallTime: 10}
+	txn.UpdateObservedTimestamp(nodeID, expTS)
+	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
+		t.Errorf("expected %s; got %s", expTS, ts)
+	}
+	expTS = hlc.Timestamp{WallTime: 9}
+	txn.UpdateObservedTimestamp(nodeID, expTS)
+	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
+		t.Errorf("expected %s; got %s", expTS, ts)
+	}
+}
+
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
 		Isolation: enginepb.SNAPSHOT,
 		Key:       Key("foo"),
-		ID: func() *uuid.UUID {
-			u := uuid.MakeV4()
-			return &u
-		}(),
-		Epoch:      2,
-		Timestamp:  makeTS(20, 21),
-		Priority:   957356782,
-		Sequence:   123,
-		BatchIndex: 1,
+		ID:        uuid.MakeV4(),
+		Epoch:     2,
+		Timestamp: makeTS(20, 21),
+		Priority:  957356782,
+		Sequence:  123,
 	},
-	Name:               "name",
-	Status:             COMMITTED,
-	LastHeartbeat:      makeTS(1, 2),
-	OrigTimestamp:      makeTS(30, 31),
-	MaxTimestamp:       makeTS(40, 41),
-	ObservedTimestamps: []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	Writing:            true,
-	WriteTooOld:        true,
-	RetryOnPush:        true,
-	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	Name:                     "name",
+	Status:                   COMMITTED,
+	LastHeartbeat:            makeTS(1, 2),
+	OrigTimestamp:            makeTS(30, 31),
+	RefreshedTimestamp:       makeTS(20, 22),
+	MaxTimestamp:             makeTS(40, 41),
+	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	Writing:                  true,
+	WriteTooOld:              true,
+	RetryOnPush:              true,
+	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	EpochZeroTimestamp:       makeTS(1, 1),
+	OrigTimestampWasObserved: true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -433,15 +512,32 @@ func TestTransactionUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u := uuid.MakeV4()
 	var txn3 Transaction
-	txn3.ID = &u
+	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
 	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTransactionUpdateEpochZero(t *testing.T) {
+	txn := nonZeroTxn
+	var txn2 Transaction
+	txn2.Update(&txn)
+
+	if a, e := txn2.EpochZeroTimestamp, txn.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
+	}
+
+	txn3 := nonZeroTxn
+	txn3.EpochZeroTimestamp = nonZeroTxn.EpochZeroTimestamp.Prev()
+	txn.Update(&txn3)
+
+	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
 	}
 }
 
@@ -457,7 +553,6 @@ func TestTransactionClone(t *testing.T) {
 	expFields := []string{
 		"Intents.EndKey",
 		"Intents.Key",
-		"TxnMeta.ID",
 		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {
@@ -595,19 +690,19 @@ func TestLeaseEquivalence(t *testing.T) {
 	ts2 := makeTS(2, 1)
 	ts3 := makeTS(3, 1)
 
-	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1)}
-	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2)}
-	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2}
-	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3}
-	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: proto.Int64(2)}
-	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3}
+	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
+	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
+	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.Clone()}
+	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.Clone()}
+	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
+	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.Clone()}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: &ts1}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2), ProposedTS: &ts1}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: &ts2}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts1.Clone()}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: ts1.Clone()}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts2.Clone()}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts1}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts2}
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.Clone()}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
 
 	testCases := []struct {
 		l, ol      Lease
@@ -629,9 +724,103 @@ func TestLeaseEquivalence(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		if err := tc.l.Equivalent(tc.ol); tc.expSuccess != (err == nil) {
-			t.Errorf("%d: expected success? %t; got %s", i, tc.expSuccess, err)
+		if ok := tc.l.Equivalent(tc.ol); tc.expSuccess != ok {
+			t.Errorf("%d: expected success? %t; got %t", i, tc.expSuccess, ok)
 		}
+	}
+
+	// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
+	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
+	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
+	prePRLease := Lease{
+		Start: hlc.Timestamp{WallTime: 10},
+		Epoch: 123,
+
+		// The bug-trigger.
+		Expiration: new(hlc.Timestamp),
+
+		// Similar potential bug triggers, but these were actually handled correctly.
+		DeprecatedStartStasis: new(hlc.Timestamp),
+		ProposedTS:            &hlc.Timestamp{WallTime: 10},
+	}
+	postPRLease := prePRLease
+	postPRLease.DeprecatedStartStasis = nil
+	postPRLease.Expiration = nil
+
+	if !postPRLease.Equivalent(prePRLease) || !prePRLease.Equivalent(postPRLease) {
+		t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
+	}
+}
+
+func TestLeaseEqual(t *testing.T) {
+	type expectedLease struct {
+		Start                 hlc.Timestamp
+		Expiration            *hlc.Timestamp
+		Replica               ReplicaDescriptor
+		DeprecatedStartStasis *hlc.Timestamp
+		ProposedTS            *hlc.Timestamp
+		Epoch                 int64
+		Sequence              LeaseSequence
+	}
+	// Verify that the lease structure does not change unexpectedly. If a compile
+	// error occurs on the following line of code, update the expectedLease
+	// structure AND update Lease.Equal.
+	var _ = expectedLease(Lease{})
+
+	// Verify that nil == &hlc.Timestamp{} for the Expiration and
+	// DeprecatedStartStasis fields. See #19843.
+	a := Lease{}
+	b := Lease{
+		Expiration:            &hlc.Timestamp{},
+		DeprecatedStartStasis: &hlc.Timestamp{},
+	}
+	if !a.Equal(b) {
+		t.Fatalf("unexpectedly did not compare equal: %s", pretty.Diff(a, b))
+	}
+
+	if !(*Lease)(nil).Equal(nil) {
+		t.Fatalf("unexpectedly did not compare equal")
+	}
+	if !(*Lease)(nil).Equal((*Lease)(nil)) {
+		t.Fatalf("unexpectedly did not compare equal")
+	}
+	if (*Lease)(nil).Equal(Lease{}) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (*Lease)(nil).Equal(&Lease{}) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (&Lease{}).Equal(nil) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (&Lease{}).Equal((*Lease)(nil)) {
+		t.Fatalf("expectedly compared equal")
+	}
+
+	ts := hlc.Timestamp{Logical: 1}
+	testCases := []Lease{
+		{Start: ts},
+		{Expiration: &ts},
+		{Replica: ReplicaDescriptor{NodeID: 1}},
+		{DeprecatedStartStasis: &ts},
+		{ProposedTS: &ts},
+		{Epoch: 1},
+		{Sequence: 1},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			if c.Equal(Lease{}) {
+				t.Fatalf("unexpected equality: %s", pretty.Diff(c, Lease{}))
+			}
+		})
+	}
+}
+
+func TestLeaseFuzzNullability(t *testing.T) {
+	var l Lease
+	protoutil.Walk(&l, protoutil.ZeroInsertingVisitor)
+	if l.Expiration == nil {
+		t.Fatal("unexpectedly nil expiration")
 	}
 }
 
@@ -640,6 +829,9 @@ func TestSpanOverlaps(t *testing.T) {
 	sD := Span{Key: []byte("d")}
 	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
 	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
 
 	testData := []struct {
 		s1, s2   Span
@@ -656,10 +848,55 @@ func TestSpanOverlaps(t *testing.T) {
 		{sAtoC, sAtoC, true},
 		{sAtoC, sBtoD, true},
 		{sBtoD, sAtoC, true},
+		// Invalid spans.
+		{sAtoC, sDtoB, false},
+		{sDtoB, sAtoC, false},
+		{sBtoD, sCtoA, false},
+		{sCtoA, sBtoD, false},
 	}
 	for i, test := range testData {
 		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
 			t.Errorf("%d: expected overlap %t; got %t between %s vs. %s", i, test.overlaps, o, test.s1, test.s2)
+		}
+	}
+}
+
+func TestSpanCombine(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sAtoD := Span{Key: []byte("a"), EndKey: []byte("d")}
+	sAtoDNext := Span{Key: []byte("a"), EndKey: Key([]byte("d")).Next()}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	sBtoDNext := Span{Key: []byte("b"), EndKey: Key([]byte("d")).Next()}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
+
+	testData := []struct {
+		s1, s2   Span
+		combined Span
+	}{
+		{sA, sA, sA},
+		{sA, sD, sAtoDNext},
+		{sA, sBtoD, sAtoD},
+		{sBtoD, sA, sAtoD},
+		{sD, sBtoD, sBtoDNext},
+		{sBtoD, sD, sBtoDNext},
+		{sA, sAtoC, sAtoC},
+		{sAtoC, sA, sAtoC},
+		{sAtoC, sAtoC, sAtoC},
+		{sAtoC, sBtoD, sAtoD},
+		{sBtoD, sAtoC, sAtoD},
+		// Invalid spans.
+		{sAtoC, sDtoB, Span{}},
+		{sDtoB, sAtoC, Span{}},
+		{sBtoD, sCtoA, Span{}},
+		{sCtoA, sBtoD, Span{}},
+	}
+	for i, test := range testData {
+		if combined := test.s1.Combine(test.s2); !combined.Equal(test.combined) {
+			t.Errorf("%d: expected combined %s; got %s between %s vs. %s", i, test.combined, combined, test.s1, test.s2)
 		}
 	}
 }
@@ -688,13 +925,87 @@ func TestSpanContains(t *testing.T) {
 		{[]byte("b"), []byte("bb"), false},
 		{[]byte("0"), []byte("bb"), false},
 		{[]byte("aa"), []byte("bb"), false},
-		// TODO(bdarnell): check for invalid ranges in Span.Contains?
-		//{[]byte("b"), []byte("a"), false},
+		{[]byte("b"), []byte("a"), false},
 	}
 	for i, test := range testData {
 		if s.Contains(Span{test.start, test.end}) != test.contains {
 			t.Errorf("%d: expected span %q-%q within range to be %v",
 				i, test.start, test.end, test.contains)
+		}
+	}
+}
+
+func TestSpanSplitOnKey(t *testing.T) {
+	s := Span{Key: []byte("b"), EndKey: []byte("c")}
+
+	testData := []struct {
+		split []byte
+		left  Span
+		right Span
+	}{
+		// Split on start/end key should fail.
+		{
+			[]byte("b"),
+			s,
+			Span{},
+		},
+		{
+			[]byte("c"),
+			s,
+			Span{},
+		},
+
+		// Before start key.
+		{
+			[]byte("a"),
+			s,
+			Span{},
+		},
+		// After end key.
+		{
+			[]byte("d"),
+			s,
+			Span{},
+		},
+
+		// Simple split.
+		{
+			[]byte("bb"),
+			Span{[]byte("b"), []byte("bb")},
+			Span{[]byte("bb"), []byte("c")},
+		},
+	}
+	for testIdx, test := range testData {
+		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			actualL, actualR := s.SplitOnKey(test.split)
+			if !test.left.EqualValue(actualL) {
+				t.Fatalf("expected left span after split to be %v, got %v", test.left, actualL)
+			}
+
+			if !test.right.EqualValue(actualR) {
+				t.Fatalf("expected right span after split to be %v, got %v", test.right, actualL)
+			}
+		})
+	}
+}
+
+func TestSpanValid(t *testing.T) {
+	testData := []struct {
+		start, end []byte
+		valid      bool
+	}{
+		{[]byte("a"), nil, true},
+		{[]byte("a"), []byte("b"), true},
+		{[]byte(""), []byte(""), false},
+		{[]byte(""), []byte("a"), true},
+		{[]byte("a"), []byte("a"), false},
+		{[]byte("b"), []byte("aa"), false},
+	}
+	for i, test := range testData {
+		s := Span{test.start, test.end}
+		if test.valid != s.Valid() {
+			t.Errorf("%d: expected span %q-%q to return %t for Valid, instead got %t",
+				i, test.start, test.end, test.valid, s.Valid())
 		}
 	}
 }
@@ -739,9 +1050,9 @@ func TestRSpanContains(t *testing.T) {
 	}
 }
 
-// TestRSpanContainsExclusiveEndKey verifies ContainsExclusiveEndKey to check whether a key
-// or key range is contained within the span.
-func TestRSpanContainsExclusiveEndKey(t *testing.T) {
+// TestRSpanContainsKeyInverted verifies ContainsKeyInverted to check whether a key
+// is contained within the span.
+func TestRSpanContainsKeyInverted(t *testing.T) {
 	rs := RSpan{Key: []byte("b"), EndKey: []byte("c")}
 
 	testData := []struct {
@@ -756,7 +1067,7 @@ func TestRSpanContainsExclusiveEndKey(t *testing.T) {
 		{RKey("c").Next(), false},
 	}
 	for i, test := range testData {
-		if rs.ContainsExclusiveEndKey(test.key) != test.contains {
+		if rs.ContainsKeyInverted(test.key) != test.contains {
 			t.Errorf("%d: expected key %q within range", i, test.key)
 		}
 	}
@@ -1013,6 +1324,14 @@ func TestValuePrettyPrint(t *testing.T) {
 	tupleBytes := encoding.EncodeBytesValue(encoding.EncodeIntValue(nil, 1, 8), 2, []byte("foo"))
 	tupleValue.SetTuple(tupleBytes)
 
+	var bytesValuePrintable, bytesValueNonPrintable Value
+	bytesValuePrintable.SetBytes([]byte("abc"))
+	bytesValueNonPrintable.SetBytes([]byte{0x89})
+
+	var bitArrayValue Value
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+	bitArrayValue.SetBitArray(ba)
+
 	var errValue Value
 	errValue.SetInt(7)
 	errValue.setTag(ValueType_FLOAT)
@@ -1031,9 +1350,12 @@ func TestValuePrettyPrint(t *testing.T) {
 		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
 		{decimalValue, "/DECIMAL/6.28"},
 		{durationValue, "/DURATION/1mon2d3ns"},
-		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/01020fff"},
+		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/0x01020fff"},
 		{MakeValueFromString("foo"), "/BYTES/foo"},
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
+		{bytesValuePrintable, "/BYTES/abc"},
+		{bytesValueNonPrintable, "/BYTES/0x89"},
+		{bitArrayValue, "/BITARRAY/B00111010"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
 	}

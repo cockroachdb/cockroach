@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
 
 syntax = "proto2";
 package cockroach.sql;
@@ -22,6 +21,8 @@ import "gogoproto/gogo.proto";
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 count = 1 [(gogoproto.nullable) = false];
 
   // FirstAttemptCount collects the total number of times a first
@@ -32,14 +33,23 @@ message StatementStatistics {
   // can be computed as FirstAttemptCount / Count.
   // The cumulative number of retries can be computed with
   // Count - FirstAttemptCount.
+  //
+  // When transmitted to the reporting server, this value gets
+  // simplified so that the proportion of statements that could be
+  // executed without retry remains as FirstAttemptCount / Count.
   optional int64 first_attempt_count = 2 [(gogoproto.nullable) = false];
 
   // MaxRetries collects the maximum observed number of automatic
   // retries in the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 max_retries = 3 [(gogoproto.nullable) = false];
 
   // LastErr collects the last error encountered.
   optional string last_err = 4 [(gogoproto.nullable) = false];
+
+  // LastErrRedacted collects the last error, redacted for reporting.
+  optional string last_err_redacted = 11 [(gogoproto.nullable) = false];
 
   // NumRows collects the number of rows returned or observed.
   optional NumericStat num_rows = 5 [(gogoproto.nullable) = false];
@@ -62,9 +72,31 @@ message StatementStatistics {
   // We store it separately (as opposed to computing it post-hoc) because the combined
   // variance for the overhead cannot be derived from the variance of the separate latencies.
   optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
 message NumericStat {
+  // NumericStat keeps track of two running values --- the running mean and
+  // the running sum of squared differences from the mean. Using this along
+  // with the total count of values, we can compute variance using Welford's
+  // method. This is more reliable than keeping track of the sum of
+  // squared values, which is liable to overflow. See
+  // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
   optional double mean = 1 [(gogoproto.nullable) = false];
   optional double squared_diffs = 2 [(gogoproto.nullable) = false];
+}
+
+message StatementStatisticsKey {
+  optional string query = 1 [(gogoproto.nullable) = false];
+  optional string app = 2 [(gogoproto.nullable) = false];
+  optional bool distSQL = 3 [(gogoproto.nullable) = false];
+  optional bool failed = 4 [(gogoproto.nullable) = false];
+  optional bool opt = 5 [(gogoproto.nullable) = false];
+}
+
+// CollectedStats wraps collected timings and metadata for some query's execution.
+message CollectedStatementStatistics {
+  optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+  optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
 }

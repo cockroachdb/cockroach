@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package util
 
@@ -26,7 +24,7 @@ import (
 // result.
 func testMoveTopKToFront(t *testing.T, k int, data ...int) {
 	// Make a copy of the values.
-	vals = append([]int(nil), data...)
+	vals := append([]int(nil), data...)
 	MoveTopKToFront(sort.IntSlice(vals), k)
 	for l := 0; l < k; l++ {
 		for r := k; r < len(data); r++ {

@@ -1,0 +1,70 @@
+# =============================================================================
+# ordering.opt contains normalization patterns that try to simplify ordering
+# directives by removing redundant columns. For example:
+#
+#   SELECT * FROM abc ORDER BY a, b
+#
+# If (a) is a key for the table, then its value is unique in every row. Since
+# subsequent sort key columns are only used when there are duplicate values in
+# previous sort key columns, the (b) sort key column will never be used.
+#
+# This is one example, but there are several ways to simplify based on
+# functional dependence theory (see [6]) that take into account constant
+# columns, equivalent columns, and the functional relationships between columns.
+# See OrderingChoice.Simplify and FuncDepSet for more details.
+#
+# Citations: [6]
+# =============================================================================
+
+# SimplifyLimitOrdering removes redundant columns from the Limit operator's
+# input ordering.
+[SimplifyLimitOrdering, Normalize]
+(Limit
+    $input:*
+    $limit:*
+    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+)
+=>
+(Limit $input $limit (SimplifyLimitOffsetOrdering $input $ordering))
+
+# SimplifyOffsetOrdering removes redundant columns from the Offset operator's
+# input ordering.
+[SimplifyOffsetOrdering, Normalize]
+(Offset
+    $input:*
+    $offset:*
+    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+)
+=>
+(Offset $input $offset (SimplifyLimitOffsetOrdering $input $ordering))
+
+# SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
+# input ordering.
+[SimplifyGroupByOrdering, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (CanSimplifyGroupingOrdering $input $groupingPrivate)
+)
+=>
+((OpName) $input $aggregations (SimplifyGroupingOrdering $input $groupingPrivate))
+
+# SimplifyRowNumberOrdering removes redundant columns from the RowNumber
+# operator's input ordering.
+[SimplifyRowNumberOrdering, Normalize]
+(RowNumber
+    $input:*
+    $rowNumberPrivate:* & (CanSimplifyRowNumberOrdering $input $rowNumberPrivate)
+)
+=>
+(RowNumber $input (SimplifyRowNumberOrdering $input $rowNumberPrivate))
+
+# SimplifyExplainOrdering removes redundant columns from the Explain operator's
+# input ordering.
+[SimplifyExplainOrdering, Normalize]
+(Explain
+    $input:*
+    $explainPrivate:* & (CanSimplifyExplainOrdering $input $explainPrivate)
+)
+=>
+(Explain $input (SimplifyExplainOrdering $input $explainPrivate))

@@ -1,0 +1,285 @@
+# LogicTest: local local-opt
+
+statement error unrecognized configuration parameter "foo"
+SET foo = bar
+
+statement error unrecognized configuration parameter "foo"
+SHOW foo
+
+statement error database "foo" does not exist
+SET database = foo
+
+# Ensure that the failing SET DATABASE call did not alter the session.
+# The default session.database value is "test".
+statement ok
+SHOW TABLES
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+SET database = foo
+
+# Create a table in the session database.
+statement ok
+CREATE TABLE bar (k INT PRIMARY KEY)
+
+# Verify that the table is indeed in "foo".
+query T
+SHOW TABLES FROM foo
+----
+bar
+
+# Verify set to empty string.
+statement ok
+SET database = ""
+
+query T colnames
+SHOW database
+----
+database
+·
+
+statement error no database specified
+SHOW TABLES
+
+# Verify SHOW TABLES FROM works when there is no current database.
+query T
+SHOW TABLES FROM foo
+----
+bar
+
+# SET statement succeeds, CREATE TABLE fails.
+statement error pgcode 42P07 relation \"bar\" already exists
+SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
+
+query T colnames
+SHOW database
+----
+database
+foo
+
+# SET succeeds
+query T
+SHOW TABLES from foo
+----
+bar
+
+statement error invalid variable name: ""
+SET ROW (1, TRUE, NULL)
+
+statement ok
+SET application_name = helloworld
+
+query T colnames
+SHOW application_name
+----
+application_name
+helloworld
+
+# SESSION_USER is a special keyword, check that SHOW knows about it.
+query T
+SHOW session_user
+----
+root
+
+## Test SET ... TO DEFAULT works
+
+statement ok
+SET distsql TO ON
+
+query T colnames
+SHOW distsql
+----
+distsql
+on
+
+statement ok
+SET distsql TO DEFAULT
+
+query T colnames
+SHOW distsql
+----
+distsql
+2.0-off
+
+## Test that our no-op compatibility vars work
+
+statement ok
+SET application_name = 'hello'
+
+statement ok
+SET extra_float_digits = 0
+
+statement error 123 is outside the valid range for parameter "extra_float_digits"
+SET extra_float_digits = 123
+
+statement ok
+SET client_min_messages = 'debug'
+
+statement ok
+SET standard_conforming_strings = 'on'
+
+statement error invalid value for parameter "standard_conforming_strings": "off"
+SET standard_conforming_strings = 'off'
+
+statement ok
+SET client_encoding = 'UTF8'
+
+statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
+SET client_encoding = 'unicode'
+
+statement error unimplemented client encoding: "other"
+SET client_encoding = 'other'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'UTF8'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'other'
+
+statement ok
+SET datestyle = 'ISO'
+
+statement error invalid value for parameter "DateStyle": "other"
+SET datestyle = 'other'
+
+statement ok
+SET intervalstyle = 'postgres'
+
+statement error invalid value for parameter "IntervalStyle": "other"
+SET intervalstyle = 'other'
+
+statement ok
+SET search_path = 'blah'
+
+statement ok
+SET distsql = always
+
+statement ok
+SET distsql = on
+
+statement ok
+SET distsql = off
+
+statement ok
+SET distsql = '2.0-off'
+
+statement ok
+SET distsql = '2.0-auto'
+
+statement error invalid value for parameter "distsql": "bogus"
+SET distsql = bogus
+
+statement ok
+SET optimizer = on
+
+statement ok
+SET optimizer = local
+
+statement ok
+SET optimizer = off
+
+statement error invalid value for parameter "optimizer": "bogus"
+SET optimizer = bogus
+
+statement ok
+SET bytea_output = escape
+
+statement ok
+SET bytea_output = hex
+
+statement error invalid value for parameter "bytea_output": "bogus"
+SET bytea_output = bogus
+
+query T colnames
+SHOW server_version
+----
+server_version
+9.5.0
+
+query T colnames
+SHOW server_version_num
+----
+server_version_num
+90500
+
+# Test read-only variables
+statement error parameter "max_index_keys" cannot be changed
+SET max_index_keys = 32
+
+statement error parameter "node_id" cannot be changed
+SET node_id = 123
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
+----
+
+# quoted identifiers
+statement ok
+SET "timezone" = 'UTC'
+
+# even quoted in postgres the session variable names are
+# case-insensitive for SET and SHOW.
+statement ok
+SET "TIMEZONE" = 'UTC'
+
+query T
+SHOW "TIMEZONE"
+----
+UTC
+
+# without quoted identifiers
+statement ok
+SET timezone = 'UTC'
+
+query T
+SHOW timezone
+----
+UTC
+
+# TIMEZONE alias - TIME ZONE two words/tokens
+statement ok
+SET TIME ZONE 'UTC'
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+# Regression test for #19727 - invalid EvalContext used to evaluate arguments to set.
+statement ok
+SET application_name = current_timestamp()::string
+
+# Test statement_timeout on a long-running query.
+statement ok
+SET statement_timeout = 1
+
+statement error query execution canceled due to statement timeout
+SELECT * FROM generate_series(1,1000000)
+
+# Test that statement_timeout can be set with an interval string.
+statement ok
+SET statement_timeout = '0ms'
+
+# Test that statement_timeout can be set with an interval string, defaulting to
+# milliseconds as a unit.
+statement ok
+SET statement_timeout = '100'
+
+query T
+SHOW statement_timeout
+----
+100
+
+# Test that composite variable names get rejected properly, especially
+# when "tracing" is used as prefix.
+
+statement error unrecognized configuration parameter "blah.blah"
+SET blah.blah = 123
+
+statement error unrecognized configuration parameter "tracing.blah"
+SET tracing.blah = 123

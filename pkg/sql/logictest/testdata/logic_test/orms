@@ -1,0 +1,134 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+## This test file contains various complex queries that ORMs issue during
+## startup or general use.
+
+## 12151
+statement ok
+CREATE TABLE a (id int UNIQUE, name string)
+
+query TTTBOI
+SELECT a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.atttypid, a.atttypmod
+    FROM pg_attribute a
+    LEFT JOIN pg_attrdef d
+    ON a.attrelid = d.adrelid
+    AND a.attnum = d.adnum
+    WHERE a.attrelid = 'a'::regclass
+    AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY a.attnum
+----
+id     bigint  NULL            false  20  -1
+name   text    NULL            false  25  -1
+rowid  bigint  unique_rowid()  true   20  -1
+
+
+# #12115
+# Skipped until #25148 is solved
+#query TT
+#SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value
+#    FROM pg_type t
+#    JOIN pg_enum e ON t.oid = e.enumtypid
+#    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+#    WHERE n.nspname = 'public'
+#    GROUP BY 1
+#----
+
+
+## 12207
+statement ok
+CREATE TABLE customers (
+    name STRING PRIMARY KEY,
+    id INT,
+    INDEX (id)
+)
+
+statement ok
+INSERT INTO customers VALUES ('jordan', 12), ('cuong', 13)
+
+query TBBTTTT colnames
+SELECT i.relname AS name,
+       ix.indisprimary AS PRIMARY,
+       ix.indisunique AS UNIQUE,
+       ix.indkey AS indkey,
+       array_agg(a.attnum) AS column_indexes,
+       array_agg(a.attname) AS column_names,
+       pg_get_indexdef(ix.indexrelid) AS definition
+FROM pg_class t,
+     pg_class i,
+     pg_index ix,
+     pg_attribute a
+WHERE t.oid = ix.indrelid
+AND   i.oid = ix.indexrelid
+AND   a.attrelid = t.oid
+AND   t.relkind = 'r'
+AND   t.relname = 'customers' -- this query is run once for each table
+GROUP BY i.relname,
+         ix.indexrelid,
+         ix.indisprimary,
+         ix.indisunique,
+         ix.indkey
+ORDER BY i.relname
+----
+name              primary  unique  indkey  column_indexes  column_names  definition
+customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers (id ASC)
+primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers (name ASC)
+
+
+query TT colnames
+SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS data_type
+FROM   pg_index i
+JOIN   pg_attribute a ON a.attrelid = i.indrelid
+                     AND a.attnum = ANY(i.indkey)
+                     WHERE  i.indrelid = '"a"'::regclass
+                     AND    i.indisprimary
+----
+attname  data_type
+rowid    bigint
+
+statement ok
+CREATE TABLE b (id INT, a_id INT, FOREIGN KEY (a_id) REFERENCES a (id))
+
+# ActiveRecord query for foreign keys
+# https://github.com/rails/rails/blob/355a2fcf/activerecord/lib/active_record/connection_adapters/postgresql/schema_statements.rb#L583
+query TTTTTT
+SELECT t2.oid::regclass::text AS to_table, a1.attname AS column, a2.attname AS primary_key, c.conname AS name, c.confupdtype AS on_update, c.confdeltype AS on_delete
+FROM pg_constraint c
+JOIN pg_class t1 ON c.conrelid = t1.oid
+JOIN pg_class t2 ON c.confrelid = t2.oid
+JOIN pg_attribute a1 ON a1.attnum = c.conkey[1] AND a1.attrelid = t1.oid
+JOIN pg_attribute a2 ON a2.attnum = c.confkey[1] AND a2.attrelid = t2.oid
+JOIN pg_namespace t3 ON c.connamespace = t3.oid
+WHERE c.contype = 'f'
+AND t1.relname ='b'
+AND t3.nspname = ANY (current_schemas(false))
+ORDER BY c.conname
+----
+a  a_id  id  fk_a_id_ref_a  a  a
+
+# Default value columns in Rails produce these kinds of queries:
+query O
+SELECT 'decimal(18,2)'::regtype::oid
+----
+1700
+
+query O
+SELECT 'character varying'::regtype::oid
+----
+25
+
+statement ok
+CREATE INDEX b_idx ON b(a_id);
+
+# ActiveRecord 4.2.x query for checking if an index exists
+# Relies on OID IN tuple support
+query I
+SELECT count(*)
+FROM pg_class t
+INNER JOIN pg_index d ON t.oid = d.indrelid
+INNER JOIN pg_class i ON d.indexrelid = i.oid
+WHERE i.relkind = 'i'
+AND i.relname = 'b_idx'
+AND t.relname = 'b'
+AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = ANY (current_schemas(false)))
+----
+1

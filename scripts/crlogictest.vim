@@ -4,13 +4,16 @@
 "
 " To use, copy the file to ~/.vim/syntax/
 " Recommended in .vimrc:
-"    autocmd BufNewFile,BufRead */sql/testdata/* set filetype=crlogictest tw=0
+"    autocmd BufNewFile,BufRead */sql/logictest/testdata/* set filetype=crlogictest tw=0
 
 if exists("b:current_syntax")
   finish
 endif
 
 syn match Comment display '#.*$' contains=Todo
+
+syn match let     display '^let' skipwhite nextgroup=letVar
+syn match letVar  display '\$[a-zA-Z][a-zA-Z0-9_]*'
 
 syn match stmt     display '^statement' skipwhite nextgroup=stmtOk,stmtErr
 syn match stmtOk   contained display 'ok\|OK'
@@ -42,10 +45,12 @@ hi def link stmt          Special
 hi def link stmtOk        Identifier
 hi def link stmtErr       Identifier
 hi def link errorStr      Constant
+hi def link let           Special
 hi def link query         Special
 hi def link queryCols     Type
 hi def link queryKeyword  Special
 hi def link badWhitespace ErrorMsg
+hi letVar ctermFg=Red
 
 syn keyword Todo TODO XXX
 
@@ -70,9 +75,9 @@ syn keyword sqlReserved ORDER PLACING PRIMARY REFERENCES RETURNING SELECT SESSIO
 syn keyword sqlReserved UNION UNIQUE USER USING VARIADIC VIEW WHEN WHERE WINDOW WITH
 
 syn keyword sqlType ANNOTATE_TYPE BETWEEN BIGINT BIGSERIAL BIT BOOL BOOLEAN BYTEA BYTES CHAR CHARACTER CHARACTERISTICS COALESCE DATE
-syn keyword sqlType DEC DECIMAL EXISTS EXTRACT EXTRACT_DURATION FLOAT GREATEST GROUPING IF IFNULL INT INT8 INT64 INTEGER INTERVAL LEAST
-syn keyword sqlType NAME NULLIF NUMERIC OUT OVERLAY POSITION PRECISION REAL ROW SERIAL SMALLINT SMALLSERIAL STRING SUBSTRING TIME TIMESTAMP
-syn keyword sqlType TIMESTAMPTZ TREAT TRIM VALUES VARCHAR
+syn keyword sqlType DEC DECIMAL EXISTS EXTRACT EXTRACT_DURATION FLOAT GREATEST GROUPING HISTOGRAM IF IFNULL INT INT2 INT4 INT8 INT64 INTEGER INTERVAL LEAST
+syn keyword sqlType NAME NULLIF NUMERIC OUT OVERLAY POSITION PRECISION REAL ROW SEQUENCE SERIAL SERIAL2 SERIAL4 SERIAL8 SMALLINT SMALLSERIAL STATISTICS STRING SUBSTRING
+syn keyword sqlType TIME TIMESTAMP TIMESTAMPTZ TREAT TRIM VALUES VARCHAR
 
 syn keyword sqlKeyword COLLATION CROSS FULL INNER ILIKE IS JOIN LEFT LIKE NATURAL OUTER OVERLAPS RIGHT SIMILAR
 

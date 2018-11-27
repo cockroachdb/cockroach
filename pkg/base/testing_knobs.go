@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package base
 
@@ -25,9 +23,14 @@ type ModuleTestingKnobs interface {
 // TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
-	Store            ModuleTestingKnobs
-	SQLExecutor      ModuleTestingKnobs
-	SQLLeaseManager  ModuleTestingKnobs
-	SQLSchemaChanger ModuleTestingKnobs
-	DistSQL          ModuleTestingKnobs
+	Store               ModuleTestingKnobs
+	KVClient            ModuleTestingKnobs
+	SQLExecutor         ModuleTestingKnobs
+	SQLLeaseManager     ModuleTestingKnobs
+	SQLSchemaChanger    ModuleTestingKnobs
+	SQLMigrationManager ModuleTestingKnobs
+	DistSQL             ModuleTestingKnobs
+	SQLEvalContext      ModuleTestingKnobs
+	RegistryLiveness    ModuleTestingKnobs
+	Upgrade             ModuleTestingKnobs
 }

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Matt Jibson (mjibson@cockroachlabs.com)
 
 package cli
 
@@ -22,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,224 +31,78 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func TestDumpRow(t *testing.T) {
+// TestDumpData uses the testdata/dump directory to execute SQL statements
+// and compare dump output with expected output. File format is from the
+// datadriven package.
+//
+// The commands supported in the data files are:
+//
+// sql: execute the commands in the input section; no arguments supported.
+//
+// dump: runs the CLI dump command with the given arguments, using its
+// output as the expected result. Then loads the data back into an empty
+// server and dumps it again to ensure the dump is roundtrippable. If the
+// input section is equal to `noroundtrip` the roundtrip step is skipped
+// (i.e., only the first dump is done). After a roundtripped dump, the tmp
+// database may be examined to verify correctness.
+func TestDumpData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	datadriven.Walk(t, filepath.Join("testdata", "dump"), func(t *testing.T, path string) {
+		c := newCLITest(cliTestParams{t: t})
+		c.omitArgs = true
+		defer c.cleanup()
 
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		i int,
-		f float,
-		s string,
-		b bytes,
-		d date,
-		t timestamp,
-		n interval,
-		o bool,
-		e decimal,
-		tz timestamptz,
-		e1 decimal(2),
-		e2 decimal(2, 1),
-		s1 string(1),
-		FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
-		FAMILY fam_1_s (s),
-		FAMILY fam_2_b (b),
-		FAMILY fam_3_e (e)
-	);
-	INSERT INTO d.t VALUES (
-		1,
-		2.3,
-		'striiing',
-		b'\141\061\142\062\143\063', '2016-03-26', '2016-01-25 10:10:10' ,
-		'2h30m30s',
-		true,
-		1.2345,
-		'2016-01-25 10:10:10',
-		3.4,
-		4.5,
-		's'
-	);
-	INSERT INTO d.t VALUES (DEFAULT);
-	INSERT INTO d.t (f) VALUES (
-		CAST('+Inf' AS FLOAT)
-	), (
-		CAST('-Inf' AS FLOAT)
-	), (
-		CAST('NaN' AS FLOAT)
-	);
-`
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			args := []string{d.Cmd}
+			switch d.Cmd {
+			case "sql":
+				args = append(args, "-e", d.Input)
+			case "dump":
+				for _, a := range d.CmdArgs {
+					args = append(args, a.String())
+				}
+			default:
+				d.Fatalf(t, "unknown command: %s", d.Cmd)
+			}
+			s, err := c.RunWithCaptureArgs(args)
+			if err != nil {
+				d.Fatalf(t, "%v", err)
+			}
+			if d.Cmd == "dump" && d.Input != "noroundtrip" {
+				if s != d.Expected {
+					return s
+				}
 
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	i INT NULL,
-	f FLOAT NULL,
-	s STRING NULL,
-	b BYTES NULL,
-	d DATE NULL,
-	t TIMESTAMP NULL,
-	n INTERVAL NULL,
-	o BOOL NULL,
-	e DECIMAL NULL,
-	tz TIMESTAMP WITH TIME ZONE NULL,
-	e1 DECIMAL(2) NULL,
-	e2 DECIMAL(2,1) NULL,
-	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
-	FAMILY fam_1_s (s),
-	FAMILY fam_2_b (b),
-	FAMILY fam_3_e (e)
-);
-
-INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, -Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, NaN, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-`
-
-	if string(out) != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-
-}
-
-func TestDumpFlags(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-
-	out, err := c.RunWithCapture("dump t f --dump-mode=both")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := `dump t f --dump-mode=both
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-`
-	if string(out) != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t f --dump-mode=schema")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected = `dump t f --dump-mode=schema
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-`
-	if string(out) != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t f --dump-mode=data")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected = `dump t f --dump-mode=data
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-`
-	if string(out) != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-}
-
-func TestDumpMultipleTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
-
-	out, err := c.RunWithCapture("dump t f g")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := `dump t f g
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-
-INSERT INTO g (x, y) VALUES
-	(3, 4);
-`
-	if string(out) != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected = `dump t
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-
-INSERT INTO g (x, y) VALUES
-	(3, 4);
-`
-	if string(out) != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
+				c.RunWithArgs([]string{"sql", "-e", "drop database if exists tmp; create database tmp"})
+				if out, err := c.RunWithCaptureArgs([]string{"sql", "-d", "tmp", "-e", s}); err != nil {
+					d.Fatalf(t, "%v", err)
+				} else {
+					t.Logf("executed SQL: %s\nresult: %s", s, out)
+				}
+				args[1] = "tmp"
+				roundtrip, err := c.RunWithCaptureArgs(args)
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+				if roundtrip != s {
+					d.Fatalf(t, "roundtrip results unexpected: %s, expected: %s", roundtrip, s)
+				}
+			}
+			return s
+		})
+	})
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
@@ -269,7 +122,7 @@ func TestDumpBytes(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpBytes", url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -333,7 +186,7 @@ func TestDumpRandom(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpRandom", url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -345,16 +198,24 @@ func TestDumpRandom(t *testing.T) {
 		CREATE TABLE d.t (
 			rowid int,
 			i int,
+			si smallint,
+			bi bigint,
 			f float,
+			fr real,
 			d date,
 			m timestamp,
+			mtz timestamptz,
 			n interval,
 			o bool,
 			e decimal,
 			s string,
 			b bytes,
-			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b)
+			u uuid,
+			ip inet,
+			j json,
+			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip)
 		);
+		SET extra_float_digits = 3;
 	`, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -375,8 +236,8 @@ func TestDumpRandom(t *testing.T) {
 			// Generate a random number of random inserts.
 			i := rnd.Int63()
 			f := rnd.Float64()
-			d := time.Unix(0, rnd.Int63()).Round(time.Hour * 24).UTC()
-			m := time.Unix(0, rnd.Int63()).Round(time.Microsecond).UTC()
+			d := timeutil.Unix(0, rnd.Int63()).Round(time.Hour * 24)
+			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond)
 			sign := 1 - rnd.Int63n(2)*2
 			dur := duration.Duration{
 				Months: sign * rnd.Int63n(1000),
@@ -385,7 +246,7 @@ func TestDumpRandom(t *testing.T) {
 			}
 			n := dur.String()
 			o := rnd.Intn(2) == 1
-			e := strings.TrimRight(apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).ToStandard(), ".0")
+			e := apd.New(rnd.Int63(), rnd.Int31n(20)-10).String()
 			sr := make([]byte, rnd.Intn(500))
 			if _, err := rnd.Read(sr); err != nil {
 				t.Fatal(err)
@@ -403,26 +264,48 @@ func TestDumpRandom(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			uuidBytes := make([]byte, 16)
+			if _, err := rnd.Read(b); err != nil {
+				t.Fatal(err)
+			}
+			u, err := uuid.FromBytes(uuidBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ip := ipaddr.RandIPAddr(rnd)
+			j, err := json.Random(20, rnd)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			vals := []driver.Value{
 				_i,
 				i,
+				i & 0x7fff, // si
+				i,          // bi
 				f,
+				f, // fr
 				d,
+				m,
 				m,
 				[]byte(n), // intervals come out as `[]byte`s
 				o,
 				[]byte(e), // decimals come out as `[]byte`s
 				string(s),
 				b,
+				[]byte(u.String()),
+				[]byte(ip.String()),
+				[]byte(j.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -496,7 +379,7 @@ func TestDumpAsOf(t *testing.T) {
 	CREATE DATABASE d;
 	CREATE TABLE d.t (i int);
 	INSERT INTO d.t VALUES (1);
-	SELECT NOW();
+	SELECT now();
 `
 
 	out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
@@ -562,7 +445,7 @@ INSERT INTO t (i, j) VALUES
 
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(string(out), "table d.t does not exist") {
+	} else if !strings.Contains(out, `relation d.public.t does not exist`) {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }

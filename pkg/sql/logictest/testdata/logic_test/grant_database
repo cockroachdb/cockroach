@@ -1,0 +1,292 @@
+# LogicTest: local local-opt
+
+statement ok
+CREATE DATABASE a
+
+query TTTT colnames
+SHOW GRANTS ON DATABASE a
+----
+database_name  schema_name         grantee  privilege_type
+a              crdb_internal       admin    ALL
+a              crdb_internal       root     ALL
+a              information_schema  admin    ALL
+a              information_schema  root     ALL
+a              pg_catalog          admin    ALL
+a              pg_catalog          root     ALL
+a              public              admin    ALL
+a              public              root     ALL
+
+statement error user root must have exactly ALL privileges on system object with ID=.*
+REVOKE SELECT ON DATABASE a FROM root
+
+statement error user admin must have exactly ALL privileges on system object with ID=.*
+REVOKE SELECT ON DATABASE a FROM admin
+
+statement ok
+CREATE USER readwrite
+
+statement error pq: user or role "test-user" does not exist
+GRANT ALL ON DATABASE a TO readwrite, "test-user"
+
+statement ok
+INSERT INTO system.users VALUES('test-user','');
+
+statement ok
+GRANT ALL ON DATABASE a TO readwrite, "test-user"
+
+statement error syntax error
+GRANT SELECT,ALL ON DATABASE a TO readwrite
+
+statement error syntax error
+REVOKE SELECT,ALL ON DATABASE a FROM readwrite
+
+query TTTT
+SHOW GRANTS ON DATABASE a
+----
+a  crdb_internal       admin      ALL
+a  crdb_internal       readwrite  ALL
+a  crdb_internal       root       ALL
+a  crdb_internal       test-user  ALL
+a  information_schema  admin      ALL
+a  information_schema  readwrite  ALL
+a  information_schema  root       ALL
+a  information_schema  test-user  ALL
+a  pg_catalog          admin      ALL
+a  pg_catalog          readwrite  ALL
+a  pg_catalog          root       ALL
+a  pg_catalog          test-user  ALL
+a  public              admin      ALL
+a  public              readwrite  ALL
+a  public              root       ALL
+a  public              test-user  ALL
+
+# Create table to inherit DB permissions.
+statement ok
+CREATE TABLE a.t (id INT PRIMARY KEY)
+
+query TTTTT colnames
+SHOW GRANTS ON a.t
+----
+database_name  schema_name  table_name  grantee    privilege_type
+a              public       t           admin      ALL
+a              public       t           readwrite  ALL
+a              public       t           root       ALL
+a              public       t           test-user  ALL
+
+query TTTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a  crdb_internal       readwrite  ALL
+a  crdb_internal       test-user  ALL
+a  information_schema  readwrite  ALL
+a  information_schema  test-user  ALL
+a  pg_catalog          readwrite  ALL
+a  pg_catalog          test-user  ALL
+a  public              readwrite  ALL
+a  public              test-user  ALL
+
+statement ok
+REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
+
+query TTTT
+SHOW GRANTS ON DATABASE a
+----
+a  crdb_internal       admin      ALL
+a  crdb_internal       readwrite  CREATE
+a  crdb_internal       readwrite  DELETE
+a  crdb_internal       readwrite  DROP
+a  crdb_internal       readwrite  GRANT
+a  crdb_internal       readwrite  SELECT
+a  crdb_internal       root       ALL
+a  crdb_internal       test-user  CREATE
+a  crdb_internal       test-user  DELETE
+a  crdb_internal       test-user  DROP
+a  crdb_internal       test-user  GRANT
+a  crdb_internal       test-user  SELECT
+a  information_schema  admin      ALL
+a  information_schema  readwrite  CREATE
+a  information_schema  readwrite  DELETE
+a  information_schema  readwrite  DROP
+a  information_schema  readwrite  GRANT
+a  information_schema  readwrite  SELECT
+a  information_schema  root       ALL
+a  information_schema  test-user  CREATE
+a  information_schema  test-user  DELETE
+a  information_schema  test-user  DROP
+a  information_schema  test-user  GRANT
+a  information_schema  test-user  SELECT
+a  pg_catalog          admin      ALL
+a  pg_catalog          readwrite  CREATE
+a  pg_catalog          readwrite  DELETE
+a  pg_catalog          readwrite  DROP
+a  pg_catalog          readwrite  GRANT
+a  pg_catalog          readwrite  SELECT
+a  pg_catalog          root       ALL
+a  pg_catalog          test-user  CREATE
+a  pg_catalog          test-user  DELETE
+a  pg_catalog          test-user  DROP
+a  pg_catalog          test-user  GRANT
+a  pg_catalog          test-user  SELECT
+a  public              admin      ALL
+a  public              readwrite  CREATE
+a  public              readwrite  DELETE
+a  public              readwrite  DROP
+a  public              readwrite  GRANT
+a  public              readwrite  SELECT
+a  public              root       ALL
+a  public              test-user  CREATE
+a  public              test-user  DELETE
+a  public              test-user  DROP
+a  public              test-user  GRANT
+a  public              test-user  SELECT
+
+query TTTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a  crdb_internal       readwrite  CREATE
+a  crdb_internal       readwrite  DELETE
+a  crdb_internal       readwrite  DROP
+a  crdb_internal       readwrite  GRANT
+a  crdb_internal       readwrite  SELECT
+a  crdb_internal       test-user  CREATE
+a  crdb_internal       test-user  DELETE
+a  crdb_internal       test-user  DROP
+a  crdb_internal       test-user  GRANT
+a  crdb_internal       test-user  SELECT
+a  information_schema  readwrite  CREATE
+a  information_schema  readwrite  DELETE
+a  information_schema  readwrite  DROP
+a  information_schema  readwrite  GRANT
+a  information_schema  readwrite  SELECT
+a  information_schema  test-user  CREATE
+a  information_schema  test-user  DELETE
+a  information_schema  test-user  DROP
+a  information_schema  test-user  GRANT
+a  information_schema  test-user  SELECT
+a  pg_catalog          readwrite  CREATE
+a  pg_catalog          readwrite  DELETE
+a  pg_catalog          readwrite  DROP
+a  pg_catalog          readwrite  GRANT
+a  pg_catalog          readwrite  SELECT
+a  pg_catalog          test-user  CREATE
+a  pg_catalog          test-user  DELETE
+a  pg_catalog          test-user  DROP
+a  pg_catalog          test-user  GRANT
+a  pg_catalog          test-user  SELECT
+a  public              readwrite  CREATE
+a  public              readwrite  DELETE
+a  public              readwrite  DROP
+a  public              readwrite  GRANT
+a  public              readwrite  SELECT
+a  public              test-user  CREATE
+a  public              test-user  DELETE
+a  public              test-user  DROP
+a  public              test-user  GRANT
+a  public              test-user  SELECT
+
+statement ok
+REVOKE SELECT ON DATABASE a FROM "test-user"
+
+query TTTT
+SHOW GRANTS ON DATABASE a
+----
+a  crdb_internal       admin      ALL
+a  crdb_internal       readwrite  CREATE
+a  crdb_internal       readwrite  DELETE
+a  crdb_internal       readwrite  DROP
+a  crdb_internal       readwrite  GRANT
+a  crdb_internal       readwrite  SELECT
+a  crdb_internal       root       ALL
+a  crdb_internal       test-user  CREATE
+a  crdb_internal       test-user  DELETE
+a  crdb_internal       test-user  DROP
+a  crdb_internal       test-user  GRANT
+a  information_schema  admin      ALL
+a  information_schema  readwrite  CREATE
+a  information_schema  readwrite  DELETE
+a  information_schema  readwrite  DROP
+a  information_schema  readwrite  GRANT
+a  information_schema  readwrite  SELECT
+a  information_schema  root       ALL
+a  information_schema  test-user  CREATE
+a  information_schema  test-user  DELETE
+a  information_schema  test-user  DROP
+a  information_schema  test-user  GRANT
+a  pg_catalog          admin      ALL
+a  pg_catalog          readwrite  CREATE
+a  pg_catalog          readwrite  DELETE
+a  pg_catalog          readwrite  DROP
+a  pg_catalog          readwrite  GRANT
+a  pg_catalog          readwrite  SELECT
+a  pg_catalog          root       ALL
+a  pg_catalog          test-user  CREATE
+a  pg_catalog          test-user  DELETE
+a  pg_catalog          test-user  DROP
+a  pg_catalog          test-user  GRANT
+a  public              admin      ALL
+a  public              readwrite  CREATE
+a  public              readwrite  DELETE
+a  public              readwrite  DROP
+a  public              readwrite  GRANT
+a  public              readwrite  SELECT
+a  public              root       ALL
+a  public              test-user  CREATE
+a  public              test-user  DELETE
+a  public              test-user  DROP
+a  public              test-user  GRANT
+
+statement ok
+REVOKE ALL ON DATABASE a FROM "test-user"
+
+query TTTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a  crdb_internal       readwrite  CREATE
+a  crdb_internal       readwrite  DELETE
+a  crdb_internal       readwrite  DROP
+a  crdb_internal       readwrite  GRANT
+a  crdb_internal       readwrite  SELECT
+a  information_schema  readwrite  CREATE
+a  information_schema  readwrite  DELETE
+a  information_schema  readwrite  DROP
+a  information_schema  readwrite  GRANT
+a  information_schema  readwrite  SELECT
+a  pg_catalog          readwrite  CREATE
+a  pg_catalog          readwrite  DELETE
+a  pg_catalog          readwrite  DROP
+a  pg_catalog          readwrite  GRANT
+a  pg_catalog          readwrite  SELECT
+a  public              readwrite  CREATE
+a  public              readwrite  DELETE
+a  public              readwrite  DROP
+a  public              readwrite  GRANT
+a  public              readwrite  SELECT
+
+statement ok
+REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
+
+query TTTT
+SHOW GRANTS ON DATABASE a
+----
+a  crdb_internal       admin  ALL
+a  crdb_internal       root   ALL
+a  information_schema  admin  ALL
+a  information_schema  root   ALL
+a  pg_catalog          admin  ALL
+a  pg_catalog          root   ALL
+a  public              admin  ALL
+a  public              root   ALL
+
+query TTTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+
+# Verify that the table privileges have not changed.
+query TTTTT colnames
+SHOW GRANTS ON a.t
+----
+database_name  schema_name  table_name  grantee    privilege_type
+a              public       t           admin      ALL
+a              public       t           readwrite  ALL
+a              public       t           root       ALL
+a              public       t           test-user  ALL

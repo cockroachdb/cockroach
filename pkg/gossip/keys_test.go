@@ -46,7 +46,7 @@ func TestNodeIDFromKey(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.key, func(t *testing.T) {
-			nodeID, err := NodeIDFromKey(tc.key)
+			nodeID, err := NodeIDFromKey(tc.key, KeyNodeIDPrefix)
 			if err != nil {
 				if tc.success {
 					t.Errorf("expected success, got error: %s", err)
@@ -57,5 +57,57 @@ func TestNodeIDFromKey(t *testing.T) {
 				t.Errorf("expected NodeID=%d, got %d", tc.nodeID, nodeID)
 			}
 		})
+	}
+}
+
+func TestStoreIDFromKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		key     string
+		storeID roachpb.StoreID
+		success bool
+	}{
+		{MakeStoreKey(0), 0, true},
+		{MakeStoreKey(1), 1, true},
+		{MakeStoreKey(123), 123, true},
+		{MakeStoreKey(123) + "foo", 0, false},
+		{"foo" + MakeStoreKey(123), 0, false},
+		{KeyStorePrefix, 0, false},
+		{"123", 0, false},
+		{MakePrefixPattern(KeyStorePrefix), 0, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.key, func(t *testing.T) {
+			storeID, err := StoreIDFromKey(tc.key)
+			if err != nil {
+				if tc.success {
+					t.Errorf("expected success, got error: %s", err)
+				}
+			} else if !tc.success {
+				t.Errorf("expected failure, got storeID %d", storeID)
+			} else if storeID != tc.storeID {
+				t.Errorf("expected StoreID=%d, got %d", tc.storeID, storeID)
+			}
+		})
+	}
+}
+
+func TestMakeTableDisableMergesKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		tableID  uint32
+		expected string
+	}{
+		{0, "table-disable-merges:0"},
+		{123, "table-disable-merges:123"},
+	}
+	for _, c := range testCases {
+		key := MakeTableDisableMergesKey(c.tableID)
+		if c.expected != key {
+			t.Fatalf("expected %s, but found %s", c.expected, key)
+		}
 	}
 }

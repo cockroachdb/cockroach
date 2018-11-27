@@ -1,0 +1,366 @@
+# =============================================================================
+# select.opt contains normalization rules for the Select operator.
+# =============================================================================
+
+
+# SimplifySelectFilters simplifies the Filters operator in several possible
+# ways:
+#   - Removes True operands
+#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Flattens nested And operands by merging their conditions into parent
+#
+# Note that the Null handling behavior is different than the SimplifyAnd rules,
+# because Filters only appears as a Select or Join filter condition, both of
+# which treat a Null filter conjunct exactly as if it were False.
+[SimplifySelectFilters, Normalize, HighPriority]
+(Select
+    $input:*
+    $filters:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $filters)
+)
+=>
+(Select
+    $input
+    (SimplifyFilters $filters)
+)
+
+# DetectSelectContradiction replaces a Select with an empty Values if it detects
+# a contradiction in the filter.
+[DetectSelectContradiction, Normalize]
+(Select
+    $input:*
+    [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
+)
+=>
+(ConstructEmptyValues (OutputCols $input))
+
+# EliminateSelect discards an unnecessary Select operator in the case where its
+# filter is always true. Keep this near the top of the file so that it tends to
+# be checked early.
+[EliminateSelect, Normalize]
+(Select $input:* []) => $input
+
+# MergeSelects combines two nested Select operators into a single Select that
+# ANDs the filter conditions of the two Selects.
+[MergeSelects, Normalize]
+(Select
+    (Select
+        $input:*
+        $innerFilters:*
+    )
+    $filters:*
+)
+=>
+(Select
+    $input
+    (ConcatFilters $innerFilters $filters)
+)
+
+# PushSelectIntoProject pushes the Select operator into its Project input. This
+# is typically preferable because it minimizes the number of rows which Project
+# needs to process. This is especially important if Project is adding expensive
+# computed columns.
+[PushSelectIntoProject, Normalize]
+(Select
+    (Project
+        $input:*
+        $projections:*
+        $passthrough:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
+)
+=>
+(Select
+    (Project
+        (Select
+            $input
+            (ExtractBoundConditions $filters $inputCols)
+        )
+        $projections
+        $passthrough
+    )
+    (ExtractUnboundConditions $filters $inputCols)
+)
+
+# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
+# AND'ing the filter conditions of each and creating a new InnerJoin with that
+# On condition. This is only safe to do with InnerJoin in the general case
+# where the conditions could filter either left or right rows. The special case
+# where a condition filters only one or the other is already taken care of by
+# the PushSelectIntoJoin rules.
+# NOTE: Keep this rule ordered before the PushSelectIntoJoin rules to avoid
+#       missing out on the potential for new filter inference based on
+#       equivalent columns.
+[MergeSelectInnerJoin, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:*
+)
+=>
+((OpName $input)
+    $left
+    $right
+    (ConcatFilters $on $filters)
+)
+
+# PushSelectCondLeftIntoJoinLeftAndRight applies to the case when a condition
+# bound by the left side of a join can be mapped to the right side using
+# equality columns from the ON condition of the join. It pushes the original
+# filter to the left side, and the mapped filter to the right side.
+# For example, consider this query:
+#
+#   SELECT * FROM l LEFT JOIN r ON l.x = r.x WHERE l.x = 5;
+#
+# This can safely be converted to:
+#
+#   SELECT * FROM (SELECT * FROM l WHERE l.x = 5)
+#   LEFT JOIN (SELECT * FROM r WHERE r.x = 5) ON l.x = r.x;
+#
+# It's not normally correct to push filters from the SELECT clause to
+# the right side of a LEFT JOIN, since those rows might still show up
+# in the output as NULL-extended rows from the left side. In this case,
+# however, for any rows removed from the right side, the matching rows are
+# also removed from the left side (and thus removed from the output).
+# To ensure that this is the case, it's important that the filter only refers
+# to columns on the left side that have corresponding equivalent columns on
+# the right side.
+[PushSelectCondLeftIntoJoinLeftAndRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:(FiltersItem $condition:*) &
+            (IsBoundBy $item (OutputCols $left)) &
+            (CanMap $on $item $right)
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            [ (FiltersItem $condition) ]
+        )
+        (Select
+            $right
+            [ (FiltersItem (Map $on $item $right)) ]
+        )
+        $on
+    )
+    (RemoveFiltersItem $filters $item)
+)
+
+# PushSelectCondRightIntoJoinLeftAndRight is symmetric with
+# PushSelectCondLeftIntoJoinLeftAndRight. It applies to the case when a
+# condition bound by the right side of a join can be mapped to the left side
+# using equality columns from the ON condition of the join. It pushes the
+# original filter to the right side, and the mapped filter to the left side.
+# See the comments above PushSelectCondLeftIntoJoinLeftAndRight for more
+# details.
+[PushSelectCondRightIntoJoinLeftAndRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:(FiltersItem $condition:*) &
+            (IsBoundBy $item (OutputCols $right)) &
+            (CanMap $on $item $left)
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            [ (FiltersItem (Map $on $item $left)) ]
+        )
+        (Select
+            $right
+            [ (FiltersItem $condition) ]
+        )
+        $on
+    )
+    (RemoveFiltersItem $filters $item)
+)
+
+# PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
+# an input Join. This is possible in the case of InnerJoin, LeftJoin, SemiJoin,
+# and AntiJoin, as long as the condition has no dependencies on the right side
+# of the join. Right and Full joins are not eligible, since attempting to filter
+# left rows would just result in NULL left rows instead.
+#
+#   -- No row is returned for a.x=1, a.y=2, b.x=1, since the WHERE excludes it.
+#   SELECT * FROM a RIGHT JOIN b ON a.x=b.x WHERE a.y < 0
+#
+#   -- But if the filter is incorrectly pushed down in RIGHT/FULL JOIN case,
+#   -- then a row containing null values on the left side is returned.
+#   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a RIGHT JOIN b ON a.x=b.x
+#
+# Citations: [1]
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+
+# PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
+# Select filter conditions into the right side of an input Join rather than
+# into the left side. See that rule's comments for more details.
+[PushSelectIntoJoinRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        $left
+        (Select
+            $right
+            (ExtractBoundConditions $filters $rightCols)
+        )
+        $on
+    )
+    (ExtractUnboundConditions $filters $rightCols)
+)
+
+# PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
+# where it only references grouping columns or ConstAgg columns.
+#
+# This rule doesn't work on ScalarGroupBy which exhibits different behavior if
+# the input is empty:
+#   SELECT MAX(y) FROM a
+#
+# If "a" is empty, this returns a single row containing a null value. This is
+# different behavior than a GroupBy with grouping columns, which would return
+# the empty set for a similar query:
+#   SELECT MAX(y) FROM a GROUP BY x
+#
+# Citations: [2]
+[PushSelectIntoGroupBy, Normalize]
+(Select
+    $input:(GroupBy | DistinctOn
+        $groupingInput:*
+        $aggregations:*
+        $groupingPrivate:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy
+            $item
+            $passthrough:(GroupingAndConstCols $groupingPrivate $aggregations)
+        )
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $groupingInput
+            (ExtractBoundConditions $filters $passthrough)
+        )
+        $aggregations
+        $groupingPrivate
+    )
+    (ExtractUnboundConditions $filters $passthrough)
+)
+
+# RemoveNotNullCondition removes a filter with an IS NOT NULL condition
+# when the given column has a NOT NULL constraint.
+[RemoveNotNullCondition, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (IsNot
+                (Variable $col:* & (IsColNotNull $col $input))
+                (Null)
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select
+    $input
+    (RemoveFiltersItem $filters $item)
+)
+
+# EliminateUnionAllLeft replaces a union all with a right side having a
+# cardinality of zero, with just the left side operand.
+[EliminateUnionAllLeft, Normalize]
+(UnionAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
+)
+=>
+(Project
+    $left
+    (ProjectColMapLeft $colmap)
+    (MakeEmptyColSet)
+)
+
+# EliminateUnionAllRight replaces a union all with a left side having a
+# cardinality of zero, with just the right side operand.
+[EliminateUnionAllRight, Normalize]
+(UnionAll
+    $left:* & (HasZeroRows $left)
+    $right:*
+    $colmap:*
+)
+=>
+(Project
+    $right
+    (ProjectColMapRight $colmap)
+    (MakeEmptyColSet)
+)

@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf
 
 package kv
 
@@ -24,20 +22,20 @@ import (
 )
 
 var emptySpan = roachpb.Span{}
-var noopRequest = roachpb.NoopRequest{}
 
-// truncate restricts all contained requests to the given key range
-// and returns a new BatchRequest.
-// All requests contained in that batch are "truncated" to the given
-// span, inserting NoopRequest appropriately to replace requests which
-// are left without a key range to operate on. The number of non-noop
-// requests after truncation is returned.
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
+// truncate restricts all contained requests to the given key range and returns
+// a new, truncated, BatchRequest. All requests contained in that batch are
+// "truncated" to the given span, and requests which are found to not overlap
+// the given span at all are removed. A mapping of response index to batch index
+// is returned. For example, if
+//
+// ba = Put[a], Put[c], Put[b],
+// rs = [a,bb],
+//
+// then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
+func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
-		if _, ok := args.(*roachpb.NoopRequest); ok {
-			return true, emptySpan, nil
-		}
-		header := args.Header()
+		header := args.Header().Span()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
@@ -62,7 +60,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		if err != nil {
 			return false, emptySpan, err
 		}
-		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
+		if l, r := keys.IsLocal(header.Key), keys.IsLocal(header.EndKey); l || r {
 			if !l || !r {
 				return false, emptySpan, errors.Errorf("local key mixed with global key in range")
 			}
@@ -98,91 +96,130 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		return true, header, nil
 	}
 
-	var numNoop int
+	// TODO(tschottdorf): optimize so that we don't always make a new request
+	// slice, only when something changed (copy-on-write).
+
+	var positions []int
 	truncBA := ba
-	truncBA.Requests = make([]roachpb.RequestUnion, len(ba.Requests))
+	truncBA.Requests = nil
 	for pos, arg := range ba.Requests {
-		hasRequest, newHeader, err := truncateOne(arg.GetInner())
-		if !hasRequest {
-			// We omit this one, i.e. replace it with a Noop.
-			numNoop++
-			union := roachpb.RequestUnion{}
-			union.MustSetInner(&noopRequest)
-			truncBA.Requests[pos] = union
-		} else {
+		hasRequest, newSpan, err := truncateOne(arg.GetInner())
+		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
-			if inner := ba.Requests[pos].GetInner(); newHeader.Equal(inner.Header()) {
-				truncBA.Requests[pos] = ba.Requests[pos]
+			inner := ba.Requests[pos].GetInner()
+			oldHeader := inner.Header()
+			if newSpan.EqualValue(oldHeader.Span()) {
+				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
+				var union roachpb.RequestUnion
+				oldHeader.SetSpan(newSpan)
 				shallowCopy := inner.ShallowCopy()
-				shallowCopy.SetHeader(newHeader)
-				union := &truncBA.Requests[pos] // avoid operating on copy
+				shallowCopy.SetHeader(oldHeader)
 				union.MustSetInner(shallowCopy)
+				truncBA.Requests = append(truncBA.Requests, union)
 			}
+			positions = append(positions, pos)
 		}
 		if err != nil {
-			return roachpb.BatchRequest{}, 0, err
+			return roachpb.BatchRequest{}, nil, err
 		}
 	}
-	return truncBA, len(ba.Requests) - numNoop, nil
+	return truncBA, positions, nil
 }
 
 // prev gives the right boundary of the union of all requests which don't
-// affect keys larger than the given key.
+// affect keys larger than the given key. Note that a right boundary is
+// exclusive, that is, the returned RKey is to be used as the exclusive
+// right endpoint in finding the next range to query.
+//
+// Informally, a call `prev(ba, k)` means: we've already executed the parts
+// of `ba` that intersect `[k, KeyMax)`; please tell me how far to the
+// left the next relevant request begins.
+//
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
-		if _, ok := inner.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
 			return nil, err
 		}
-		eAddr, err := keys.AddrUpperBound(h.EndKey)
+		endKey := h.EndKey
+		if len(endKey) == 0 {
+			// This is unintuitive, but if we have a point request at `x=k` then that request has
+			// already been satisfied (since the batch has already been executed for all keys `>=
+			// k`). We treat `k` as `[k,k)` which does the right thing below. It also does when `x >
+			// k` and `x < k`, so we're good.
+			//
+			// Note that if `x` is /Local/k/something, then AddrUpperBound below will turn it into
+			// `k\x00`, and so we're looking at the key range `[k, k\x00)`. This is exactly what we
+			// want since otherwise the result would be `k` and so the caller would restrict itself
+			// to `key < k`, but that excludes `k` itself and thus all local keys attached to it.
+			//
+			// See TestBatchPrevNext for a test case with commentary.
+			endKey = h.Key
+		}
+		eAddr, err := keys.AddrUpperBound(endKey)
 		if err != nil {
 			return nil, err
 		}
-		if len(eAddr) == 0 {
-			eAddr = addr.Next()
-		}
 		if !eAddr.Less(k) {
-			if !k.Less(addr) {
+			// EndKey is k or higher.
+			//           [x-------y)    !x.Less(k) -> skip
+			//         [x-------y)      !x.Less(k) -> skip
+			//      [x-------y)          x.Less(k) -> return k
+			//  [x------y)               x.Less(k) -> return k
+			// [x------y)                not in this branch
+			//          k
+			if addr.Less(k) {
 				// Range contains k, so won't be able to go lower.
+				// Note that in the special case in which the interval
+				// touches k, we don't take this branch. This reflects
+				// the fact that `prev(k)` means that all keys >= k have
+				// been handled, so a request `[k, x)` should simply be
+				// skipped.
 				return k, nil
 			}
 			// Range is disjoint from [KeyMin,k).
 			continue
 		}
+		// Current candidate interval is strictly to the left of `k`.
 		// We want the largest surviving candidate.
-		if candidate.Less(addr) {
-			candidate = addr
+		if candidate.Less(eAddr) {
+			candidate = eAddr
 		}
 	}
 	return candidate, nil
 }
 
-// next gives the left boundary of the union of all requests which don't
-// affect keys less than the given key.
+// next gives the left boundary of the union of all requests which don't affect
+// keys less than the given key. Note that the left boundary is inclusive, that
+// is, the returned RKey is the inclusive left endpoint of the keys the request
+// should operate on next.
+//
+// Informally, a call `next(ba, k)` means: we've already executed the parts of
+// `ba` that intersect `[KeyMin, k)`; please tell me how far to the right the
+// next relevant request begins.
+//
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
-		if _, ok := inner.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
 			return nil, err
 		}
 		if addr.Less(k) {
+			if len(h.EndKey) == 0 {
+				// `h` affects only `[KeyMin,k)`, all of which is less than `k`.
+				continue
+			}
 			eAddr, err := keys.AddrUpperBound(h.EndKey)
 			if err != nil {
 				return nil, err
@@ -191,7 +228,7 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 				// Starts below k, but continues beyond. Need to stay at k.
 				return k, nil
 			}
-			// Affects only [KeyMin,k).
+			// `h` affects only `[KeyMin,k)`, all of which is less than `k`.
 			continue
 		}
 		// We want the smallest of the surviving candidates.

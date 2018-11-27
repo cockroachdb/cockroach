@@ -11,14 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package kv
 
 import (
-	"golang.org/x/net/context"
+	"context"
+	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,8 +32,12 @@ type ReplicaInfo struct {
 	NodeDesc *roachpb.NodeDescriptor
 }
 
-func (i ReplicaInfo) attrs() []string {
-	return i.NodeDesc.Attrs.Attrs
+func (i ReplicaInfo) locality() []roachpb.Tier {
+	return i.NodeDesc.Locality.Tiers
+}
+
+func (i ReplicaInfo) addr() string {
+	return i.NodeDesc.Address.String()
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -84,51 +87,6 @@ func (rs ReplicaSlice) FindReplica(storeID roachpb.StoreID) int {
 	return -1
 }
 
-// FindReplicaByNodeID returns the index of the replica which matches the specified node
-// ID. If no replica matches, -1 is returned.
-func (rs ReplicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
-	for i := range rs {
-		if rs[i].NodeID == nodeID {
-			return i
-		}
-	}
-	return -1
-}
-
-// SortByCommonAttributePrefix rearranges the ReplicaSlice by comparing the
-// attributes to the given reference attributes. The basis for the comparison
-// is that of the common prefix of replica attributes (i.e. the number of equal
-// attributes, starting at the first), with a longer prefix sorting first. The
-// number of attributes successfully matched to at least one replica is
-// returned (hence, if the return value equals the length of the ReplicaSlice,
-// at least one replica matched all attributes).
-func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
-	if len(rs) < 2 {
-		return 0
-	}
-	topIndex := len(rs) - 1
-	for bucket := 0; bucket < len(attrs); bucket++ {
-		firstNotOrdered := 0
-		for i := 0; i <= topIndex; i++ {
-			if bucket < len(rs[i].attrs()) && rs[i].attrs()[bucket] == attrs[bucket] {
-				// Move replica which matches this attribute to an earlier
-				// place in the array, just behind the last matching replica.
-				// This packs all matching replicas together.
-				rs.Swap(firstNotOrdered, i)
-				firstNotOrdered++
-			}
-		}
-		if topIndex < len(rs)-1 {
-			shuffle.Shuffle(rs[firstNotOrdered : topIndex+1])
-		}
-		if firstNotOrdered == 0 {
-			return bucket
-		}
-		topIndex = firstNotOrdered - 1
-	}
-	return len(attrs)
-}
-
 // MoveToFront moves the replica at the given index to the front
 // of the slice, keeping the order of the remaining elements stable.
 // The function will panic when invoked with an invalid index.
@@ -142,30 +100,63 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-// OptimizeReplicaOrder sorts the replicas in the order in which they're to be
-// used for sending RPCs (meaning in the order in which they'll be probed for
-// the lease).  "Closer" (matching in more attributes) replicas are ordered
-// first. If the current node is a replica, then it'll be the first one.
+// localityMatch returns the number of consecutive locality tiers
+// which match between a and b.
+func localityMatch(a, b []roachpb.Tier) int {
+	if len(a) == 0 {
+		return 0
+	}
+	for i := range a {
+		if i >= len(b) || a[i] != b[i] {
+			return i
+		}
+	}
+	return len(a)
+}
+
+// A LatencyFunc returns the latency from this node to a remote
+// address and a bool indicating whether the latency is valid.
+type LatencyFunc func(string) (time.Duration, bool)
+
+// OptimizeReplicaOrder sorts the replicas in the order in which
+// they're to be used for sending RPCs (meaning in the order in which
+// they'll be probed for the lease). Lower latency and "closer"
+// (matching in more attributes) replicas are ordered first. If the
+// current node is a replica, then it'll be the first one.
 //
-// nodeDesc is the descriptor of the current node. It can be nil, in which case
-// information about the current descriptor is not used in optimizing the order.
+// nodeDesc is the descriptor of the current node. It can be nil, in
+// which case information about the current descriptor is not used in
+// optimizing the order.
 //
-// Note that this method is not concerned with any information the node might
-// have about who the lease holder might be. If there is such info (e.g. in a
-// LeaseHolderCache), the caller will probably want to further tweak the head of
-// the ReplicaSlice.
-func (rs ReplicaSlice) OptimizeReplicaOrder(nodeDesc *roachpb.NodeDescriptor) {
+// Note that this method is not concerned with any information the
+// node might have about who the lease holder might be. If the
+// leaseholder is known by the caller, the caller will move it to the
+// front if appropriate.
+func (rs ReplicaSlice) OptimizeReplicaOrder(
+	nodeDesc *roachpb.NodeDescriptor, latencyFn LatencyFunc,
+) {
 	// If we don't know which node we're on, send the RPCs randomly.
 	if nodeDesc == nil {
 		shuffle.Shuffle(rs)
 		return
 	}
-	// Sort replicas by attribute affinity, which we treat as a stand-in for
-	// proximity (for now).
-	rs.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs)
-
-	// If there is a replica in local node, move it to the front.
-	if i := rs.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
-		rs.MoveToFront(i)
-	}
+	// Sort replicas by latency and then attribute affinity.
+	sort.Slice(rs, func(i, j int) bool {
+		// If there is a replica in local node, it sorts first.
+		if rs[i].NodeID == nodeDesc.NodeID {
+			return true
+		}
+		if latencyFn != nil {
+			latencyI, okI := latencyFn(rs[i].addr())
+			latencyJ, okJ := latencyFn(rs[j].addr())
+			if okI && okJ {
+				return latencyI < latencyJ
+			}
+		}
+		attrMatchI := localityMatch(nodeDesc.Locality.Tiers, rs[i].locality())
+		attrMatchJ := localityMatch(nodeDesc.Locality.Tiers, rs[j].locality())
+		// Longer locality matches sort first (the assumption is that
+		// they'll have better latencies).
+		return attrMatchI > attrMatchJ
+	})
 }

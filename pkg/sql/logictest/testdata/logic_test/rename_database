@@ -1,0 +1,173 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+query T
+SHOW DATABASES
+----
+defaultdb
+postgres
+system
+test
+
+query TTTT
+SHOW GRANTS ON DATABASE test
+----
+test  crdb_internal       admin  ALL
+test  crdb_internal       root   ALL
+test  information_schema  admin  ALL
+test  information_schema  root   ALL
+test  pg_catalog          admin  ALL
+test  pg_catalog          root   ALL
+test  public              admin  ALL
+test  public              root   ALL
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+SET sql_safe_updates = TRUE;
+
+statement error RENAME DATABASE on current database
+ALTER DATABASE test RENAME TO u
+
+statement ok
+SET sql_safe_updates = FALSE;
+ ALTER DATABASE test RENAME TO u
+
+statement error pgcode 42P01 relation "kv" does not exist
+SELECT * FROM kv
+
+statement error database "test" does not exist
+SHOW GRANTS ON DATABASE test
+
+query T
+SHOW DATABASES
+----
+defaultdb
+postgres
+system
+u
+
+# check the name in descriptor is also changed
+query TTTT
+SHOW GRANTS ON DATABASE u
+----
+u  crdb_internal       admin  ALL
+u  crdb_internal       root   ALL
+u  information_schema  admin  ALL
+u  information_schema  root   ALL
+u  pg_catalog          admin  ALL
+u  pg_catalog          root   ALL
+u  public              admin  ALL
+u  public              root   ALL
+
+statement ok
+SET DATABASE = u
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error empty database name
+ALTER DATABASE "" RENAME TO u
+
+statement error empty database name
+ALTER DATABASE u RENAME TO ""
+
+statement ok
+ALTER DATABASE u RENAME TO u
+
+statement ok
+CREATE DATABASE t
+
+statement error the new database name "u" already exists
+ALTER DATABASE t RENAME TO u
+
+statement ok
+GRANT ALL ON DATABASE t TO testuser
+
+user testuser
+
+statement error only superusers are allowed to ALTER DATABASE ... RENAME
+ALTER DATABASE t RENAME TO v
+
+query T
+SHOW DATABASES
+----
+t
+
+user root
+
+# Test that renames aren't allowed while views refer to any of a DB's tables,
+# both for views in that database and for views in a different database.
+
+statement ok
+CREATE VIEW t.v AS SELECT k,v FROM u.kv
+
+query T
+SHOW TABLES FROM u
+----
+kv
+
+statement error cannot rename database because view "t.public.v" depends on table "kv"
+ALTER DATABASE u RENAME TO v
+
+statement ok
+DROP VIEW t.v
+
+statement ok
+ALTER DATABASE u RENAME TO v
+
+statement ok
+CREATE VIEW v.v AS SELECT k,v FROM v.kv
+
+statement error cannot rename database because view "v" depends on table "kv"
+ALTER DATABASE v RENAME TO u
+
+# Check that the default databases can be renamed like any other.
+statement ok
+ALTER DATABASE defaultdb RENAME TO w;
+  ALTER DATABASE postgres RENAME TO defaultdb;
+  ALTER DATABASE w RENAME TO postgres
+
+query T
+SHOW DATABASES
+----
+defaultdb
+postgres
+system
+t
+v
+
+query TTT
+EXPLAIN ALTER DATABASE v RENAME TO x
+----
+rename database  ·  ·
+
+# Verify that the EXPLAIN above does not actually rename the database (#30543)
+query T colnames
+SHOW DATABASES
+----
+database_name
+defaultdb
+postgres
+system
+t
+v

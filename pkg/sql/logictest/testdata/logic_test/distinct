@@ -1,0 +1,156 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 2, 3),
+  (2, 5, 6),
+  (3, 2, 3),
+  (4, 5, 6),
+  (5, 2, 6),
+  (6, 3, 5),
+  (7, 2, 9)
+
+query II rowsort
+SELECT y, z FROM xyz
+----
+2 3
+5 6
+2 3
+5 6
+2 6
+3 5
+2 9
+
+query II rowsort
+SELECT DISTINCT y, z FROM xyz
+----
+2 3
+5 6
+2 6
+3 5
+2 9
+
+query I rowsort
+SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
+----
+2
+5
+2
+3
+2
+
+query II partialsort(2)
+SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+2 3
+3 5
+2 6
+5 6
+2 9
+
+query II partialsort(1)
+SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+2 3
+2 6
+2 9
+3 5
+5 6
+
+query II
+SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+2 3
+2 6
+2 9
+3 5
+5 6
+
+query I
+SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
+----
+5
+8
+11
+
+query II
+SELECT DISTINCT y AS w, z FROM xyz ORDER by z, w
+----
+2  3
+3  5
+2  6
+5  6
+2  9
+
+query I
+SELECT DISTINCT y AS w FROM xyz ORDER by y
+----
+2
+3
+5
+
+# Insert NULL values for z.
+statement ok
+INSERT INTO xyz (x, y) VALUES (8, 2), (9, 2)
+
+query II rowsort
+SELECT DISTINCT y,z FROM xyz
+----
+2 3
+5 6
+2 6
+3 5
+2 9
+2 NULL
+
+query T rowsort
+SELECT DISTINCT (y,z) FROM xyz
+----
+(2,3)
+(5,6)
+(2,6)
+(3,5)
+(2,9)
+(2,)
+
+query I
+SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
+----
+3
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
+
+statement ok
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, NULL), (4, NULL), (5, 5), (6, NULL)
+
+query I rowsort
+SELECT DISTINCT v FROM kv
+----
+NULL
+1
+2
+5
+
+query I rowsort
+SELECT DISTINCT v FROM kv@idx
+----
+NULL
+1
+2
+5
+
+query I rowsort
+SELECT DISTINCT v FROM kv@idx WHERE v > 0
+----
+1
+2
+5

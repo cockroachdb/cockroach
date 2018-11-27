@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package caller
 
@@ -61,7 +59,7 @@ func TestDefaultCallResolver(t *testing.T) {
 	}
 }
 
-func BenchmarkFormatedCaller(b *testing.B) {
+func BenchmarkFormattedCaller(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		file, line, _ := Lookup(1)
 		s := fmt.Sprintf("%s:%d", file, line)
