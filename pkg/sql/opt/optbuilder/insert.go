@@ -96,13 +96,13 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// replaced and named target columns are known. So this step must come first.
 	if len(ins.Columns) != 0 {
 		// Target columns are explicitly specified by name.
-		mb.addTargetNamedCols(ins.Columns)
+		mb.addTargetNamedColsForInsert(ins.Columns)
 	} else {
 		values := mb.extractValuesInput(ins.Rows)
 		if values != nil {
 			// Target columns are implicitly targeted by VALUES expression in the
 			// same order they appear in the target table schema.
-			mb.addTargetTableCols(len(values.Rows[0]))
+			mb.addTargetTableColsForInsert(len(values.Rows[0]))
 		}
 	}
 
@@ -124,7 +124,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		//
 		rows := mb.replaceDefaultExprs(ins.Rows)
 
-		mb.buildInputRows(inScope, rows)
+		mb.buildInputForInsert(inScope, rows)
 	} else {
 		mb.buildEmptyInput(inScope)
 	}
@@ -133,7 +133,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// name or implicitly targeted by input columns. This includes any columns
 	// undergoing write mutations, as they must always have a default or computed
 	// value.
-	mb.addDefaultAndComputedCols()
+	mb.addDefaultAndComputedColsForInsert()
 
 	// Build the final insert statement, including any returned expressions.
 	if resultsNeeded(ins.Returning) {

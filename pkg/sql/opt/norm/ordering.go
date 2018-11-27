@@ -103,20 +103,22 @@ func (c *CustomFuncs) SimplifyExplainOrdering(
 	return &copy
 }
 
-// CanSimplifyInsertOrdering returns true if the ordering required by the
-// Insert operator can be made less restrictive, so that the input operator has
-// more ordering choices.
-func (c *CustomFuncs) CanSimplifyInsertOrdering(in memo.RelExpr, private *memo.InsertPrivate) bool {
+// CanSimplifyMutationOrdering returns true if the ordering required by a
+// mutation operator (Insert, Update, etc) can be made less restrictive, so that
+// the input operator has more ordering choices.
+func (c *CustomFuncs) CanSimplifyMutationOrdering(
+	in memo.RelExpr, private *memo.MutationPrivate,
+) bool {
 	return c.canSimplifyOrdering(in, private.Ordering)
 }
 
-// SimplifyInsertOrdering makes the ordering required by the Insert operator
-// less restrictive by removing optional columns, adding equivalent columns, and
-// removing redundant columns.
-func (c *CustomFuncs) SimplifyInsertOrdering(
-	in memo.RelExpr, private *memo.InsertPrivate,
-) *memo.InsertPrivate {
-	// Copy InsertPrivate to stack and replace Ordering field.
+// SimplifyMutationOrdering makes the ordering required by a mutation operator
+// (Insert, Update, etc) less restrictive by removing optional columns, adding
+// equivalent columns, and removing redundant columns.
+func (c *CustomFuncs) SimplifyMutationOrdering(
+	in memo.RelExpr, private *memo.MutationPrivate,
+) *memo.MutationPrivate {
+	// Copy MutationPrivate to stack and replace Ordering field.
 	copy := *private
 	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
 	return &copy
