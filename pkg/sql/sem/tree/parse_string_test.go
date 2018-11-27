@@ -80,9 +80,9 @@ func TestParseDatumStringAs(t *testing.T) {
 			strconv.Itoa(math.MinInt64),
 		},
 		types.Interval: {
-			"1h",
-			"-1m",
-			"2y3mon",
+			"01:00:00",
+			"-00:01:00",
+			"2 years 3 mons",
 		},
 		types.JSON: {
 			"{}",

@@ -43,7 +43,7 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL || 'hello'`, `NULL`},
 		{`NULL || 'hello'::bytes`, `NULL`},
 		{`NULL::int`, `NULL::INT`},
-		{`INTERVAL '1s'`, `'1s':::INTERVAL`},
+		{`INTERVAL '1s'`, `'00:00:01':::INTERVAL`},
 		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL::DECIMAL::DECIMAL`},
 		{`NULL = 1`, `NULL`},
 		{`1 = NULL`, `NULL`},
@@ -97,14 +97,14 @@ func TestTypeCheck(t *testing.T) {
 		{`'a' = ALL current_schemas(true)`, `'a':::STRING = ALL current_schemas(true)`},
 		{`NULL = ALL current_schemas(true)`, `NULL`},
 
-		{`INTERVAL '1'`, `'1s':::INTERVAL`},
+		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
 		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
 
 		{`1 + 2`, `3:::INT`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
 		{`1:::float + 2`, `1.0:::FLOAT8 + 2.0:::FLOAT8`},
-		{`INTERVAL '1.5s' * 2`, `'1s500ms':::INTERVAL * 2:::INT`},
-		{`2 * INTERVAL '1.5s'`, `2:::INT * '1s500ms':::INTERVAL`},
+		{`INTERVAL '1.5s' * 2`, `'00:00:01.5':::INTERVAL * 2:::INT`},
+		{`2 * INTERVAL '1.5s'`, `2:::INT * '00:00:01.5':::INTERVAL`},
 
 		{`1 + $1`, `1:::INT + $1:::INT`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},

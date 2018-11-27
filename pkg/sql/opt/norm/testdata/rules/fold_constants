@@ -260,7 +260,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── const: '-24h' [type=interval]
+      └── const: '-24:00:00' [type=interval]
 
 # Fold constant.
 opt expect=FoldBinary
@@ -276,7 +276,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── const: '-21h' [type=interval]
+      └── const: '-21:00:00' [type=interval]
 
 # Fold constant.
 opt expect=FoldBinary
@@ -420,7 +420,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── const: '1d' [type=interval]
+      └── const: '1 day' [type=interval]
 
 # TODO(justin): this seems incorrect but it's consistent with the existing
 # planner. Revisit this: #26932.
@@ -437,7 +437,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── const: '-9223372036854775808d' [type=interval]
+      └── const: '-9223372036854775808 days' [type=interval]
 
 # Fold constant.
 opt expect=FoldUnary

@@ -141,8 +141,8 @@ func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches 
 
 func TestPrettyVerify(t *testing.T) {
 	tests := map[string]string{
-		// Verify that INTERVAL is maintained and behavior of the micron symbol.
-		`SELECT interval '-2µs'`: `SELECT '-2µs':::INTERVAL`,
+		// Verify that INTERVAL is maintained.
+		`SELECT interval '-2µs'`: `SELECT '-00:00:00.000002':::INTERVAL`,
 	}
 	for orig, pretty := range tests {
 		t.Run(orig, func(t *testing.T) {

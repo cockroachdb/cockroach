@@ -233,8 +233,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
-fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
-output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '02:45:02.234'
+output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '02:45:02.234']
 
 statement ok
 SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
@@ -253,10 +253,10 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
-output row: ['2h45m2s234ms']
-fetched: /dt/dt_c_key/'34h2s' -> /'2015-08-30 03:34:45.34567+00:00'
-output row: ['34h2s']
+fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453+00:00'
+output row: ['02:45:02.234']
+fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567+00:00'
+output row: ['34:00:02']
 
 # ------------------------------------------------------------------------------
 # Ensure that decimal values result in correct scan spans.

@@ -1,0 +1,31 @@
+# Case operator.
+
+eval
+CASE WHEN true THEN 1 END
+----
+1
+
+eval
+CASE WHEN false THEN 1 END
+----
+NULL
+
+eval
+CASE WHEN false THEN 1 ELSE 2 END
+----
+2
+
+eval
+CASE WHEN false THEN 1 WHEN false THEN 2 END
+----
+NULL
+
+eval
+CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END
+----
+2
+
+eval
+CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 5 END
+----
+5

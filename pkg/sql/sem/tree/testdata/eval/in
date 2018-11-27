@@ -1,0 +1,136 @@
+# IN and NOT IN expressions.
+
+eval
+1 NOT IN (2, 3, 4)
+----
+true
+
+eval
+1+1 IN (2, 3, 4)
+----
+true
+
+eval
+2.2 IN (2.1, 2.2, 2.3)
+----
+true
+
+eval
+2.0 IN (2.1, 2.2, 2.3)
+----
+false
+
+eval
+'a0' IN ('a'||0::char, 'b'||1::char, 'c'||2::char)
+----
+true
+
+eval
+'2012-09-21'::date IN ('2012-09-21'::date)
+----
+true
+
+eval
+'12:00:00'::time IN ('12:00:00'::time)
+----
+true
+
+eval
+'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)
+----
+true
+
+eval
+'34h'::interval IN ('34h'::interval)
+----
+true
+
+eval
+(1, 2) IN ((0+1, 1+1), (3, 4), (5, 6))
+----
+true
+
+eval
+(1, 2) IN ((2, 1), (3, 4))
+----
+false
+
+eval
+1 IN (1, 2, NULL)
+----
+true
+
+eval
+NULL IN (1, 2, NULL)
+----
+NULL
+
+eval
+(1, 2) IN ((NULL, 2), (1, NULL), (1, 2))
+----
+true
+
+eval
+(1, 2) IN ((1, NULL), (NULL, 2))
+----
+NULL
+
+eval
+(1, NULL) IN ((1, NULL), (NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(1, NULL) IN ((NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(1, NULL) IN ((3, 4))
+----
+false
+
+eval
+(NULL, 2) IN ((1, NULL), (NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(NULL, 2) IN ((1, NULL), (3, 4))
+----
+NULL
+
+eval
+(NULL, 2) IN ((3, 4))
+----
+false
+
+eval
+(NULL, NULL) IN ((NULL, NULL), (1, NULL), (NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(NULL, NULL) IN ((1, NULL), (NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(NULL, NULL) IN ((NULL, 2), (3, 4))
+----
+NULL
+
+eval
+(NULL, NULL) IN ((3, 4))
+----
+NULL
+
+eval
+NULL IN ()
+----
+false
+
+eval
+1 IN ()
+----
+false

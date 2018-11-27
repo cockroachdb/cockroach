@@ -1839,7 +1839,7 @@ CREATE VIEW revenue0 (supplier_no, total_revenue) AS
         l_suppkey;
 ----
 VIEW revenue0 (supplier_no, total_revenue)
- └── SELECT l_suppkey, sum(l_extendedprice * (1 - l_discount)) FROM lineitem WHERE (l_shipdate >= DATE '1996-01-01') AND (l_shipdate < (DATE '1996-01-01' + '3mon':::INTERVAL)) GROUP BY l_suppkey
+ └── SELECT l_suppkey, sum(l_extendedprice * (1 - l_discount)) FROM lineitem WHERE (l_shipdate >= DATE '1996-01-01') AND (l_shipdate < (DATE '1996-01-01' + '3 mons':::INTERVAL)) GROUP BY l_suppkey
 
 opt
 SELECT

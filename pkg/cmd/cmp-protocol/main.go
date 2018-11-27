@@ -64,6 +64,9 @@ func main() {
 					sqlbase.ColumnType_COLLATEDSTRING, // pg complains about utf8
 					sqlbase.ColumnType_INT2VECTOR,
 					sqlbase.ColumnType_OIDVECTOR,
+					sqlbase.ColumnType_OID,         // our 8-byte ints are usually out of range for pg
+					sqlbase.ColumnType_FLOAT,       // slight rounding differences at the end
+					sqlbase.ColumnType_TIMESTAMPTZ, // slight timezone differences
 					// tested manually below:
 					sqlbase.ColumnType_ARRAY,
 					sqlbase.ColumnType_TUPLE:
@@ -74,11 +77,11 @@ func main() {
 					continue
 				}
 				for _, format := range []string{
-					"SELECT %s;",
-					"SELECT ARRAY[%s];",
-					"SELECT (%s, NULL);",
+					"SELECT %s::%s;",
+					"SELECT ARRAY[%s::%s];",
+					"SELECT (%s::%s, NULL);",
 				} {
-					input := fmt.Sprintf(format, datum)
+					input := fmt.Sprintf(format, datum, pgTypeName(sem))
 					stmtCh <- input
 					fmt.Printf("\nTYP: %v, DATUM: %v\n", sem, datum)
 				}
@@ -89,9 +92,24 @@ func main() {
 	for input := range stmtCh {
 		fmt.Println("INPUT", input)
 		if err := compare(os.Stdout, input, *pgAddr, *crAddr, *pgUser, *crUser); err != nil {
-			fmt.Printf("sql: %s\n%+v\n", input, err)
-			os.Exit(1)
+			fmt.Fprintln(os.Stderr, "ERROR:", input)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "OK", input)
 		}
+	}
+}
+
+func pgTypeName(sem sqlbase.ColumnType_SemanticType) string {
+	switch sem {
+	case sqlbase.ColumnType_STRING:
+		return "TEXT"
+	case sqlbase.ColumnType_BYTES:
+		return "BYTEA"
+	case sqlbase.ColumnType_INT:
+		return "INT8"
+	default:
+		return sem.String()
 	}
 }
 

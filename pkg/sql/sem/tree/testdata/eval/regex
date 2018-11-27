@@ -1,0 +1,273 @@
+# ~ and !~
+
+eval
+'TEST' ~ 'TEST'
+----
+true
+
+eval
+'TEST' ~ 'test'
+----
+false
+
+eval
+'TEST' ~ 'TE.*'
+----
+true
+
+eval
+'TEST' ~ '.*E.*'
+----
+true
+
+eval
+'TEST' ~ '.*e.*'
+----
+false
+
+eval
+'TEST' ~ 'TES.'
+----
+true
+
+eval
+'TEST' ~ '^TE[a-z]{2}$'
+----
+false
+
+eval
+'TEST' ~ 'TE.+'
+----
+true
+
+eval
+'TEST' ~ 'TE.$'
+----
+false
+
+eval
+'TEST' ~ '.*'
+----
+true
+
+eval
+'TEST' ~ '.+'
+----
+true
+
+eval
+'' ~ '.+'
+----
+false
+
+eval
+'TEST' ~ '.*R'
+----
+false
+
+eval
+'TEST' ~ 'TESTER'
+----
+false
+
+eval
+'TEST' ~ ''
+----
+true
+
+eval
+'TEST' ~ '^$'
+----
+false
+
+eval
+'' ~ ''
+----
+true
+
+eval
+'T' ~ '^.$'
+----
+true
+
+eval
+'TE' ~ '^.$'
+----
+false
+
+eval
+'T' ~ '^.*$'
+----
+true
+
+eval
+'TE' ~ '^.*$'
+----
+true
+
+eval
+'T' ~ '[a-z]'
+----
+false
+
+eval
+'T' ~ '[a-zA-Z]'
+----
+true
+
+eval
+'TEST' !~ '.E.{2}'
+----
+false
+
+eval
+'TEST' !~ '.e.{2}'
+----
+true
+
+eval
+'TEST' !~ 'TES.'
+----
+false
+
+eval
+'TEST' !~ 'TeST'
+----
+true
+
+eval
+'TEST' !~ 'TESV'
+----
+true
+
+eval
+'TEST' !~ 'TE.'
+----
+false
+
+# ~* and !~*
+
+eval
+'TEST' ~* 'TEST'
+----
+true
+
+eval
+'TEST' ~* 'test'
+----
+true
+
+eval
+'TEST' ~* 'Te'
+----
+true
+
+eval
+'TEST' ~* '^Te$'
+----
+false
+
+eval
+'TEST' ~* '^Te.*$'
+----
+true
+
+eval
+'TEST' ~* '.*E.*'
+----
+true
+
+eval
+'TEST' ~* '.*e.*'
+----
+true
+
+eval
+'TEST' ~* 'TES'
+----
+true
+
+eval
+'TEST' ~* '^TE[a-z]{2}$'
+----
+true
+
+eval
+'TEST' ~* '.*'
+----
+true
+
+eval
+'TEST' ~* '.*R'
+----
+false
+
+eval
+'TEST' ~* 'TESTER'
+----
+false
+
+eval
+'TEST' ~* 'tester'
+----
+false
+
+eval
+'TEST' ~* ''
+----
+true
+
+eval
+'TEST' ~* '^$'
+----
+false
+
+eval
+'' ~* ''
+----
+true
+
+eval
+'T' ~* '[a-z]'
+----
+true
+
+eval
+'T' ~* '[a-zA-Z]'
+----
+true
+
+eval
+'TE' ~* '.'
+----
+true
+
+eval
+'TEST' !~* '.E.{2}'
+----
+false
+
+eval
+'TEST' !~* '.e.{2}'
+----
+false
+
+eval
+'TEST' !~* 'TES.'
+----
+false
+
+eval
+'TEST' !~* 'TeST'
+----
+false
+
+eval
+'TEST' !~* 'TESV'
+----
+true
+
+eval
+'TEST' !~* 'TE.'
+----
+false

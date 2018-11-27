@@ -1,0 +1,141 @@
+# IS DISTINCT FROM can be used to compare NULLs "safely".
+
+eval
+0 IS DISTINCT FROM 0
+----
+false
+
+eval
+0 IS DISTINCT FROM 1
+----
+true
+
+eval
+0 IS DISTINCT FROM NULL
+----
+true
+
+eval
+NULL IS DISTINCT FROM NULL
+----
+false
+
+eval
+NULL IS DISTINCT FROM 1
+----
+true
+
+eval
+0 IS NOT DISTINCT FROM 0
+----
+true
+
+eval
+0 IS NOT DISTINCT FROM 1
+----
+false
+
+eval
+0 IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+NULL IS NOT DISTINCT FROM NULL
+----
+true
+
+eval
+NULL IS NOT DISTINCT FROM 1
+----
+false
+
+eval
+(1, NULL) IS NOT DISTINCT FROM (1, NULL)
+----
+true
+
+eval
+(1, NULL) IS DISTINCT FROM (1, NULL)
+----
+false
+
+eval
+(NULL, 1) IS NOT DISTINCT FROM (NULL, 1)
+----
+true
+
+eval
+(NULL, 1) IS DISTINCT FROM (NULL, 1)
+----
+false
+
+eval
+(1, NULL) IS NOT DISTINCT FROM (2, NULL)
+----
+false
+
+eval
+(1, NULL) IS DISTINCT FROM (2, NULL)
+----
+true
+
+eval
+(NULL, 1) IS NOT DISTINCT FROM (NULL, 2)
+----
+false
+
+eval
+(NULL, 1) IS DISTINCT FROM (NULL, 2)
+----
+true
+
+eval
+((NULL, NULL), (1, NULL)) IS NOT DISTINCT FROM ((NULL, NULL), (1, NULL))
+----
+true
+
+eval
+((NULL, NULL), (1, NULL)) IS DISTINCT FROM ((NULL, NULL), (1, NULL))
+----
+false
+
+eval
+ARRAY[1,2,3] IS DISTINCT FROM ARRAY[1,2,3]
+----
+false
+
+eval
+ARRAY['foo','bar','baz'] IS DISTINCT FROM ARRAY['foo','bar','baz']
+----
+false
+
+eval
+ARRAY[1,2,3] IS DISTINCT FROM ARRAY[1,2,4]
+----
+true
+
+eval
+ARRAY[1,2,3] IS NOT DISTINCT FROM ARRAY[1,2,3]
+----
+true
+
+eval
+ARRAY['foo','bar','baz'] IS NOT DISTINCT FROM ARRAY['foo','bar','baz']
+----
+true
+
+eval
+ARRAY[1,2,3] IS DISTINCT FROM NULL
+----
+true
+
+eval
+ARRAY[1,2,3] IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+NULL::INT[] IS DISTINCT FROM NULL::INT[]
+----
+false

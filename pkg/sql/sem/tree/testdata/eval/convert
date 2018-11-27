@@ -1,0 +1,84 @@
+eval
+convert_from('\xE290A4'::bytea, 'utf8')
+----
+e'\U00002424'
+
+eval
+convert_from('\x2424'::bytea, 'latin1')
+----
+'$$'
+
+eval
+convert_from('\x2424'::bytea, 'l%%%$^^^&atin--%%%%#$$$%%1')
+----
+'$$'
+
+eval
+convert_from('\xaaaa'::bytea, 'latin1')
+----
+e'\u00AA\u00AA'
+
+eval
+convert_to('abå', 'latin1')
+----
+'\x6162e5'
+
+eval
+convert_to('abå', 'utf8')
+----
+'\x6162c3a5'
+
+eval
+convert_to('ab漢', 'utf8')
+----
+'\x6162e6bca2'
+
+eval
+(1,2,3)::string
+----
+'(1,2,3)'
+
+eval
+(1,NULL,3)::string
+----
+'(1,,3)'
+
+eval
+(1,'a"b',3)::string
+----
+'(1,"a""b",3)'
+
+eval
+(1,(2,3))::string
+----
+'(1,"(2,3)")'
+
+eval
+(1,(2,'a"b'))::string
+----
+'(1,"(2,""a""""b"")")'
+
+eval
+(1,array['a','b"c'])::string
+----
+e'(1,"{a,""b\\\\""c""}")'
+
+eval
+ARRAY[1,2,3]::string
+----
+'{1,2,3}'
+
+eval
+ARRAY[1,NULL,3]::string
+----
+'{1,NULL,3}'
+
+eval
+ARRAY['a b','c"d']::string
+----
+e'{"a b","c\\"d"}'
+
+eval
+ARRAY[(1,'a b'),(2,'c"d')]::string
+----
+e'{"(1,\\"a b\\")","(2,\\"c\\"\\"d\\")"}'

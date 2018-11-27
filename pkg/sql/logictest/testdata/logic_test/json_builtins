@@ -204,7 +204,7 @@ SELECT to_json('00:00:00'::TIME)
 query T
 SELECT to_json('2h45m2s234ms'::INTERVAL)
 ----
-"2h45m2s234ms"
+"02:45:02.234"
 
 query T
 SELECT to_json((1, 2, 'hello', NULL, NULL))
@@ -299,7 +299,7 @@ SELECT to_jsonb('00:00:00'::TIME)
 query T
 SELECT to_jsonb('2h45m2s234ms'::INTERVAL)
 ----
-"2h45m2s234ms"
+"02:45:02.234"
 
 query T
 SELECT to_jsonb((1, 2, 'hello', NULL, NULL))

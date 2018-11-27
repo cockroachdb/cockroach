@@ -1,0 +1,143 @@
+# Array constructors.
+
+eval
+ARRAY[]:::int[]
+----
+ARRAY[]
+
+eval
+ARRAY[NULL]
+----
+ARRAY[NULL]
+
+eval
+ARRAY[1, 2, 3]
+----
+ARRAY[1,2,3]
+
+eval
+ARRAY['a', 'b', 'c']
+----
+ARRAY['a','b','c']
+
+eval
+ARRAY[ARRAY[1, 2], ARRAY[2, 3]]
+----
+ARRAY[ARRAY[1,2],ARRAY[2,3]]
+
+eval
+ARRAY[1, NULL]
+----
+ARRAY[1,NULL]
+
+eval
+ARRAY(1, 2)
+----
+ARRAY[1,2]
+
+# Array sizes.
+
+eval
+array_length(ARRAY[1, 2, 3], 1)
+----
+3
+
+eval
+array_length(ARRAY[1, 2, 3], 2)
+----
+NULL
+
+eval
+array_length(ARRAY[1, 2, 3], 0)
+----
+NULL
+
+eval
+array_length(ARRAY[1, 2, 3], -10)
+----
+NULL
+
+eval
+array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
+----
+2
+
+eval
+array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
+----
+3
+
+eval
+array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
+----
+NULL
+
+eval
+array_lower(ARRAY[1, 2, 3], 1)
+----
+1
+
+eval
+array_lower(ARRAY[1, 2, 3], 2)
+----
+NULL
+
+eval
+array_lower(ARRAY[1, 2, 3], 0)
+----
+NULL
+
+eval
+array_lower(ARRAY[1, 2, 3], -10)
+----
+NULL
+
+eval
+array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
+----
+1
+
+eval
+array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
+----
+1
+
+eval
+array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
+----
+NULL
+
+eval
+array_upper(ARRAY[1, 2, 3], 1)
+----
+3
+
+eval
+array_upper(ARRAY[1, 2, 3], 2)
+----
+NULL
+
+eval
+array_upper(ARRAY[1, 2, 3], 0)
+----
+NULL
+
+eval
+array_upper(ARRAY[1, 2, 3], -10)
+----
+NULL
+
+eval
+array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
+----
+2
+
+eval
+array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
+----
+3
+
+eval
+array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
+----
+NULL
