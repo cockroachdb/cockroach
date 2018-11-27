@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// insertBuilder is a helper struct that supports building an Insert operator in
+// mutationBuilder is a helper struct that supports building an Insert operator in
 // stages.
-type insertBuilder struct {
+type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
 
@@ -66,37 +66,37 @@ type insertBuilder struct {
 	outScope *scope
 }
 
-func (ib *insertBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alias *tree.TableName) {
-	ib.b = b
-	ib.md = b.factory.Metadata()
-	ib.op = op
-	ib.tab = tab
-	ib.targetColList = make(opt.ColList, 0, tab.ColumnCount())
+func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alias *tree.TableName) {
+	mb.b = b
+	mb.md = b.factory.Metadata()
+	mb.op = op
+	mb.tab = tab
+	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount())
 
 	if alias != nil {
-		ib.alias = alias
+		mb.alias = alias
 	} else {
-		ib.alias = tab.Name()
+		mb.alias = tab.Name()
 	}
 
 	// Add the table and its columns to metadata. Include columns undergoing write
 	// mutations, since default values will need to be inserted into those.
-	ib.tabID = ib.md.AddTableWithMutations(tab)
+	mb.tabID = mb.md.AddTableWithMutations(tab)
 }
 
 // addTargetNamedCols adds a list of user-specified column names to the list of
 // table columns that are the target of the Insert operation.
-func (ib *insertBuilder) addTargetNamedCols(names tree.NameList) {
-	if len(ib.targetColList) != 0 {
+func (mb *mutationBuilder) addTargetNamedCols(names tree.NameList) {
+	if len(mb.targetColList) != 0 {
 		panic("addTargetNamedCols cannot be called more than once")
 	}
 
 	for _, name := range names {
 		found := false
-		for ord, n := 0, ib.tab.ColumnCount(); ord < n; ord++ {
-			tabCol := ib.tab.Column(ord)
+		for ord, n := 0, mb.tab.ColumnCount(); ord < n; ord++ {
+			tabCol := mb.tab.Column(ord)
 			if tabCol.ColName() == name {
-				colID := ib.tabID.ColumnID(ord)
+				colID := mb.tabID.ColumnID(ord)
 
 				// Computed columns cannot be targeted with input values.
 				if tabCol.IsComputed() {
@@ -104,12 +104,12 @@ func (ib *insertBuilder) addTargetNamedCols(names tree.NameList) {
 				}
 
 				// Ensure that the name list does not contain duplicates.
-				if ib.targetColSet.Contains(int(colID)) {
+				if mb.targetColSet.Contains(int(colID)) {
 					panic(builderError{fmt.Errorf("multiple assignments to the same column %q", &name)})
 				}
-				ib.targetColSet.Add(int(colID))
+				mb.targetColSet.Add(int(colID))
 
-				ib.targetColList = append(ib.targetColList, colID)
+				mb.targetColList = append(mb.targetColList, colID)
 				found = true
 				break
 			}
@@ -121,18 +121,18 @@ func (ib *insertBuilder) addTargetNamedCols(names tree.NameList) {
 
 	// Ensure that primary key columns are in the target column list, or that
 	// they have default values.
-	ib.checkPrimaryKey()
+	mb.checkPrimaryKey()
 
 	// Ensure that foreign keys columns are in the target column list, or that
 	// they have default values.
-	ib.checkForeignKeys()
+	mb.checkForeignKeys()
 }
 
 // checkPrimaryKey ensures that the columns of the primary key are either
 // assigned values by the INSERT statement, or else have default/computed
 // values. If neither condition is true, checkPrimaryKey raises an error.
-func (ib *insertBuilder) checkPrimaryKey() {
-	primary := ib.tab.Index(opt.PrimaryIndex)
+func (mb *mutationBuilder) checkPrimaryKey() {
+	primary := mb.tab.Index(opt.PrimaryIndex)
 	for i, n := 0, primary.KeyColumnCount(); i < n; i++ {
 		col := primary.Column(i)
 		if col.Column.HasDefault() || col.Column.IsComputed() {
@@ -140,8 +140,8 @@ func (ib *insertBuilder) checkPrimaryKey() {
 			continue
 		}
 
-		colID := ib.tabID.ColumnID(col.Ordinal)
-		if ib.targetColSet.Contains(int(colID)) {
+		colID := mb.tabID.ColumnID(col.Ordinal)
+		if mb.targetColSet.Contains(int(colID)) {
 			// The column is explicitly specified in the target name list.
 			continue
 		}
@@ -170,9 +170,9 @@ func (ib *insertBuilder) checkPrimaryKey() {
 // as well, or else neither column can be specified.
 //
 // TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
-func (ib *insertBuilder) checkForeignKeys() {
-	for i, n := 0, ib.tab.IndexCount(); i < n; i++ {
-		idx := ib.tab.Index(i)
+func (mb *mutationBuilder) checkForeignKeys() {
+	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
+		idx := mb.tab.Index(i)
 		fkey, ok := idx.ForeignKey()
 		if !ok {
 			continue
@@ -188,8 +188,8 @@ func (ib *insertBuilder) checkForeignKeys() {
 				continue
 			}
 
-			colID := ib.tabID.ColumnID(indexCol.Ordinal)
-			if ib.targetColSet.Contains(int(colID)) {
+			colID := mb.tabID.ColumnID(indexCol.Ordinal)
+			if mb.targetColSet.Contains(int(colID)) {
 				// The column is explicitly specified in the target name list.
 				allMissing = false
 				continue
@@ -225,14 +225,14 @@ func (ib *insertBuilder) checkForeignKeys() {
 //
 // In this example, the first three columns of table t would be added as target
 // columns.
-func (ib *insertBuilder) addTargetTableCols(maxCols int) {
-	if len(ib.targetColList) != 0 {
+func (mb *mutationBuilder) addTargetTableCols(maxCols int) {
+	if len(mb.targetColList) != 0 {
 		panic("addTargetTableCols cannot be called more than once")
 	}
 
 	numCols := 0
-	for i, n := 0, ib.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
-		tabCol := ib.tab.Column(i)
+	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
+		tabCol := mb.tab.Column(i)
 		if tabCol.IsHidden() {
 			continue
 		}
@@ -243,21 +243,21 @@ func (ib *insertBuilder) addTargetTableCols(maxCols int) {
 			panic(builderError{sqlbase.CannotWriteToComputedColError(string(tabCol.ColName()))})
 		}
 
-		colID := ib.tabID.ColumnID(i)
-		ib.targetColList = append(ib.targetColList, colID)
-		ib.targetColSet.Add(int(colID))
+		colID := mb.tabID.ColumnID(i)
+		mb.targetColList = append(mb.targetColList, colID)
+		mb.targetColSet.Add(int(colID))
 		numCols++
 	}
 
 	// Ensure that the number of input columns does not exceed the number of
 	// target columns.
-	ib.checkNumCols(len(ib.targetColList), maxCols)
+	mb.checkNumCols(len(mb.targetColList), maxCols)
 }
 
 // extractValuesInput tests whether the given input is a VALUES clause with no
 // WITH, ORDER BY, or LIMIT modifier. If so, it's returned, otherwise nil is
 // returned.
-func (ib *insertBuilder) extractValuesInput(inputRows *tree.Select) *tree.ValuesClause {
+func (mb *mutationBuilder) extractValuesInput(inputRows *tree.Select) *tree.ValuesClause {
 	if inputRows == nil {
 		return nil
 	}
@@ -269,7 +269,7 @@ func (ib *insertBuilder) extractValuesInput(inputRows *tree.Select) *tree.Values
 
 	// Discard parentheses.
 	if parens, ok := inputRows.Select.(*tree.ParenSelect); ok {
-		return ib.extractValuesInput(parens.Select)
+		return mb.extractValuesInput(parens.Select)
 	}
 
 	if values, ok := inputRows.Select.(*tree.ValuesClause); ok {
@@ -291,8 +291,8 @@ func (ib *insertBuilder) extractValuesInput(inputRows *tree.Select) *tree.Values
 //
 // replaceDefaultExprs returns a VALUES expression with replaced DEFAULT values,
 // or just the unchanged input expression if there are no DEFAULT values.
-func (ib *insertBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree.Select) {
-	values := ib.extractValuesInput(inRows)
+func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree.Select) {
+	values := mb.extractValuesInput(inRows)
 	if values == nil {
 		return inRows
 	}
@@ -300,7 +300,7 @@ func (ib *insertBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree
 	// Ensure that the number of input columns exactly matches the number of
 	// target columns.
 	numCols := len(values.Rows[0])
-	ib.checkNumCols(len(ib.targetColList), numCols)
+	mb.checkNumCols(len(mb.targetColList), numCols)
 
 	var newRows []tree.Exprs
 	for irow, tuple := range values.Rows {
@@ -323,7 +323,7 @@ func (ib *insertBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree
 					copy(newTuple, tuple[:itup])
 				}
 
-				val = ib.parseDefaultOrComputedExpr(ib.targetColList[itup])
+				val = mb.parseDefaultOrComputedExpr(mb.targetColList[itup])
 			}
 			if newTuple != nil {
 				newTuple = append(newTuple, val)
@@ -347,7 +347,7 @@ func (ib *insertBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree
 
 // buildInputRows constructs the memo group for the input expression and
 // constructs a new output scope containing that expression's output columns.
-func (ib *insertBuilder) buildInputRows(inScope *scope, inputRows *tree.Select) {
+func (mb *mutationBuilder) buildInputRows(inScope *scope, inputRows *tree.Select) {
 	// If there are already required target columns, then those will provide
 	// desired input types. Otherwise, input columns are mapped to the table's
 	// non-hidden columns by corresponding ordinal position. Exclude hidden
@@ -361,46 +361,46 @@ func (ib *insertBuilder) buildInputRows(inScope *scope, inputRows *tree.Select) 
 	//   INSERT INTO <table> (...) VALUES (...)
 	//
 	var desiredTypes []types.T
-	if len(ib.targetColList) != 0 {
-		desiredTypes = make([]types.T, len(ib.targetColList))
-		for i, colID := range ib.targetColList {
-			desiredTypes[i] = ib.md.ColumnType(colID)
+	if len(mb.targetColList) != 0 {
+		desiredTypes = make([]types.T, len(mb.targetColList))
+		for i, colID := range mb.targetColList {
+			desiredTypes[i] = mb.md.ColumnType(colID)
 		}
 	} else {
-		desiredTypes = make([]types.T, 0, ib.tab.ColumnCount())
-		for i, n := 0, ib.tab.ColumnCount(); i < n; i++ {
-			tabCol := ib.tab.Column(i)
+		desiredTypes = make([]types.T, 0, mb.tab.ColumnCount())
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			tabCol := mb.tab.Column(i)
 			if !tabCol.IsHidden() {
 				desiredTypes = append(desiredTypes, tabCol.DatumType())
 			}
 		}
 	}
 
-	ib.outScope = ib.b.buildSelect(inputRows, desiredTypes, inScope)
+	mb.outScope = mb.b.buildSelect(inputRows, desiredTypes, inScope)
 
-	if len(ib.targetColList) != 0 {
+	if len(mb.targetColList) != 0 {
 		// Target columns already exist, so ensure that the number of input
 		// columns exactly matches the number of target columns.
-		ib.checkNumCols(len(ib.targetColList), len(ib.outScope.cols))
+		mb.checkNumCols(len(mb.targetColList), len(mb.outScope.cols))
 	} else {
 		// No target columns have been added by previous steps, so add columns
 		// that are implicitly targeted by the input expression.
-		ib.addTargetTableCols(len(ib.outScope.cols))
+		mb.addTargetTableCols(len(mb.outScope.cols))
 	}
 
 	// Type check input columns.
-	for i := range ib.outScope.cols {
-		inCol := &ib.outScope.cols[i]
-		tabCol := ib.tab.Column(ib.md.ColumnOrdinal(ib.targetColList[i]))
+	for i := range mb.outScope.cols {
+		inCol := &mb.outScope.cols[i]
+		tabCol := mb.tab.Column(mb.md.ColumnOrdinal(mb.targetColList[i]))
 		checkDatumTypeFitsColumnType(tabCol, inCol.typ)
 	}
 }
 
 // buildEmptyInput constructs a new output scope containing a single row VALUES
 // expression with zero columns.
-func (ib *insertBuilder) buildEmptyInput(inScope *scope) {
-	ib.outScope = inScope.push()
-	ib.outScope.expr = ib.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+func (mb *mutationBuilder) buildEmptyInput(inScope *scope) {
+	mb.outScope = inScope.push()
+	mb.outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
 }
 
 // addDefaultAndComputedCols wraps the input expression with Project operator(s)
@@ -411,13 +411,13 @@ func (ib *insertBuilder) buildEmptyInput(inScope *scope) {
 // After this call, the input expression will provide values for every one of
 // the target table columns, whether it was explicitly specified or implicitly
 // added.
-func (ib *insertBuilder) addDefaultAndComputedCols() {
+func (mb *mutationBuilder) addDefaultAndComputedCols() {
 	// Add any missing default and nullable columns.
-	ib.addSynthesizedCols(func(tabCol opt.Column) bool { return !tabCol.IsComputed() })
+	mb.addSynthesizedCols(func(tabCol opt.Column) bool { return !tabCol.IsComputed() })
 
 	// Add any missing computed columns. This must be done after adding default
 	// columns above, because computed columns can depend on default columns.
-	ib.addSynthesizedCols(func(tabCol opt.Column) bool { return tabCol.IsComputed() })
+	mb.addSynthesizedCols(func(tabCol opt.Column) bool { return tabCol.IsComputed() })
 }
 
 // addSynthesizedCols is a helper method for addDefaultAndComputedCols that
@@ -425,18 +425,18 @@ func (ib *insertBuilder) addDefaultAndComputedCols() {
 // provided by the input expression. New columns are synthesized for any missing
 // columns, as long as the addCol callback function returns true for that
 // column.
-func (ib *insertBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) bool) {
+func (mb *mutationBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) bool) {
 	var projectionsScope *scope
 
-	for i, n := 0, ib.tab.ColumnCount()+ib.tab.MutationColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount()+mb.tab.MutationColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
-		tabColID := ib.tabID.ColumnID(i)
-		if ib.targetColSet.Contains(int(tabColID)) {
+		tabColID := mb.tabID.ColumnID(i)
+		if mb.targetColSet.Contains(int(tabColID)) {
 			continue
 		}
 
 		// Get column metadata, including any mutation columns.
-		tabCol := tableColumnByOrdinal(ib.tab, i)
+		tabCol := tableColumnByOrdinal(mb.tab, i)
 
 		// Invoke addCol to determine whether column should be added.
 		if !addCol(tabCol) {
@@ -446,29 +446,29 @@ func (ib *insertBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) bool)
 		// Construct a new Project operator that will contain the newly synthesized
 		// column(s).
 		if projectionsScope == nil {
-			projectionsScope = ib.outScope.replace()
-			projectionsScope.appendColumnsFromScope(ib.outScope)
-			projectionsScope.copyOrdering(ib.outScope)
+			projectionsScope = mb.outScope.replace()
+			projectionsScope.appendColumnsFromScope(mb.outScope)
+			projectionsScope.copyOrdering(mb.outScope)
 		}
 
-		expr := ib.parseDefaultOrComputedExpr(tabColID)
-		texpr := ib.outScope.resolveType(expr, tabCol.DatumType())
-		scopeCol := ib.b.addColumn(projectionsScope, "" /* label */, texpr)
-		ib.b.buildScalar(texpr, ib.outScope, projectionsScope, scopeCol, nil)
+		expr := mb.parseDefaultOrComputedExpr(tabColID)
+		texpr := mb.outScope.resolveType(expr, tabCol.DatumType())
+		scopeCol := mb.b.addColumn(projectionsScope, "" /* label */, texpr)
+		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
-		ib.targetColList = append(ib.targetColList, tabColID)
-		ib.targetColSet.Add(int(tabColID))
+		mb.targetColList = append(mb.targetColList, tabColID)
+		mb.targetColSet.Add(int(tabColID))
 	}
 
 	if projectionsScope != nil {
-		ib.b.constructProjectForScope(ib.outScope, projectionsScope)
-		ib.outScope = projectionsScope
+		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+		mb.outScope = projectionsScope
 	}
 
 	// Alias output columns using table column names. Computed columns may refer
 	// to other columns in the table by name.
-	for i := range ib.outScope.cols {
-		ib.outScope.cols[i].name = tree.Name(ib.md.ColumnLabel(ib.targetColList[i]))
+	for i := range mb.outScope.cols {
+		mb.outScope.cols[i].name = tree.Name(mb.md.ColumnLabel(mb.targetColList[i]))
 	}
 }
 
@@ -476,65 +476,65 @@ func (ib *insertBuilder) addSynthesizedCols(addCol func(tabCol opt.Column) bool)
 // operator that corresponds to the given RETURNING clause. Insert always
 // returns columns in the same order and with the same names as the target
 // table.
-func (ib *insertBuilder) buildInsert(returning tree.ReturningExprs) {
-	if len(ib.outScope.cols) != len(ib.targetColList) {
+func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
+	if len(mb.outScope.cols) != len(mb.targetColList) {
 		panic("expected input column count to match table column coun")
 	}
 
 	// Map unordered input columns to order of target table columns.
-	inputCols := make(opt.ColList, len(ib.outScope.cols))
-	for i := range ib.outScope.cols {
-		tabOrd := ib.md.ColumnOrdinal(ib.targetColList[i])
-		inputCols[tabOrd] = ib.outScope.cols[i].id
+	inputCols := make(opt.ColList, len(mb.outScope.cols))
+	for i := range mb.outScope.cols {
+		tabOrd := mb.md.ColumnOrdinal(mb.targetColList[i])
+		inputCols[tabOrd] = mb.outScope.cols[i].id
 	}
 
 	private := memo.InsertPrivate{
-		Table:       ib.tabID,
+		Table:       mb.tabID,
 		InputCols:   inputCols,
 		NeedResults: returning != nil,
 	}
-	private.Ordering.FromOrdering(ib.outScope.ordering)
-	ib.outScope.expr = ib.b.factory.ConstructInsert(ib.outScope.expr, &private)
+	private.Ordering.FromOrdering(mb.outScope.ordering)
+	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
 
 	if returning != nil {
 		// 1. Project only non-mutation columns.
 		// 2. Re-order columns so they're in same order as table columns.
 		// 3. Alias columns to use table column names.
 		// 4. Mark hidden columns.
-		inScope := ib.outScope.replace()
-		inScope.expr = ib.outScope.expr
-		inScope.cols = make([]scopeColumn, ib.tab.ColumnCount())
-		for i := range ib.outScope.cols {
-			targetColID := ib.targetColList[i]
-			ord := ib.md.ColumnOrdinal(targetColID)
-			if ord >= ib.tab.ColumnCount() {
+		inScope := mb.outScope.replace()
+		inScope.expr = mb.outScope.expr
+		inScope.cols = make([]scopeColumn, mb.tab.ColumnCount())
+		for i := range mb.outScope.cols {
+			targetColID := mb.targetColList[i]
+			ord := mb.md.ColumnOrdinal(targetColID)
+			if ord >= mb.tab.ColumnCount() {
 				// Exclude mutation columns.
 				continue
 			}
 
-			outCol := &ib.outScope.cols[i]
+			outCol := &mb.outScope.cols[i]
 			inScope.cols[ord] = *outCol
-			inScope.cols[ord].table = *ib.alias
-			inScope.cols[ord].name = ib.tab.Column(ord).ColName()
+			inScope.cols[ord].table = *mb.alias
+			inScope.cols[ord].name = mb.tab.Column(ord).ColName()
 
-			if ib.tab.Column(ord).IsHidden() {
+			if mb.tab.Column(ord).IsHidden() {
 				inScope.cols[ord].hidden = true
 			}
 		}
 
 		outScope := inScope.replace()
-		ib.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
-		ib.b.buildProjectionList(inScope, outScope)
-		ib.b.constructProjectForScope(inScope, outScope)
-		ib.outScope = outScope
+		mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
+		mb.b.buildProjectionList(inScope, outScope)
+		mb.b.constructProjectForScope(inScope, outScope)
+		mb.outScope = outScope
 	} else {
-		ib.outScope = &scope{builder: ib.b, expr: ib.outScope.expr}
+		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
 	}
 }
 
 // checkNumCols raises an error if the expected number of columns does not match
 // the actual number of columns.
-func (ib *insertBuilder) checkNumCols(expected, actual int) {
+func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 	if actual != expected {
 		more, less := "expressions", "target columns"
 		if actual < expected {
@@ -552,19 +552,19 @@ func (ib *insertBuilder) checkNumCols(expected, actual int) {
 // parseDefaultOrComputedExpr parses the default (including nullable) or
 // computed value expression for the given table column, and caches it for
 // reuse.
-func (ib *insertBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
-	if ib.parsedExprs == nil {
-		ib.parsedExprs = make([]tree.Expr, ib.tab.ColumnCount()+ib.tab.MutationColumnCount())
+func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedExprs == nil {
+		mb.parsedExprs = make([]tree.Expr, mb.tab.ColumnCount()+mb.tab.MutationColumnCount())
 	}
 
 	// Return expression from cache, if it was already parsed previously.
-	ord := ib.md.ColumnOrdinal(colID)
-	if ib.parsedExprs[ord] != nil {
-		return ib.parsedExprs[ord]
+	ord := mb.md.ColumnOrdinal(colID)
+	if mb.parsedExprs[ord] != nil {
+		return mb.parsedExprs[ord]
 	}
 
 	var exprStr string
-	tabCol := tableColumnByOrdinal(ib.tab, ord)
+	tabCol := tableColumnByOrdinal(mb.tab, ord)
 	switch {
 	case tabCol.IsComputed():
 		exprStr = tabCol.ComputedExprStr()
@@ -581,8 +581,8 @@ func (ib *insertBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Exp
 		panic(builderError{err})
 	}
 
-	ib.parsedExprs[ord] = expr
-	return ib.parsedExprs[ord]
+	mb.parsedExprs[ord] = expr
+	return mb.parsedExprs[ord]
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
