@@ -96,7 +96,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize))
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
 	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
@@ -163,7 +163,6 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
-	var ra sqlbase.EncDatumRowAlloc
 	var buf []byte
 	for {
 		row, meta := s.input.Next()
@@ -200,8 +199,9 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		row = ra.CopyRow(row)
-		s.sr.SampleRow(row, rank)
+		if err := s.sr.SampleRow(row, rank); err != nil {
+			return false, err
+		}
 	}
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
