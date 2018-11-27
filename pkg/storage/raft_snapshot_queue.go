@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 
@@ -91,11 +93,14 @@ func (rq *raftSnapshotQueue) process(
 		for id, p := range status.Progress {
 			if p.State == raft.ProgressStateSnapshot {
 				if log.V(1) {
-					log.Infof(ctx, "sending raft snapshot")
+					log.Infof(ctx, "sending Raft snapshot")
 				}
+				tBegin := timeutil.Now()
 				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return err
 				}
+				elapsed := timeutil.Since(tBegin).Seconds()
+				log.Infof(ctx, "sent Raft snapshot in %.1fs", elapsed)
 			}
 		}
 	}

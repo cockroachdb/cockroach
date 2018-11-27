@@ -197,7 +197,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 2 {
 		t.Errorf("expected 2 pending replicas; got %d", v)
 	}
-	if bq.pop() != r2 {
+	if r, _ := bq.pop(); r != r2 {
 		t.Error("expected r2")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r2, nil)
@@ -205,7 +205,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
-	if bq.pop() != r1 {
+	if r, _ := bq.pop(); r != r1 {
 		t.Error("expected r1")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r1, nil)
@@ -213,7 +213,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
-	if r := bq.pop(); r != nil {
+	if r, _ := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
@@ -239,17 +239,17 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.pop() != r1 {
+	if r, _ := bq.pop(); r != r1 {
 		t.Error("expected r1")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
-	if bq.pop() != r2 {
+	if r, _ := bq.pop(); r != r2 {
 		t.Error("expected r2")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
-	if r := bq.pop(); r != nil {
+	if r, _ := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
@@ -261,17 +261,17 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.pop() != r1 {
+	if r, _ := bq.pop(); r != r1 {
 		t.Error("expected r1")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
-	if bq.pop() != r2 {
+	if r, _ := bq.pop(); r != r2 {
 		t.Error("expected r2")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
-	if r := bq.pop(); r != nil {
+	if r, _ := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
@@ -285,7 +285,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
-	if bq.pop() != r1 {
+	if r, _ := bq.pop(); r != r1 {
 		t.Errorf("expected r1")
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r1, nil)
@@ -330,7 +330,7 @@ func TestBaseQueueSamePriorityFIFO(t *testing.T) {
 		}
 	}
 	for _, expRepl := range repls {
-		actRepl := bq.pop()
+		actRepl, _ := bq.pop()
 		if actRepl != expRepl {
 			t.Fatalf("expected %v, got %v", expRepl, actRepl)
 		}
