@@ -77,8 +77,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		b.checkPrivilege(tab, privilege.UPDATE)
 	}
 
-	var ib insertBuilder
-	ib.init(b, opt.InsertOp, tab, alias)
+	var mb mutationBuilder
+	mb.init(b, opt.InsertOp, tab, alias)
 
 	// Compute target columns in two cases:
 	//
@@ -96,13 +96,13 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// replaced and named target columns are known. So this step must come first.
 	if len(ins.Columns) != 0 {
 		// Target columns are explicitly specified by name.
-		ib.addTargetNamedCols(ins.Columns)
+		mb.addTargetNamedCols(ins.Columns)
 	} else {
-		values := ib.extractValuesInput(ins.Rows)
+		values := mb.extractValuesInput(ins.Rows)
 		if values != nil {
 			// Target columns are implicitly targeted by VALUES expression in the
 			// same order they appear in the target table schema.
-			ib.addTargetTableCols(len(values.Rows[0]))
+			mb.addTargetTableCols(len(values.Rows[0]))
 		}
 	}
 
@@ -122,25 +122,25 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		//
 		//   INSERT INTO <table> VALUES (..., DEFAULT, ...)
 		//
-		rows := ib.replaceDefaultExprs(ins.Rows)
+		rows := mb.replaceDefaultExprs(ins.Rows)
 
-		ib.buildInputRows(inScope, rows)
+		mb.buildInputRows(inScope, rows)
 	} else {
-		ib.buildEmptyInput(inScope)
+		mb.buildEmptyInput(inScope)
 	}
 
 	// Add default and computed columns that were not explicitly specified by
 	// name or implicitly targeted by input columns. This includes any columns
 	// undergoing write mutations, as they must always have a default or computed
 	// value.
-	ib.addDefaultAndComputedCols()
+	mb.addDefaultAndComputedCols()
 
 	// Build the final insert statement, including any returned expressions.
 	if resultsNeeded(ins.Returning) {
-		ib.buildInsert(*ins.Returning.(*tree.ReturningExprs))
+		mb.buildInsert(*ins.Returning.(*tree.ReturningExprs))
 	} else {
-		ib.buildInsert(nil /* returning */)
+		mb.buildInsert(nil /* returning */)
 	}
 
-	return ib.outScope
+	return mb.outScope
 }
