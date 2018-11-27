@@ -24,22 +24,22 @@
 define Insert {
     Input RelExpr
 
-    _ InsertPrivate
+    _ MutationPrivate
 }
 
 [Private]
-define InsertPrivate {
+define MutationPrivate {
     # Table identifies the table into which to insert. It is an id that can be
     # passed to the Metadata.Table method in order to fetch opt.Table metadata.
     Table TableID
 
-    # InputCols are columns from the Input expression that will be inserted into
+    # InsertCols are columns from the Input expression that will be inserted into
     # the target table. They must be a subset of the Input expression's output
     # columns, but otherwise can be in any order. The count and order of columns
-    # corresponds to the count and order of the target table's columns; column
-    # values are read from the specified input columns and are then inserted into
-    # the corresponding table columns.
-    InputCols ColList
+    # corresponds to the count and order of the target table's columns, including
+    # in-progress schema mutation columns. Column values are read from the input
+    # columns and are then inserted into the corresponding table columns.
+    InsertCols ColList
 
     # Ordering is the ordering required of the input expression. Rows will be
     # inserted into the target table in this order.

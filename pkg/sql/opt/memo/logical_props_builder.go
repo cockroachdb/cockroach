@@ -961,7 +961,7 @@ func (b *logicalPropsBuilder) buildInsertProps(ins *InsertExpr, rel *props.Relat
 	// Output Columns
 	// --------------
 	// Only non-mutation columns are output columns.
-	for i, col := range ins.InputCols {
+	for i, col := range ins.InsertCols {
 		// Column is mutation column if its ordinal is >= count of regular columns
 		// in the table.
 		if i < tab.ColumnCount() {

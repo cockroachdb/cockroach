@@ -264,7 +264,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Child("columns: <none>")
 		}
 		tpChild := tp.Child("insert:")
-		f.formatMutation(e, tpChild, t.InputCols, t.Table)
+		f.formatMutation(e, tpChild, t.InsertCols, t.Table)
 		if !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
@@ -626,7 +626,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name())
 
-	case *InsertPrivate:
+	case *MutationPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 
