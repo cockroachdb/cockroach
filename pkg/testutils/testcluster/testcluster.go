@@ -18,6 +18,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -261,6 +262,20 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 		// splits.
 		if _, err := conn.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
 			t.Fatal(err)
+		}
+	}
+
+	if serverArgs.Knobs.Store != nil {
+		storeKnobs := serverArgs.Knobs.Store.(*storage.StoreTestingKnobs)
+		if storeKnobs.DisableLoadBasedSplitting && len(tc.Servers) == 0 {
+			// Disable LBS for the cluster as the first node is added.
+			if _, err := conn.Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+				// If the cluster setting doesn't exist, the cluster version is < 2.2.0 and
+				// so Load based Splitting doesn't apply anyway and the error should be ignored.
+				if !strings.Contains(err.Error(), "unknown cluster setting") {
+					t.Fatal(err)
+				}
+			}
 		}
 	}
 
