@@ -285,6 +285,15 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 		}
 		select {
 		case <-time.After(r.store.cfg.RaftTickInterval):
+			// Propose an empty command which works around a Raft bug that can
+			// leave a follower in ProgressStateProbe even though it has caught
+			// up.
+			r.raftMu.Lock()
+			r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
+				_ = rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
+				return false, nil
+			})
+			r.raftMu.Unlock()
 		case <-ctx.Done():
 			return ""
 		}
