@@ -56,7 +56,7 @@ func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.TableDescriptor) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.ImmutableTableDescriptor) RemovalTracker {
 	id := tableVersionID{
 		id:      table.ID,
 		version: table.Version,
@@ -116,7 +116,7 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	timestamp hlc.Timestamp,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
@@ -125,5 +125,5 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	return &table.TableDescriptor, table.expiration, nil
+	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

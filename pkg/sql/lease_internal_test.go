@@ -154,7 +154,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	var tables []sqlbase.TableDescriptor
+	var tables []sqlbase.ImmutableTableDescriptor
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
@@ -221,8 +221,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// without a lease.
 	ts.mu.Lock()
 	tableVersion := &tableVersionState{
-		TableDescriptor: tables[0],
-		expiration:      tables[5].ModificationTime,
+		ImmutableTableDescriptor: tables[0],
+		expiration:               tables[5].ModificationTime,
 	}
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
@@ -277,7 +277,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -304,7 +304,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -337,7 +337,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+		if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -422,7 +422,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Release.
 	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
-	tableChan := make(chan *sqlbase.TableDescriptor)
+	tableChan := make(chan *sqlbase.ImmutableTableDescriptor)
 	errChan := make(chan error)
 	go func() {
 		for table := range tableChan {
@@ -604,7 +604,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
-		table *sqlbase.TableDescriptor
+		table *sqlbase.ImmutableTableDescriptor
 		exp   hlc.Timestamp
 		err   error
 	}

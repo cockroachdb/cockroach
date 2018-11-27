@@ -80,7 +80,7 @@ func MakeDefaultExprs(
 // and returns the defaultExprs for cols.
 func ProcessDefaultColumns(
 	cols []ColumnDescriptor,
-	tableDesc *TableDescriptor,
+	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
@@ -92,7 +92,7 @@ func ProcessDefaultColumns(
 }
 
 func processColumnSet(
-	cols []ColumnDescriptor, tableDesc *TableDescriptor, inSet func(ColumnDescriptor) bool,
+	cols []ColumnDescriptor, tableDesc *ImmutableTableDescriptor, inSet func(ColumnDescriptor) bool,
 ) []ColumnDescriptor {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
 	for _, col := range cols {

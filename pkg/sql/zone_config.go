@@ -257,13 +257,16 @@ func (p *planner) resolveTableForZone(
 			res = mutRes.TableDesc()
 		}
 	} else if zs.TargetsTable() {
+		var immutRes *ImmutableTableDescriptor
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			res, err = ResolveExistingObject(
+			immutRes, err = ResolveExistingObject(
 				ctx, p, &zs.TableOrIndex.Table, true /*required*/, anyDescType,
 			)
 		})
 		if err != nil {
 			return nil, err
+		} else if immutRes != nil {
+			res = immutRes.TableDesc()
 		}
 	}
 	return res, err

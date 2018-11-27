@@ -71,7 +71,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	return val, nil
 }
 
-func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
+func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
 	seqOpts := descriptor.SequenceOpts
 	isAscending := seqOpts.Increment > 0
 
@@ -135,7 +135,7 @@ func (p *planner) SetSequenceValue(
 			`cannot set the value of virtual sequence %q`, tree.ErrString(seqName))
 	}
 
-	seqValueKey, newVal, err := MakeSequenceKeyVal(descriptor, newVal, isCalled)
+	seqValueKey, newVal, err := MakeSequenceKeyVal(descriptor.TableDesc(), newVal, isCalled)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func MakeSequenceKeyVal(
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, desc *sqlbase.TableDescriptor,
+	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor,
 ) (int64, error) {
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")

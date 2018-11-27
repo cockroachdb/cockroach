@@ -393,7 +393,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	args := make([]row.FetcherTableArgs, len(tables))
 
 	for i, table := range tables {
-		desc := table.Desc
+		desc := sqlbase.NewImmutableTableDescriptor(table.Desc)
 		var err error
 		args[i].Index, args[i].IsSecondaryIndex, err = desc.FindIndexByIndexIdx(int(table.IndexIdx))
 		if err != nil {
@@ -405,7 +405,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		// on a scan before a join.
 		args[i].ValNeededForCol.AddRange(0, len(desc.Columns)-1)
 		args[i].ColIdxMap = desc.ColumnIdxMap()
-		args[i].Desc = &desc
+		args[i].Desc = desc
 		args[i].Cols = desc.Columns
 		args[i].Spans = make(roachpb.Spans, len(table.Spans))
 		for j, trSpan := range table.Spans {

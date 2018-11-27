@@ -42,7 +42,7 @@ type TableLookupsByID map[ID]TableLookup
 // flag.
 // This also includes an optional CheckHelper for the table.
 type TableLookup struct {
-	Table       *sqlbase.TableDescriptor
+	Table       *sqlbase.ImmutableTableDescriptor
 	IsAdding    bool
 	CheckHelper *sqlbase.CheckHelper
 }
@@ -182,7 +182,7 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
-	table sqlbase.TableDescriptor,
+	table sqlbase.ImmutableTableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
@@ -404,7 +404,7 @@ var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
 	txn *client.Txn,
-	table sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	otherTables TableLookupsByID,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
@@ -493,7 +493,7 @@ type fkDeleteHelper struct {
 
 func makeFKDeleteHelper(
 	txn *client.Txn,
-	table sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	otherTables TableLookupsByID,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
@@ -561,7 +561,7 @@ type fkUpdateHelper struct {
 
 func makeFKUpdateHelper(
 	txn *client.Txn,
-	table sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	otherTables TableLookupsByID,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
@@ -628,8 +628,8 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 type baseFKHelper struct {
 	txn          *client.Txn
 	rf           Fetcher
-	searchTable  *sqlbase.TableDescriptor // the table being searched (for err msg)
-	searchIdx    *sqlbase.IndexDescriptor // the index that must (not) contain a value
+	searchTable  *sqlbase.ImmutableTableDescriptor // the table being searched (for err msg)
+	searchIdx    *sqlbase.IndexDescriptor          // the index that must (not) contain a value
 	prefixLen    int
 	writeIdx     sqlbase.IndexDescriptor  // the index we want to modify
 	searchPrefix []byte                   // prefix of keys in searchIdx
@@ -650,7 +650,7 @@ func makeBaseFKHelper(
 	if b.searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
-	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable, ref.Index)
+	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable.TableDesc(), ref.Index)
 	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
 	if err != nil {
 		return b, err
@@ -704,7 +704,7 @@ func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
 		keyBytes, _, err := sqlbase.EncodePartialIndexKey(
-			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
+			f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
 		if err != nil {
 			return roachpb.Span{}, err
 		}

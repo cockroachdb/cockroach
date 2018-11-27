@@ -234,7 +234,7 @@ func (rf *CFetcher) Init(
 
 		table := cTableInfo{
 			spans:            tableArgs.Spans,
-			desc:             tableArgs.Desc,
+			desc:             tableArgs.Desc.TableDesc(),
 			colIdxMap:        tableArgs.ColIdxMap,
 			index:            tableArgs.Index,
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,

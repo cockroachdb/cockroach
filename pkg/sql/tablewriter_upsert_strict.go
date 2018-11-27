@@ -127,7 +127,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 		// Get the primary key of the insert row.
 		upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 		// and if not, mark the key to be checked against the table.
 		for _, idx := range tu.conflictIndexes {
 			entries, err := sqlbase.EncodeSecondaryIndex(
-				tableDesc, &idx, tu.ri.InsertColIDtoRowIndex, row)
+				tableDesc.TableDesc(), &idx, tu.ri.InsertColIDtoRowIndex, row)
 			if err != nil {
 				return nil, err
 			}

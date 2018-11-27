@@ -603,7 +603,7 @@ func GenerateInsertRow(
 	insertCols []sqlbase.ColumnDescriptor,
 	computedCols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
 ) (tree.Datums, error) {
@@ -677,7 +677,9 @@ func GenerateInsertRow(
 // are returned. If allowMutations is set, even columns undergoing
 // mutations are added.
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	nameList tree.NameList,
+	ensureColumns, allowMutations bool,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {

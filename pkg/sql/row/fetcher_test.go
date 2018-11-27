@@ -35,7 +35,7 @@ import (
 )
 
 type initFetcherArgs struct {
-	tableDesc       *sqlbase.TableDescriptor
+	tableDesc       *sqlbase.ImmutableTableDescriptor
 	indexIdx        int
 	valNeededForCol util.FastIntSet
 	spans           roachpb.Spans
@@ -143,7 +143,7 @@ func TestNextRowSingle(t *testing.T) {
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
@@ -263,7 +263,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
@@ -375,7 +375,7 @@ INDEX(c)
 
 	alloc := &sqlbase.DatumAlloc{}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+	tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, table.nCols-1)
@@ -542,7 +542,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nVals-1)
@@ -894,7 +894,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			// RowFetcher.
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
-				tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
+				tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
 				var indexID sqlbase.IndexID
 				if entry.indexIdx == 0 {
 					indexID = tableDesc.PrimaryIndex.ID
@@ -1013,7 +1013,7 @@ func TestRowFetcherReset(t *testing.T) {
 		0,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
 	)
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "foo")
+	tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, "foo")
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, 1)
 	args := []initFetcherArgs{

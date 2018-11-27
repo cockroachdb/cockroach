@@ -182,7 +182,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
-		tableDesc := objDesc.TableDesc()
+		tableDesc := objDesc.(*sqlbase.ImmutableTableDescriptor)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue
@@ -195,7 +195,10 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	ctx context.Context,
+	p *planner,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(n.n.AsOf)
 	if err != nil {
@@ -273,7 +276,7 @@ func (n *scrubNode) startScrubTable(
 // getColumns returns the columns that are stored in an index k/v. The
 // column names and types are also returned.
 func getColumns(
-	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
 ) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i, col := range tableDesc.Columns {
@@ -304,7 +307,7 @@ func getColumns(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *sqlbase.TableDescriptor, columns []*sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*sqlbase.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -399,7 +402,7 @@ func tableColumnsProjection(tableName string, columns []string) string {
 // createPhysicalCheckOperations will return the physicalCheckOperation
 // for all indexes on a table.
 func createPhysicalCheckOperations(
-	tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	tableDesc *sqlbase.ImmutableTableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
 	for i := range tableDesc.Indexes {
@@ -416,7 +419,7 @@ func createPhysicalCheckOperations(
 // first invalid index.
 func createIndexCheckOperations(
 	indexNames tree.NameList,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -474,7 +477,7 @@ func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
 	constraintNames tree.NameList,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
