@@ -74,6 +74,13 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	return desc.GetTable()
 }
 
+// GetImmutableTableDescriptor retrieves an immutable table descriptor directly from the KV layer.
+func GetImmutableTableDescriptor(
+	kvDB *client.DB, database string, table string,
+) *ImmutableTableDescriptor {
+	return NewImmutableTableDescriptor(*GetTableDescriptor(kvDB, database, table))
+}
+
 // RandDatum generates a random Datum of the given type.
 // If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,

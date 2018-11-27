@@ -102,12 +102,12 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID)
 
 	return nil
 }
 
-func (tu *tableUpserterBase) tableDesc() *sqlbase.TableDescriptor {
+func (tu *tableUpserterBase) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
 
@@ -490,7 +490,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	conflictingRowValues tree.Datums,
 	existingRows []tree.Datums,
 	pkToRowIdx map[string]int,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
 	// First compute all the updates via SET (or the pseudo-SET generated
@@ -557,7 +557,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	// tu.evaler.ccIvarContainer.Mapping which contains the suitable
 	// mapping for the table columns already.
 	updatedConflictingRowPK, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
+		tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -630,7 +630,7 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	conflictingRowPK roachpb.Key,
 	existingRows []tree.Datums,
 	pkToRowIdx map[string]int,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
 	// Perform the insert proper.
@@ -644,7 +644,7 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	// In that case, compute it now.
 	if conflictingRowPK == nil {
 		conflictingRowPK, _, err = sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -687,7 +687,7 @@ func (tu *tableUpserter) getConflictingRowPK(
 	insertRow tree.Datums,
 	rowIdx int,
 	conflictingPKs map[int]roachpb.Key,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (conflictingRowPK roachpb.Key, err error) {
 	if conflictingPKs != nil {
 		// If a secondary index helped us find the conflicting PK for this
@@ -699,7 +699,7 @@ func (tu *tableUpserter) getConflictingRowPK(
 
 	// Otherwise, encode the values to determine the primary key.
 	insertRowPK, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+		tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 	return insertRowPK, err
 }
 
@@ -736,7 +736,7 @@ func (tu *tableUpserter) upsertRowPKs(
 
 			// Compute the PK for the current row.
 			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-				tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+				tableDesc.TableDesc(), &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -762,7 +762,7 @@ func (tu *tableUpserter) upsertRowPKs(
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
 		entries, err := sqlbase.EncodeSecondaryIndex(
-			tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
+			tableDesc.TableDesc(), &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -782,7 +782,7 @@ func (tu *tableUpserter) upsertRowPKs(
 	for i, result := range b.Results {
 		if len(result.Rows) == 1 {
 			if result.Rows[0].Value != nil {
-				upsertRowPK, err := sqlbase.ExtractIndexKey(tu.alloc, tableDesc, result.Rows[0])
+				upsertRowPK, err := sqlbase.ExtractIndexKey(tu.alloc, tableDesc.TableDesc(), result.Rows[0])
 				if err != nil {
 					return nil, nil, err
 				}
@@ -858,7 +858,7 @@ func (tu *tableUpserter) fetchExisting(
 		}
 
 		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -877,7 +877,7 @@ func (tu *tableUpserter) fetchExisting(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *tableUpserter) tableDesc() *sqlbase.TableDescriptor {
+func (tu *tableUpserter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
 

@@ -30,7 +30,7 @@ import (
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
 	tableName  *tree.TableName
-	tableDesc  *sqlbase.TableDescriptor
+	tableDesc  *sqlbase.ImmutableTableDescriptor
 	constraint *sqlbase.ConstraintDetail
 	asOf       hlc.Timestamp
 
@@ -49,7 +49,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	constraint sqlbase.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
@@ -257,7 +257,7 @@ func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
 //
 func createFKCheckQuery(
 	database string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	constraint *sqlbase.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) (string, error) {

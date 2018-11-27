@@ -41,7 +41,7 @@ type optCatalog struct {
 	// dataSources is a cache of table and view objects that's used to satisfy
 	// repeated calls for the same data source. The same underlying descriptor
 	// will always return the same data source wrapper object.
-	dataSources map[*sqlbase.TableDescriptor]opt.DataSource
+	dataSources map[*sqlbase.ImmutableTableDescriptor]opt.DataSource
 }
 
 var _ opt.Catalog = &optCatalog{}
@@ -91,11 +91,11 @@ func (oc *optCatalog) ResolveDataSourceByID(
 // newDataSource returns a data source wrapper for the given table descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) newDataSource(
-	desc *sqlbase.TableDescriptor, name *tree.TableName,
+	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
 ) (opt.DataSource, error) {
 	// Check to see if there's already a data source wrapper for this descriptor.
 	if oc.dataSources == nil {
-		oc.dataSources = make(map[*sqlbase.TableDescriptor]opt.DataSource)
+		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]opt.DataSource)
 	} else {
 		if ds, ok := oc.dataSources[desc]; ok {
 			return ds, nil
@@ -119,11 +119,11 @@ func (oc *optCatalog) newDataSource(
 	return ds, nil
 }
 
-// optView is a wrapper around sqlbase.TableDescriptor that implements the
+// optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
 // opt.DataSource and opt.View interfaces.
 type optView struct {
 	cat  *optCatalog
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of
 	// the view.
@@ -132,7 +132,9 @@ type optView struct {
 
 var _ opt.View = &optView{}
 
-func newOptView(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName) *optView {
+func newOptView(
+	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
+) *optView {
 	ov := &optView{cat: cat, desc: desc, name: *name}
 
 	// The opt.View interface requires that view names be fully qualified.
@@ -172,13 +174,13 @@ func (ov *optView) ColumnName(i int) tree.Name {
 	return tree.Name(ov.desc.Columns[i].Name)
 }
 
-// optSequence is a wrapper around sqlbase.TableDescriptor that implements the
+// optSequence is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
 // opt.DataSource interface.
 //
 // TODO(andyk): This should implement opt.Sequence once we have it.
 type optSequence struct {
 	cat  *optCatalog
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// sequence.
@@ -188,7 +190,7 @@ type optSequence struct {
 var _ opt.DataSource = &optSequence{}
 
 func newOptSequence(
-	cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName,
+	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
 ) *optSequence {
 	ot := &optSequence{cat: cat, desc: desc, name: *name}
 
@@ -214,11 +216,11 @@ func (os *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) 
 	return os.cat.resolver.CheckPrivilege(ctx, os.desc, priv)
 }
 
-// optTable is a wrapper around sqlbase.TableDescriptor that caches index
+// optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches index
 // wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
 	cat  *optCatalog
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// table.
@@ -242,7 +244,9 @@ type optTable struct {
 
 var _ opt.Table = &optTable{}
 
-func newOptTable(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName) *optTable {
+func newOptTable(
+	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
+) *optTable {
 	ot := &optTable{cat: cat, desc: desc, name: *name}
 
 	// The opt.Table interface requires that table names be fully qualified.

@@ -197,7 +197,7 @@ func initRowFetcher(
 		}
 	}
 	tableArgs := row.FetcherTableArgs{
-		Desc:             desc,
+		Desc:             sqlbase.NewImmutableTableDescriptor(*desc),
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,

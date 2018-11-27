@@ -191,7 +191,7 @@ func (p *planner) truncateTable(
 		return err
 	}
 	tableDesc.DropJobID = dropJobID
-	newTableDesc := NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
+	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
 	}
@@ -399,7 +399,13 @@ func truncateTableInChunks(
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			rd, err := row.MakeDeleter(
-				txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
+				txn,
+				sqlbase.NewImmutableTableDescriptor(*tableDesc),
+				nil,
+				nil,
+				row.SkipFKs,
+				nil, /* *tree.EvalContext */
+				alloc,
 			)
 			if err != nil {
 				return err

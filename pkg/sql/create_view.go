@@ -155,9 +155,9 @@ func (n *createViewNode) startExec(params runParams) error {
 	// Persist the back-references in all referenced table descriptors.
 	for _, updated := range n.planDeps {
 		backrefID := updated.desc.ID
-		backRefMutable := params.p.Tables().getUncommittedTableByID(backrefID)
+		backRefMutable := params.p.Tables().getUncommittedTableByID(backrefID).MutableTableDescriptor
 		if backRefMutable == nil {
-			backRefMutable = NewMutableExistingTableDescriptor(*updated.desc)
+			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
 		}
 		for _, dep := range updated.deps {
 			// The logical plan constructor merely registered the dependencies.

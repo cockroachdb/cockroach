@@ -27,7 +27,7 @@ import (
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	leaseMgr *sql.LeaseManager
-	fetchers map[*sqlbase.TableDescriptor]*row.Fetcher
+	fetchers map[*sqlbase.ImmutableTableDescriptor]*row.Fetcher
 
 	a sqlbase.DatumAlloc
 }
@@ -35,14 +35,14 @@ type rowFetcherCache struct {
 func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 	return &rowFetcherCache{
 		leaseMgr: leaseMgr,
-		fetchers: make(map[*sqlbase.TableDescriptor]*row.Fetcher),
+		fetchers: make(map[*sqlbase.ImmutableTableDescriptor]*row.Fetcher),
 	}
 }
 
 func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
-) (*sqlbase.TableDescriptor, error) {
-	var tableDesc *sqlbase.TableDescriptor
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	var tableDesc *sqlbase.ImmutableTableDescriptor
 	for skippedCols := 0; ; {
 		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
 		if err != nil {
@@ -80,7 +80,7 @@ func (c *rowFetcherCache) TableDescForKey(
 }
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (*row.Fetcher, error) {
 	if rf, ok := c.fetchers[tableDesc]; ok {
 		return rf, nil

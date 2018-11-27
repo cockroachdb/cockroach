@@ -94,12 +94,12 @@ func GetObjectNames(
 // if no object is found.
 func ResolveExistingObject(
 	ctx context.Context, sc SchemaResolver, tn *ObjectName, required bool, requiredType requiredType,
-) (res *TableDescriptor, err error) {
+) (res *ImmutableTableDescriptor, err error) {
 	desc, err := resolveExistingObjectImpl(ctx, sc, tn, required, false /* requiredMutable */, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*TableDescriptor), nil
+	return desc.(*ImmutableTableDescriptor), nil
 }
 
 // ResolveMutableExistingObject looks up an existing mutable object.
@@ -158,7 +158,7 @@ func resolveExistingObjectImpl(
 		return descI.(*MutableTableDescriptor), nil
 	}
 
-	return obj.TableDesc(), nil
+	return descI.(*ImmutableTableDescriptor), nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -193,11 +193,15 @@ func (p *planner) ResolveMutableTableDescriptor(
 
 func (p *planner) ResolveUncachedTableDescriptor(
 	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
-) (table *UncachedTableDescriptor, err error) {
+) (_ *UncachedTableDescriptor, err error) {
+	var table *ImmutableTableDescriptor
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = ResolveExistingObject(ctx, p, tn, required, requiredType)
 	})
-	return table, err
+	if table == nil {
+		return nil, err
+	}
+	return table.TableDesc(), err
 }
 
 // ResolveTargetObject determines a valid target path for an object
@@ -583,9 +587,9 @@ func (r *fkSelfResolver) LookupObject(
 		tbName == r.newTableName.Table() {
 		table := r.newTableDesc
 		if requireMutable {
-			return true, NewMutableExistingTableDescriptor(*table), nil
+			return true, sqlbase.NewMutableExistingTableDescriptor(*table), nil
 		}
-		return true, table, nil
+		return true, sqlbase.NewImmutableTableDescriptor(*table), nil
 	}
 	return r.SchemaResolver.LookupObject(ctx, requireMutable, dbName, scName, tbName)
 }

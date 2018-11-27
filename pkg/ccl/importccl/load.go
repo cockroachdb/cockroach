@@ -94,14 +94,14 @@ func Load(
 
 	privs := dbDesc.GetPrivileges()
 
-	tableDescs := make(map[string]*sqlbase.TableDescriptor)
+	tableDescs := make(map[string]*sqlbase.ImmutableTableDescriptor)
 
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
 	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
 	var cols []sqlbase.ColumnDescriptor
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *sqlbase.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
 	var kvs []engine.MVCCKeyValue
@@ -170,10 +170,10 @@ func Load(
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
 
-			tableDesc = desc.TableDesc()
+			tableDesc = sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
 			tableDescs[tableName] = tableDesc
 			backup.Descriptors = append(backup.Descriptors, sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{Table: tableDesc},
+				Union: &sqlbase.Descriptor_Table{Table: desc.TableDesc()},
 			})
 
 			for _, col := range tableDesc.Columns {
@@ -253,7 +253,7 @@ func Load(
 
 func insertStmtToKVs(
 	ctx context.Context,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,

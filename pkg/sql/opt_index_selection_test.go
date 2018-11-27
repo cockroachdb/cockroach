@@ -37,7 +37,7 @@ import (
 
 func makeTestIndex(
 	t *testing.T, columns []string, dirs []encoding.Direction,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
+) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
 	desc := testTableDesc()
 	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
 		Name:        "foo",
@@ -66,7 +66,7 @@ func makeTestIndex(
 // it is descending.
 func makeTestIndexFromStr(
 	t *testing.T, columnsStr string,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
+) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
 	for i, c := range columns {
@@ -84,7 +84,7 @@ func makeSpans(
 	t *testing.T,
 	p *planner,
 	sql string,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
 ) (_ *constraint.Constraint, spans roachpb.Spans) {
@@ -255,7 +255,7 @@ func TestMakeSpans(t *testing.T) {
 				span := spans[0]
 				d.expected = d.expected[4:]
 				// Trim the index prefix from the span.
-				prefix := string(sqlbase.MakeIndexKeyPrefix(desc, index.ID))
+				prefix := string(sqlbase.MakeIndexKeyPrefix(desc.TableDesc(), index.ID))
 				got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
 					strings.TrimPrefix(string(span.EndKey), prefix)
 			} else {

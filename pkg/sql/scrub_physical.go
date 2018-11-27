@@ -31,7 +31,7 @@ var _ checkOperation = &physicalCheckOperation{}
 // physicalCheckOperation is a check on an indexes physical data.
 type physicalCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
@@ -53,7 +53,9 @@ type physicalCheckRun struct {
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
@@ -136,7 +138,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
+		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err
 	}

@@ -105,12 +105,19 @@ const (
 type MutationID uint32
 
 // MutableTableDescriptor is a custom type for TableDescriptors
-// going through mutations.
+// going through schema mutations.
 type MutableTableDescriptor struct {
 	TableDescriptor
 
 	// ClusterVersion represents the version of the table descriptor read from the store.
 	ClusterVersion TableDescriptor
+}
+
+// ImmutableTableDescriptor is a custom type for TableDescriptors
+// It holds precomputed values and the underlying TableDescriptor
+// should be const.
+type ImmutableTableDescriptor struct {
+	TableDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -155,6 +162,26 @@ var ErrDescriptorNotFound = errors.New("descriptor not found")
 // index with the given ID does not have a descriptor and is in the garbage
 // collected mutations list.
 var ErrIndexGCMutationsList = errors.New("index in GC mutations list")
+
+// NewMutableCreatedTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version being the zero table. This
+// is for a table that is created in the transaction.
+func NewMutableCreatedTableDescriptor(tbl TableDescriptor) *MutableTableDescriptor {
+	return &MutableTableDescriptor{TableDescriptor: tbl}
+}
+
+// NewMutableExistingTableDescriptor returns a MutableTableDescriptor from the
+// given TableDescriptor with the cluster version also set to the descriptor.
+// This is for an existing table.
+func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescriptor {
+	return &MutableTableDescriptor{TableDescriptor: tbl, ClusterVersion: tbl}
+}
+
+// NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
+// given TableDescriptor.
+func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
+	return &ImmutableTableDescriptor{TableDescriptor: tbl}
+}
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
 // ID passed in using an existing txn. Returns an error if the descriptor
@@ -2534,11 +2561,11 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 }
 
 // TableDesc implements the ObjectDescriptor interface.
-func (desc *TableDescriptor) TableDesc() *TableDescriptor {
-	return desc
+func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
+	return &desc.TableDescriptor
 }
 
 // TableDesc implements the ObjectDescriptor interface.
-func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
+func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
 }

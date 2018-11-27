@@ -197,7 +197,7 @@ type rowConverter struct {
 	kvBatch  kvBatch
 	batchCap int
 
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
@@ -215,14 +215,15 @@ const kvBatchSize = 1000
 func newRowConverter(
 	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
+	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &rowConverter{
-		tableDesc: tableDesc,
+		tableDesc: immutDesc,
 		kvCh:      kvCh,
 		evalCtx:   evalCtx,
 	}
 
-	ri, err := row.MakeInserter(nil /* txn */, tableDesc, nil, /* fkTables */
-		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
+		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
 	}
@@ -232,14 +233,14 @@ func newRowConverter(
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, c.evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.evalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
 	c.cols = cols
 	c.defaultExprs = defaultExprs
 
-	c.visibleCols = tableDesc.VisibleColumns()
+	c.visibleCols = immutDesc.VisibleColumns()
 	c.visibleColTypes = make([]types.T, len(c.visibleCols))
 	for i := range c.visibleCols {
 		c.visibleColTypes[i] = c.visibleCols[i].DatumType()
@@ -261,13 +262,13 @@ func newRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
+	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
 	c.batchCap = kvBatchSize + padding
 	c.kvBatch = make(kvBatch, 0, c.batchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.Columns,
+		Cols:    immutDesc.Columns,
 	}
 	return c, nil
 }

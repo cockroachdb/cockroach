@@ -147,11 +147,11 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// Immediately after a RENAME an old name still points to the
 			// descriptor during the drain phase for the name. Do not
 			// return a descriptor during draining.
-			if nameMatchesTable(desc, dbDesc.ID, name.Table()) {
+			if desc.Name == name.Table() {
 				if flags.requireMutable {
-					return NewMutableExistingTableDescriptor(*desc), dbDesc, nil
+					return sqlbase.NewMutableExistingTableDescriptor(*desc), dbDesc, nil
 				}
-				return desc, dbDesc, nil
+				return sqlbase.NewImmutableTableDescriptor(*desc), dbDesc, nil
 			}
 		}
 	}
