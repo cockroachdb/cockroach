@@ -1352,31 +1352,35 @@ func (s *statusServer) ListLocalSessions(
 		return nil, remoteDebuggingErr
 	}
 
-	var showAll bool
 	sessionUser, err := userFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// If the client is asking to see more than just their own sessions, verify
-	// that they should be allowed to.
-	if sessionUser != req.Username {
-		superuser := (sessionUser == security.RootUser || s.isSuperUser(ctx, sessionUser))
-		if req.Username != "" && !superuser {
+
+	superuser := s.isSuperUser(ctx, sessionUser)
+	if !superuser {
+		// For non-superusers, requests with an empty username is
+		// implicitly a request for the client's own sessions.
+		if req.Username == "" {
+			req.Username = sessionUser
+		}
+
+		// Non-superusers are not allowed to query sessions others than their own.
+		if sessionUser != req.Username {
 			return nil, grpcstatus.Errorf(
 				codes.PermissionDenied,
 				"client user %q does not have permission to view sessions from user %q",
 				sessionUser, req.Username)
 		}
-		// If the user isn't a superuser, then a request with an empty username is
-		// implicitly a request for the client's own sessions.
-		if req.Username == "" && !superuser {
-			req.Username = sessionUser
-		}
-		showAll = (req.Username == "" && superuser)
 	}
 
-	registry := s.sessionRegistry
+	// There are two ways to query "all sessions":
+	// - an empty username in the request (subject to the checks above).
+	// - the request is internal (coming from crdb_internal.{node,cluster}_sessions)
+	//   and the requested user is a superuser.
+	showAll := req.Username == ""
 
+	registry := s.sessionRegistry
 	sessions := registry.SerializeAll()
 	userSessions := make([]serverpb.Session, 0, len(sessions))
 
@@ -1743,6 +1747,9 @@ type superUserChecker interface {
 }
 
 func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
+	if username == security.RootUser {
+		return true
+	}
 	planner, cleanup := sql.NewInternalPlanner(
 		"check-superuser",
 		client.NewTxn(ctx, s.db, s.gossip.NodeID.Get(), client.RootTxn),
