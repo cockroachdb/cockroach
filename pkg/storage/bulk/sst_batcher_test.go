@@ -184,17 +184,11 @@ func runTestImport(t *testing.T, batchSize int64) {
 					}
 				}
 			}
-<<<<<<< HEAD
 			if splitRetries != expectedSplitRetries {
 				t.Fatalf("expected %d split-caused retries, got %d", expectedSplitRetries, splitRetries)
 			}
 			cancel()
-||||||| merged common ancestors
-			t.Logf("flushed batch: %d", b.sstWriter.DataSize)
 
-=======
-
->>>>>>> sql: plumb BulkAdder though distsql
 			added := b.GetSummary()
 			t.Logf("Wrote %d total", added.DataSize)
 
