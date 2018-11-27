@@ -74,6 +74,7 @@
     "copy-webpack-plugin": "^4.5.1",
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
+    "d3-geo-projection": "^2.5.0",
     "dagre-layout": "^0.8.0",
     "enzyme": "^3.3.0",
     "enzyme-adapter-react-16": "^1.1.1",
@@ -104,13 +105,16 @@
     "stylus": "^0.54.5",
     "stylus-loader": "^3.0.1",
     "thread-loader": "^1.1.1",
+    "topojson": "^3.0.2",
     "ts-loader": "^2.3.4",
     "tslint": "^5.10.0",
     "typescript": "^2.2.1",
     "url-loader": "^0.5.8",
+    "us-atlas": "^1.0.2",
     "webpack": "^3.5.6",
     "webpack-dev-server": "^2.11.2",
-    "webpack-visualizer-plugin": "^0.1.11"
+    "webpack-visualizer-plugin": "^0.1.11",
+    "world-atlas": "^1.1.4"
   },
   "engines": {
     "node": ">=6",

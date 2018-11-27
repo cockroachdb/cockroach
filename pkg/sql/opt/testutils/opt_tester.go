@@ -107,7 +107,14 @@ type OptTesterFlags struct {
 	// to pass.
 	UnexpectedRules RuleSet
 
+	// ColStats is a list of ColSets for which a column statistic is requested.
 	ColStats []opt.ColSet
+
+	// PerturbCost indicates how much to randomly perturb the cost. It is used
+	// to generate alternative plans for testing. For example, if PerturbCost is
+	// 0.5, and the estimated cost of an expression is c, the cost returned by
+	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
+	PerturbCost float64
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -194,6 +201,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    expression. The value is a column or a list of columns. The flag can
 //    be used multiple times to request different statistics.
 //
+//  - perturb-cost: used to randomly perturb the estimated cost of each
+//    expression in the query tree for the purpose of creating alternate query
+//    plans in the optimizer.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -203,6 +214,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 
 	ot.Flags.Verbose = testing.Verbose()
+	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -439,6 +451,16 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		}
 		f.ColStats = append(f.ColStats, cols)
 
+	case "perturb-cost":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("perturb-cost requires one argument")
+		}
+		var err error
+		f.PerturbCost, err = strconv.ParseFloat(arg.Vals[0], 64)
+		if err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
 	}
@@ -492,11 +514,9 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx)
-	err := ot.buildExpr(o.Factory())
-	if err != nil {
+	if _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}
-	o.Optimize()
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
 }
 
@@ -804,7 +824,11 @@ func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return o.Optimize(), nil
+	root := o.Optimize()
+	if ot.Flags.PerturbCost != 0 {
+		o.RecomputeCost()
+	}
+	return root, nil
 }
 
 func (ot *OptTester) output(format string, args ...interface{}) {
