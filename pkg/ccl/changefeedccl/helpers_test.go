@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 
 	"github.com/cockroachdb/apd"
@@ -277,12 +278,6 @@ func makeSinkless(s serverutils.TestServerInterface, db *gosql.DB) *sinklessFeed
 func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
 	t.Helper()
 
-	if _, err := f.db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
 	s := &sinklessFeed{db: f.db, seen: make(map[string]struct{})}
 	now := timeutil.Now()
 	var err error
@@ -399,11 +394,6 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	c := &tableFeed{
 		db: db, urlCleanup: cleanup, sinkURI: sink.String(), flushCh: f.flushCh,
 		seen: make(map[string]struct{}),
-	}
-	if _, err := c.db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
-	); err != nil {
-		t.Fatal(err)
 	}
 	if _, err := c.db.Exec(`CREATE DATABASE ` + sink.Path); err != nil {
 		t.Fatal(err)
@@ -684,6 +674,62 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
 }
 
+// maybeWaitForEpochLeases waits until all ranges serving user table data have
+// epoch leases.
+//
+// Changefeed resolved timestamps rely on RangeFeed checkpoints which rely on
+// closed timestamps which only work with epoch leases. This means that any
+// changefeed test that _uses RangeFeed_ and _needs resolved timestamps_ should
+// first wait until all the relevant ranges have epoch-leases.
+//
+// We added this to unblock RangeFeed work, but it takes ~10s, so we should fix
+// it for real at some point. The permanent fix is being tracked in #32495.
+func maybeWaitForEpochLeases(t *testing.T, s serverutils.TestServerInterface) {
+	// If it's not a rangefeed test, don't bother waiting.
+	if !strings.Contains(t.Name(), `rangefeed`) {
+		return
+	}
+
+	userTablesSpan := roachpb.RSpan{
+		Key:    roachpb.RKey(keys.MakeTablePrefix(keys.MinUserDescID)),
+		EndKey: roachpb.RKeyMax,
+	}
+	testutils.SucceedsSoon(t, func() error {
+		ctx := context.Background()
+		var rangeDescs []roachpb.RangeDescriptor
+		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			rangeDescs, err = allRangeDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+			return err
+		}
+
+		// Force a lease acquisition so we don't get stuck waiting forever.
+		if _, err := s.DB().Scan(ctx, userTablesSpan.Key, userTablesSpan.EndKey, 0); err != nil {
+			return err
+		}
+
+		stores := s.GetStores().(*storage.Stores)
+		for _, rangeDesc := range rangeDescs {
+			if !rangeDesc.ContainsKeyRange(userTablesSpan.Key, userTablesSpan.EndKey) {
+				continue
+			}
+			replica, err := stores.GetReplicaForRangeID(rangeDesc.RangeID)
+			if err != nil {
+				return err
+			}
+			lease, _ := replica.GetLease()
+			if lease.Epoch == 0 {
+				err := errors.Errorf("%s does not have an epoch lease: should resolve in %s",
+					rangeDesc, lease.Expiration.GoTime().Sub(timeutil.Now()))
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
@@ -752,7 +798,16 @@ func rangefeedTest(
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		metaTestFn(func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+			// TODO(dan): We currently have to set this to an extremely
+			// conservative value because otherwise schema changes become flaky
+			// (they don't commit their txn in time, get pushed by closed
+			// timestamps, and retry forever). This is more likely when the
+			// tests run slower (race builds or inside docker). The conservative
+			// value makes our tests take a long longer, though. Figure out some
+			// way to speed this up.
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 			testFn(t, db, f)
 		})(t)
 	}
