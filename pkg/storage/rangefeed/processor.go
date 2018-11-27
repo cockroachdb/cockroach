@@ -42,14 +42,7 @@ const (
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
-// events and is forced to drop events in order to not block. The error is
-// usually associated with a slow consumer.
-// TODO(nvanbenschoten): currently a single slow consumer can cause all
-// rangefeeds on a Range to be shut down with this error. We should work
-// on isolating buffering for individual consumers so that a slow consumer
-// only affects itself. One idea for this is to replace Stream.Send with
-// Stream.SendAsync and give each stream its own individual buffer. If
-// an individual stream is unable to keep up, to should fail on its own.
+// events and is forced to drop events in order to not block.
 func newErrBufferCapacityExceeded() *roachpb.Error {
 	return roachpb.NewErrorf("rangefeed: buffer capacity exceeded due to slow consumer")
 }
@@ -117,19 +110,12 @@ type Processor struct {
 	rts resolvedTimestamp
 
 	regC     chan registration
-	catchUpC chan catchUpResult
+	unregC   chan *registration
 	lenReqC  chan struct{}
 	lenResC  chan int
 	eventC   chan event
 	stopC    chan *roachpb.Error
 	stoppedC chan struct{}
-}
-
-// catchUpResult is delivered to the Processor goroutine when a catch up scan
-// for a new registration has completed.
-type catchUpResult struct {
-	r    *registration
-	pErr *roachpb.Error
 }
 
 // event is a union of different event types that the Processor goroutine needs
@@ -153,7 +139,7 @@ func NewProcessor(cfg Config) *Processor {
 		rts:    makeResolvedTimestamp(),
 
 		regC:     make(chan registration),
-		catchUpC: make(chan catchUpResult),
+		unregC:   make(chan *registration),
 		lenReqC:  make(chan struct{}),
 		lenResC:  make(chan int),
 		eventC:   make(chan event, cfg.EventChanCap),
@@ -200,13 +186,9 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 			defer txnPushTicker.Stop()
 		}
 
-		// checkStreamsTicker periodically checks whether any streams have
-		// disconnected. If so, the registration is unregistered.
-		checkStreamsTicker := time.NewTicker(p.CheckStreamsInterval)
-		defer checkStreamsTicker.Stop()
-
 		for {
 			select {
+
 			// Handle new registrations.
 			case r := <-p.regC:
 				if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
@@ -216,21 +198,17 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				// Add the new registration to the registry.
 				p.reg.Register(&r)
 
-				// Launch an async catch-up scan for the new registration.
-				// Ignore error if quiescing.
-				if r.catchUpIter != nil {
-					catchUp := newCatchUpScan(p, &r)
-					err := stopper.RunAsyncTask(ctx, "rangefeed: catch-up scan", catchUp.Run)
-					if err != nil {
-						catchUp.Cancel()
-					}
-				} else {
-					p.handleCatchUpScanRes(ctx, catchUpResult{r: &r})
+				// Run an output loop for the registry.
+				loop := newRegistryOutputLoop(p, &r)
+				if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", loop.Run); err != nil {
+					r.disconnect(roachpb.NewError(err))
+					p.reg.Unregister(&r)
 				}
 
-			// React to registrations finishing their catch up scan.
-			case res := <-p.catchUpC:
-				p.handleCatchUpScanRes(ctx, res)
+			// Respond to unregistration requests; these come from registrations that
+			// encounter an error during their output loop.
+			case r := <-p.unregC:
+				p.reg.Unregister(r)
 
 			// Respond to answers about the processor goroutine state.
 			case <-p.lenReqC:
@@ -285,10 +263,6 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				txnPushTickerC = txnPushTicker.C
 				txnPushAttemptC = nil
 
-			// Check whether any streams have disconnected.
-			case <-checkStreamsTicker.C:
-				p.reg.CheckStreams()
-
 			// Close registrations and exit when signaled.
 			case pErr := <-p.stopC:
 				p.reg.DisconnectWithErr(all, pErr)
@@ -340,17 +314,17 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // events that are consumed concurrently with this call. The channel will be
 // provided an error when the registration closes.
 //
-// The provided iterator is used to catch the registration up from its starting
-// timestamp with value events for all committed values. It must obey the
-// contract of an iterator used for a catchUpScan. The Processor promises to
-// clean up the iterator by calling its Close method when it is finished. If the
-// iterator is nil then no catch-up scan will be performed.
+// The provided engine is used to instantiate "catch-up" iterators for this
+// registration as needed. Catch-up iterators are used if a registration
+// temporarily falls behind the "live" stream of output events; a catch-up phase
+// is also used immediately when a new registration is created with a non-empty
+// startTS.
 //
 // NOT safe to call on nil Processor.
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIter engine.SimpleIterator,
+	eng engine.Engine,
 	stream Stream,
 	errC chan<- *roachpb.Error,
 ) {
@@ -359,19 +333,10 @@ func (p *Processor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	r := registration{
-		span:        span.AsRawSpanWithNoLocals(),
-		startTS:     startTS,
-		catchUpIter: catchUpIter,
-		stream:      stream,
-		errC:        errC,
-	}
+	r := newRegistration(span, startTS, eng, p.Config.EventChanCap, stream, errC)
 	select {
 	case p.regC <- r:
 	case <-p.stoppedC:
-		if catchUpIter != nil {
-			catchUpIter.Close() // clean up
-		}
 		errC <- roachpb.NewErrorf("rangefeed processor closed")
 	}
 }
@@ -389,16 +354,6 @@ func (p *Processor) Len() int {
 		return <-p.lenResC
 	case <-p.stoppedC:
 		return 0
-	}
-}
-
-// deliverCatchUpScanRes informs the Processor of the results of a catch-up scan
-// for a given registration.
-func (p *Processor) deliverCatchUpScanRes(r *registration, pErr *roachpb.Error) {
-	select {
-	case p.catchUpC <- catchUpResult{r: r, pErr: pErr}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
 	}
 }
 
@@ -489,25 +444,6 @@ func (p *Processor) syncEventC() {
 		}
 	case <-p.stoppedC:
 		// Already stopped. Do nothing.
-	}
-}
-
-//
-// Methods called from Processor goroutine.
-//
-
-func (p *Processor) handleCatchUpScanRes(ctx context.Context, res catchUpResult) {
-	if res.pErr == nil {
-		res.r.SetCaughtUp()
-
-		// Publish checkpoint to processor even if the resolved timestamp is
-		// not initialized. In that case, the timestamp will be empty but the
-		// checkpoint event is still useful to indicate that the catch-up scan
-		// has completed. This allows clients to rely on stronger ordering
-		// semantics once they observe the first checkpoint event.
-		p.reg.PublishToReg(res.r, p.newCheckpointEvent())
-	} else {
-		p.reg.DisconnectRegWithError(res.r, res.pErr)
 	}
 }
 

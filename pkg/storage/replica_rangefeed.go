@@ -161,16 +161,7 @@ func (r *Replica) RangeFeed(
 
 	// Ensure that the rangefeed processor is running.
 	p := r.maybeInitRangefeedRaftMuLocked()
-
-	// Register the stream with a catch-up iterator.
-	var catchUpIter engine.SimpleIterator
-	if !args.Timestamp.IsEmpty() {
-		catchUpIter = r.Engine().NewIterator(engine.IterOptions{
-			UpperBound:       args.Span.EndKey,
-			MinTimestampHint: args.Timestamp,
-		})
-	}
-	p.Register(rspan, args.Timestamp, catchUpIter, lockedStream, errC)
+	p.Register(rspan, args.Timestamp, r.Engine(), lockedStream, errC)
 	r.raftMu.Unlock()
 
 	// When this function returns, attempt to clean up the rangefeed.
@@ -199,7 +190,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		Clock:            r.Clock(),
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
-		EventChanCap:     512,
+		EventChanCap:     256,
 		EventChanTimeout: 50 * time.Millisecond,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
