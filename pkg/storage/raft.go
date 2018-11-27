@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft"
@@ -106,7 +107,7 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 }
 
 func verboseRaftLoggingEnabled() bool {
-	return log.V(5)
+	return true || log.V(5)
 }
 
 func logRaftReady(ctx context.Context, ready raft.Ready) {
@@ -135,10 +136,12 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 	}
 	for i, m := range ready.Messages {
-		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
+		fmt.Fprintf(&buf, "outgoing raft msg [%d]: %.200s\n",
 			i, raftDescribeMessage(m, raftEntryFormatter))
 	}
-	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
+	for _, line := range strings.Split(buf.String(), "\n") {
+		log.Infof(ctx, "raft ready: %s", line)
+	}
 }
 
 // This is a fork of raft.DescribeMessage with a tweak to avoid logging
