@@ -4380,6 +4380,153 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	}
 }
 
+// TestMVCCIntentHistory verifies that trying to write to a key that already was written
+// to - results in the history being recorded in the MVCCMetadata.
+func TestMVCCIntentHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
+
+	key := roachpb.Key("a")
+	value := roachpb.MakeValueFromString("first value")
+	newValue := roachpb.MakeValueFromString("second value")
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1}}
+	txn.Status = roachpb.PENDING
+
+	// Lay down an intent.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the intent meta was found.
+	aggMeta := &enginepb.MVCCMetadata{
+		Txn:       &txn.TxnMeta,
+		Timestamp: hlc.LegacyTimestamp(ts1),
+		KeyBytes:  mvccVersionTimestampSize,
+		ValBytes:  int64(len(value.RawBytes)),
+	}
+	metaKey := mvccKey(key)
+	meta := &enginepb.MVCCMetadata{}
+	ok, _, _, err := engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared")
+	}
+	if !meta.Equal(aggMeta) {
+		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Lay down an overriding intent with a higher sequence.
+	txn.Sequence++
+	if err := MVCCPut(ctx, engine, nil, key, ts2, newValue, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that intent history is recorded when the value is overridden by the same transaction.
+	aggMeta = &enginepb.MVCCMetadata{
+		Txn:       &txn.TxnMeta,
+		Timestamp: hlc.LegacyTimestamp(ts2),
+		KeyBytes:  mvccVersionTimestampSize,
+		ValBytes:  int64(len(newValue.RawBytes)),
+		IntentHistory: []enginepb.Entry{
+			{Sequence: 0, Value: value.RawBytes, Deleted: false},
+		},
+	}
+	ok, _, _, err = engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared")
+	}
+	if !meta.Equal(aggMeta) {
+		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Lay down a deletion intent with a higher sequence.
+	txn.Sequence++
+	if err := MVCCDelete(ctx, engine, nil, key, ts2, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that intent history is recorded when the value is overridden by the same transaction.
+	aggMeta = &enginepb.MVCCMetadata{
+		Txn:       &txn.TxnMeta,
+		Timestamp: hlc.LegacyTimestamp(ts2),
+		KeyBytes:  mvccVersionTimestampSize,
+		ValBytes:  0,
+		Deleted:   true,
+		IntentHistory: []enginepb.Entry{
+			{Sequence: 0, Value: value.RawBytes, Deleted: false},
+			{Sequence: 1, Value: newValue.RawBytes, Deleted: false},
+		},
+	}
+	ok, _, _, err = engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared")
+	}
+	if !meta.Equal(aggMeta) {
+		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Lay down another intent with a higher sequence to see if history accurately captures deletes.
+	txn.Sequence++
+	if err := MVCCPut(ctx, engine, nil, key, ts2, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that intent history is recorded when the value is overridden by the same transaction.
+	aggMeta = &enginepb.MVCCMetadata{
+		Txn:       &txn.TxnMeta,
+		Timestamp: hlc.LegacyTimestamp(ts2),
+		KeyBytes:  mvccVersionTimestampSize,
+		ValBytes:  int64(len(value.RawBytes)),
+		IntentHistory: []enginepb.Entry{
+			{Sequence: 0, Value: value.RawBytes, Deleted: false},
+			{Sequence: 1, Value: newValue.RawBytes, Deleted: false},
+			{Sequence: 2, Value: []byte{}, Deleted: true},
+		},
+	}
+	ok, _, _, err = engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared")
+	}
+	if !meta.Equal(aggMeta) {
+		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Resolve the intent.
+	if err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+		Span:   roachpb.Span{Key: key},
+		Status: roachpb.COMMITTED,
+		Txn:    txn.TxnMeta,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the intent was cleared.
+	ok, _, _, err = engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("intent should have been cleared")
+	}
+}
+
 // TestMVCCTimeSeriesPartialMerge ensures that "partial merges" of merged time
 // series data does not result in a different final result than a "full merge".
 func TestMVCCTimeSeriesPartialMerge(t *testing.T) {

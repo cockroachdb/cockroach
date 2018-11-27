@@ -13,6 +13,7 @@
 	It has these top-level messages:
 		FileRegistry
 		FileEntry
+		Entry
 		MVCCMetadata
 		MVCCStats
 		TxnMeta
