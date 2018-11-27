@@ -204,3 +204,59 @@ EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 
 project set    ·         ·  ("if")  ·
  │             render 0  1  ·       ·
  └── emptyrow  ·         ·  ()      ·
+
+statement ok
+CREATE TABLE articles (
+  id INT PRIMARY KEY,
+  body STRING,
+  description STRING,
+  title STRING,
+  slug STRING,
+  tag_list STRING[],
+  user_id STRING,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+)
+
+# Regression test for #31706.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a0.id, a0.body, a0.description, a0.title, a0.slug, a0.tag_list, a0.user_id, a0.created_at, a0.updated_at
+    FROM articles AS a0
+   WHERE EXISTS(SELECT * FROM unnest(a0.tag_list) AS tag WHERE tag = 'dragons')
+ORDER BY a0.created_at
+   LIMIT 10
+  OFFSET 0;
+----
+limit                                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
+ │                                    count        10                         ·                                                                                        ·
+ │                                    offset       0                          ·                                                                                        ·
+ └── sort                             ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
+      │                               order        +created_at                ·                                                                                        ·
+      └── group                       ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+           │                          aggregate 0  id                         ·                                                                                        ·
+           │                          aggregate 1  any_not_null(body)         ·                                                                                        ·
+           │                          aggregate 2  any_not_null(description)  ·                                                                                        ·
+           │                          aggregate 3  any_not_null(title)        ·                                                                                        ·
+           │                          aggregate 4  any_not_null(slug)         ·                                                                                        ·
+           │                          aggregate 5  any_not_null(tag_list)     ·                                                                                        ·
+           │                          aggregate 6  any_not_null(user_id)      ·                                                                                        ·
+           │                          aggregate 7  any_not_null(created_at)   ·                                                                                        ·
+           │                          aggregate 8  any_not_null(updated_at)   ·                                                                                        ·
+           │                          group by     @1                         ·                                                                                        ·
+           └── render                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+                │                     render 0     id                         ·                                                                                        ·
+                │                     render 1     body                       ·                                                                                        ·
+                │                     render 2     description                ·                                                                                        ·
+                │                     render 3     title                      ·                                                                                        ·
+                │                     render 4     slug                       ·                                                                                        ·
+                │                     render 5     tag_list                   ·                                                                                        ·
+                │                     render 6     user_id                    ·                                                                                        ·
+                │                     render 7     created_at                 ·                                                                                        ·
+                │                     render 8     updated_at                 ·                                                                                        ·
+                └── filter            ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
+                     │                filter       unnest = 'dragons'         ·                                                                                        ·
+                     └── project set  ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
+                          │           render 0     unnest(@6)                 ·                                                                                        ·
+                          └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+·                                     table        articles@primary           ·                                                                                        ·
+·                                     spans        ALL                        ·                                                                                        ·
