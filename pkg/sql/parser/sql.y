@@ -2111,9 +2111,9 @@ create_ddl_stmt:
 // %Text:
 // CREATE STATISTICS <statisticname>
 //   ON <colname> [, ...]
-//   FROM <tablename>
+//   FROM <tablename> [AS OF SYSTEM TIME <expr>]
 create_stats_stmt:
-  CREATE STATISTICS statistics_name ON name_list FROM table_name
+  CREATE STATISTICS statistics_name ON name_list FROM table_name opt_as_of_clause
   {
     name, err := tree.NormalizeTableName($7.unresolvedName())
     if err != nil {
@@ -2124,6 +2124,7 @@ create_stats_stmt:
       Name: tree.Name($3),
       ColumnNames: $5.nameList(),
       Table: name,
+      AsOf: $8.asOfClause(),
     }
   }
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
