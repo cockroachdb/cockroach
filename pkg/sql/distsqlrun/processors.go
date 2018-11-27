@@ -1056,6 +1056,14 @@ func newProcessor(
 			flowCtx, processorID, core.InterleavedReaderJoiner, post, outputs[0],
 		)
 	}
+	if core.ZigzagJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newZigzagJoiner(
+			flowCtx, processorID, core.ZigzagJoiner, nil, post, outputs[0],
+		)
+	}
 	if core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err

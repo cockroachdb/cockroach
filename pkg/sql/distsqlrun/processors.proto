@@ -344,7 +344,10 @@ message ZigzagJoinerSpec {
   // columns in the right stream.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
-  optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+  // Fixed values at the start of indices.
+  repeated ValuesCoreSpec fixed_values = 5;
+
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 }
 
 // LocalPlanNodeSpec is the specification for a local planNode wrapping
