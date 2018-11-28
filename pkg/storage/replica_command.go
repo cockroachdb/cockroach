@@ -316,7 +316,8 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 		r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
 			err := rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
 			log.Infof(ctx, "proposed empty command: %v", err)
-			return false, nil
+			// NB: we need to unquiesce as the group might be quiesced.
+			return true /* unquiesceAndWakeLeader */, nil
 		})
 		r.raftMu.Unlock()
 
