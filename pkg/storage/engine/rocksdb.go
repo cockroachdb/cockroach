@@ -3023,7 +3023,10 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 }
 
 func notFoundErrOrDefault(err error) error {
-	if strings.Contains(err.Error(), "No such file or directory") || strings.Contains(err.Error(), "File not found") {
+	errStr := err.Error()
+	if strings.Contains(errStr, "No such file or directory") ||
+		strings.Contains(errStr, "File not found") ||
+		strings.Contains(errStr, "The system cannot find the path specified") {
 		return os.ErrNotExist
 	}
 	return err
