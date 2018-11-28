@@ -725,7 +725,6 @@ unreserved_keyword ::=
 	| 'TESTING_RANGES'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
-	| 'TIMESTAMPTZ'
 	| 'TRACE'
 	| 'TRANSACTION'
 	| 'TRIGGER'
@@ -791,6 +790,7 @@ col_name_keyword ::=
 	| 'TIME'
 	| 'TIMETZ'
 	| 'TIMESTAMP'
+	| 'TIMESTAMPTZ'
 	| 'TREAT'
 	| 'TRIM'
 	| 'VALUES'
@@ -1847,12 +1847,8 @@ character_without_length ::=
 
 const_datetime ::=
 	'DATE'
-	| 'TIME'
-	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMP'
-	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMP' opt_timezone
 	| 'TIMESTAMPTZ'
-	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
 
 const_json ::=
 	'JSON'
@@ -2016,6 +2012,11 @@ opt_float ::=
 opt_numeric_modifiers ::=
 	'(' iconst64 ')'
 	| '(' iconst64 ',' iconst64 ')'
+	| 
+
+opt_timezone ::=
+	'WITH' 'TIME' 'ZONE'
+	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
 
 interval_qualifier ::=
