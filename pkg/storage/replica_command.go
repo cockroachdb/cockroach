@@ -274,9 +274,10 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 		r.mu.RUnlock()
 
 		if raftStatus == nil {
-			// Don't delay followers artificially. This case is hit rarely
-			// enough to not matter.
-			log.Infof(ctx, "no raft status")
+			// Don't delay on followers (we don't know when to stop). This case
+			// is hit rarely enough to not matter.
+			extra += "; not Raft leader"
+			succeeded = true
 			break
 		}
 
