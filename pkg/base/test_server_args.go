@@ -166,6 +166,8 @@ const (
 	// ReplicationAuto means that ranges are replicated according to the
 	// production default zone config. Replication is performed as in
 	// production, by the replication queue.
+	// If ReplicationAuto is used, StartTestCluster() blocks until the initial
+	// ranges are fully replicated.
 	ReplicationAuto TestClusterReplicationMode = iota
 	// ReplicationManual means that the split and replication queues of all
 	// servers are stopped, and the test must manually control splitting and
