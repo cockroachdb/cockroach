@@ -201,7 +201,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			Progress: make(map[uint64]raft.Progress),
 		}
 		for j, v := range c.progress {
-			status.Progress[uint64(j)] = raft.Progress{Match: v}
+			status.Progress[uint64(j)] = raft.Progress{State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
 		}
 		decision := computeTruncateDecision(truncateDecisionInput{
 			RaftStatus:                     status,
@@ -268,6 +268,29 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestTruncateDecisionNumSnapshots(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	status := &raft.Status{
+		Progress: map[uint64]raft.Progress{
+			// Fully caught up.
+			5: {State: raft.ProgressStateReplicate, Match: 11, Next: 12},
+			// Behind.
+			6: {State: raft.ProgressStateReplicate, Match: 10, Next: 11},
+			// Last MsgApp in flight, so basically caught up.
+			7: {State: raft.ProgressStateReplicate, Match: 10, Next: 12},
+			8: {State: raft.ProgressStateProbe},    // irrelevant
+			9: {State: raft.ProgressStateSnapshot}, // irrelevant
+		},
+	}
+
+	decision := truncateDecision{Input: truncateDecisionInput{RaftStatus: status}}
+	assert.Equal(t, 0, decision.raftSnapshotsForIndex(10))
+	assert.Equal(t, 1, decision.raftSnapshotsForIndex(11))
+	assert.Equal(t, 3, decision.raftSnapshotsForIndex(12))
+	assert.Equal(t, 3, decision.raftSnapshotsForIndex(13))
 }
 
 func verifyLogSizeInSync(t *testing.T, r *Replica) {
