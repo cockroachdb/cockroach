@@ -209,6 +209,14 @@ func (p *planner) Update(
 						return nil, err
 					}
 
+					// Make sure there are no aggregation/window functions in the filter
+					// (after subqueries have been expanded).
+					if err := p.txCtx.AssertNoAggregationOrWindowing(
+						render.render[colIdx], "UPDATE SET", p.SessionData().SearchPath,
+					); err != nil {
+						return nil, err
+					}
+
 					sourceSlots = append(sourceSlots, scalarSlot{
 						column:      updateCols[currentUpdateIdx],
 						sourceIndex: colIdx,
@@ -228,6 +236,14 @@ func (p *planner) Update(
 					return nil, err
 				}
 
+				// Make sure there are no aggregation/window functions in the filter
+				// (after subqueries have been expanded).
+				if err := p.txCtx.AssertNoAggregationOrWindowing(
+					expr, "UPDATE SET", p.SessionData().SearchPath,
+				); err != nil {
+					return nil, err
+				}
+
 				colIdx := render.addOrReuseRender(col, expr, false)
 
 				sourceSlots = append(sourceSlots, tupleSlot{
@@ -242,6 +258,14 @@ func (p *planner) Update(
 		} else {
 			colIdx, err := p.addOrMergeExpr(ctx, setExpr.Expr, currentUpdateIdx, updateCols, defaultExprs, render)
 			if err != nil {
+				return nil, err
+			}
+
+			// Make sure there are no aggregation/window functions in the filter
+			// (after subqueries have been expanded).
+			if err := p.txCtx.AssertNoAggregationOrWindowing(
+				render.render[colIdx], "UPDATE SET", p.SessionData().SearchPath,
+			); err != nil {
 				return nil, err
 			}
 

@@ -529,3 +529,24 @@ query IIII rowsort
 SELECT * FROM tu
 ----
 1 NULL NULL NULL
+
+#regression test for #32477
+subtest reject_special_funcs_inset
+
+statement ok
+CREATE TABLE t32477(x, y, z) AS SELECT 1, 2, 3
+
+statement error aggregate functions are not allowed in UPDATE SET
+UPDATE t32477 SET x = count(x)
+
+statement error aggregate functions are not allowed in UPDATE SET
+UPDATE t32477 SET (y,z) = (count(y), count(z))
+
+statement error window functions are not allowed in UPDATE SET
+UPDATE t32477 SET x = rank() OVER ();
+
+statement error window functions are not allowed in UPDATE SET
+UPDATE t32477 SET (y,z) = (rank() OVER (), rank() OVER ())
+
+statement error value type setof tuple{int} doesn't match type INT of column "x"
+UPDATE t32477 SET x = generate_series(1, 2)
