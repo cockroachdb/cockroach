@@ -43,7 +43,7 @@ var _ ColBatch = &memBatch{}
 
 // ColBatchSize is the maximum number of tuples that fit in a column batch.
 // TODO(jordan): tune
-const ColBatchSize = 1024
+const ColBatchSize = uint16(1024)
 
 // NewMemBatch allocates a new in-memory ColBatch.
 // TODO(jordan): pool these allocations.
@@ -61,7 +61,7 @@ func NewMemBatch(types []types.T) ColBatch {
 
 // NewMemBatchWithSize allocates a new in-memory ColBatch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(types []types.T, size int) ColBatch {
+func NewMemBatchWithSize(types []types.T, size uint16) ColBatch {
 	b := &memBatch{}
 	b.b = make([]ColVec, len(types))
 

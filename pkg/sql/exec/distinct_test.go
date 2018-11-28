@@ -73,7 +73,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
 	lastB := int64(0)
-	for i := 0; i < ColBatchSize; i++ {
+	for i := uint16(0); i < ColBatchSize; i++ {
 		// 1/4 chance of changing each distinct col.
 		if rng.Float64() > 0.75 {
 			lastA++

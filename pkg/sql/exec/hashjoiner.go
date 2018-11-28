@@ -513,7 +513,7 @@ func (builder *hashJoinBuilder) exec() {
 	nKeyCols := len(builder.eqCols)
 	batchStart := uint64(0)
 	for batchStart < builder.ht.size {
-		batchEnd := batchStart + ColBatchSize
+		batchEnd := batchStart + uint64(ColBatchSize)
 		if batchEnd > builder.ht.size {
 			batchEnd = builder.ht.size
 		}

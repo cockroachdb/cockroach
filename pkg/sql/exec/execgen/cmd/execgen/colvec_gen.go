@@ -64,7 +64,7 @@ func (m *memColumn) AppendWithSel(
 	}
 }
 
-func (m *memColumn) Copy(src ColVec, srcStartIdx, srcEndIdx int, typ types.T) {
+func (m *memColumn) Copy(src ColVec, srcStartIdx uint16, srcEndIdx uint16, typ types.T) {
 	switch typ {
 	{{range .}}
 	case types.{{.ExecType}}:

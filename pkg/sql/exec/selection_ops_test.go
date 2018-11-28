@@ -99,7 +99,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 
 	batch := NewMemBatch([]types.T{types.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := int64(0); i < ColBatchSize; i++ {
+	for i := uint16(0); i < ColBatchSize; i++ {
 		col[i] = rng.Int63()
 	}
 	batch.SetLength(ColBatchSize)
@@ -125,7 +125,7 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	batch := NewMemBatch([]types.T{types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < ColBatchSize; i++ {
+	for i := uint16(0); i < ColBatchSize; i++ {
 		col1[i] = rng.Int63()
 		col2[i] = rng.Int63()
 	}

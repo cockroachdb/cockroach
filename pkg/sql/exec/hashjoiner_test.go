@@ -535,7 +535,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < ColBatchSize; i++ {
+		for i := uint16(0); i < ColBatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
@@ -545,10 +545,10 @@ func BenchmarkHashJoiner(b *testing.B) {
 	for _, buildDistinct := range []bool{true, false} {
 		b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
 			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*int(ColBatchSize)), func(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
 					// batch) * nCols (number of columns / row) * 2 (number of sources).
-					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+					b.SetBytes(int64(8 * nBatches * int(ColBatchSize) * nCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						leftSource := newFiniteBatchSource(batch, nBatches)

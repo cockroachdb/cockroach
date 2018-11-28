@@ -92,7 +92,7 @@ type orderedAggregator struct {
 		// writing to on the next iteration of Next().
 		resumeIdx int
 		// outputSize is ColBatchSize by default.
-		outputSize int
+		outputSize uint16
 	}
 
 	// groupCol is the slice that aggregateFuncs use to determine whether a value
@@ -189,7 +189,7 @@ func NewOrderedAggregator(
 	return a, nil
 }
 
-func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
+func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize uint16) {
 	a.input.Init()
 
 	// Output types are the input types for now.
@@ -216,24 +216,24 @@ func (a *orderedAggregator) Next() ColBatch {
 		a.scratch.SetLength(0)
 		return a.scratch
 	}
-	if a.scratch.resumeIdx >= a.scratch.outputSize {
+	if a.scratch.resumeIdx >= int(a.scratch.outputSize) {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
 		for i := 0; i < len(a.aggTyps); i++ {
 			// According to the aggregate function interface contract, the value at
 			// the current index must also be copied.
-			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i), a.scratch.outputSize, a.scratch.resumeIdx+1, a.aggTyps[i][0])
-			a.scratch.resumeIdx = a.scratch.resumeIdx - a.scratch.outputSize
-			if a.scratch.resumeIdx >= a.scratch.outputSize {
+			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i), a.scratch.outputSize, uint16(a.scratch.resumeIdx+1), a.aggTyps[i][0])
+			a.scratch.resumeIdx = a.scratch.resumeIdx - int(a.scratch.outputSize)
+			if a.scratch.resumeIdx >= int(a.scratch.outputSize) {
 				// We still have overflow output values.
 				a.scratch.SetLength(uint16(a.scratch.outputSize))
 				return a.scratch
 			}
-			a.aggregateFuncs[i].SetOutputIndex(a.scratch.resumeIdx)
+			a.aggregateFuncs[i].SetOutputIndex(int(a.scratch.resumeIdx))
 		}
 	}
 
-	for a.scratch.resumeIdx < a.scratch.outputSize {
+	for a.scratch.resumeIdx < int(a.scratch.outputSize) {
 		batch := a.input.Next()
 		for i, fn := range a.aggregateFuncs {
 			fn.Compute(batch, a.aggCols[i])
@@ -249,8 +249,8 @@ func (a *orderedAggregator) Next() ColBatch {
 		copy(a.groupCol, zeroBoolVec)
 	}
 
-	if a.scratch.resumeIdx > a.scratch.outputSize {
-		a.scratch.SetLength(uint16(a.scratch.outputSize))
+	if a.scratch.resumeIdx > int(a.scratch.outputSize) {
+		a.scratch.SetLength(a.scratch.outputSize)
 	} else {
 		a.scratch.SetLength(uint16(a.scratch.resumeIdx))
 	}
@@ -431,12 +431,12 @@ type aggregatorSpec struct {
 type hashedAggregatorBatchOp struct {
 	ht *hashTable
 
-	batchStart uint64
-
 	// sel is an ordered list of indices to select representing the input rows.
 	// This selection vector is much bigger than ColBatchSize and should be
 	// batched with the hashedAggregatorBatchOp operator.
 	sel []uint64
+
+	batchStart uint64
 
 	batch ColBatch
 }

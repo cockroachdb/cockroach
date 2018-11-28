@@ -66,7 +66,7 @@ type ColVec interface {
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
-	Copy(src ColVec, srcStartIdx, srcEndIdx int, typ types.T)
+	Copy(src ColVec, srcStartIdx, srcEndIdx uint16, typ types.T)
 
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
@@ -104,7 +104,7 @@ type memColumn struct {
 }
 
 // newMemColumn returns a new memColumn, initialized with a length.
-func newMemColumn(t types.T, n int) *memColumn {
+func newMemColumn(t types.T, n uint16) *memColumn {
 	switch t {
 	case types.Bool:
 		return &memColumn{col: make([]bool, n)}
