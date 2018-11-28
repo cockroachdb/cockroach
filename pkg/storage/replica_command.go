@@ -219,7 +219,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				// This follower is in good working order.
 				continue
 			}
-			s += fmt.Sprintf("; r%d/%d is", rangeID, replicaID)
+			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
 			switch pr.State {
 			case raft.ProgressStateSnapshot:
 				// If the Raft snapshot queue is backed up, replicas can spend
