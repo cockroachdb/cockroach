@@ -1621,7 +1621,9 @@ func TestRenderHTML(t *testing.T) {
 		name := fmt.Sprintf("escape=%v/rowStats=%v", tc.reporter.escape, tc.reporter.rowStats)
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			err := render(&tc.reporter, &buf, cols, newRowSliceIter(rows, align), nil /* noRowsHook */)
+			err := render(&tc.reporter, &buf,
+				cols, newRowSliceIter(rows, align),
+				nil /* completedHook */, nil /* noRowsHook */)
 			if err != nil {
 				t.Fatal(err)
 			}
