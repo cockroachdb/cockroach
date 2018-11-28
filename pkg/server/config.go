@@ -58,8 +58,9 @@ const (
 	defaultScanMaxIdleTime   = 1 * time.Second
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
-	DefaultMetricsSampleInterval = 10 * time.Second
-	defaultStorePath             = "cockroach-data"
+	DefaultMetricsSampleInterval   = 10 * time.Second
+	DefaultHistogramWindowInterval = 6 * DefaultMetricsSampleInterval
+	defaultStorePath               = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -270,7 +271,7 @@ type Config struct {
 // metrics. For more information on the issues underlying our histogram system
 // and the proposed fixes, please see issue #7896.
 func (cfg Config) HistogramWindowInterval() time.Duration {
-	hwi := DefaultMetricsSampleInterval * 6
+	hwi := DefaultHistogramWindowInterval
 
 	// Rudimentary overflow detection; this can result if
 	// DefaultMetricsSampleInterval is set to an extremely large number, likely

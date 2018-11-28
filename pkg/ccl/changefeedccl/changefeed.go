@@ -62,6 +62,9 @@ type emitEntry struct {
 	// span that no previously unseen entries with a lower or equal updated
 	// timestamp will be emitted.
 	resolved *jobspb.ResolvedSpan
+
+	// bufferGetTimestamp is the time this entry came out of the buffer.
+	bufferGetTimestamp time.Time
 }
 
 // kvsToRows gets changed kvs from a closure and converts them into sql rows. It
@@ -77,6 +80,7 @@ func kvsToRows(
 	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(
 		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+		bufferGetTimestamp time.Time,
 	) ([]emitEntry, error) {
 		// Reuse kvs to save allocations.
 		kvs.KVs = kvs.KVs[:0]
@@ -105,6 +109,7 @@ func kvsToRows(
 
 		for {
 			var r emitEntry
+			r.bufferGetTimestamp = bufferGetTimestamp
 			r.row.datums, r.row.tableDesc, _, err = rf.NextRow(ctx)
 			if err != nil {
 				return nil, err
@@ -141,13 +146,17 @@ func kvsToRows(
 				if input.schemaTimestamp != (hlc.Timestamp{}) {
 					schemaTimestamp = input.schemaTimestamp
 				}
-				output, err = appendEmitEntryForKV(ctx, output, input.kv, schemaTimestamp)
+				output, err = appendEmitEntryForKV(
+					ctx, output, input.kv, schemaTimestamp, input.bufferGetTimestamp)
 				if err != nil {
 					return nil, err
 				}
 			}
 			if input.resolved != nil {
-				output = append(output, emitEntry{resolved: input.resolved})
+				output = append(output, emitEntry{
+					resolved:           input.resolved,
+					bufferGetTimestamp: input.bufferGetTimestamp,
+				})
 			}
 			if output != nil {
 				return output, nil
@@ -167,6 +176,7 @@ func emitEntries(
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
 	knobs TestingKnobs,
+	metrics *Metrics,
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row emitRow) error {
@@ -211,6 +221,17 @@ func emitEntries(
 			return nil, err
 		}
 		for _, input := range inputs {
+			if input.bufferGetTimestamp == (time.Time{}) {
+				// We could gracefully handle this instead of panic'ing, but
+				// we'd really like to be able to reason about this data, so
+				// instead we're defensive. If this is ever seen in prod without
+				// breaking a unit test, then we have a pretty severe test
+				// coverage issue.
+				panic(`unreachable: bufferGetTimestamp is set by all codepaths`)
+			}
+			processingNanos := timeutil.Since(input.bufferGetTimestamp).Nanoseconds()
+			metrics.ProcessingNanos.Inc(processingNanos)
+
 			if input.row.datums != nil {
 				if err := emitRowFn(ctx, input.row); err != nil {
 					return nil, err
