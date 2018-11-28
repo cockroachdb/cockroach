@@ -326,3 +326,6 @@ func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error 
 		}
 	}
 }
+
+// TODO(peter): silence unused warning.
+var _ = verifyMetrics
