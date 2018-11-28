@@ -18,6 +18,7 @@ env=(
   "GOFLAGS=${GOFLAGS:-}"
   "TAGS=${TAGS:-}"
   "STRESSFLAGS=${STRESSFLAGS:-}"
+  "TZ=America/New_York"
 )
 
 build/builder.sh env "${env[@]}" bash <<'EOF'
@@ -44,7 +45,8 @@ go install ./pkg/cmd/github-post
 # We've set pipefail, so the exit status is going to come from stress if there
 # are test failures.
 # Use an `if` so that the `-e` option doesn't stop the script on error.
-if ! make stress PKG="$PKG" TESTTIMEOUT=40m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS="-maxruns 100 -maxfails 1 -stderr $STRESSFLAGS" 2>&1 \
+if ! stdbuf -oL -eL \
+  make stress PKG="$PKG" TESTTIMEOUT=40m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS="-maxruns 100 -maxfails 1 -stderr $STRESSFLAGS" 2>&1 \
   | tee artifacts/stress.log; then
   exit_status=${PIPESTATUS[0]}
   go tool test2json -t < artifacts/stress.log | github-post

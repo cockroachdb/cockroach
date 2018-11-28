@@ -119,6 +119,7 @@ To repro, try:
 # controls concurrency.
 `+regexp.QuoteMeta(`./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
 cd ~/go/src/github.com/cockroachdb/cockroach && \
+stdbuf -oL -eL \
 make stress TESTS=%s PKG=%s TESTTIMEOUT=5m STRESSFLAGS='-stderr=false -maxtime 20m -timeout 10m'`)+`
 `+"```"+`
 
