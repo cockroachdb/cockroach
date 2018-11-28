@@ -46,7 +46,7 @@ type optCatalog struct {
 
 var _ opt.Catalog = &optCatalog{}
 
-// init allows the optCatalog wrapper to be inlined.
+// init allows the caller to pre-allocate optCatalog.
 func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
@@ -88,6 +88,22 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return oc.newDataSource(desc, &name)
 }
 
+// CheckPrivilege is part of the opt.Catalog interface.
+func (oc *optCatalog) CheckPrivilege(
+	ctx context.Context, ds opt.DataSource, priv privilege.Kind,
+) error {
+	switch t := ds.(type) {
+	case *optTable:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	case *optView:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	case *optSequence:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	default:
+		panic("invalid DataSource")
+	}
+}
+
 // newDataSource returns a data source wrapper for the given table descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) newDataSource(
@@ -106,11 +122,21 @@ func (oc *optCatalog) newDataSource(
 	var ds opt.DataSource
 	switch {
 	case desc.IsTable():
-		ds = newOptTable(oc, desc, name)
+		stats, err := oc.statsCache.GetTableStats(context.TODO(), desc.ID)
+		if err != nil {
+			// Ignore any error. We still want to be able to run queries even if we lose
+			// access to the statistics table.
+			// TODO(radu): at least log the error.
+			stats = nil
+		}
+		ds = newOptTable(desc, name, stats)
+
 	case desc.IsView():
-		ds = newOptView(oc, desc, name)
+		ds = newOptView(desc, name)
+
 	case desc.IsSequence():
-		ds = newOptSequence(oc, desc, name)
+		ds = newOptSequence(desc, name)
+
 	default:
 		panic(fmt.Sprintf("unexpected table descriptor: %+v", desc))
 	}
@@ -122,7 +148,6 @@ func (oc *optCatalog) newDataSource(
 // optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
 // opt.DataSource and opt.View interfaces.
 type optView struct {
-	cat  *optCatalog
 	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of
@@ -132,10 +157,8 @@ type optView struct {
 
 var _ opt.View = &optView{}
 
-func newOptView(
-	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
-) *optView {
-	ov := &optView{cat: cat, desc: desc, name: *name}
+func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optView {
+	ov := &optView{desc: desc, name: *name}
 
 	// The opt.View interface requires that view names be fully qualified.
 	ov.name.ExplicitSchema = true
@@ -152,11 +175,6 @@ func (ov *optView) Fingerprint() opt.Fingerprint {
 // Name is part of the opt.View interface.
 func (ov *optView) Name() *tree.TableName {
 	return &ov.name
-}
-
-// CheckPrivilege is part of the opt.DataSource interface.
-func (ov *optView) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return ov.cat.resolver.CheckPrivilege(ctx, ov.desc, priv)
 }
 
 // Query is part of the opt.View interface.
@@ -179,7 +197,6 @@ func (ov *optView) ColumnName(i int) tree.Name {
 //
 // TODO(andyk): This should implement opt.Sequence once we have it.
 type optSequence struct {
-	cat  *optCatalog
 	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
@@ -189,10 +206,8 @@ type optSequence struct {
 
 var _ opt.DataSource = &optSequence{}
 
-func newOptSequence(
-	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
-) *optSequence {
-	ot := &optSequence{cat: cat, desc: desc, name: *name}
+func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optSequence {
+	ot := &optSequence{desc: desc, name: *name}
 
 	// The opt.Sequence interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
@@ -211,15 +226,9 @@ func (os *optSequence) Name() *tree.TableName {
 	return &os.name
 }
 
-// CheckPrivilege is part of the opt.DataSource interface.
-func (os *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return os.cat.resolver.CheckPrivilege(ctx, os.desc, priv)
-}
-
 // optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches index
 // wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
-	cat  *optCatalog
 	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
@@ -245,9 +254,20 @@ type optTable struct {
 var _ opt.Table = &optTable{}
 
 func newOptTable(
-	cat *optCatalog, desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
+	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName, stats []*stats.TableStatistic,
 ) *optTable {
-	ot := &optTable{cat: cat, desc: desc, name: *name}
+	ot := &optTable{desc: desc, name: *name}
+	if stats != nil {
+		ot.stats = make([]optTableStat, len(stats))
+		n := 0
+		for i := range stats {
+			// We skip any stats that have columns that don't exist in the table anymore.
+			if ot.stats[n].init(ot, stats[i]) {
+				n++
+			}
+		}
+		ot.stats = ot.stats[:n]
+	}
 
 	// The opt.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
@@ -266,11 +286,6 @@ func (ot *optTable) Fingerprint() opt.Fingerprint {
 // Name is part of the opt.DataSource interface.
 func (ot *optTable) Name() *tree.TableName {
 	return &ot.name
-}
-
-// CheckPrivilege is part of the opt.DataSource interface.
-func (ot *optTable) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
 }
 
 // InternalID is part of the opt.Table interface.
@@ -326,28 +341,7 @@ func (ot *optTable) Index(i int) opt.Index {
 
 // StatisticCount is part of the opt.Table interface.
 func (ot *optTable) StatisticCount() int {
-	if ot.stats != nil {
-		return len(ot.stats)
-	}
-	stats, err := ot.cat.statsCache.GetTableStats(context.TODO(), ot.desc.ID)
-	if err != nil {
-		// Ignore any error. We still want to be able to run queries even if we lose
-		// access to the statistics table.
-		// TODO(radu): at least log the error.
-		ot.stats = make([]optTableStat, 0)
-		return 0
-	}
-	ot.stats = make([]optTableStat, len(stats))
-	n := 0
-	for i := range stats {
-		// We skip any stats that have columns that don't exist in
-		// the table anymore.
-		if ot.stats[n].init(ot, stats[i]) {
-			n++
-		}
-	}
-	ot.stats = ot.stats[:n]
-	return n
+	return len(ot.stats)
 }
 
 // Statistic is part of the opt.Table interface.
@@ -413,7 +407,8 @@ func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 	return oi
 }
 
-// init allows the optIndex wrapper to be inlined.
+// init can be used instead of newOptIndex when we have a pre-allocated instance
+// (e.g. as part of a bigger struct).
 func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	oi.tab = tab
 	oi.desc = desc

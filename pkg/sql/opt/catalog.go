@@ -58,6 +58,10 @@ type Catalog interface {
 	// locates a data source by its unique identifier in the database. This id
 	// is stable as long as the data source exists.
 	ResolveDataSourceByID(ctx context.Context, dataSourceID int64) (DataSource, error)
+
+	// CheckPrivilege verifies that the current user has the given privilege on
+	// the given data source. If not, then CheckPrivilege returns an error.
+	CheckPrivilege(ctx context.Context, ds DataSource, priv privilege.Kind) error
 }
 
 // DataSource is an interface to a database object that provides rows, like a
@@ -72,10 +76,6 @@ type DataSource interface {
 	// name of the data source. The ExplicitCatalog and ExplicitSchema fields
 	// will always be true, since all parts of the name are always specified.
 	Name() *tree.TableName
-
-	// CheckPrivilege verifies that the current user has the given privilege on
-	// this data source. If not, then CheckPrivilege returns an error.
-	CheckPrivilege(ctx context.Context, priv privilege.Kind) error
 }
 
 // Table is an interface to a database table, exposing only the information
