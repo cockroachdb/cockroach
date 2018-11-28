@@ -162,22 +162,33 @@ func NewOrderedAggregator(
 		aggTyps:  aggTyps,
 		groupCol: groupCol,
 	}
-	a.aggregateFuncs = make([]aggregateFunc, len(aggCols))
+
+	a.aggregateFuncs, err = makeAggregateFuncs(aggTyps, aggFns)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+func makeAggregateFuncs(aggTyps [][]types.T, aggFns []int) ([]aggregateFunc, error) {
+	funcs := make([]aggregateFunc, len(aggFns))
 	for i := range aggFns {
-		if len(aggCols[i]) != 1 {
+		if len(aggTyps[i]) != 1 {
 			return nil, errors.Errorf(
 				"malformed input columns at index %d, expected 1 col got %d",
-				i, len(aggCols[i]),
+				i, len(aggTyps[i]),
 			)
 		}
 		var err error
 		switch aggFns[i] {
 		// AVG.
 		case 1:
-			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
-		// SUM, SUM_INT.
+			funcs[i], err = newAvgAgg(aggTyps[i][0])
+			// SUM, SUM_INT.
 		case 10, 11:
-			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(aggTyps[i][0])
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
 		}
@@ -186,7 +197,7 @@ func NewOrderedAggregator(
 		}
 	}
 
-	return a, nil
+	return funcs, nil
 }
 
 func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize uint16) {
@@ -286,6 +297,9 @@ type hashedAggregator struct {
 	orderedAgg Operator
 }
 
+// NewHashedAggregator creates a hashed aggregator on the given grouping
+// columns. The input specifications to this function are the same as that of
+// the NewOrderedAggregator function.
 func NewHashedAggregator(
 	input Operator, aggFns []int, groupCols []uint32, aggCols [][]uint32, colTypes []types.T,
 ) (Operator, error) {
@@ -303,7 +317,7 @@ func NewHashedAggregator(
 		}
 	}
 
-	// Only keep relevant output columns (all the groupCols and aggCols).
+	// Only keep relevant output columns.
 	nCols := uint32(len(colTypes))
 	keepCol := make([]bool, nCols)
 	compressed := make([]uint32, nCols)
@@ -313,12 +327,7 @@ func NewHashedAggregator(
 		}
 	}
 
-	for _, col := range groupCols {
-		keepCol[col] = true
-	}
-
-	// Map the corresponding aggCols and groupCols to the new output column
-	// indices.
+	// Map the corresponding aggCols to the new output column indices.
 	nOutCols := uint32(0)
 	outCols := make([]uint32, 0)
 	for i := range keepCol {
@@ -337,11 +346,6 @@ func NewHashedAggregator(
 		}
 	}
 
-	mappedGroupCols := make([]uint32, len(groupCols))
-	for i := range groupCols {
-		mappedGroupCols[i] = compressed[groupCols[i]]
-	}
-
 	ht := makeHashTable(
 		hashTableBucketSize,
 		colTypes,
@@ -358,19 +362,19 @@ func NewHashedAggregator(
 
 	// op is the underlying batching operator used as input by the orderedAgg to
 	// create the batches of ColBatchSize from built hashTable.
-	op := makeHashedAggregatorBatchOp(ht)
-
-	orderedAgg, err := NewOrderedAggregator(
-		op,
-		mappedGroupCols,
-		groupTyps,
-		aggFns,
-		mappedAggCols,
-		aggTyps,
-	)
+	distinctCol, op := makeHashedAggregatorBatchOp(ht)
+	funcs, err := makeAggregateFuncs(aggTyps, aggFns)
 
 	if err != nil {
 		return nil, err
+	}
+
+	orderedAgg := &orderedAggregator{
+		input:          op,
+		aggCols:        mappedAggCols,
+		aggTyps:        aggTyps,
+		groupCol:       distinctCol,
+		aggregateFuncs: funcs,
 	}
 
 	return &hashedAggregator{
@@ -403,11 +407,6 @@ func (ag *hashedAggregator) Next() ColBatch {
 	return ag.orderedAgg.Next()
 }
 
-func (ag *hashedAggregator) Reset() {
-	ag.isBuilding = true
-	ag.ht.size = 0
-}
-
 func (ag *hashedAggregator) build() {
 	ag.builder.exec()
 	ag.isBuilding = false
@@ -435,15 +434,23 @@ type hashedAggregatorBatchOp struct {
 	// This selection vector is much bigger than ColBatchSize and should be
 	// batched with the hashedAggregatorBatchOp operator.
 	sel []uint64
+	// distinct represents whether each corresponding row is part of a new group.
+	distinct []bool
+
+	// distinctCol is the slice that aggregateFuncs use to determine whether a value
+	// is part of the current aggregation group. See aggregateFunc.Init for more
+	// information.
+	distinctCol []bool
 
 	batchStart uint64
-
-	batch ColBatch
+	batch      ColBatch
 }
 
-func makeHashedAggregatorBatchOp(ht *hashTable) Operator {
-	return &hashedAggregatorBatchOp{
-		ht: ht,
+func makeHashedAggregatorBatchOp(ht *hashTable) ([]bool, Operator) {
+	distinctCol := make([]bool, ColBatchSize)
+	return distinctCol, &hashedAggregatorBatchOp{
+		distinctCol: distinctCol,
+		ht:          ht,
 	}
 }
 
@@ -466,12 +473,17 @@ func (op *hashedAggregatorBatchOp) Next() ColBatch {
 		// we can use it as the selection vector. This way we don't have to
 		// reallocate a huge array.
 		op.sel = op.ht.next
+		// Since visited is no longer used and pre-allocated to the appropriate
+		// size, we can use it for the distinct vector.
+		op.distinct = op.ht.visited
+
 		for i := uint64(0); i < op.ht.size; i++ {
+			op.distinct[i] = false
 			for !op.ht.head[headID] || curID == 0 {
+				op.distinct[i] = true
 				headID++
 				curID = headID
 			}
-
 			op.sel[i] = curID - 1
 			curID = op.ht.same[curID]
 		}
@@ -488,8 +500,8 @@ func (op *hashedAggregatorBatchOp) Next() ColBatch {
 	}
 	nSelected = uint16(batchEnd - op.batchStart)
 
-	// TODO(changangela): redundant work is done by the orderedAggregator to
-	// determine where the distinct keys are.
+	copy(op.distinctCol, op.distinct[op.batchStart:batchEnd])
+
 	for i, colIdx := range op.ht.outCols {
 		toCol := op.batch.ColVec(i)
 		fromCol := op.ht.vals[colIdx]
