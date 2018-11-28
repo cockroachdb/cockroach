@@ -215,7 +215,7 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool
 			return false
 		}
 		if dep.priv != 0 {
-			if err = ds.CheckPrivilege(ctx, dep.priv); err != nil {
+			if err = catalog.CheckPrivilege(ctx, ds, dep.priv); err != nil {
 				return false
 			}
 		}

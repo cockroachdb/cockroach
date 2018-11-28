@@ -417,7 +417,7 @@ func (b *Builder) checkPrivilege(ds opt.DataSource) {
 	var priv privilege.Kind
 	if !b.skipSelectPrivilegeChecks {
 		priv = privilege.SELECT
-		err := ds.CheckPrivilege(b.ctx, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
 			panic(builderError{err})
 		}
