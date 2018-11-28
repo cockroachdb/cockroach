@@ -51,6 +51,7 @@ type poller struct {
 	buf       *buffer
 	tableHist *tableHistory
 	leaseMgr  *sql.LeaseManager
+	metrics   *Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -81,6 +82,7 @@ func makePoller(
 	highWater hlc.Timestamp,
 	buf *buffer,
 	leaseMgr *sql.LeaseManager,
+	metrics *Metrics,
 ) *poller {
 	p := &poller{
 		settings: settings,
@@ -92,6 +94,7 @@ func makePoller(
 		details:  details,
 		buf:      buf,
 		leaseMgr: leaseMgr,
+		metrics:  metrics,
 	}
 	p.mu.previousTableVersion = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	// If no highWater is specified, set the highwater to the statement time
@@ -136,10 +139,12 @@ func (p *poller) Run(ctx context.Context) error {
 
 		nextHighWater := p.clock.Now()
 
+		tableMetadataStart := timeutil.Now()
 		// Ingest table descriptors up to the next prospective highwater.
 		if err := p.updateTableHistory(ctx, nextHighWater); err != nil {
 			return err
 		}
+		p.metrics.TableMetadataNanos.Inc(timeutil.Since(tableMetadataStart).Nanoseconds())
 
 		// Determine if we are at a scanBoundary, and trigger a full scan if needed.
 		isFullScan := false
@@ -395,7 +400,7 @@ func (p *poller) exportSpansParallel(
 	for _, span := range spans {
 		span := span
 
-		// Wait for our sempahore.
+		// Wait for our semaphore.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -410,6 +415,7 @@ func (p *poller) exportSpansParallel(
 
 			stopwatchStart := timeutil.Now()
 			exported, pErr := exportSpan(ctx, span, sender, start, end, isFullScan)
+			exportDuration := timeutil.Since(stopwatchStart)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
 				log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
@@ -420,6 +426,7 @@ func (p *poller) exportSpansParallel(
 					pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey,
 				)
 			}
+			p.metrics.PollRequestNanosHist.RecordValue(exportDuration.Nanoseconds())
 
 			// When outputting a full scan, we want to use the schema at the scan
 			// timestamp, not the schema at the value timestamp.
