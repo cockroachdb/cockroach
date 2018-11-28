@@ -225,7 +225,22 @@ type truncateDecision struct {
 func (td *truncateDecision) raftSnapshotsForIndex(index uint64) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
-		if p.Match < index {
+		if p.State != raft.ProgressStateReplicate {
+			// If the follower isn't replicating, we can't trust its Match in
+			// the first place. But note that this shouldn't matter in practice
+			// as we already take care to not cut off these followers when
+			// computing the truncate decision. See:
+			_ = truncatableIndexChosenViaProbingFollower // guru ref
+			continue
+		}
+
+		// When a log truncation happens at the "current log index" (i.e. the
+		// most recently committed index), it is often still in flight to the
+		// followers not required for quorum, and it is likely that they won't
+		// need a truncation to catch up. A follower in that state will have a
+		// Match equaling committed-1, but a Next of committed+1 (indicating that
+		// an append at 'committed' is already ongoing).
+		if p.Match < index && p.Next <= index {
 			n++
 		}
 	}
