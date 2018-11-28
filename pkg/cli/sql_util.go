@@ -744,11 +744,15 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		if err != nil {
 			return err
 		}
+
+		var queryCompleteTime time.Time
+		completedHook := func() { queryCompleteTime = timeutil.Now() }
+
 		if err := func() error {
 			if cleanup != nil {
 				defer cleanup()
 			}
-			return render(reporter, w, cols, newRowIter(rows, true), noRowsHook)
+			return render(reporter, w, cols, newRowIter(rows, true), completedHook, noRowsHook)
 		}(); err != nil {
 			return err
 		}
@@ -759,9 +763,18 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 			// all the work upfront so most of the time is accounted for by
 			// the 1st result; this is subject to change once CockroachDB
 			// evolves to stream results as statements are executed.
-			newNow := timeutil.Now()
-			fmt.Fprintf(w, "\nTime: %s\n\n", newNow.Sub(startTime))
-			startTime = newNow
+			fmt.Fprintf(w, "\nTime: %s\n", queryCompleteTime.Sub(startTime))
+			// Make users better understand any discrepancy they observe.
+			renderDelay := timeutil.Now().Sub(queryCompleteTime)
+			if renderDelay >= 1*time.Second {
+				fmt.Fprintf(w,
+					"Note: an additional delay of %s was spent formatting the results.\n"+
+						"You can use \\set display_format to change the formatting.\n",
+					renderDelay)
+			}
+			fmt.Fprintln(w)
+			// Reset the clock. We ignore the rendering time.
+			startTime = timeutil.Now()
 		}
 
 		if more, err := rows.NextResultSet(); err != nil {
