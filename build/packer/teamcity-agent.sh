@@ -39,6 +39,7 @@ debconf-set-selections <<< "oracle-java8-installer shared/accepted-oracle-licens
 # Install the necessary dependencies. Keep this list small!
 apt-get install --yes \
   docker-ce \
+  docker-compose \
   git \
   golang-${GOVERS} \
   oracle-java8-installer \
