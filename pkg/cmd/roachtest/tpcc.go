@@ -498,8 +498,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		t.Status("installing haproxy")
 		c.Install(ctx, loadNodes, "haproxy")
 		c.Put(ctx, cockroach, "./cockroach", loadNodes)
-		c.Run(ctx, loadNodes, fmt.Sprintf("./cockroach gen haproxy --insecure --host %s",
-			c.InternalIP(ctx, c.Node(1))[0]))
+		c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 		c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 	}
 
