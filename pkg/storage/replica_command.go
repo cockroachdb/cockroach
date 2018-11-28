@@ -276,6 +276,7 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 		if raftStatus == nil {
 			// Don't delay followers artificially. This case is hit rarely
 			// enough to not matter.
+			log.Infof(ctx, "no raft status")
 			break
 		}
 
@@ -288,6 +289,7 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 			}
 
 			if !pr.RecentActive {
+				log.Infof(ctx, "r%d/%d inactive", r.RangeID, replicaID)
 				continue
 			}
 
@@ -305,7 +307,8 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 		// up.
 		r.raftMu.Lock()
 		r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
-			_ = rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
+			err := rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
+			log.Infof(ctx, "proposed empty command: %v", err)
 			return false, nil
 		})
 		r.raftMu.Unlock()
