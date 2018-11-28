@@ -16,7 +16,6 @@ package optbuilder
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/pkg/errors"
 
@@ -294,52 +293,53 @@ func (ib *insertBuilder) checkPrimaryKey() {
 // This INSERT statement would trigger a static error, because only cust_id is
 // specified in the INSERT statement. Either the state column must be specified
 // as well, or else neither column can be specified.
-//
-// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
 func (ib *insertBuilder) checkForeignKeys() {
-	for i, n := 0, ib.tab.IndexCount(); i < n; i++ {
-		idx := ib.tab.Index(i)
-		fkey, ok := idx.ForeignKey()
-		if !ok {
-			continue
-		}
+	// Since this is MATCH SIMPLE now, performing this check is not needed.
+	// TODO(bram): Bring this check back once MATCH FULL is implemented
+	// correctly. See #20305.
+	// for i, n := 0, ib.tab.IndexCount(); i < n; i++ {
+	// 	idx := ib.tab.Index(i)
+	// 	fkey, ok := idx.ForeignKey()
+	// 	if !ok {
+	// 		continue
+	// 	}
 
-		var missingCols []string
-		allMissing := true
-		for j := 0; j < int(fkey.PrefixLen); j++ {
-			indexCol := idx.Column(j)
-			if indexCol.Column.HasDefault() || indexCol.Column.IsComputed() {
-				// The column has a default value.
-				allMissing = false
-				continue
-			}
+	// 	var missingCols []string
+	// 	allMissing := true
+	// 	for j := 0; j < int(fkey.PrefixLen); j++ {
+	// 		indexCol := idx.Column(j)
+	// 		if indexCol.Column.HasDefault() || indexCol.Column.IsComputed() {
+	// 			// The column has a default value.
+	// 			allMissing = false
+	// 			continue
+	// 		}
 
-			colID := ib.tabID.ColumnID(indexCol.Ordinal)
-			if ib.targetColSet.Contains(int(colID)) {
-				// The column is explicitly specified in the target name list.
-				allMissing = false
-				continue
-			}
+	// 		colID := ib.tabID.ColumnID(indexCol.Ordinal)
+	// 		if ib.targetColSet.Contains(int(colID)) {
+	// 			// The column is explicitly specified in the target name list.
+	// 			allMissing = false
+	// 			continue
+	// 		}
 
-			missingCols = append(missingCols, string(indexCol.Column.ColName()))
-		}
-		if allMissing {
-			continue
-		}
+	// 		missingCols = append(missingCols, string(indexCol.Column.ColName()))
+	// 	}
+	// 	if allMissing {
+	// 		continue
+	// 	}
 
-		switch len(missingCols) {
-		case 0:
-			// Do nothing.
+	// 	switch len(missingCols) {
+	// 	case 0:
+	// 		// Do nothing.
 
-		case 1:
-			panic(builderError{errors.Errorf(
-				"missing value for column %q in multi-part foreign key", missingCols[0])})
-		default:
-			sort.Strings(missingCols)
-			panic(builderError{errors.Errorf(
-				"missing values for columns %q in multi-part foreign key", missingCols)})
-		}
-	}
+	// 	case 1:
+	// 		panic(builderError{errors.Errorf(
+	// 			"missing value for column %q in multi-part foreign key", missingCols[0])})
+	// 	default:
+	// 		sort.Strings(missingCols)
+	// 		panic(builderError{errors.Errorf(
+	// 			"missing values for columns %q in multi-part foreign key", missingCols)})
+	// 	}
+	// }
 }
 
 // addTargetTableCols adds up to maxCols columns to the list of columns that

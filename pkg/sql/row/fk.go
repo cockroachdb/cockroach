@@ -17,7 +17,6 @@ package row
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/pkg/errors"
 
@@ -461,20 +460,18 @@ func checkIdx(
 	idx sqlbase.IndexID,
 	row tree.Datums,
 ) error {
+outer:
 	for i, fk := range fks[idx] {
-		nulls := true
+		// This implements the check for MATCH SIMPLE.
+		// See https://github.com/cockroachdb/cockroach/issues/20305.
 		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 			found, ok := fk.ids[colID]
 			if !ok {
 				panic(fmt.Sprintf("fk ids (%v) missing column id %d", fk.ids, colID))
 			}
-			if row[found] != tree.DNull {
-				nulls = false
-				break
+			if row[found] == tree.DNull {
+				continue outer
 			}
-		}
-		if nulls {
-			continue
 		}
 		if err := checker.addCheck(row, &fks[idx][i]); err != nil {
 			return err
@@ -672,32 +669,17 @@ func makeBaseFKHelper(
 		return b, err
 	}
 
-	// Check for all NULL values, since these can skip FK checking in MATCH FULL
-	// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
+	// This implements the check for MATCH SIMPLE.
+	// See https://github.com/cockroachdb/cockroach/issues/20305.
 	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
-	nulls := true
-	var missingColumns []string
 	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
 		if found, ok := colMap[writeColID]; ok {
 			b.ids[searchIdx.ColumnIDs[i]] = found
-			nulls = false
 		} else {
-			missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
+			return b, errSkipUnusedFK
 		}
 	}
-	if nulls {
-		return b, errSkipUnusedFK
-	}
-
-	switch len(missingColumns) {
-	case 0:
-		return b, nil
-	case 1:
-		return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
-	default:
-		sort.Strings(missingColumns)
-		return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
-	}
+	return b, nil
 }
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
