@@ -1635,7 +1635,21 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// NB: The in-mem RocksDB instance doesn't support syncing the WAL which is
+	// necessary for this test.
+	e, err := NewRocksDB(
+		RocksDBConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+		},
+		RocksDBCache{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer e.Close()
 
 	// Commit a batch with one key.
