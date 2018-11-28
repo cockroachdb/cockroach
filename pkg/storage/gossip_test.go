@@ -174,10 +174,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Take down a node other than the first node and replace it with a new one.
-	// Replacing the first node would be better from an adversarial testing
-	// perspective because it typically has the most leases on it, but that also
-	// causes the test to take significantly longer as a result.
+	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
 	newServerArgs := serverArgs
 	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
