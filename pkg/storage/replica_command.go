@@ -290,6 +290,13 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 
 			if !pr.RecentActive {
 				log.Infof(ctx, "r%d/%d inactive", r.RangeID, replicaID)
+				// By setting done = false, we make sure we're not exiting early.
+				// This is important because we sometimes need that Raft proposal
+				// below to make the followers active as there's no chatter on an
+				// idle range. (Note that there's a theoretical race in which the
+				// follower becomes inactive again during the sleep, but the
+				// inactivity interval is much larger than a tick).
+				done = false
 				continue
 			}
 
