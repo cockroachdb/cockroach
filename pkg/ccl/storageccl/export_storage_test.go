@@ -444,6 +444,27 @@ func TestPutS3Endpoint(t *testing.T) {
 	testExportStore(t, u.String(), false)
 }
 
+func TestPutBOS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	endpoint := os.Getenv("BOS_ENDPOINT")
+	path := os.Getenv("BOS_PATH")
+	bucket := os.Getenv("BOS_BUCKET")
+	id := os.Getenv("BOS_ACCESS_KEY_ID")
+	key := os.Getenv("BOS_SECRET_ACCESS_KEY")
+	if endpoint == "" || path == "" || bucket == "" || id == "" || key == "" {
+		t.Skip("BOS_ENDPOINT, BOS_PATH, BOS_BUCKET, BOS_ACCESS_KEY_ID, BOS_SECRET_ACCESS_KEY env var must be set")
+	}
+
+	testExportStore(t,
+		fmt.Sprintf(
+			"bos://%s/%s?BOS_BUCKET=%s&BOS_ACCESS_KEY_ID=%s&BOS_SECRET_ACCESS_KEY=%s",
+			endpoint, path, bucket, id, key,
+		),
+		false,
+	)
+}
+
 func TestPutGoogleCloud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

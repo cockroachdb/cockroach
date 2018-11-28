@@ -36,6 +36,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2/google"
 
+	"github.com/baidubce/bce-sdk-go/bce"
+	"github.com/baidubce/bce-sdk-go/services/bos"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -118,6 +120,26 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		// contain spaces. We can convert any space characters we see to +
 		// characters to recover the original secret.
 		conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
+	case "bos":
+		conf.Provider = roachpb.ExportStorageProvider_BOS
+		conf.BOSConfig = &roachpb.ExportStorage_BOS{
+			EndPoint:  "https://" + uri.Host,
+			Bucket:    uri.Query().Get("BOS_BUCKET"),
+			Path:      uri.Path,
+			AccessKey: uri.Query().Get("BOS_ACCESS_KEY_ID"),
+			Secret:    uri.Query().Get("BOS_SECRET_ACCESS_KEY"),
+		}
+		if conf.BOSConfig.Bucket == "" {
+			return conf, errors.New("bos uri missing BOS_BUCKET parameter")
+		}
+		if conf.BOSConfig.AccessKey == "" {
+			return conf, errors.New("bos uri missing BOS_ACCESS_KEY_ID parameter")
+		}
+		if conf.BOSConfig.Secret == "" {
+			return conf, errors.New("bos uri missing BOS_SECRET_ACCESS_KEY parameter")
+		}
+		conf.BOSConfig.Path = strings.TrimSuffix(conf.BOSConfig.Path, "/")
+		return conf, nil
 	case "gs":
 		conf.Provider = roachpb.ExportStorageProvider_GoogleCloud
 		conf.GoogleCloudConfig = &roachpb.ExportStorage_GCS{
@@ -200,6 +222,9 @@ func MakeExportStorage(
 	case roachpb.ExportStorageProvider_S3:
 		telemetry.Count("external-io.s3")
 		return makeS3Storage(ctx, dest.S3Config, settings)
+	case roachpb.ExportStorageProvider_BOS:
+		telemetry.Count("external-io.bos")
+		return makeBOSStorage(ctx, dest.BOSConfig, settings)
 	case roachpb.ExportStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
@@ -638,6 +663,101 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (s *s3Storage) Close() error {
 	return nil
+}
+
+type bosStorage struct {
+	conf      *roachpb.ExportStorage_BOS
+	bosClient *bos.Client
+	settings  *cluster.Settings
+}
+
+var _ ExportStorage = &bosStorage{}
+
+func (bos *bosStorage) Conf() roachpb.ExportStorage {
+	return roachpb.ExportStorage{
+		Provider:  roachpb.ExportStorageProvider_BOS,
+		BOSConfig: bos.conf,
+	}
+}
+
+func (bos *bosStorage) WriteFile(
+	ctx context.Context, basename string, content io.ReadSeeker,
+) error {
+	_, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&bos.settings.SV))
+	defer cancel()
+	prefix := bos.conf.Path
+	if basename != "" {
+		prefix = path.Join(bos.conf.Path, basename)
+	}
+	data, err := ioutil.ReadAll(content)
+	if err != nil {
+		return errors.Wrap(err, "failed to read data")
+	}
+	body, err := bce.NewBodyFromBytes(data)
+	if err != nil {
+		return errors.Wrap(err, "failed to get bos body from data")
+	}
+
+	_, err = bos.bosClient.PutObject(bos.conf.Bucket, prefix, body, nil)
+	return err
+}
+
+func (bos *bosStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	prefix := bos.conf.Path
+	if basename != "" {
+		prefix = path.Join(bos.conf.Path, basename)
+	}
+	res, err := bos.bosClient.BasicGetObject(bos.conf.Bucket, prefix)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get bos object")
+	}
+	return res.Body, nil
+}
+
+func (bos *bosStorage) Delete(ctx context.Context, basename string) error {
+	_, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&bos.settings.SV))
+	defer cancel()
+	prefix := bos.conf.Path
+	if basename != "" {
+		prefix = path.Join(bos.conf.Path, basename)
+	}
+	return bos.bosClient.DeleteObject(bos.conf.Bucket, prefix)
+}
+
+func (*bosStorage) Close() error {
+	return nil
+}
+
+func (bos *bosStorage) Size(ctx context.Context, basename string) (int64, error) {
+	_, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&bos.settings.SV))
+	defer cancel()
+	prefix := bos.conf.Path
+	if basename != "" {
+		prefix = path.Join(bos.conf.Path, basename)
+	}
+	res, err := bos.bosClient.GetObjectMeta(bos.conf.Bucket, prefix)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get bos object meta")
+	}
+	return res.ObjectMeta.ContentLength, nil
+}
+
+func makeBOSStorage(
+	ctx context.Context, conf *roachpb.ExportStorage_BOS, settings *cluster.Settings,
+) (ExportStorage, error) {
+	if conf == nil {
+		return nil, errors.Errorf("bos upload requested but info missing")
+	}
+	bosClient, err := bos.NewClient(conf.AccessKey, conf.Secret, conf.EndPoint)
+	if err != nil {
+		return nil, errors.Wrap(err, "new bos client")
+	}
+
+	return &bosStorage{
+		conf:      conf,
+		bosClient: bosClient,
+		settings:  settings,
+	}, nil
 }
 
 type gcsStorage struct {

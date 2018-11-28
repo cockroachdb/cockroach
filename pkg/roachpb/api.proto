@@ -1031,6 +1031,7 @@ enum ExportStorageProvider {
   GoogleCloud = 4;
   Azure = 5;
   Workload = 6;
+  BOS = 7;
 }
 
 message ExportStorage {
@@ -1091,12 +1092,23 @@ message ExportStorage {
     int64 batch_begin = 6;
     int64 batch_end = 7;
   }
+  message BOS {
+    option (gogoproto.equal) = true;
+    
+    string end_point = 1;
+    string bucket = 2;
+    string path = 3;
+
+    string access_key = 4;
+    string secret= 5;
+  }
   LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   Http HttpPath = 3 [(gogoproto.nullable) = false];
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
   Workload WorkloadConfig = 7;
+  BOS BOSConfig = 8;
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
