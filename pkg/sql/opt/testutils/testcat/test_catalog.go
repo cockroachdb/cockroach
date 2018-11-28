@@ -116,6 +116,26 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", tableID)
 }
 
+// CheckPrivilege is part of the opt.Catalog interface.
+func (tc *Catalog) CheckPrivilege(
+	ctx context.Context, ds opt.DataSource, priv privilege.Kind,
+) error {
+	switch t := ds.(type) {
+	case *Table:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.TabName)
+		}
+	case *View:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.ViewName)
+		}
+	default:
+		panic("invalid DataSource")
+	}
+
+	return nil
+}
+
 // resolveDataSource checks if `toResolve` exists among the data sources in this
 // Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
 // and returns the corresponding data source. Otherwise, it returns an error.
@@ -269,14 +289,6 @@ func (tv *View) Name() *tree.TableName {
 	return &tv.ViewName
 }
 
-// CheckPrivilege is part of the opt.DataSource interface.
-func (tv *View) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	if tv.Revoked {
-		return fmt.Errorf("user does not have privilege to access %v", tv.ViewName)
-	}
-	return nil
-}
-
 // Query is part of the opt.View interface.
 func (tv *View) Query() string {
 	return tv.QueryText
@@ -324,14 +336,6 @@ func (tt *Table) Fingerprint() opt.Fingerprint {
 // Name is part of the opt.DataSource interface.
 func (tt *Table) Name() *tree.TableName {
 	return &tt.TabName
-}
-
-// CheckPrivilege is part of the opt.DataSource interface.
-func (tt *Table) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	if tt.Revoked {
-		return fmt.Errorf("user does not have privilege to access %v", tt.TabName)
-	}
-	return nil
 }
 
 // InternalID is part of the opt.Table interface.
