@@ -231,7 +231,7 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 	// delayed for that many ticks, and so we want to delay by at least as much
 	// plus a bit of padding to give a snapshot a chance to catch the follower
 	// up. If we run out of time, we'll resume the split no matter what.
-	_ = r.maybeDropMsgAppResp
+	_ = r.maybeDropMsgAppResp // guru assigment
 	maxDelaySplitToAvoidSnapshotTicks := 50 + r.store.cfg.RaftPostSplitSuppressSnapshotTicks
 
 	var extra string
@@ -275,7 +275,7 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 			}
 
 			if pr.State != raft.ProgressStateReplicate {
-				extra += fmt.Sprintf("replica r%d/%d not caught up: %+v", r.RangeID, replicaID, pr)
+				extra += fmt.Sprintf("; replica r%d/%d not caught up: %+v", r.RangeID, replicaID, &pr)
 				done = false
 			}
 		}
@@ -283,31 +283,31 @@ func (r *Replica) maybeDelaySplitToAvoidSnapshot(ctx context.Context) string {
 			succeeded = true
 			break
 		}
+		// Propose an empty command which works around a Raft bug that can
+		// leave a follower in ProgressStateProbe even though it has caught
+		// up.
+		r.raftMu.Lock()
+		r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
+			_ = rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
+			return false, nil
+		})
+		r.raftMu.Unlock()
+
 		select {
 		case <-time.After(r.store.cfg.RaftTickInterval):
-			// Propose an empty command which works around a Raft bug that can
-			// leave a follower in ProgressStateProbe even though it has caught
-			// up.
-			r.raftMu.Lock()
-			r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
-				_ = rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
-				return false, nil
-			})
-			r.raftMu.Unlock()
+
 		case <-ctx.Done():
 			return ""
 		}
 	}
 
-	if !waited {
-		return ""
+	if waited {
+		extra += fmt.Sprintf("; delayed split for %s to avoid Raft snapshot", timeutil.Since(tPreWait))
+		if !succeeded {
+			extra += " (without success)"
+		}
 	}
 
-	elapsed := timeutil.Since(tPreWait)
-	extra += fmt.Sprintf("; delayed split for %s to avoid Raft snapshot", elapsed)
-	if !succeeded {
-		extra += " (without success)"
-	}
 	return extra
 }
 
