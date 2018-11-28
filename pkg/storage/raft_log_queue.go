@@ -262,6 +262,12 @@ func (td *truncateDecision) String() string {
 	return buf.String()
 }
 
+func (td *truncateDecision) Verbose() string {
+	s := td.String()
+	s += "; Raft status " + td.Input.RaftStatus.String()
+	return s
+}
+
 func (td *truncateDecision) NumTruncatableIndexes() int {
 	if td.NewFirstIndex < td.Input.FirstIndex {
 		log.Fatalf(
@@ -415,7 +421,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 	// Can and should the raft logs be truncated?
 	if decision.ShouldTruncate() {
 		if n := decision.NumNewRaftSnapshots(); true || log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-			log.Info(ctx, decision)
+			log.Info(ctx, decision.Verbose())
 		} else {
 			log.VEvent(ctx, 1, decision.String())
 		}
