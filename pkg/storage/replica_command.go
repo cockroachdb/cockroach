@@ -214,8 +214,25 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				// https://github.com/etcd-io/etcd/pull/10279
 				continue
 			}
-			if pr.State != raft.ProgressStateReplicate {
-				s += fmt.Sprintf("; may cause Raft snapshot to r%d/%d: %v", rangeID, replicaID, &pr)
+			if pr.State == raft.ProgressStateReplicate {
+				// This follower is in good working order.
+				continue
+			}
+			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
+			switch pr.State {
+			case raft.ProgressStateSnapshot:
+				// If the Raft snapshot queue is backed up, replicas can spend
+				// minutes or worse until they are caught up.
+				s += "waiting for a Raft snapshot"
+			case raft.ProgressStateProbe:
+				// Assuming the split has already been delayed for a little bit,
+				// seeing a follower that is probing hints at some problem with
+				// Raft or Raft message delivery. (Of course it's possible that
+				// the follower *just* entered probing state).
+				s += "being probed (may or may not need a Raft snapshot)"
+			default:
+				// Future proofing.
+				s += "in unknown state " + pr.State.String()
 			}
 		}
 	}
