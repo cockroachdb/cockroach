@@ -15,6 +15,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -82,9 +84,64 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return sortPhysicalProps(n)
 	case *distinctNode:
 		return distinctPhysicalProps(n)
-	}
+	case *lookupJoinNode:
+		return n.props
 
 	// Every other node simply has no guarantees on its output rows.
+	case *CreateUserNode:
+	case *DropUserNode:
+	case *alterIndexNode:
+	case *alterSequenceNode:
+	case *alterTableNode:
+	case *alterUserSetPasswordNode:
+	case *cancelQueriesNode:
+	case *cancelSessionsNode:
+	case *controlJobsNode:
+	case *createDatabaseNode:
+	case *createIndexNode:
+	case *createSequenceNode:
+	case *createStatsNode:
+	case *createTableNode:
+	case *createViewNode:
+	case *delayedNode:
+	case *dropDatabaseNode:
+	case *dropIndexNode:
+	case *dropSequenceNode:
+	case *dropTableNode:
+	case *dropViewNode:
+	case *explainDistSQLNode:
+	case *hookFnNode:
+	case *iterativeSortStrategy:
+	case *relocateNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
+	case *rowCountNode:
+	case *rowSourceToPlanNode:
+	case *scatterNode:
+	case *scrubNode:
+	case *sequenceSelectNode:
+	case *setClusterSettingNode:
+	case *setVarNode:
+	case *setZoneConfigNode:
+	case *showFingerprintsNode:
+	case *showRangesNode:
+	case *showTraceNode:
+	case *showTraceReplicaNode:
+	case *showZoneConfigNode:
+	case *sortAllStrategy:
+	case *sortTopKStrategy:
+	case *sortValues:
+	case *splitNode:
+	case *truncateNode:
+	case *unaryNode:
+	case *valuesNode:
+	case *virtualTableNode:
+	case *zeroNode:
+	default:
+		panic(fmt.Sprintf("unhandled node type: %T", plan))
+	}
 
 	return physicalProps{}
 }

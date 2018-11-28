@@ -231,7 +231,7 @@ Thomas H Cormen
 ####################################
 
 statement ok
-CREATE TABLE small (a INT, b INT, c INT, d INT)
+CREATE TABLE small (a INT PRIMARY KEY, b INT, c INT, d INT)
 
 statement ok
 CREATE TABLE large (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
@@ -303,6 +303,21 @@ SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
 16 NULL
 18 NULL
 20 NULL
+
+# Left join should preserve input order.
+query II
+SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
+----
+1   NULL
+2   NULL
+3   6
+4   NULL
+5   NULL
+6   12
+7   NULL
+8   NULL
+9   18
+10  NULL
 
 # Left join against covering secondary index
 query II rowsort
