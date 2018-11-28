@@ -142,6 +142,10 @@ func TestGossipFirstRange(t *testing.T) {
 // restarted after losing its data) without the cluster breaking.
 func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		// As of Nov 2018 it takes 3.6s.
+		t.Skip("short")
+	}
 	ctx := context.Background()
 
 	// Shorten the raft tick interval and election timeout to make range leases
@@ -161,18 +165,9 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			// Use manual replication so that we can ensure the range is properly
-			// replicated to all three nodes before stopping one of them.
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      serverArgs,
+			ServerArgs: serverArgs,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-
-	// Ensure that the first range is fully replicated before moving on.
-	firstRangeKey := keys.MinKey
-	if _, err := tc.AddReplicas(firstRangeKey, tc.Target(1), tc.Target(2)); err != nil {
-		t.Fatal(err)
-	}
 
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
