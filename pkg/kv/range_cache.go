@@ -359,10 +359,16 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
-	if res.Shared {
-		log.Event(ctx, "looked up range descriptor with shared request")
+	var s string
+	if res.Err != nil {
+		s = res.Err.Error()
 	} else {
-		log.Event(ctx, "looked up range descriptor")
+		s = res.Val.(lookupResult).desc.String()
+	}
+	if res.Shared {
+		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
+	} else {
+		log.Eventf(ctx, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
 		return nil, nil, res.Err
