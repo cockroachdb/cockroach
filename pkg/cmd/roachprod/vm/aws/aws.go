@@ -107,12 +107,12 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			// "us-east-2a:subnet-3ea05c57",
 			"us-east-2b:subnet-49170331",
 			"us-east-2c:subnet-46c7f20c",
-			"us-west-2a:subnet-fc46638b",
-			"us-west-2b:subnet-2910174c",
-			"us-west-2c:subnet-da2a5783",
-			"eu-west-2a:subnet-e98a6c92",
-			"eu-west-2b:subnet-3c754e76",
-			"eu-west-2c:subnet-7733c91e",
+			"us-west-2a:subnet-0ffd1c2a34c9231ca",
+			"us-west-2b:subnet-0e6c3c944d64cdcaf",
+			"us-west-2c:subnet-0987b45308598f96a",
+			"eu-west-2a:subnet-056b3d8c21c5ea593",
+			"eu-west-2b:subnet-018fa0ae185054048",
+			"eu-west-2c:subnet-0678178e17d36f556",
 		},
 		"Subnet id for zones in each region")
 
@@ -120,8 +120,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringSliceVar(&o.SecurityGroups, ProviderName+"-sg",
 		[]string{
 			"us-east-2:sg-06a4c809644e32920",
-			"us-west-2:sg-00dfe24958e988576",
-			"eu-west-2:sg-057f3842f5cec0576"},
+			"us-west-2:sg-03548a0ccc7870601",
+			"eu-west-2:sg-0ebb21d61843dd82f"},
 		"Security group id in each region")
 
 	// AWS images generally use "ubuntu" or "ec2-user"
