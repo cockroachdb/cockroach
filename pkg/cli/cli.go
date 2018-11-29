@@ -38,6 +38,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 )
 
 // Main is the entry point for the cli, with a single line calling it intended
