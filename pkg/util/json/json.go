@@ -197,21 +197,15 @@ func NewArrayBuilder(numAddsHint int) *ArrayBuilder {
 
 // Add appends JSON to the sequence.
 func (b *ArrayBuilder) Add(j JSON) {
-	if b.jsons == nil {
-		panic(msgModifyAfterBuild)
-	}
 	b.jsons = append(b.jsons, j)
 }
 
-// Build returns a JSON array built from a JSON sequence. After that, it should
-// not be modified any longer.
+// Build returns the constructed JSON array. A caller may not modify the array,
+// and the ArrayBuilder reserves the right to re-use the array returned (though
+// the data will not be modified).  This is important in the case of a window
+// function, which might want to incrementally update an aggregation.
 func (b *ArrayBuilder) Build() JSON {
-	if b.jsons == nil {
-		panic(msgModifyAfterBuild)
-	}
-	arr := jsonArray(b.jsons)
-	b.jsons = nil
-	return arr
+	return jsonArray(b.jsons)
 }
 
 // ArrayBuilderWithCounter builds JSON Array by a JSON sequence with a size counter.
