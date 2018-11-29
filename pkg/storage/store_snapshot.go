@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -342,6 +343,7 @@ func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (_cleanup func(), _rejectionMsg string, _err error) {
+	tBegin := timeutil.Now()
 	if header.RangeSize == 0 {
 		// Empty snapshots are exempt from rate limits because they're so cheap to
 		// apply. This vastly speeds up rebalancing any empty ranges created by a
@@ -369,6 +371,18 @@ func (s *Store) reserveSnapshot(
 		case <-s.stopper.ShouldStop():
 			return nil, "", errors.Errorf("stopped")
 		}
+	}
+
+	const snapshotReservationWaitWarnThreshold = 13 * time.Second
+	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
+		replDesc, _ := header.State.Desc.GetReplicaDescriptor(s.StoreID())
+		log.Infof(
+			ctx,
+			"waited for %.1fs to acquire snapshot reservation to r%d/%d",
+			elapsed.Seconds(),
+			header.State.Desc.RangeID,
+			replDesc.ReplicaID,
+		)
 	}
 
 	s.metrics.ReservedReplicaCount.Inc(1)
