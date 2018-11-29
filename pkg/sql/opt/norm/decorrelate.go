@@ -793,8 +793,20 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 	}
 
 	return r.f.Reconstruct(scalar, func(nd opt.Expr) opt.Expr {
-		// Recursively hoist subqueries in each child that contains them.
-		return r.hoistAll(nd.(opt.ScalarExpr))
+		// Recursively hoist subqueries in each scalar child that contains them.
+		// Skip relational children, since only subquery scalar operators have a
+		// relational child, and either:
+		//
+		//   1. The child is correlated, and therefore was handled above by hoisting
+		//      and rewriting (and therefore won't ever get here),
+		//
+		//   2. Or the child is uncorrelated, and therefore should be skipped, since
+		//      uncorrelated subqueries are not hoisted.
+		//
+		if scalarChild, ok := nd.(opt.ScalarExpr); ok {
+			return r.hoistAll(scalarChild)
+		}
+		return nd
 	}).(opt.ScalarExpr)
 }
 
