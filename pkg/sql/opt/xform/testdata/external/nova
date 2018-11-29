@@ -553,16 +553,16 @@ sort
       │         │    │         │    │    │         │    │    │    ├── fd: ()-->(28)
       │         │    │         │    │    │         │    │    │    ├── ordering: +17 opt(28) [provided: +17]
       │         │    │         │    │    │         │    │    │    ├── select
-      │         │    │         │    │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) flavor_projects.project_id:18(string!null)
+      │         │    │         │    │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
       │         │    │         │    │    │         │    │    │    │    ├── has-placeholder
       │         │    │         │    │    │         │    │    │    │    ├── key: (17,18)
       │         │    │         │    │    │         │    │    │    │    ├── ordering: +17
       │         │    │         │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
-      │         │    │         │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) flavor_projects.project_id:18(string!null)
+      │         │    │         │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:17(int!null) project_id:18(string!null)
       │         │    │         │    │    │         │    │    │    │    │    ├── key: (17,18)
       │         │    │         │    │    │         │    │    │    │    │    └── ordering: +17
       │         │    │         │    │    │         │    │    │    │    └── filters
-      │         │    │         │    │    │         │    │    │    │         └── flavor_projects.project_id = $1 [type=bool, outer=(18), constraints=(/18: (/NULL - ])]
+      │         │    │         │    │    │         │    │    │    │         └── project_id = $1 [type=bool, outer=(18), constraints=(/18: (/NULL - ])]
       │         │    │         │    │    │         │    │    │    └── projections
       │         │    │         │    │    │         │    │    │         └── true [type=bool]
       │         │    │         │    │    │         │    │    └── filters (true)
@@ -603,16 +603,16 @@ sort
       │         │    │         │    │    │    ├── fd: ()-->(31)
       │         │    │         │    │    │    ├── ordering: +23 opt(31) [provided: +23]
       │         │    │         │    │    │    ├── select
-      │         │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) flavor_projects.project_id:24(string!null)
+      │         │    │         │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) project_id:24(string!null)
       │         │    │         │    │    │    │    ├── has-placeholder
       │         │    │         │    │    │    │    ├── key: (23,24)
       │         │    │         │    │    │    │    ├── ordering: +23
       │         │    │         │    │    │    │    ├── scan flavor_projects@secondary
-      │         │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) flavor_projects.project_id:24(string!null)
+      │         │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:23(int!null) project_id:24(string!null)
       │         │    │         │    │    │    │    │    ├── key: (23,24)
       │         │    │         │    │    │    │    │    └── ordering: +23
       │         │    │         │    │    │    │    └── filters
-      │         │    │         │    │    │    │         └── flavor_projects.project_id = $2 [type=bool, outer=(24), constraints=(/24: (/NULL - ])]
+      │         │    │         │    │    │    │         └── project_id = $2 [type=bool, outer=(24), constraints=(/24: (/NULL - ])]
       │         │    │         │    │    │    └── projections
       │         │    │         │    │    │         └── true [type=bool]
       │         │    │         │    │    └── filters (true)
@@ -2897,17 +2897,17 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │         │    │    │    ├── fd: ()-->(33)
  │    │         │    │         │    │    │         │    │    │    ├── ordering: +18 opt(33) [provided: +18]
  │    │         │    │         │    │    │         │    │    │    ├── select
- │    │         │    │         │    │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) instance_type_projects.project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
+ │    │         │    │         │    │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │         │    │    │    │    ├── key: (18-20)
  │    │         │    │         │    │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │         │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) instance_type_projects.project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
  │    │         │    │         │    │    │         │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │         │    │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │         │    │    │    │    └── filters
  │    │         │    │         │    │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
- │    │         │    │         │    │    │         │    │    │    │         └── instance_type_projects.project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
+ │    │         │    │         │    │    │         │    │    │    │         └── project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
  │    │         │    │         │    │    │         │    │    │    └── projections
  │    │         │    │         │    │    │         │    │    │         └── true [type=bool]
  │    │         │    │         │    │    │         │    │    └── filters (true)
@@ -2952,18 +2952,18 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── fd: ()-->(36)
  │    │         │    │         │    │    │    ├── ordering: +26 opt(36) [provided: +26]
  │    │         │    │         │    │    │    ├── select
- │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
+ │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    │    ├── key: (26-28)
  │    │         │    │         │    │    │    │    ├── ordering: +26
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string) instance_type_projects.deleted:28(bool)
+ │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) project_id:27(string) instance_type_projects.deleted:28(bool)
  │    │         │    │         │    │    │    │    │    ├── lax-key: (26-28)
  │    │         │    │         │    │    │    │    │    └── ordering: +26
  │    │         │    │         │    │    │    │    └── filters
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $4 [type=bool, outer=(28), constraints=(/28: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $5 [type=bool, outer=(28), constraints=(/28: (/NULL - ])]
- │    │         │    │         │    │    │    │         └── instance_type_projects.project_id = $6 [type=bool, outer=(27), constraints=(/27: (/NULL - ])]
+ │    │         │    │         │    │    │    │         └── project_id = $6 [type=bool, outer=(27), constraints=(/27: (/NULL - ])]
  │    │         │    │         │    │    │    └── projections
  │    │         │    │         │    │    │         └── true [type=bool]
  │    │         │    │         │    │    └── filters (true)

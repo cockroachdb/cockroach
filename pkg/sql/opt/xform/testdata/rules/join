@@ -444,12 +444,12 @@ memo (optimized, ~9KB, required=[presentation: s:1,t:2,u:3,s:4,t:5,u:6])
  ├── G6: (eq G9 G10)
  ├── G7: (eq G11 G12)
  ├── G8: (eq G13 G14)
- ├── G9: (variable stu.s)
- ├── G10: (variable stu.s)
- ├── G11: (variable stu.t)
- ├── G12: (variable stu.t)
- ├── G13: (variable stu.u)
- └── G14: (variable stu.u)
+ ├── G9: (variable s)
+ ├── G10: (variable s)
+ ├── G11: (variable t)
+ ├── G12: (variable t)
+ ├── G13: (variable u)
+ └── G14: (variable u)
 
 exploretrace rule=GenerateMergeJoins
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
@@ -464,15 +464,15 @@ Source expression:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    └── key: (1-3)
    ├── scan stu
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    └── key: (4-6)
    └── filters
-        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
-        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+        ├── s = s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── t = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── u = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
@@ -482,11 +482,11 @@ New expression 1 of 2:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +1,+2,+3
    ├── scan stu
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +4,+5,+6
    └── filters (true)
@@ -499,11 +499,11 @@ New expression 2 of 2:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu@uts
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +3,+2,+1
    ├── scan stu@uts
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +6,+5,+4
    └── filters (true)
@@ -517,15 +517,15 @@ Source expression:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    └── key: (4-6)
    ├── scan stu
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    └── key: (1-3)
    └── filters
-        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
-        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+        ├── s = s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── t = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── u = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
@@ -535,11 +535,11 @@ New expression 1 of 2:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +4,+5,+6
    ├── scan stu
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +1,+2,+3
    └── filters (true)
@@ -552,11 +552,11 @@ New expression 2 of 2:
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu@uts
-   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +6,+5,+4
    ├── scan stu@uts
-   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +3,+2,+1
    └── filters (true)
