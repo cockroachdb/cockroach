@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -475,9 +476,24 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	if scan.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
-		numUnappliedConjuncts := sb.applyIndexConstraint(scan.Constraint, scan, relProps)
-
+		var numUnappliedConjuncts float64
 		var cols opt.ColSet
+		// Inverted indexes are a special case; a constraint like:
+		// /1: [/'{"a": "b"}' - /'{"a": "b"}']
+		// does not necessarily mean there is only going to be one distinct
+		// value for column 1, if it is being applied to an inverted index.
+		// This is because inverted index keys could correspond to partial
+		// column values, such as one path-to-a-leaf through a JSON object.
+		//
+		// For now, don't apply constraints on inverted index columns.
+		if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
+			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
+			}
+		} else {
+			numUnappliedConjuncts = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
+		}
+
 		for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 			cols.Add(int(scan.Constraint.Columns.Get(i).ID()))
 		}
@@ -1261,6 +1277,24 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// clause.
 	numUnappliedConjuncts, constrainedCols := sb.applyFilter(zigzag.On, zigzag, relProps)
 
+	// Application of constraints on inverted indexes needs to be handled a
+	// little differently since a constraint on an inverted index key column
+	// could match multiple distinct values in the actual column. This is
+	// because inverted index keys could correspond to partial values, like JSON
+	// paths.
+	//
+	// Since filters on inverted index columns cannot be pushed down into the ON
+	// clause (due to them containing partial values), we need to explicitly
+	// increment numUnappliedConjuncts here for every constrained inverted index
+	// column.
+	tab := sb.md.Table(zigzag.LeftTable)
+	if tab.Index(zigzag.LeftIndex).IsInverted() {
+		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) + len(zigzag.LeftEqCols))
+	}
+	if tab.Index(zigzag.RightIndex).IsInverted() {
+		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) + len(zigzag.RightEqCols))
+	}
+
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies. Note that
 	// these functional dependencies already include equalities
@@ -2035,6 +2069,36 @@ func (sb *statisticsBuilder) applyFilter(
 	applyConjunct := func(conjunct *FiltersItem) {
 		if isEqualityWithTwoVars(conjunct.Condition) {
 			// We'll handle equalities later.
+			return
+		}
+
+		// Special case: The current conjunct is a JSON Contains operator.
+		// If so, count every path to a leaf node in the RHS as a separate
+		// conjunct. If for whatever reason we can't get to the JSON datum
+		// or enumerate its paths, count the whole operator as one conjunct.
+		if conjunct.Condition.Op() == opt.ContainsOp {
+			rhs := conjunct.Condition.Child(1)
+			if !CanExtractConstDatum(rhs) {
+				numUnappliedConjuncts++
+				return
+			}
+			rightDatum := ExtractConstDatum(rhs)
+			if rightDatum == tree.DNull {
+				numUnappliedConjuncts++
+				return
+			}
+			rd := rightDatum.(*tree.DJSON).JSON
+			if rd.Type() != json.ArrayJSONType && rd.Type() != json.ObjectJSONType {
+				numUnappliedConjuncts++
+				return
+			}
+
+			paths, err := json.AllPaths(rd)
+			if err != nil {
+				numUnappliedConjuncts++
+				return
+			}
+			numUnappliedConjuncts += float64(len(paths))
 			return
 		}
 

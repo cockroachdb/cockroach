@@ -649,25 +649,49 @@ project
            ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
            └── key: (1)
 
-# Query only the primary key with a remaining filter.
+memo
+SELECT k FROM b WHERE j @> '{"a": "b"}'
+----
+memo (optimized, ~6KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 570.03
+ ├── G2: (select G4 G5) (index-join G6 b,cols=(1,4))
+ │    └── []
+ │         ├── best: (index-join G6 b,cols=(1,4))
+ │         └── cost: 566.69
+ ├── G3: (projections)
+ ├── G4: (scan b,cols=(1,4))
+ │    └── []
+ │         ├── best: (scan b,cols=(1,4))
+ │         └── cost: 1060.01
+ ├── G5: (filters G7)
+ ├── G6: (scan b@inv_idx,cols=(1),constrained)
+ │    └── []
+ │         ├── best: (scan b@inv_idx,cols=(1),constrained)
+ │         └── cost: 114.45
+ ├── G7: (contains G8 G9)
+ ├── G8: (variable j)
+ └── G9: (const '{"a": "b"}')
+
+# Query only the primary key with a remaining filter. 2+ paths in containment
+# query should favor zigzag joins.
 opt
 SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 project
  ├── columns: k:1(int!null)
  ├── key: (1)
- └── select
+ └── inner-join (lookup b)
       ├── columns: k:1(int!null) j:4(jsonb)
+      ├── key columns: [1] = [1]
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1(int!null) j:4(jsonb)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@inv_idx
-      │         ├── columns: k:1(int!null)
-      │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
-      │         └── key: (1)
+      ├── inner-join (zigzag b@inv_idx b@inv_idx)
+      │    ├── columns: k:1(int!null)
+      │    ├── eq columns: [1] = [1]
+      │    └── filters (true)
       └── filters
            └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
@@ -712,40 +736,34 @@ index-join b
       ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       └── key: (1)
 
-# Query requiring an index join with a remaining filter.
-# TODO(justin): push this filter into the index join.
+# Query requiring a zigzag join with a remaining filter.
+# TODO(itsbilal): push this filter into the zigzag join.
 opt
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
-select
+inner-join (lookup b)
  ├── columns: j:4(jsonb) k:1(int!null)
+ ├── key columns: [1] = [1]
  ├── key: (1)
  ├── fd: (1)-->(4)
- ├── index-join b
- │    ├── columns: k:1(int!null) j:4(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(4)
- │    └── scan b@inv_idx
- │         ├── columns: k:1(int!null)
- │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
- │         └── key: (1)
+ ├── inner-join (zigzag b@inv_idx b@inv_idx)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    └── filters (true)
  └── filters
       └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-select
+inner-join (lookup b)
  ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── key columns: [1] = [1]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── index-join b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── scan b@inv_idx
- │         ├── columns: k:1(int!null)
- │         ├── constraint: /4/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
- │         └── key: (1)
+ ├── inner-join (zigzag b@inv_idx b@inv_idx)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    └── filters (true)
  └── filters
       └── j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]

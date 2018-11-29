@@ -860,6 +860,105 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 	return false
 }
 
+// makeAllInvertedIndexSpansForExpr is analogous to makeInvertedIndexSpansForExpr,
+// except it does not stop at the first constraint. It adds all constraints to the
+// provided slice.
+func (c *indexConstraintCtx) makeAllInvertedIndexSpansForExpr(
+	nd opt.Expr, constraints []*constraint.Constraint,
+) []*constraint.Constraint {
+	out := &constraint.Constraint{}
+	switch nd.Op() {
+	case opt.ContainsOp:
+		lhs, rhs := nd.Child(0), nd.Child(1)
+
+		if !c.isIndexColumn(lhs, 0 /* index */) || !opt.IsConstValueOp(rhs) {
+			c.unconstrained(0 /* offset */, out)
+			return append(constraints, out)
+		}
+
+		rightDatum := memo.ExtractConstDatum(rhs)
+
+		if rightDatum == tree.DNull {
+			c.contradiction(0 /* offset */, out)
+			return append(constraints, out)
+		}
+
+		rd := rightDatum.(*tree.DJSON).JSON
+
+		switch rd.Type() {
+		case json.ArrayJSONType, json.ObjectJSONType:
+			// First, check if there's more than one path through the datum.
+			paths, err := json.AllPaths(rd)
+			if err != nil {
+				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+				c.unconstrained(0 /* offset */, out)
+				return append(constraints, out)
+			}
+			constrained := false
+			for i := range paths {
+				hasContainerLeaf, err := paths[i].HasContainerLeaf()
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					c.unconstrained(0 /* offset */, out)
+					return append(constraints, out)
+				}
+				if hasContainerLeaf {
+					// We want to have a full index scan if the RHS contains either [] or {}.
+					continue
+				}
+				pathDatum, err := tree.MakeDJSON(paths[i])
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					c.unconstrained(0 /* offset */, out)
+					return append(constraints, out)
+				}
+				c.eqSpan(0 /* offset */, pathDatum, out)
+				constraints = append(constraints, out)
+				out = &constraint.Constraint{}
+				constrained = true
+			}
+
+			if constrained {
+				return constraints
+			}
+
+		default:
+			// If we find a scalar on the right side of the @> operator it means that we need to find
+			// both matching scalars and arrays that contain that value. In order to do this we generate
+			// two logical spans, one for the original scalar and one for arrays containing the scalar.
+			// This is valid because in JSON something can either be an array or scalar so the spans are
+			// guaranteed not to overlap when mapped onto the primary key space. Therefore there won't be
+			// any duplicate primary keys when we retrieve rows for both sets.
+			j := json.NewArrayBuilder(1)
+			j.Add(rd)
+			dJSON, err := tree.MakeDJSON(j.Build())
+			if err != nil {
+				break
+			}
+
+			// This is the span for the scalar.
+			c.eqSpan(0 /* offset */, rightDatum, out)
+
+			// This is the span to match arrays.
+			var other constraint.Constraint
+			c.eqSpan(0 /* offset */, dJSON, &other)
+			out.UnionWith(c.evalCtx, &other)
+			return append(constraints, out)
+		}
+
+	case opt.AndOp, opt.FiltersOp:
+		for i, n := 0, nd.ChildCount(); i < n; i++ {
+			constraints = c.makeAllInvertedIndexSpansForExpr(nd.Child(i), constraints)
+		}
+		return constraints
+	case opt.FiltersItemOp:
+		// Pass through the call.
+		return c.makeAllInvertedIndexSpansForExpr(nd.Child(0), constraints)
+	}
+	c.unconstrained(0 /* offset */, out)
+	return append(constraints, out)
+}
+
 // getMaxSimplifyPrefix finds the longest prefix (maxSimplifyPrefix) such that
 // every span has the same first maxSimplifyPrefix values for the start and end
 // key. For example, for:
@@ -1069,6 +1168,14 @@ func (ic *Instance) Constraint() *constraint.Constraint {
 		return nil
 	}
 	return &ic.consolidated
+}
+
+// AllInvertedIndexConstraints returns all constraints that can be created on
+// the specified inverted index. Only works for inverted indexes.
+func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
+	allConstraints := make([]*constraint.Constraint, 0)
+
+	return ic.makeAllInvertedIndexSpansForExpr(&ic.filters, allConstraints), nil
 }
 
 // RemainingFilters calculates a simplified FiltersExpr that needs to be applied

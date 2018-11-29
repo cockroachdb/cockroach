@@ -340,6 +340,45 @@ func (c *CustomFuncs) tryConstrainIndex(
 	return &copy, remaining, true
 }
 
+// allInvIndexConstraints tries to derive all constraints for the specified inverted
+// index that can be derived. If no constraint is derived, then it returns ok = false,
+// similar to tryConstrainIndex.
+func (c *CustomFuncs) allInvIndexConstraints(
+	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
+) (constraints []*constraint.Constraint, ok bool) {
+	// Fill out data structures needed to initialize the idxconstraint library.
+	// Use LaxKeyColumnCount, since all columns <= LaxKeyColumnCount are
+	// guaranteed to be part of each row's key (i.e. not stored in row's value,
+	// which does not take part in an index scan). Note that the OrderingColumn
+	// slice cannot be reused, as Instance.Init can use it in the constraint.
+	md := c.e.mem.Metadata()
+	index := md.Table(tabID).Index(indexOrd)
+	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
+	var notNullCols opt.ColSet
+	for i := range columns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal)
+		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.Column.IsNullable() {
+			notNullCols.Add(int(colID))
+		}
+	}
+
+	// Generate index constraints.
+	var ic idxconstraint.Instance
+	ic.Init(filters, columns, notNullCols, true, c.e.evalCtx, c.e.f)
+	constraints, err := ic.AllInvertedIndexConstraints()
+	if err != nil {
+		return nil, false
+	}
+	constraint := constraints[0]
+	if constraint.IsUnconstrained() {
+		return constraints, false
+	}
+
+	return constraints, true
+}
+
 // canMaybeConstrainIndex performs two checks that can quickly rule out the
 // possibility that the given index can be constrained by the specified filter:
 //
@@ -1055,6 +1094,165 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// original select.
 			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 		}
+	}
+}
+
+// GenerateInvertedIndexZigzagJoins generates zigzag joins for constraints on
+// inverted index. It looks for cases where one inverted index can satisfy
+// two constraints, and it produces zigzag joins with the same index on both
+// sides of the zigzag join for those cases, fixed on different constant values.
+func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+) {
+	// Short circuit unless zigzag joins are explicitly enabled.
+	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled {
+		return
+	}
+
+	var sb indexScanBuilder
+	sb.init(c, scanPrivate.Table)
+
+	// Iterate over all inverted indexes.
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanPrivate)
+	for iter.nextInverted() {
+		// See if there are two or more constraints that can be satisfied
+		// by this inverted index. This is possible with inverted indexes as
+		// opposed to secondary indexes, because one row in the primary index
+		// can often correspond to multiple rows in an inverted index.
+		constraints, ok := c.allInvIndexConstraints(
+			filters, scanPrivate.Table, iter.indexOrdinal,
+		)
+		if !ok || len(constraints) < 2 {
+			continue
+		}
+		// In theory, we could explore zigzag joins on all constraint pairs.
+		// However, in the absence of stats on inverted indexes, we will not
+		// be able to distinguish more selective constraints from less
+		// selective ones anyway, so just pick the first two constraints.
+		constraint := constraints[0]
+		constraint2 := constraints[1]
+
+		minPrefix := constraint.ExactPrefix(c.e.evalCtx)
+		if prefix2 := constraint2.ExactPrefix(c.e.evalCtx); prefix2 < minPrefix {
+			minPrefix = prefix2
+		}
+
+		if minPrefix == 0 {
+			continue
+		}
+
+		zigzagJoin := memo.ZigzagJoinExpr{
+			On: filters,
+			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
+				LeftTable:  scanPrivate.Table,
+				LeftIndex:  iter.indexOrdinal,
+				RightTable: scanPrivate.Table,
+				RightIndex: iter.indexOrdinal,
+			},
+		}
+
+		// Get constant values from each constraint. Add them to FixedVals as
+		// tuples, with associated Column IDs in both {Left,Right}FixedCols.
+		leftVals := make(memo.ScalarListExpr, 0, minPrefix)
+		leftTypes := make([]types.T, 0, minPrefix)
+		rightVals := make(memo.ScalarListExpr, 0, minPrefix)
+		rightTypes := make([]types.T, 0, minPrefix)
+
+		zigzagJoin.LeftFixedCols = make(opt.ColList, 0, minPrefix)
+		zigzagJoin.RightFixedCols = make(opt.ColList, 0, minPrefix)
+		for i := 0; i < minPrefix; i++ {
+			leftVal := constraint.Spans.Get(0).StartKey().Value(i)
+			rightVal := constraint2.Spans.Get(0).StartKey().Value(i)
+
+			leftVals = append(leftVals, c.e.f.ConstructConstVal(leftVal))
+			leftTypes = append(leftTypes, leftVal.ResolvedType())
+			rightVals = append(rightVals, c.e.f.ConstructConstVal(rightVal))
+			rightTypes = append(rightTypes, rightVal.ResolvedType())
+			zigzagJoin.LeftFixedCols = append(zigzagJoin.LeftFixedCols, constraint.Columns.Get(i).ID())
+			zigzagJoin.RightFixedCols = append(zigzagJoin.RightFixedCols, constraint.Columns.Get(i).ID())
+		}
+		zigzagJoin.FixedVals = make(memo.ScalarListExpr, 2)
+		zigzagJoin.FixedVals[0] = c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes})
+		zigzagJoin.FixedVals[1] = c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes})
+
+		// Set equality columns - all remaining columns after the fixed prefix
+		// need to be equal.
+		zigzagJoin.LeftEqCols = make(opt.ColList, iter.index.ColumnCount()-minPrefix)
+		zigzagJoin.RightEqCols = make(opt.ColList, iter.index.ColumnCount()-minPrefix)
+		for i := minPrefix; i < iter.index.ColumnCount(); i++ {
+			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
+			zigzagJoin.LeftEqCols[i-minPrefix] = colID
+			zigzagJoin.RightEqCols[i-minPrefix] = colID
+		}
+		zigzagJoin.On = filters
+
+		// Don't output the first column (i.e. the inverted index' JSON key
+		// col) from the zigzag join. It could contain partial values, so
+		// presenting it in the output or checking ON conditions against
+		// it makes little sense.
+		zigzagCols := iter.indexCols()
+		for i, cnt := 0, iter.index.KeyColumnCount(); i < cnt; i++ {
+			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
+			zigzagCols.Remove(int(colID))
+		}
+
+		pkIndex := iter.tab.Index(opt.PrimaryIndex)
+		pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
+		for i := range pkCols {
+			pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+			// Ensure primary key columns are always retrieved from the zigzag
+			// join.
+			zigzagCols.Add(int(pkCols[i]))
+		}
+
+		if scanPrivate.Cols.SubsetOf(zigzagCols) {
+			// Case 1 (zigzagged indexes contain all requested columns).
+			zigzagJoin.Cols = scanPrivate.Cols
+			c.e.mem.AddZigzagJoinToGroup(&zigzagJoin, grp)
+			continue
+		}
+
+		if scanPrivate.Flags.NoIndexJoin {
+			continue
+		}
+
+		// Case 2 (wrap zigzag join in an index join).
+
+		var indexJoin memo.LookupJoinExpr
+		// Ensure the zigzag join returns pk columns.
+		zigzagJoin.Cols = scanPrivate.Cols.Intersection(zigzagCols)
+		for i := range pkCols {
+			zigzagJoin.Cols.Add(int(pkCols[i]))
+		}
+
+		if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
+			// The ON condition refers only to the columns available in the zigzag
+			// indices.
+			indexJoin.On = memo.TrueFilter
+		} else {
+			// ON has some conditions that are bound by the columns in the index (at
+			// the very least, the equality conditions we used for EqCols and FixedCols),
+			// and some conditions that refer to other table columns. We can put
+			// the former in the lower ZigzagJoin and the latter in the index join.
+			conditions := zigzagJoin.On
+			zigzagJoin.On = c.ExtractBoundConditions(conditions, zigzagCols)
+			indexJoin.On = c.ExtractUnboundConditions(conditions, zigzagCols)
+		}
+
+		indexJoin.Input = c.e.f.ConstructZigzagJoin(
+			zigzagJoin.On,
+			&zigzagJoin.ZigzagJoinPrivate,
+		)
+		indexJoin.JoinType = opt.InnerJoinOp
+		indexJoin.Table = scanPrivate.Table
+		indexJoin.Index = opt.PrimaryIndex
+		indexJoin.KeyCols = pkCols
+		indexJoin.Cols = scanPrivate.Cols
+
+		// Create the LookupJoin for the index join in the same group as the
+		// original select.
+		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	}
 }
 
