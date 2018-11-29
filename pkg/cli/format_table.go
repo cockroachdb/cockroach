@@ -166,8 +166,15 @@ type rowReporter interface {
 // The caller can pass a noRowsHook helper that will be called in the
 // case there were no result rows. The helper is guaranteed to be called
 // after the iteration through iter.Next(). Used in runQueryAndFormatResults.
+// The completedHook is called after the last row is received/passed to the
+// rendered, but before the final rendering takes place.
 func render(
-	r rowReporter, w io.Writer, cols []string, iter rowStrIter, noRowsHook func() (bool, error),
+	r rowReporter,
+	w io.Writer,
+	cols []string,
+	iter rowStrIter,
+	completedHook func(),
+	noRowsHook func() (bool, error),
 ) error {
 	if err := r.describe(w, cols); err != nil {
 		return err
@@ -197,6 +204,10 @@ func render(
 		}
 
 		nRows++
+	}
+
+	if completedHook != nil {
+		completedHook()
 	}
 
 	if nRows == 0 && noRowsHook != nil {
@@ -609,5 +620,5 @@ func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
 	if cleanup != nil {
 		defer cleanup()
 	}
-	return render(reporter, w, cols, allRows, nil)
+	return render(reporter, w, cols, allRows, nil, nil)
 }

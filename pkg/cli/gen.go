@@ -231,7 +231,8 @@ Output the list of cluster settings known to this binary.
 			hr.rowStats = false
 		}
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return render(reporter, os.Stdout, cols, newRowSliceIter(rows, "dddd"), nil /* noRowsHook*/)
+		return render(reporter, os.Stdout,
+			cols, newRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
 	},
 }
 
