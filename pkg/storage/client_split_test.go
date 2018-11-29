@@ -1884,6 +1884,10 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 // before returning unsuccessfully.
 func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		// As of Nov 2018, it takes 7s. #32722.
+		t.Skip("short")
+	}
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("b")
