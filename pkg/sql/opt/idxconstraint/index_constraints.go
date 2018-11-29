@@ -753,24 +753,34 @@ func (c *indexConstraintCtx) makeSpansForOr(
 }
 
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
-// used for inverted indexes.
+// used for inverted indexes. If allPaths is true, the slice is populated with
+// all constraints found. Otherwise, this function stops at the first
+// constraint. Note that we use a slice instead of a constraint.Set, because
+// constraint.Set.Union merges spans of constraints on the same columns. This
+// logically represents an OR of the different span constraints, while what
+// we want to represent is effectively an AND of the different spans, forcing
+// us to store every span in its own constraint.Constraint and store it in
+// a slice.
 func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
-	nd opt.Expr, out *constraint.Constraint,
-) (tight bool) {
+	nd opt.Expr, constraints []*constraint.Constraint, allPaths bool,
+) (bool, []*constraint.Constraint) {
+	var tight bool
+	out := &constraint.Constraint{}
+	constrained := false
 	switch nd.Op() {
 	case opt.ContainsOp:
 		lhs, rhs := nd.Child(0), nd.Child(1)
 
 		if !c.isIndexColumn(lhs, 0 /* index */) || !opt.IsConstValueOp(rhs) {
 			c.unconstrained(0 /* offset */, out)
-			return false
+			return false, append(constraints, out)
 		}
 
 		rightDatum := memo.ExtractConstDatum(rhs)
 
 		if rightDatum == tree.DNull {
 			c.contradiction(0 /* offset */, out)
-			return true
+			return false, append(constraints, out)
 		}
 
 		rd := rightDatum.(*tree.DJSON).JSON
@@ -782,14 +792,14 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			if err != nil {
 				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 				c.unconstrained(0 /* offset */, out)
-				return false
+				return false, append(constraints, out)
 			}
 			for i := range paths {
 				hasContainerLeaf, err := paths[i].HasContainerLeaf()
 				if err != nil {
 					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 					c.unconstrained(0 /* offset */, out)
-					return false
+					return false, append(constraints, out)
 				}
 				if hasContainerLeaf {
 					// We want to have a full index scan if the RHS contains either [] or {}.
@@ -799,16 +809,25 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 				if err != nil {
 					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 					c.unconstrained(0 /* offset */, out)
-					return false
+					return false, append(constraints, out)
 				}
 				c.eqSpan(0 /* offset */, pathDatum, out)
+				constraints = append(constraints, out)
 				// The span is tight if we just had 1 path through the index constraint.
-				return len(paths) == 1
+				constrained = true
+				if !allPaths {
+					return len(paths) == 1, constraints
+				}
+				// Reset out for next iteration
+				out = &constraint.Constraint{}
 			}
 
 			// We found no paths that could constrain the scan.
-			c.unconstrained(0 /* offset */, out)
-			return false
+			if !constrained {
+				c.unconstrained(0 /* offset */, out)
+				return false, append(constraints, out)
+			}
+			return len(paths) == 1, constraints
 
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
@@ -831,33 +850,48 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			var other constraint.Constraint
 			c.eqSpan(0 /* offset */, dJSON, &other)
 			out.UnionWith(c.evalCtx, &other)
-			return true
+			return true, append(constraints, out)
 		}
 
 	case opt.AndOp, opt.FiltersOp:
 		for i, n := 0, nd.ChildCount(); i < n; i++ {
-			tight := c.makeInvertedIndexSpansForExpr(nd.Child(i), out)
+			tight, constraints = c.makeInvertedIndexSpansForExpr(
+				nd.Child(i), constraints, allPaths,
+			)
 			if n == 1 {
 				// Single child.
-				return tight
+				return tight, constraints
 			}
+			// Only need to check the last appended element in constraints
+			// to figure out whether we are unconstrained.
+			out = constraints[len(constraints)-1]
 			if !out.IsUnconstrained() {
-				// TODO(radu, masha): for now, the best we can do is to generate
-				// constraints for at most one "contains" op in the disjunction; the
-				// rest are remaining filters.
-				//
-				// The spans are not tight because we have other conditions in the
-				// conjunction.
-				return false
+				if !allPaths {
+					// TODO(radu, masha): for now, the best we can do is to generate
+					// constraints for at most one "contains" op in the disjunction; the
+					// rest are remaining filters.
+					//
+					// The spans are not tight because we have other conditions in the
+					// conjunction.
+					return false, constraints
+				}
+				constrained = true
+			} else {
+				// The last added element is unconstrained. Remove it from the slice
+				// in case the next iteration finds a constraint that works.
+				constraints = constraints[:len(constraints)-1]
 			}
 		}
 
 	case opt.FiltersItemOp:
 		// Pass through the call.
-		return c.makeInvertedIndexSpansForExpr(nd.Child(0), out)
+		return c.makeInvertedIndexSpansForExpr(nd.Child(0), constraints, allPaths)
 	}
-	c.unconstrained(0 /* offset */, out)
-	return false
+	if !constrained {
+		c.unconstrained(0 /* offset */, out)
+		constraints = append(constraints, out)
+	}
+	return false, constraints
 }
 
 // getMaxSimplifyPrefix finds the longest prefix (maxSimplifyPrefix) such that
@@ -973,7 +1007,11 @@ func (c *indexConstraintCtx) simplifyFilter(
 		var tight bool
 		if c.isInverted {
 			if offset == 0 {
-				tight = c.makeInvertedIndexSpansForExpr(scalar, &cExpr)
+				constraints := make([]*constraint.Constraint, 0, 1)
+				tight, constraints = c.makeInvertedIndexSpansForExpr(scalar, constraints, false)
+				// makeInvertedIndexSpansForExpr is guaranteed to add at least one
+				// constraint. It may be an "unconstrained" constraint.
+				cExpr = *constraints[0]
 			} else {
 				c.unconstrained(0, &cExpr)
 			}
@@ -1035,8 +1073,14 @@ func (ic *Instance) Init(
 ) {
 	ic.filters = filters
 	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
+	constraints := make([]*constraint.Constraint, 0, 1)
 	if isInverted {
-		ic.tight = ic.makeInvertedIndexSpansForExpr(&ic.filters, &ic.constraint)
+		ic.tight, constraints = ic.makeInvertedIndexSpansForExpr(
+			&ic.filters, constraints, false,
+		)
+		// makeInvertedIndexSpansForExpr is guaranteed to add at least one
+		// constraint. It may be an "unconstrained" constraint.
+		ic.constraint = *constraints[0]
 	} else {
 		ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.filters, &ic.constraint)
 	}
@@ -1069,6 +1113,15 @@ func (ic *Instance) Constraint() *constraint.Constraint {
 		return nil
 	}
 	return &ic.consolidated
+}
+
+// AllInvertedIndexConstraints returns all constraints that can be created on
+// the specified inverted index. Only works for inverted indexes.
+func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
+	allConstraints := make([]*constraint.Constraint, 0)
+	_, allConstraints = ic.makeInvertedIndexSpansForExpr(&ic.filters, allConstraints, true)
+
+	return allConstraints, nil
 }
 
 // RemainingFilters calculates a simplified FiltersExpr that needs to be applied

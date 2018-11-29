@@ -531,6 +531,61 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 	return eqCols
 }
 
+// Generates a Key for an inverted index from the passed datums and side
+// info. Used by produceKeyFromBaseRow.
+func (z *zigzagJoiner) produceInvertedIndexKey(
+	info *zigzagJoinerInfo, datums sqlbase.EncDatumRow,
+) (roachpb.Key, error) {
+	// For inverted indexes, the JSON field (first column in the index) is
+	// encoded a little differently. We need to explicitly call
+	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
+	// index key containing the remaining neededDatums can be generated
+	// and appended using EncodeColumns.
+	colMap := make(map[sqlbase.ColumnID]int)
+	decodedDatums := make([]tree.Datum, len(datums))
+
+	// Ensure all EncDatums have been decoded.
+	for i, encDatum := range datums {
+		err := encDatum.EnsureDecoded(&info.indexTypes[i], info.alloc)
+		if err != nil {
+			return nil, err
+		}
+
+		decodedDatums[i] = encDatum.Datum
+		if i < len(info.index.ColumnIDs) {
+			colMap[info.index.ColumnIDs[i]] = i
+		} else {
+			// This column's value will be encoded in the second part (i.e.
+			// EncodeColumns).
+			colMap[info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)]] = i
+		}
+	}
+
+	keys, err := sqlbase.EncodeInvertedIndexKeys(
+		info.table,
+		info.index,
+		colMap,
+		decodedDatums,
+		info.prefix,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != 1 {
+		return nil, errors.Errorf("%d fixed values passed in for inverted index", len(keys))
+	}
+
+	// Append remaining (non-JSON) datums to the key.
+	key, _, err := sqlbase.EncodeColumns(
+		info.index.ExtraColumnIDs[:len(datums)-1],
+		info.indexDirs[1:],
+		colMap,
+		decodedDatums,
+		keys[0],
+	)
+	return key, err
+}
+
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
 func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
@@ -543,6 +598,10 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
+	if info.index.Type == sqlbase.IndexDescriptor_INVERTED {
+		return z.produceInvertedIndexKey(info, neededDatums)
+	}
+
 	key, err := sqlbase.MakeKeyFromEncDatums(
 		info.prefix,
 		neededDatums,
