@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -475,9 +476,24 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	if scan.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
-		numUnappliedConjuncts := sb.applyIndexConstraint(scan.Constraint, scan, relProps)
-
+		var numUnappliedConjuncts float64
 		var cols opt.ColSet
+		// Inverted indexes are a special case; a constraint like:
+		// /1: [/'{"a": "b"}' - /'{"a": "b"}']
+		// does not necessarily mean there is only going to be one distinct
+		// value for column 1, if it is being applied to an inverted index.
+		// This is because inverted index keys could correspond to partial
+		// column values, such as one path-to-a-leaf through a JSON object.
+		//
+		// For now, don't apply constraints on inverted index columns.
+		if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
+			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
+			}
+		} else {
+			numUnappliedConjuncts = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
+		}
+
 		for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 			cols.Add(int(scan.Constraint.Columns.Get(i).ID()))
 		}
@@ -1261,6 +1277,24 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// clause.
 	numUnappliedConjuncts, constrainedCols := sb.applyFilter(zigzag.On, zigzag, relProps)
 
+	// Application of constraints on inverted indexes needs to be handled a
+	// little differently since a constraint on an inverted index key column
+	// could match multiple distinct values in the actual column. This is
+	// because inverted index keys could correspond to partial values, like JSON
+	// paths.
+	//
+	// Since filters on inverted index columns cannot be pushed down into the ON
+	// clause (due to them containing partial values), we need to explicitly
+	// increment numUnappliedConjuncts here for every constrained inverted index
+	// column.
+	tab := sb.md.Table(zigzag.LeftTable)
+	if tab.Index(zigzag.LeftIndex).IsInverted() {
+		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) + len(zigzag.LeftEqCols))
+	}
+	if tab.Index(zigzag.RightIndex).IsInverted() {
+		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) + len(zigzag.RightEqCols))
+	}
+
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies. Note that
 	// these functional dependencies already include equalities
@@ -2024,6 +2058,33 @@ const (
 	unknownGeneratorDistinctCountRatio = 0.7
 )
 
+// countJSONPaths returns the number of JSON paths in the specified
+// FiltersItem. Used in the calculation of unapplied conjuncts in a JSON
+// Contains operator. Returns 0 if paths could not be counted for any
+// reason, such as malformed JSON.
+func countJSONPaths(conjunct *FiltersItem) int {
+	rhs := conjunct.Condition.Child(1)
+	if !CanExtractConstDatum(rhs) {
+		return 0
+	}
+	rightDatum := ExtractConstDatum(rhs)
+	if rightDatum == tree.DNull {
+		return 0
+	}
+	rd, ok := rightDatum.(*tree.DJSON)
+	if !ok {
+		return 0
+	}
+
+	// TODO(itsbilal): Replace this with a method that only counts paths
+	// instead of generating a slice for all of them.
+	paths, err := json.AllPaths(rd.JSON)
+	if err != nil {
+		return 0
+	}
+	return len(paths)
+}
+
 // applyFilter uses constraints to update the distinct counts for the
 // constrained columns in the filter. The changes in the distinct counts will be
 // used later to determine the selectivity of the filter.
@@ -2047,6 +2108,20 @@ func (sb *statisticsBuilder) applyFilter(
 	applyConjunct := func(conjunct *FiltersItem) {
 		if isEqualityWithTwoVars(conjunct.Condition) {
 			// We'll handle equalities later.
+			return
+		}
+
+		// Special case: The current conjunct is a JSON Contains operator.
+		// If so, count every path to a leaf node in the RHS as a separate
+		// conjunct. If for whatever reason we can't get to the JSON datum
+		// or enumerate its paths, count the whole operator as one conjunct.
+		if conjunct.Condition.Op() == opt.ContainsOp {
+			numPaths := countJSONPaths(conjunct)
+			if numPaths == 0 {
+				numUnappliedConjuncts++
+			} else {
+				numUnappliedConjuncts += float64(numPaths)
+			}
 			return
 		}
 

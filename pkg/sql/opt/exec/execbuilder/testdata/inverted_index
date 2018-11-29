@@ -146,7 +146,8 @@ scan  ·       ·
 ·     spans   ALL
 ·     filter  b @> '{"a": {}}'
 
-## Multi-path contains queries
+## Multi-path contains queries. Should create zigzag joins with the respective
+## session flag enabled.
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
@@ -183,6 +184,60 @@ filter           ·       ·                                                    
       │          spans   /Arr/"a"/"b"/Arr/Arr/2-/Arr/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
       └── scan   ·       ·                                                        (a, b)  ·
 ·                table   d@primary                                                ·       ·
+
+statement ok
+SET experimental_enable_zigzag_join = true
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
+----
+lookup-join       ·          ·                                    (a, b)  ·
+ │                type       inner                                ·       ·
+ │                pred       @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ ├── zigzag-join  ·          ·                                    (a)     ·
+ │    │           type       inner                                ·       ·
+ │    ├── scan    ·          ·                                    (a)     ·
+ │    │           table      d@foo_inv                            ·       ·
+ │    │           fixedvals  1 column                             ·       ·
+ │    └── scan    ·          ·                                    ()      ·
+ │                table      d@foo_inv                            ·       ·
+ │                fixedvals  1 column                             ·       ·
+ └── scan         ·          ·                                    (b)     ·
+·                 table      d@primary                            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+lookup-join       ·          ·                                              (a, b)  ·
+ │                type       inner                                          ·       ·
+ │                pred       @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ ├── zigzag-join  ·          ·                                              (a)     ·
+ │    │           type       inner                                          ·       ·
+ │    ├── scan    ·          ·                                              (a)     ·
+ │    │           table      d@foo_inv                                      ·       ·
+ │    │           fixedvals  1 column                                       ·       ·
+ │    └── scan    ·          ·                                              ()      ·
+ │                table      d@foo_inv                                      ·       ·
+ │                fixedvals  1 column                                       ·       ·
+ └── scan         ·          ·                                              (b)     ·
+·                 table      d@primary                                      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+lookup-join       ·          ·                                   (a, b)  ·
+ │                type       inner                               ·       ·
+ │                pred       @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ ├── zigzag-join  ·          ·                                   (a)     ·
+ │    │           type       inner                               ·       ·
+ │    ├── scan    ·          ·                                   (a)     ·
+ │    │           table      d@foo_inv                           ·       ·
+ │    │           fixedvals  1 column                            ·       ·
+ │    └── scan    ·          ·                                   ()      ·
+ │                table      d@foo_inv                           ·       ·
+ │                fixedvals  1 column                            ·       ·
+ └── scan         ·          ·                                   (b)     ·
+·                 table      d@primary                           ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'

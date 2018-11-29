@@ -1297,6 +1297,8 @@ SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 inner-join (zigzag pqr@q pqr@r)
  ├── columns: q:2(int!null) r:3(int!null)
  ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
  ├── fd: ()-->(2,3)
  └── filters
       ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
@@ -1360,6 +1362,8 @@ inner-join (lookup pqr)
  ├── inner-join (zigzag pqr@q pqr@r)
  │    ├── columns: p:1(int!null) q:2(int!null) r:3(int!null)
  │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [1]
+ │    ├── right fixed columns: [3] = [2]
  │    ├── fd: ()-->(2,3)
  │    └── filters
  │         ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
@@ -1424,6 +1428,8 @@ SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 inner-join (zigzag pqr@q pqr@s)
  ├── columns: q:2(int!null) s:4(string!null)
  ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [4] = ['foo']
  ├── fd: ()-->(2,4)
  └── filters
       ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
@@ -1476,6 +1482,8 @@ SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 inner-join (zigzag pqr@rs pqr@ts)
  ├── columns: r:3(int!null) t:5(string!null)
  ├── eq columns: [4 1] = [4 1]
+ ├── left fixed columns: [3] = [1]
+ ├── right fixed columns: [5] = ['foo']
  ├── fd: ()-->(3,5)
  └── filters
       ├── r = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
@@ -1488,7 +1496,7 @@ memo (optimized, ~12KB, required=[presentation: r:3,t:5])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@rs pqr@ts) (select G4 G5) (select G6 G5) (select G7 G8)
  │    └── [presentation: r:3,t:5]
  │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 0.21
+ │         └── cost: 0.22
  ├── G2: (scan pqr,cols=(3,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(3,5))
@@ -1534,6 +1542,8 @@ SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 inner-join (zigzag pqr@q pqr@s)
  ├── columns: p:1(int!null) q:2(int!null) r:3(int!null) s:4(string!null)
  ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [4] = ['foo']
  ├── key: (1)
  ├── fd: ()-->(2-4)
  └── filters
@@ -1562,16 +1572,16 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G6: (zigzag-join G11 pqr@r pqr@s)
  │    └── []
  │         ├── best: (zigzag-join G11 pqr@r pqr@s)
- │         └── cost: 0.21
+ │         └── cost: 0.22
  ├── G7: (filters G16)
  ├── G8: (zigzag-join G11 pqr@r pqr@rs)
  │    └── []
  │         ├── best: (zigzag-join G11 pqr@r pqr@rs)
- │         └── cost: 0.21
+ │         └── cost: 0.22
  ├── G9: (zigzag-join G11 pqr@s pqr@rs)
  │    └── []
  │         ├── best: (zigzag-join G11 pqr@s pqr@rs)
- │         └── cost: 0.21
+ │         └── cost: 0.22
  ├── G10: (index-join G20 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G20 pqr,cols=(1-4))
@@ -1678,3 +1688,121 @@ memo (optimized, ~8KB, required=[presentation: q:2,t:5])
  ├── G13: (const 1)
  ├── G14: (variable t)
  └── G15: (const 'foo')
+
+# --------------------------
+# GenerateInvertedIndexZigzagJoins
+# --------------------------
+
+exec-ddl
+CREATE TABLE t5 (
+    a INT PRIMARY KEY,
+    b JSONB,
+    c INT,
+    INVERTED INDEX b_idx(b)
+)
+----
+TABLE t5
+ ├── a int not null
+ ├── b jsonb
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INVERTED INDEX b_idx
+      ├── b jsonb
+      └── a int not null
+
+# One path. Should generate a scan constrained on the inverted index.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":1}'
+----
+index-join t5
+ ├── columns: b:2(jsonb) a:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t5@b_idx
+      ├── columns: a:1(int!null)
+      ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
+      └── key: (1)
+
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
+----
+index-join t5
+ ├── columns: b:2(jsonb) a:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t5@b_idx
+      ├── columns: a:1(int!null)
+      ├── constraint: /2/1: [/'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}' - /'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}']
+      └── key: (1)
+
+# Two paths. Should generate a zigzag join.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}'
+----
+inner-join (lookup t5)
+ ├── columns: b:2(jsonb) a:1(int!null)
+ ├── key columns: [1] = [1]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (zigzag t5@b_idx t5@b_idx)
+ │    ├── columns: a:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = ['{"a": 1}']
+ │    ├── right fixed columns: [2] = ['{"c": 2}']
+ │    └── filters (true)
+ └── filters
+      └── b @> '{"a": 1, "c": 2}' [type=bool, outer=(2)]
+
+memo
+SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
+----
+memo (optimized, ~10KB, required=[presentation: a:1])
+ ├── G1: (project G2 G3 a)
+ │    └── [presentation: a:1]
+ │         ├── best: (project G2 G3 a)
+ │         └── cost: 191.63
+ ├── G2: (select G4 G5) (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2)) (select G7 G5)
+ │    └── []
+ │         ├── best: (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2))
+ │         └── cost: 190.51
+ ├── G3: (projections)
+ ├── G4: (scan t5,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan t5,cols=(1,2))
+ │         └── cost: 1050.01
+ ├── G5: (filters G8)
+ ├── G6: (zigzag-join G9 t5@b_idx t5@b_idx)
+ │    └── []
+ │         ├── best: (zigzag-join G9 t5@b_idx t5@b_idx)
+ │         └── cost: 25.57
+ ├── G7: (index-join G10 t5,cols=(1,2))
+ │    └── []
+ │         ├── best: (index-join G10 t5,cols=(1,2))
+ │         └── cost: 565.58
+ ├── G8: (contains G11 G12)
+ ├── G9: (filters)
+ ├── G10: (scan t5@b_idx,cols=(1),constrained)
+ │    └── []
+ │         ├── best: (scan t5@b_idx,cols=(1),constrained)
+ │         └── cost: 114.45
+ ├── G11: (variable b)
+ └── G12: (const '{"a": 1, "c": 2}')
+
+# Three or more paths. Should generate zigzag joins.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":[{"b":"c", "d":3}, 5]}'
+----
+inner-join (lookup t5)
+ ├── columns: b:2(jsonb) a:1(int!null)
+ ├── key columns: [1] = [1]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (zigzag t5@b_idx t5@b_idx)
+ │    ├── columns: a:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = ['{"a": [{"b": "c"}]}']
+ │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
+ │    └── filters (true)
+ └── filters
+      └── b @> '{"a": [{"b": "c", "d": 3}, 5]}' [type=bool, outer=(2)]
