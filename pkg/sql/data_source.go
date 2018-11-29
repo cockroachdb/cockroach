@@ -440,7 +440,8 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
 		// It's okay to ignore the As columns here, as they're not permitted in
-		// DML aliases where this function is used.
+		// DML aliases where this function is used. The grammar does not allow
+		// them, so the parser would have reported an error if they were present.
 		if ate.As.Alias != "" {
 			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 		}

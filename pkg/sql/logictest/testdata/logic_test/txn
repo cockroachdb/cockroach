@@ -931,19 +931,19 @@ statement ok
 COMMIT
 
 statement error cannot execute CREATE TABLE in a read-only transaction
-CREATE TABLE a (a int)
+CREATE TABLE tab (a int)
 
 statement error cannot execute INSERT in a read-only transaction
-INSERT INTO a VALUES(1)
+INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
-UPDATE a SET a = 1
+UPDATE kv SET v = 'foo'
 
 statement error cannot execute INSERT in a read-only transaction
-UPSERT INTO a VALUES(2)
+UPSERT INTO kv VALUES('foo')
 
 statement error cannot execute DELETE in a read-only transaction
-DELETE FROM a
+DELETE FROM kv
 
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')

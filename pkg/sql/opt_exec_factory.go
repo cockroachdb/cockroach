@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -160,6 +161,13 @@ func (ef *execFactory) ConstructFilter(
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
 	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	f.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+
+	// If there's a spool, pull it up.
+	if spool, ok := f.source.plan.(*spoolNode); ok {
+		f.source.plan = spool.source
+		spool.source = f
+		return spool, nil
+	}
 	return f, nil
 }
 
@@ -190,26 +198,18 @@ func (ef *execFactory) ConstructSimpleProject(
 		// We will need the names of the input columns.
 		inputCols = planColumns(n.(planNode))
 	}
-	src := asDataSource(n)
-	r := &renderNode{
-		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
-		render:     make([]tree.TypedExpr, len(cols)),
-		columns:    make([]sqlbase.ResultColumn, len(cols)),
-	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
+
+	var rb renderBuilder
+	rb.init(n, reqOrdering, len(cols))
 	for i, col := range cols {
-		v := r.ivarHelper.IndexedVar(int(col))
-		r.render[i] = v
+		v := rb.r.ivarHelper.IndexedVar(int(col))
 		if colNames == nil {
-			r.columns[i].Name = inputCols[col].Name
+			rb.addExpr(v, inputCols[col].Name)
 		} else {
-			r.columns[i].Name = colNames[i]
+			rb.addExpr(v, colNames[i])
 		}
-		r.columns[i].Typ = v.ResolvedType()
 	}
-	r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
-	return r, nil
+	return rb.res, nil
 }
 
 func hasDuplicates(cols []exec.ColumnOrdinal) bool {
@@ -227,21 +227,13 @@ func hasDuplicates(cols []exec.ColumnOrdinal) bool {
 func (ef *execFactory) ConstructRender(
 	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	src := asDataSource(n)
-	r := &renderNode{
-		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
-		render:     make([]tree.TypedExpr, len(exprs)),
-		columns:    make([]sqlbase.ResultColumn, len(exprs)),
-	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
+	var rb renderBuilder
+	rb.init(n, reqOrdering, len(exprs))
 	for i, expr := range exprs {
-		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		r.render[i] = expr
-		r.columns[i] = sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
+		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
+		rb.addExpr(expr, colNames[i])
 	}
-	r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
-	return r, nil
+	return rb.res, nil
 }
 
 // RenameColumns is part of the exec.Factory interface.
@@ -742,6 +734,12 @@ func (ef *execFactory) ConstructLimit(
 		l.countExpr = limit
 		return l, nil
 	}
+	// If the input plan is a spoolNode, then propagate any constant limit to it.
+	if spool, ok := plan.(*spoolNode); ok {
+		if val, ok := limit.(*tree.DInt); ok {
+			spool.hardLimit = int64(*val)
+		}
+	}
 	return &limitNode{
 		plan:       plan,
 		countExpr:  limit,
@@ -784,6 +782,16 @@ func (ef *execFactory) ConstructProjectSet(
 func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery,
 ) (exec.Plan, error) {
+	// Enable auto-commit if the planner setting allows it.
+	if ef.planner.autoCommit {
+		if ac, ok := root.(autoCommitNode); ok {
+			ac.enableAutoCommit()
+		}
+	}
+	// No need to spool at the root.
+	if spool, ok := root.(*spoolNode); ok {
+		root = spool.source
+	}
 	res := &planTop{
 		plan:        root.(planNode),
 		auditEvents: ef.planner.curPlan.auditEvents,
@@ -869,4 +877,111 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 		node = &showTraceReplicaNode{plan: node}
 	}
 	return node, nil
+}
+
+func (ef *execFactory) ConstructInsert(
+	input exec.Node, table opt.Table, rowsNeeded bool,
+) (exec.Node, error) {
+	// Derive insert table and column descriptors.
+	tabDesc := table.(*optTable).desc
+	colCount := len(tabDesc.Columns)
+	colDescs := make([]sqlbase.ColumnDescriptor, colCount+table.MutationColumnCount())
+	copy(colDescs, tabDesc.Columns)
+
+	// Append any mutation columns.
+	for i := colCount; i < len(colDescs); i++ {
+		colDescs[i] = *table.MutationColumn(i - colCount).(*sqlbase.ColumnDescriptor)
+	}
+
+	// Determine the foreign key tables involved in the update.
+	fkTables, err := row.TablesNeededForFKs(
+		ef.planner.extendedEvalCtx.Context,
+		*tabDesc,
+		row.CheckInserts,
+		ef.planner.LookupTableByID,
+		ef.planner.CheckPrivilege,
+		ef.planner.analyzeExpr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table insert, which does the bulk of the work.
+	ri, err := row.MakeInserter(ef.planner.txn, tabDesc, fkTables, colDescs,
+		row.CheckFKs, &ef.planner.alloc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine the relational type of the generated insert node.
+	// If rows are not needed, no columns are returned.
+	var returnCols sqlbase.ResultColumns
+	if rowsNeeded {
+		// Insert always returns all non-mutation columns, in the same order they
+		// are defined in the table. Note that the columns and order can be
+		// different than tabCols.
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+	}
+
+	// Regular path for INSERT.
+	ins := insertNodePool.Get().(*insertNode)
+	*ins = insertNode{
+		source:  input.(planNode),
+		columns: returnCols,
+		run: insertRun{
+			ti:          tableInserter{ri: ri},
+			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			rowsNeeded:  rowsNeeded,
+			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+				Cols:    tabDesc.Columns,
+				Mapping: ri.InsertColIDtoRowIndex,
+			},
+			insertCols: ri.InsertCols,
+		},
+	}
+
+	// serialize the data-modifying plan to ensure that no data is
+	// observed that hasn't been validated first. See the comments
+	// on BatchedNext() in plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{source: &serializeNode{source: ins}}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: ins}, nil
+}
+
+// renderBuilder encapsulates the code to build a renderNode.
+type renderBuilder struct {
+	r   *renderNode
+	res planNode
+}
+
+// init initializes the renderNode with render expressions.
+func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap int) {
+	src := asDataSource(n)
+	rb.r = &renderNode{
+		source:     src,
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+		render:     make([]tree.TypedExpr, 0, cap),
+		columns:    make([]sqlbase.ResultColumn, 0, cap),
+	}
+	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.info.SourceColumns))
+	rb.r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+
+	// If there's a spool, pull it up.
+	if spool, ok := rb.r.source.plan.(*spoolNode); ok {
+		rb.r.source.plan = spool.source
+		spool.source = rb.r
+		rb.res = spool
+	} else {
+		rb.res = rb.r
+	}
+}
+
+// addExpr adds a new render expression with the given name.
+func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
+	rb.r.render = append(rb.r.render, expr)
+	rb.r.columns = append(rb.r.columns, sqlbase.ResultColumn{Name: colName, Typ: expr.ResolvedType()})
 }

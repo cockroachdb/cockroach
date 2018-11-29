@@ -25,16 +25,12 @@ TABLE b
 opt expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
-project
+values
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{bool}]
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── scan a
@@ -47,16 +43,12 @@ project
 opt expect=EliminateMax1Row
 SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
-project
+values
  ├── columns: r:7(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{bool}]
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── scalar-group-by
@@ -72,16 +64,12 @@ project
 opt expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
-project
+values
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{bool}]
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── values
@@ -95,16 +83,12 @@ project
 opt expect-not=EliminateMax1Row
 SELECT (SELECT i FROM a) > 5 AS r
 ----
-project
+values
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{bool}]
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── max1-row

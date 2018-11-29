@@ -18,9 +18,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
@@ -115,11 +115,7 @@ func (b *Builder) addExtraColumn(
 func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
-	tab, ok := b.resolveDataSource(&order.Table).(opt.Table)
-	if !ok {
-		panic(builderError{sqlbase.NewWrongObjectTypeError(&order.Table, "table")})
-	}
-
+	tab := b.resolveTable(&order.Table, privilege.SELECT)
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
 		panic(builderError{err})
@@ -143,7 +139,7 @@ func (b *Builder) analyzeOrderByIndex(
 
 		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
-		outCol := b.addColumn(orderByScope, "" /* label */, expr.ResolvedType(), expr)
+		outCol := b.addColumn(orderByScope, "" /* label */, expr)
 		outCol.descending = desc
 	}
 }
@@ -249,7 +245,7 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		b.addColumn(extraColsScope, "" /* label */, e.ResolvedType(), e)
+		b.addColumn(extraColsScope, "" /* label */, e)
 	}
 }
 

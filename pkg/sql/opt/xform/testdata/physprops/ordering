@@ -1185,3 +1185,75 @@ sort
            │    └── variable: b [type=int]
            └── first-agg [type=int]
                 └── variable: c [type=int]
+
+# --------------------------------------------------
+# Insert operator.
+# --------------------------------------------------
+
+# Verify that the internal ordering is required of the input.
+opt
+INSERT INTO a SELECT a, b::float, c::decimal, 'foo' FROM abc ORDER BY b
+----
+insert a
+ ├── columns: <none>
+ ├── table columns: x:1(int) y:2(float) z:3(decimal) s:4(string)
+ ├── input columns: a:5(int) b:8(float) c:9(decimal) "?column?":10(string)
+ ├── internal-ordering: +8 opt(10)
+ └── sort
+      ├── columns: a:5(int!null) b:8(float) c:9(decimal) "?column?":10(string!null)
+      ├── ordering: +8 opt(10)
+      └── project
+           ├── columns: b:8(float) c:9(decimal) "?column?":10(string!null) a:5(int!null)
+           ├── scan abc
+           │    └── columns: a:5(int!null) abc.b:6(int!null) abc.c:7(int!null)
+           └── projections
+                ├── abc.b::FLOAT8 [type=float]
+                ├── abc.c::DECIMAL [type=decimal]
+                └── const: 'foo' [type=string]
+
+# Verify that the external and internal orderings are intersected.
+opt
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *] ORDER BY b
+----
+insert abc
+ ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── table columns: a:1(int) b:2(int) c:3(int)
+ ├── input columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── internal-ordering: +5,+6
+ ├── ordering: +5
+ └── sort
+      ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── ordering: +5,+6
+      └── scan xyz
+           └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+
+# Verify that the external and internal orderings are intersected and simplified
+# according to FDs.
+opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz WHERE y=z ORDER BY z RETURNING *] ORDER BY b, c
+----
+insert abc
+ ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── table columns: a:1(int) b:2(int) c:3(int)
+ ├── input columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── internal-ordering: +(5|6)
+ ├── side-effects, mutations
+ ├── key: (4,6)
+ ├── fd: (5)==(6), (6)==(5)
+ ├── ordering: +(5|6) [provided: +5]
+ └── sort
+      ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── key: (4,6)
+      ├── fd: (5)==(6), (6)==(5)
+      ├── ordering: +(5|6) [provided: +5]
+      └── select
+           ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+           ├── key: (4,6)
+           ├── fd: (5)==(6), (6)==(5)
+           ├── scan xyz
+           │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+           │    ├── key: (4-6)
+           │    ├── prune: (4-6)
+           │    └── interesting orderings: (+4,+5,+6)
+           └── filters
+                └── y = z [type=bool, outer=(5,6), fd=(5)==(6), (6)==(5)]

@@ -68,3 +68,13 @@
 )
 =>
 (Explain $input (SimplifyExplainOrdering $input $explainPrivate))
+
+# SimplifyInsertOrdering removes redundant columns from the Insert operator's
+# input ordering.
+[SimplifyInsertOrdering, Normalize]
+(Insert
+    $input:*
+    $insertPrivate:* & (CanSimplifyInsertOrdering $input $insertPrivate)
+)
+=>
+(Insert $input (SimplifyInsertOrdering $input $insertPrivate))

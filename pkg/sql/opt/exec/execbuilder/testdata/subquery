@@ -32,16 +32,16 @@ ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 query TTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-root                ·             ·
- ├── render         ·             ·
- │    └── emptyrow  ·             ·
- └── subquery       ·             ·
-      │             id            @S1
-      │             original sql  EXISTS (SELECT a FROM abc)
-      │             exec mode     exists
-      └── scan      ·             ·
-·                   table         abc@primary
-·                   spans         ALL
+root            ·             ·
+ ├── values     ·             ·
+ │              size          1 column, 1 row
+ └── subquery   ·             ·
+      │         id            @S1
+      │         original sql  EXISTS (SELECT a FROM abc)
+      │         exec mode     exists
+      └── scan  ·             ·
+·               table         abc@primary
+·               spans         ALL
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
@@ -98,15 +98,15 @@ sort         ·      ·
 query TTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-root                     ·             ·
- ├── values              ·             ·
- │                       size          1 column, 2 rows
- └── subquery            ·             ·
-      │                  id            @S1
-      │                  original sql  (SELECT 2)
-      │                  exec mode     one row
-      └── render         ·             ·
-           └── emptyrow  ·             ·
+root              ·             ·
+ ├── values       ·             ·
+ │                size          1 column, 2 rows
+ └── subquery     ·             ·
+      │           id            @S1
+      │           original sql  (SELECT 2)
+      │           exec mode     one row
+      └── values  ·             ·
+·                 size          1 column, 1 row
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
@@ -216,20 +216,20 @@ join            ·                  ·                (x, z)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
-root                 ·             ·                       ("array")  ·
- ├── render          ·             ·                       ("array")  ·
- │    │              render 0      COALESCE(@S1, ARRAY[])  ·          ·
- │    └── emptyrow   ·             ·                       ()         ·
- └── subquery        ·             ·                       ("array")  ·
-      │              id            @S1                     ·          ·
-      │              original sql  (SELECT x FROM b)       ·          ·
-      │              exec mode     one row                 ·          ·
-      └── group      ·             ·                       (agg0)     ·
-           │         aggregate 0   array_agg(x)            ·          ·
-           │         scalar        ·                       ·          ·
-           └── scan  ·             ·                       (x)        ·
-·                    table         b@primary               ·          ·
-·                    spans         ALL                     ·          ·
+root                 ·              ·                       ("array")  ·
+ ├── values          ·              ·                       ("array")  ·
+ │                   size           1 column, 1 row         ·          ·
+ │                   row 0, expr 0  COALESCE(@S1, ARRAY[])  ·          ·
+ └── subquery        ·              ·                       ("array")  ·
+      │              id             @S1                     ·          ·
+      │              original sql   (SELECT x FROM b)       ·          ·
+      │              exec mode      one row                 ·          ·
+      └── group      ·              ·                       (agg0)     ·
+           │         aggregate 0    array_agg(x)            ·          ·
+           │         scalar         ·                       ·          ·
+           └── scan  ·              ·                       (x)        ·
+·                    table          b@primary               ·          ·
+·                    spans          ALL                     ·          ·
 
 # Case where the plan has an apply join.
 query error could not decorrelate subquery
