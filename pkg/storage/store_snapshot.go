@@ -676,9 +676,9 @@ func sendSnapshot(
 	if err := stream.Send(&SnapshotRequest{Final: true}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot to %s: %s, rate-limit: %s/sec, %0.0fms",
+	log.Infof(ctx, "streamed snapshot to %s: %s, rate-limit: %s/sec, %.2fs",
 		to, ss.Status(), humanizeutil.IBytes(int64(targetRate)),
-		timeutil.Since(start).Seconds()*1000)
+		timeutil.Since(start).Seconds())
 
 	resp, err = stream.Recv()
 	if err != nil {
