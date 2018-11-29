@@ -2958,3 +2958,18 @@ Laptop      Dell             800.00   NULL  800.00
 Tablet      iPad             700.00   NULL  700.00
 Tablet      Kindle Fire      150.00   NULL  150.00
 Tablet      Samsung          200.00   NULL  200.00
+
+# Test for #32702
+
+statement ok
+CREATE TABLE x (a INT)
+
+statement ok
+INSERT INTO x VALUES (1), (2), (3)
+
+query IT
+SELECT a, json_agg(a) OVER (ORDER BY a) FROM x ORDER BY a
+----
+1 [1]
+2 [1, 2]
+3 [1, 2, 3]
