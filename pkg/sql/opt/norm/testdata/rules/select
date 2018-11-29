@@ -1149,10 +1149,10 @@ SELECT k FROM
 project
  ├── columns: k:11(int)
  ├── scan b
- │    ├── columns: b.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections
-      └── variable: b.k [type=int, outer=(1)]
+      └── variable: k [type=int, outer=(1)]
 
 # --------------------------------------------------
 # EliminateUnionAllRight
@@ -1167,10 +1167,10 @@ SELECT k FROM
 project
  ├── columns: k:11(int)
  ├── scan b
- │    ├── columns: b.k:6(int!null)
+ │    ├── columns: k:6(int!null)
  │    └── key: (6)
  └── projections
-      └── variable: b.k [type=int, outer=(6)]
+      └── variable: k [type=int, outer=(6)]
 
 opt
 SELECT k FROM

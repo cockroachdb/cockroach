@@ -466,23 +466,23 @@ insert abcde
       │    ├── columns: column17:17(int!null) column18:18(int) y:15(int) "?column?":16(int)
       │    ├── union
       │    │    ├── columns: y:15(int) "?column?":16(int)
-      │    │    ├── left columns: xyz.y:2(int) "?column?":4(int)
-      │    │    ├── right columns: "?column?":8(int) xyz.y:6(int)
+      │    │    ├── left columns: y:2(int) "?column?":4(int)
+      │    │    ├── right columns: "?column?":8(int) y:6(int)
       │    │    ├── project
-      │    │    │    ├── columns: "?column?":4(int) xyz.y:2(int)
+      │    │    │    ├── columns: "?column?":4(int) y:2(int)
       │    │    │    ├── scan xyz
-      │    │    │    │    └── columns: xyz.x:1(string!null) xyz.y:2(int) xyz.z:3(float)
+      │    │    │    │    └── columns: x:1(string!null) y:2(int) z:3(float)
       │    │    │    └── projections
       │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: xyz.y [type=int]
+      │    │    │              ├── variable: y [type=int]
       │    │    │              └── const: 1 [type=int]
       │    │    └── project
-      │    │         ├── columns: "?column?":8(int) xyz.y:6(int)
+      │    │         ├── columns: "?column?":8(int) y:6(int)
       │    │         ├── scan xyz
-      │    │         │    └── columns: xyz.x:5(string!null) xyz.y:6(int) xyz.z:7(float)
+      │    │         │    └── columns: x:5(string!null) y:6(int) z:7(float)
       │    │         └── projections
       │    │              └── plus [type=int]
-      │    │                   ├── variable: xyz.y [type=int]
+      │    │                   ├── variable: y [type=int]
       │    │                   └── const: 1 [type=int]
       │    └── projections
       │         ├── const: 10 [type=int]

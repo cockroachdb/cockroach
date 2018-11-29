@@ -516,7 +516,7 @@ limit
  │         │              ├── columns: count_rows:8(int)
  │         │              ├── project
  │         │              │    └── scan abc
- │         │              │         └── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
+ │         │              │         └── columns: a:5(int!null) b:6(int) c:7(int)
  │         │              └── aggregations
  │         │                   └── count-rows [type=int]
  │         └── const: 3 [type=int]
@@ -528,7 +528,7 @@ limit
       │              ├── columns: count_rows:12(int)
       │              ├── project
       │              │    └── scan abc
-      │              │         └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
+      │              │         └── columns: a:9(int!null) b:10(int) c:11(int)
       │              └── aggregations
       │                   └── count-rows [type=int]
       └── const: 2 [type=int]

@@ -41,22 +41,22 @@ SELECT av.k, av2.s FROM av, av AS av2 WHERE av.k=av2.k
 project
  ├── columns: k:1(int!null) s:9(string)
  └── select
-      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string) a.k:6(int!null) a.i:7(int) a.s:9(string)
+      ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
       ├── inner-join
-      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string) a.k:6(int!null) a.i:7(int) a.s:9(string)
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
       │    ├── project
-      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │    └── scan a
-      │    │         └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+      │    │         └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── project
-      │    │    ├── columns: a.k:6(int!null) a.i:7(int) a.s:9(string)
+      │    │    ├── columns: k:6(int!null) i:7(int) s:9(string)
       │    │    └── scan a
-      │    │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+      │    │         └── columns: k:6(int!null) i:7(int) f:8(float) s:9(string) j:10(jsonb)
       │    └── filters (true)
       └── filters
            └── eq [type=bool]
-                ├── variable: a.k [type=int]
-                └── variable: a.k [type=int]
+                ├── variable: k [type=int]
+                └── variable: k [type=int]
 
 # View with aliased column names, filter, and ORDER BY.
 exec-ddl

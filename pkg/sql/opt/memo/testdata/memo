@@ -290,9 +290,9 @@ memo (optimized, ~4KB, required=[presentation: x:7,y:8])
  ├── G5: (projections G6 G7)
  ├── G6: (plus G8 G9)
  ├── G7: (plus G10 G9)
- ├── G8: (variable a.x)
+ ├── G8: (variable x)
  ├── G9: (const 1)
- └── G10: (variable a.y)
+ └── G10: (variable y)
 
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)

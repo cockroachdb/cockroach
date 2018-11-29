@@ -78,34 +78,34 @@ inner-join
  ├── key: (1,7,11)
  ├── fd: ()-->(5,6), (1)-->(2-4), (7)-->(8-10), (11)-->(12)
  ├── inner-join
- │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string) uv.u:11(int!null) uv.v:12(int!null)
+ │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
  │    ├── key: (7,11)
  │    ├── fd: (7)-->(8-10), (11)-->(12)
  │    ├── scan a
- │    │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string)
+ │    │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8-10)
  │    ├── select
- │    │    ├── columns: uv.u:11(int!null) uv.v:12(int!null)
+ │    │    ├── columns: u:11(int!null) v:12(int!null)
  │    │    ├── key: (11)
  │    │    ├── fd: (11)-->(12)
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:11(int!null) uv.v:12(int)
+ │    │    │    ├── columns: u:11(int!null) v:12(int)
  │    │    │    ├── key: (11)
  │    │    │    └── fd: (11)-->(12)
  │    │    └── filters
- │    │         └── uv.v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │         └── v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
  │    └── filters (true)
  ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) uv.u:5(int!null) uv.v:6(int)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int!null) v:6(int)
  │    ├── key: (1)
  │    ├── fd: ()-->(5,6), (1)-->(2-4)
  │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4)
  │    ├── scan uv
- │    │    ├── columns: uv.u:5(int!null) uv.v:6(int)
+ │    │    ├── columns: u:5(int!null) v:6(int)
  │    │    ├── constraint: /5: [/1 - /1]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
@@ -556,37 +556,37 @@ project
  ├── columns: "?column?":17(int!null)
  ├── fd: ()-->(17)
  ├── left-join-apply
- │    ├── columns: a.s:4(string) exists:16(bool)
+ │    ├── columns: s:4(string) exists:16(bool)
  │    ├── scan a
- │    │    └── columns: a.s:4(string)
+ │    │    └── columns: s:4(string)
  │    ├── project
  │    │    ├── columns: exists:16(bool)
  │    │    ├── outer: (4)
  │    │    ├── group-by
- │    │    │    ├── columns: a.k:5(int!null) true_agg:15(bool)
- │    │    │    ├── grouping columns: a.k:5(int!null)
+ │    │    │    ├── columns: k:5(int!null) true_agg:15(bool)
+ │    │    │    ├── grouping columns: k:5(int!null)
  │    │    │    ├── outer: (4)
  │    │    │    ├── key: (5)
  │    │    │    ├── fd: (5)-->(15)
  │    │    │    ├── left-join
- │    │    │    │    ├── columns: a.k:5(int!null) true:14(bool)
+ │    │    │    │    ├── columns: k:5(int!null) true:14(bool)
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── fd: ()~~>(14)
  │    │    │    │    ├── scan a
- │    │    │    │    │    ├── columns: a.k:5(int!null)
+ │    │    │    │    │    ├── columns: k:5(int!null)
  │    │    │    │    │    └── key: (5)
  │    │    │    │    ├── project
  │    │    │    │    │    ├── columns: true:14(bool!null)
  │    │    │    │    │    ├── outer: (4)
  │    │    │    │    │    ├── fd: ()-->(14)
  │    │    │    │    │    ├── select
- │    │    │    │    │    │    ├── columns: a.s:12(string!null)
+ │    │    │    │    │    │    ├── columns: s:12(string!null)
  │    │    │    │    │    │    ├── outer: (4)
  │    │    │    │    │    │    ├── fd: ()-->(12)
  │    │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    │    └── columns: a.s:12(string)
+ │    │    │    │    │    │    │    └── columns: s:12(string)
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── a.s = a.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    │    │    │    │         └── s = s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
  │    │    │    │    │    └── projections
  │    │    │    │    │         └── true [type=bool]
  │    │    │    │    └── filters (true)

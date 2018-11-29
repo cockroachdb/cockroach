@@ -286,25 +286,27 @@ func (md *Metadata) ColumnOrdinal(id ColumnID) int {
 	return int(id - tabID.firstColID())
 }
 
-// QualifiedColumnLabel returns the column label, possibly qualified with the
-// table name if either of these conditions is true:
+// QualifiedColumnLabel returns the column label, qualified with the table name
+// if either of these conditions is true:
 //
 //   1. fullyQualify is true
-//   2. the label might be ambiguous if it's not qualified, because there's
-//      another column in the metadata with the same name
+//   2. there's another column in the metadata with the same column name but
+//      different table name
 //
 // If the column label is qualified, the table is prefixed to it and separated
-// by a "." character.
+// by a "." character. The table name is qualified with catalog/schema only if
+// fullyQualify is true.
 func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string {
-	col := md.cols[id-1]
+	col := &md.cols[id-1]
 	if col.tabID == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
 		return col.label
 	}
+	tab := md.Table(col.tabID)
 
 	// If a fully qualified label has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
-	ambiguous := fullyQualify
+	var tabName string
 	if !fullyQualify {
 		for i := range md.cols {
 			if i == int(id-1) {
@@ -314,23 +316,29 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 			// If there are two columns with same name, then column is ambiguous.
 			otherCol := &md.cols[i]
 			if otherCol.label == col.label {
-				ambiguous = true
+				tabName = string(tab.Name().TableName)
+				if otherCol.tabID == 0 {
+					fullyQualify = true
+				} else {
+					// Only qualify if the qualified names are actually different.
+					otherTabName := string(md.Table(otherCol.tabID).Name().TableName)
+					if tabName != otherTabName {
+						fullyQualify = true
+					}
+				}
 				break
 			}
 		}
+	} else {
+		tabName = tab.Name().FQString()
 	}
 
-	if !ambiguous {
+	if !fullyQualify {
 		return col.label
 	}
 
 	var sb strings.Builder
-	tabName := md.Table(col.tabID).Name()
-	if fullyQualify {
-		sb.WriteString(tabName.FQString())
-	} else {
-		sb.WriteString(string(tabName.TableName))
-	}
+	sb.WriteString(tabName)
 	sb.WriteRune('.')
 	sb.WriteString(col.label)
 	return sb.String()
