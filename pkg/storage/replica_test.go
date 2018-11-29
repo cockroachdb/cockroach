@@ -7361,15 +7361,14 @@ func TestEntries(t *testing.T) {
 		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expCacheCount: 0, expError: raft.ErrUnavailable, setup: nil},
 		// Case 18: lo is available, hi is not, but it was cut off by maxBytes.
 		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
-
 		// Case 19: lo and hi are available, but entry cache evicted.
 		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
 			// Manually evict cache for the first 10 log entries.
-			repl.store.raftEntryCache.delEntries(rangeID, indexes[0], indexes[9]+1)
+			repl.store.raftEntryCache.Clear(rangeID, indexes[9]+1)
 			indexes = append(indexes, populateLogs(10, 40)...)
 		}},
 		// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
-		{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 4, setup: nil},
+		{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 0, setup: nil},
 		// Case 21: lo and hi are available and in entry cache.
 		{lo: indexes[9] + 2, hi: indexes[9] + 32, expResultCount: 30, expCacheCount: 30, setup: nil},
 		// Case 22: lo is available and hi is not.
@@ -7381,7 +7380,7 @@ func TestEntries(t *testing.T) {
 		if tc.maxBytes == 0 {
 			tc.maxBytes = math.MaxUint64
 		}
-		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
+		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.Scan(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
@@ -7411,45 +7410,6 @@ func TestEntries(t *testing.T) {
 		t.Errorf("23: error expected, got none")
 	}
 	repl.mu.Unlock()
-
-	// Case 24: add a gap to the indexes.
-	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
-		t.Fatal(err)
-	}
-	repl.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
-
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
-	if _, err := repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64); err == nil {
-		t.Errorf("24: error expected, got none")
-	}
-
-	// Case 25a: don't hit the gap due to maxBytes, cache populated.
-	{
-		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
-		if err != nil {
-			t.Errorf("25: expected no error, got %s", err)
-		}
-		if len(ents) != 1 {
-			t.Errorf("25: expected 1 entry, got %d", len(ents))
-		}
-	}
-	// Case 25b: don't hit the gap due to maxBytes, cache cleared.
-	{
-		repl.store.raftEntryCache.delEntries(rangeID, indexes[5], indexes[5]+1)
-		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
-		if err != nil {
-			t.Errorf("25: expected no error, got %s", err)
-		}
-		if len(ents) != 1 {
-			t.Errorf("25: expected 1 entry, got %d", len(ents))
-		}
-	}
-
-	// Case 26: don't hit the gap due to truncation.
-	if _, err := repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64); err != raft.ErrCompacted {
-		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
-	}
 }
 
 func TestTerm(t *testing.T) {
