@@ -15,11 +15,11 @@ SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
 project
  ├── columns: x:1(int) y:3(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: x:1(int) rowid:2(int!null) x:3(int) rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters (true)
 
 # Check that name resolution chokes on ambiguity when it needs to.
@@ -38,7 +38,7 @@ SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b
 project
  ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: x:1(int!null) onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
+      ├── columns: x:1(int!null) onecolumn.x:2(int) rowid:3(int!null) onecolumn.x:4(int) rowid:5(int!null)
       ├── project
       │    ├── columns: x:1(int!null)
       │    ├── values
@@ -46,11 +46,11 @@ project
       │    └── projections
       │         └── const: 1 [type=int]
       ├── inner-join
-      │    ├── columns: onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
+      │    ├── columns: onecolumn.x:2(int) rowid:3(int!null) onecolumn.x:4(int) rowid:5(int!null)
       │    ├── scan onecolumn
-      │    │    └── columns: onecolumn.x:2(int) onecolumn.rowid:3(int!null)
+      │    │    └── columns: onecolumn.x:2(int) rowid:3(int!null)
       │    ├── scan onecolumn
-      │    │    └── columns: onecolumn.x:4(int) onecolumn.rowid:5(int!null)
+      │    │    └── columns: onecolumn.x:4(int) rowid:5(int!null)
       │    └── filters (true)
       └── filters (true)
 
@@ -60,15 +60,15 @@ SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 project
  ├── columns: x:1(int!null) y:3(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
+      ├── columns: x:1(int!null) rowid:2(int!null) x:3(int!null) rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
@@ -77,17 +77,17 @@ sort
  ├── columns: x:1(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: onecolumn.x:1(int!null)
+      ├── columns: x:1(int!null)
       └── inner-join
-           ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
+           ├── columns: x:1(int!null) rowid:2(int!null) x:3(int!null) rowid:4(int!null)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+           │    └── columns: x:1(int) rowid:2(int!null)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+           │    └── columns: x:3(int) rowid:4(int!null)
            └── filters
                 └── eq [type=bool]
-                     ├── variable: onecolumn.x [type=int]
-                     └── variable: onecolumn.x [type=int]
+                     ├── variable: x [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
@@ -95,15 +95,15 @@ SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
 project
  ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
+      ├── columns: x:1(int!null) rowid:2(int!null) x:3(int!null) rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
@@ -111,15 +111,15 @@ SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 project
  ├── columns: x:1(int) y:3(int)
  └── left-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int)
+      ├── columns: x:1(int) rowid:2(int!null) x:3(int) rowid:4(int)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
@@ -128,17 +128,17 @@ sort
  ├── columns: x:1(int)
  ├── ordering: +1
  └── project
-      ├── columns: onecolumn.x:1(int)
+      ├── columns: x:1(int)
       └── left-join
-           ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int)
+           ├── columns: x:1(int) rowid:2(int!null) x:3(int) rowid:4(int)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+           │    └── columns: x:1(int) rowid:2(int!null)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+           │    └── columns: x:3(int) rowid:4(int!null)
            └── filters
                 └── eq [type=bool]
-                     ├── variable: onecolumn.x [type=int]
-                     └── variable: onecolumn.x [type=int]
+                     ├── variable: x [type=int]
+                     └── variable: x [type=int]
 
 # Check that ORDER BY chokes on ambiguity if no table less columns
 # were introduced by USING. (#12239)
@@ -173,15 +173,15 @@ SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 project
  ├── columns: x:1(int)
  └── left-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int)
+      ├── columns: x:1(int) rowid:2(int!null) x:3(int) rowid:4(int)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
@@ -189,15 +189,15 @@ SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 project
  ├── columns: x:1(int) y:3(int)
  └── right-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: x:1(int) rowid:2(int) x:3(int) rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
@@ -206,17 +206,17 @@ sort
  ├── columns: x:3(int)
  ├── ordering: +3
  └── project
-      ├── columns: onecolumn.x:3(int)
+      ├── columns: x:3(int)
       └── right-join
-           ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+           ├── columns: x:1(int) rowid:2(int) x:3(int) rowid:4(int!null)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+           │    └── columns: x:1(int) rowid:2(int!null)
            ├── scan onecolumn
-           │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+           │    └── columns: x:3(int) rowid:4(int!null)
            └── filters
                 └── eq [type=bool]
-                     ├── variable: onecolumn.x [type=int]
-                     └── variable: onecolumn.x [type=int]
+                     ├── variable: x [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
@@ -224,15 +224,15 @@ SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
 project
  ├── columns: x:3(int)
  └── right-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: x:1(int) rowid:2(int) x:3(int) rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    └── columns: x:3(int) rowid:4(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: onecolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 exec-ddl
 CREATE TABLE onecolumn_w(w INT)
@@ -724,15 +724,15 @@ SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 project
  ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int!null)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int!null) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int) y:5(int!null) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: twocolumn.x [type=int]
-                └── variable: twocolumn.y [type=int]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]
 
 build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
@@ -740,15 +740,15 @@ SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 project
  ├── columns: x:1(int!null) y:2(int!null) x:4(int) y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int!null) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int!null) rowid:3(int!null) x:4(int) y:5(int) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: twocolumn.x [type=int]
-                └── variable: twocolumn.y [type=int]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]
 
 build
 SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
@@ -789,14 +789,14 @@ SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 project
  ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int) y:5(int) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: twocolumn.x [type=int]
+                ├── variable: x [type=int]
                 └── const: 44 [type=int]
 
 build
@@ -1015,20 +1015,20 @@ limit
  ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
- │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int)
+ │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) y:9(int)
  │    ├── ordering: +1
  │    └── project
- │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int)
+ │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) y:9(int)
  │         └── inner-join
- │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null) twocolumn.x:8(int!null) y:9(int) twocolumn.rowid:10(int!null)
  │              ├── inner-join
- │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null)
+ │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null)
  │              │    ├── inner-join
- │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
  │              │    │    ├── scan onecolumn
  │              │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
  │              │    │    ├── scan twocolumn
- │              │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │              │    │    │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
  │              │    │    └── filters (true)
  │              │    ├── scan onecolumn
  │              │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
@@ -1037,7 +1037,7 @@ limit
  │              │              ├── variable: onecolumn.x [type=int]
  │              │              └── variable: twocolumn.x [type=int]
  │              ├── scan twocolumn
- │              │    └── columns: twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │              │    └── columns: twocolumn.x:8(int) y:9(int) twocolumn.rowid:10(int!null)
  │              └── filters
  │                   └── and [type=bool]
  │                        ├── eq [type=bool]
@@ -1055,11 +1055,11 @@ SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolum
 project
  ├── columns: x:1(int!null) x:3(int!null) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── filters
            └── and [type=bool]
                 ├── eq [type=bool]
@@ -1069,12 +1069,12 @@ project
                      ├── project
                      │    ├── columns: twocolumn.x:6(int)
                      │    └── select
-                     │         ├── columns: twocolumn.x:6(int) twocolumn.y:7(int!null) twocolumn.rowid:8(int!null)
+                     │         ├── columns: twocolumn.x:6(int) y:7(int!null) twocolumn.rowid:8(int!null)
                      │         ├── scan twocolumn
-                     │         │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+                     │         │    └── columns: twocolumn.x:6(int) y:7(int) twocolumn.rowid:8(int!null)
                      │         └── filters
                      │              └── ge [type=bool]
-                     │                   ├── variable: twocolumn.y [type=int]
+                     │                   ├── variable: y [type=int]
                      │                   └── const: 52 [type=int]
                      └── variable: onecolumn.x [type=int]
 
@@ -1107,13 +1107,13 @@ SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
 project
  ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) x:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) rowid:2(int!null) x:5(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: onecolumn.x:1(int) rowid:2(int!null)
       ├── project
       │    ├── columns: x:5(int)
       │    ├── scan onecolumn
-      │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      │    │    └── columns: onecolumn.x:3(int) rowid:4(int!null)
       │    └── projections
       │         └── plus [type=int]
       │              ├── variable: onecolumn.x [type=int]
@@ -1132,28 +1132,28 @@ limit
  ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
- │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │    ├── columns: x:1(int!null) y:2(int) y:5(int) y:8(int)
  │    ├── ordering: +1
  │    └── project
- │         ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │         ├── columns: x:1(int!null) y:2(int) y:5(int) y:8(int)
  │         └── inner-join
- │              ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int!null) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │              ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null) x:7(int!null) y:8(int) rowid:9(int!null)
  │              ├── inner-join
- │              │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │              │    ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null)
  │              │    ├── scan twocolumn
- │              │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+ │              │    │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
  │              │    ├── scan twocolumn
- │              │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │              │    │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
  │              │    └── filters
  │              │         └── eq [type=bool]
- │              │              ├── variable: twocolumn.x [type=int]
- │              │              └── variable: twocolumn.x [type=int]
+ │              │              ├── variable: x [type=int]
+ │              │              └── variable: x [type=int]
  │              ├── scan twocolumn
- │              │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │              │    └── columns: x:7(int) y:8(int) rowid:9(int!null)
  │              └── filters
  │                   └── eq [type=bool]
- │                        ├── variable: twocolumn.x [type=int]
- │                        └── variable: twocolumn.x [type=int]
+ │                        ├── variable: x [type=int]
+ │                        └── variable: x [type=int]
  └── const: 1 [type=int]
 
 build
@@ -1163,25 +1163,25 @@ sort
  ├── columns: s:1(int!null) x:4(int!null) x:7(int!null) y:2(int) y:5(int) y:8(int)
  ├── ordering: +1
  └── project
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.x:7(int!null) twocolumn.y:8(int)
+      ├── columns: x:1(int!null) y:2(int) x:4(int!null) y:5(int) x:7(int!null) y:8(int)
       └── inner-join
-           ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int!null) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+           ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null) x:7(int!null) y:8(int) rowid:9(int!null)
            ├── inner-join
-           │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+           │    ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null)
            │    ├── scan twocolumn
-           │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+           │    │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
            │    ├── scan twocolumn
-           │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+           │    │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
            │    └── filters
            │         └── eq [type=bool]
-           │              ├── variable: twocolumn.x [type=int]
-           │              └── variable: twocolumn.x [type=int]
+           │              ├── variable: x [type=int]
+           │              └── variable: x [type=int]
            ├── scan twocolumn
-           │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+           │    └── columns: x:7(int) y:8(int) rowid:9(int!null)
            └── filters
                 └── eq [type=bool]
-                     ├── variable: twocolumn.x [type=int]
-                     └── variable: twocolumn.x [type=int]
+                     ├── variable: x [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
@@ -1224,13 +1224,13 @@ SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 inner-join
  ├── columns: x:1(int) x:3(int)
  ├── project
- │    ├── columns: onecolumn.x:1(int)
+ │    ├── columns: x:1(int)
  │    └── scan onecolumn
- │         └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         └── columns: x:1(int) rowid:2(int!null)
  ├── project
- │    ├── columns: onecolumn.x:3(int)
+ │    ├── columns: x:3(int)
  │    └── scan onecolumn
- │         └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── columns: x:3(int) rowid:4(int!null)
  └── filters (true)
 
 # Check that anonymous sources are properly looked up without ambiguity.
@@ -1289,11 +1289,11 @@ SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 project
  ├── columns: x:1(int) y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int) y:2(int) rowid:3(int!null) x:4(int) y:5(int) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters (true)
 
 build
@@ -1302,15 +1302,15 @@ SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 project
  ├── columns: y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: twocolumn.x [type=int]
-                └── variable: twocolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
@@ -1318,15 +1318,15 @@ SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 project
  ├── columns: y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int!null) y:5(int) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: twocolumn.x [type=int]
-                └── variable: twocolumn.x [type=int]
+                ├── variable: x [type=int]
+                └── variable: x [type=int]
 
 build
 SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
@@ -1334,15 +1334,15 @@ SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 project
  ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int!null) twocolumn.rowid:6(int!null)
+      ├── columns: x:1(int!null) y:2(int) rowid:3(int!null) x:4(int) y:5(int!null) rowid:6(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+      │    └── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      │    └── columns: x:4(int) y:5(int) rowid:6(int!null)
       └── filters
            └── lt [type=bool]
-                ├── variable: twocolumn.x [type=int]
-                └── variable: twocolumn.y [type=int]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
@@ -2038,21 +2038,21 @@ SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) d:8(int)
  └── inner-join
-      ├── columns: pkbac.a:1(int!null) pkbac.b:2(int!null) pkbac.c:3(int!null) pkbac.d:4(int) pkbac.a:5(int!null) pkbac.b:6(int!null) pkbac.c:7(int!null) pkbac.d:8(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
       ├── scan pkbac
-      │    └── columns: pkbac.a:1(int!null) pkbac.b:2(int!null) pkbac.c:3(int!null) pkbac.d:4(int)
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
       ├── scan pkbac
-      │    └── columns: pkbac.a:5(int!null) pkbac.b:6(int!null) pkbac.c:7(int!null) pkbac.d:8(int)
+      │    └── columns: a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
       └── filters
            ├── eq [type=bool]
-           │    ├── variable: pkbac.a [type=int]
-           │    └── variable: pkbac.a [type=int]
+           │    ├── variable: a [type=int]
+           │    └── variable: a [type=int]
            ├── eq [type=bool]
-           │    ├── variable: pkbac.b [type=int]
-           │    └── variable: pkbac.b [type=int]
+           │    ├── variable: b [type=int]
+           │    └── variable: b [type=int]
            └── eq [type=bool]
-                ├── variable: pkbac.c [type=int]
-                └── variable: pkbac.c [type=int]
+                ├── variable: c [type=int]
+                └── variable: c [type=int]
 
 build
 SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
