@@ -56,8 +56,8 @@ func Connect(
 		defer close(send)
 		for {
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case msg := <-send:
 				err := fe.Send(msg)
 				if err != nil {
@@ -83,8 +83,8 @@ func Connect(
 			dup := y.Interface().(pgproto3.BackendMessage)
 
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case recv <- dup:
 			}
 		}

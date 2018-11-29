@@ -573,8 +573,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				return err
 			}
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case valsCh <- vals:
 			}
 		}
@@ -671,8 +671,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				d.Format(&f.FmtCtx)
 			}
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case stringsCh <- f.String():
 			}
 		}
