@@ -254,6 +254,10 @@ func (c *conn) serveImpl(
 		if err := sendStatusParam("session_authorization", c.sessionArgs.User); err != nil {
 			return err
 		}
+
+		// TODO(knz): this should retrieve the admin status during
+		// authentication using the roles table, instead of using a
+		// simple/naive username match.
 		isSuperUser := c.sessionArgs.User == security.RootUser
 		superUserVal := "off"
 		if isSuperUser {
