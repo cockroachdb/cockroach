@@ -26,6 +26,8 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -118,7 +120,7 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DDate:
 		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(t, nil, b.putbuf[4:4])
+		s := formatDate(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -204,6 +206,24 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt64(int64(math.Float64bits(float64(*v))))
 
 	case *tree.DDecimal:
+		if v.Form != apd.Finite {
+			b.putInt32(8)
+			// 0 digits.
+			b.putInt32(0)
+			// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+			b.write([]byte{0xc0, 0, 0, 0})
+
+			if v.Form == apd.Infinite {
+				// TODO(mjibson): #32489
+				// The above encoding is not correct for Infinity, but since that encoding
+				// doesn't exist in postgres, it's unclear what to do. For now use the NaN
+				// encoding and count it to see if anyone even needs this.
+				telemetry.Count("pgwire.#32489.binary_decimal_infinity")
+			}
+
+			return
+		}
+
 		alloc := struct {
 			pgNum pgwirebase.PGNumeric
 
@@ -375,9 +395,12 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 }
 
-const pgTimeFormat = "15:04:05.999999"
-const pgTimeStampFormatNoOffset = "2006-01-02 " + pgTimeFormat
-const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
+const (
+	pgTimeFormat              = "15:04:05.999999"
+	pgDateFormat              = "2006-01-02"
+	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+)
 
 // formatTime formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
@@ -386,11 +409,25 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
 }
 
-// formatTs formats t with an optional offset into a format lib/pq understands,
-// appending to the provided tmp buffer and reallocating if needed. The function
-// will then return the resulting buffer. formatTs is mostly cribbed from
-// github.com/lib/pq.
 func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+	var format string
+	if offset != nil {
+		format = pgTimeStampFormat
+	} else {
+		format = pgTimeStampFormatNoOffset
+	}
+	return formatTsWithFormat(format, t, offset, tmp)
+}
+
+func formatDate(t time.Time, offset *time.Location, tmp []byte) []byte {
+	return formatTsWithFormat(pgDateFormat, t, offset, tmp)
+}
+
+// formatTsWithFormat formats t with an optional offset into a format
+// lib/pq understands, appending to the provided tmp buffer and
+// reallocating if needed. The function will then return the resulting
+// buffer. formatTsWithFormat is mostly cribbed from github.com/lib/pq.
+func formatTsWithFormat(format string, t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -405,12 +442,7 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 		bc = true
 	}
 
-	if offset != nil {
-		b = t.AppendFormat(tmp, pgTimeStampFormat)
-	} else {
-		b = t.AppendFormat(tmp, pgTimeStampFormatNoOffset)
-	}
-
+	b = t.AppendFormat(tmp, format)
 	if bc {
 		b = append(b, " BC"...)
 	}
