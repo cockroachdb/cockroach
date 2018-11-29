@@ -110,11 +110,26 @@ var _ Operator = &orderedAggregator{}
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on. aggTyps specifies the associated
 // types of these input columns.
-// TODO(asubiotto): Add aggregate function specifiers. Currently the ordered
-// aggregator only plans sum aggregations.
+// TODO(asubiotto): Take in distsqlrun.AggregatorSpec_Func. This is currently
+// impossible due to an import cycle so we hack around it by taking in the raw
+// integer specifier.
 func NewOrderedAggregator(
-	input Operator, groupCols []uint32, groupTyps []types.T, aggCols [][]uint32, aggTyps [][]types.T,
+	input Operator,
+	groupCols []uint32,
+	groupTyps []types.T,
+	aggFns []int,
+	aggCols [][]uint32,
+	aggTyps [][]types.T,
 ) (Operator, error) {
+	if len(aggFns) != len(aggCols) || len(aggFns) != len(aggTyps) {
+		return nil,
+			errors.Errorf(
+				"mismatched aggregation spec lengths: aggFns(%d), aggCols(%d), aggTyps(%d)",
+				len(aggFns),
+				len(aggCols),
+				len(aggTyps),
+			)
+	}
 	op, groupCol, err := orderedDistinctColsToOperators(input, groupCols, groupTyps)
 	if err != nil {
 		return nil, err
@@ -148,15 +163,24 @@ func NewOrderedAggregator(
 		groupCol: groupCol,
 	}
 	a.aggregateFuncs = make([]aggregateFunc, len(aggCols))
-	for i, cols := range aggCols {
-		if len(cols) != 1 {
+	for i := range aggFns {
+		if len(aggCols[i]) != 1 {
 			return nil, errors.Errorf(
 				"malformed input columns at index %d, expected 1 col got %d",
-				i, len(cols),
+				i, len(aggCols[i]),
 			)
 		}
 		var err error
-		a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+		switch aggFns[i] {
+		// AVG.
+		case 1:
+			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
+		// SUM, SUM_INT.
+		case 10, 11:
+			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+		default:
+			return nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
+		}
 		if err != nil {
 			return nil, err
 		}
