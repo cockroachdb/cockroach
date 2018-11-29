@@ -50,6 +50,8 @@ import (
 // performed under lock is linear with respect to the number of spans that a
 // latch acquisition declares but NOT linear with respect to the number of other
 // latch attempts that it will wait on.
+//
+// Manager's zero value can be used directly.
 type Manager struct {
 	mu      syncutil.Mutex
 	idAlloc uint64
@@ -59,48 +61,22 @@ type Manager struct {
 // scopedManager is a latch manager scoped to either local or global keys.
 // See spanset.SpanScope.
 type scopedManager struct {
-	rSet  map[*latch]struct{}
-	trees [spanset.NumSpanAccess]btree
-}
-
-// New creates a new Manager.
-func New() *Manager {
-	m := new(Manager)
-	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
-		m.scopes[s] = scopedManager{
-			rSet: make(map[*latch]struct{}),
-		}
-	}
-	return m
+	readSet latchList
+	trees   [spanset.NumSpanAccess]btree
 }
 
 // latches are stored in the Manager's btrees. They represent the latching
 // of a single key span.
 type latch struct {
-	meta uint64 // high bit: inRSet; lower 63 bits: id
-	span roachpb.Span
-	ts   hlc.Timestamp
-	done *signal
+	id         uint64
+	span       roachpb.Span
+	ts         hlc.Timestamp
+	done       *signal
+	next, prev *latch // readSet linked-list.
 }
 
-func (la *latch) inRSet() bool {
-	return la.meta>>63 == 1
-}
-
-func (la *latch) setInRSet(b bool) {
-	if b {
-		la.meta |= (1 << 63)
-	} else {
-		la.meta &^= (1 << 63)
-	}
-}
-
-func (la *latch) id() uint64 {
-	return la.meta &^ (1 << 63)
-}
-
-func (la *latch) setID(id uint64) {
-	la.meta = id &^ (1 << 63)
+func (la *latch) inReadSet() bool {
+	return la.next != nil
 }
 
 // Guard is a handle to a set of acquired latches. It is returned by
@@ -255,9 +231,7 @@ func (m *Manager) snapshotLocked(spans *spanset.SpanSet) snapshot {
 		writing := len(spans.GetSpans(spanset.SpanReadWrite, s)) > 0
 
 		if writing {
-			if len(sm.rSet) > 0 {
-				sm.flushReadSetLocked()
-			}
+			sm.flushReadSetLocked()
 			snap.trees[s][spanset.SpanReadOnly] = sm.trees[spanset.SpanReadOnly].Clone()
 		}
 		if writing || reading {
@@ -269,18 +243,10 @@ func (m *Manager) snapshotLocked(spans *spanset.SpanSet) snapshot {
 
 // flushReadSetLocked flushes the read set into the read interval tree.
 func (sm *scopedManager) flushReadSetLocked() {
-	for latch := range sm.rSet {
-		latch.setInRSet(false)
+	for sm.readSet.len > 0 {
+		latch := sm.readSet.front()
+		sm.readSet.remove(latch)
 		sm.trees[spanset.SpanReadOnly].Set(latch)
-	}
-	if realloc := len(sm.rSet) > 16; realloc {
-		// TODO(nvanbenschoten): never re-alloc in go1.11.
-		sm.rSet = make(map[*latch]struct{})
-	} else {
-		// NB: hitting map-clearing range fast-path.
-		for latch := range sm.rSet {
-			delete(sm.rSet, latch)
-		}
 	}
 }
 
@@ -293,13 +259,12 @@ func (m *Manager) insertLocked(lg *Guard) {
 			latches := lg.latches(s, a)
 			for i := range latches {
 				latch := &latches[i]
-				latch.setID(m.nextID())
+				latch.id = m.nextID()
 				switch a {
 				case spanset.SpanReadOnly:
 					// Add reads to the rSet. They only need to enter the read
 					// tree if they're flushed by a write capturing a snapshot.
-					latch.setInRSet(true)
-					sm.rSet[latch] = struct{}{}
+					sm.readSet.pushBack(latch)
 				case spanset.SpanReadWrite:
 					// Add writes directly to the write tree.
 					sm.trees[spanset.SpanReadWrite].Set(latch)
@@ -424,8 +389,8 @@ func (m *Manager) removeLocked(lg *Guard) {
 			latches := lg.latches(s, a)
 			for i := range latches {
 				latch := &latches[i]
-				if latch.inRSet() {
-					delete(sm.rSet, latch)
+				if latch.inReadSet() {
+					sm.readSet.remove(latch)
 				} else {
 					sm.trees[a].Delete(latch)
 				}
