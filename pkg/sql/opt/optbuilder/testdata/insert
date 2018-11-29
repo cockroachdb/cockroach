@@ -471,7 +471,7 @@ insert abcde
       │    │    ├── project
       │    │    │    ├── columns: "?column?":4(int) xyz.y:2(int)
       │    │    │    ├── scan xyz
-      │    │    │    │    └── columns: xyz.x:1(string!null) xyz.y:2(int) xyz.z:3(float)
+      │    │    │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
       │    │    │    └── projections
       │    │    │         └── plus [type=int]
       │    │    │              ├── variable: xyz.y [type=int]
@@ -479,7 +479,7 @@ insert abcde
       │    │    └── project
       │    │         ├── columns: "?column?":8(int) xyz.y:6(int)
       │    │         ├── scan xyz
-      │    │         │    └── columns: xyz.x:5(string!null) xyz.y:6(int) xyz.z:7(float)
+      │    │         │    └── columns: x:5(string!null) xyz.y:6(int) z:7(float)
       │    │         └── projections
       │    │              └── plus [type=int]
       │    │                   ├── variable: xyz.y [type=int]
