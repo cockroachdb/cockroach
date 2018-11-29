@@ -253,7 +253,8 @@ echo "ext {
 		t.l.Printf("------------------------\n")
 
 		var bResults strings.Builder
-		fmt.Fprintf(&bResults, "%d Total Test Run\n",
+		fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
+		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
 		fmt.Fprintf(&bResults, "%d tests passed\n", passUnexpectedCount+passExpectedCount)
@@ -261,7 +262,7 @@ echo "ext {
 		fmt.Fprintf(&bResults, "%d tests passed unexpectedly\n", passUnexpectedCount)
 		fmt.Fprintf(&bResults, "%d tests failed unexpectedly\n", failUnexpectedCount)
 		fmt.Fprintf(&bResults, "%d tests expected failed, but not run \n", notRunCount)
-		fmt.Fprintf(&bResults, "For a full summary, look at artifacts/hibernate/logs/report/index.html\n")
+		fmt.Fprintf(&bResults, "For a full summary look at the hibernate artifacts \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
 
@@ -281,12 +282,9 @@ echo "ext {
 			fmt.Fprintf(&b, "}\n\n")
 			t.l.Printf("\n\n%s\n\n", b.String())
 			t.l.Printf("------------------------\n")
-			t.Fatalf("\n"+
-				"%d tests failed unexpectedly\n"+
-				"%d tests passed unexpectedly\n"+
-				"%d tests were not run that were expected to fail\n"+
-				"See artifacts/hibernate/log/logs/report for more details",
-				failUnexpectedCount, passUnexpectedCount, notRunCount,
+			t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' hibernate log\n",
+				bResults.String(),
+				blacklistName,
 			)
 		}
 	}
