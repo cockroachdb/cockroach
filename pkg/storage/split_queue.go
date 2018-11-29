@@ -180,6 +180,7 @@ func (sq *splitQueue) processAttempt(
 				SplitKey: splitKey.AsRawKey(),
 			},
 			desc,
+			false, /* delayable */
 		); err != nil {
 			return errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
@@ -196,6 +197,7 @@ func (sq *splitQueue) processAttempt(
 			ctx,
 			roachpb.AdminSplitRequest{},
 			desc,
+			false, /* delayable */
 		)
 		return err
 	}
@@ -220,6 +222,7 @@ func (sq *splitQueue) processAttempt(
 				SplitKey: splitByLoadKey,
 			},
 			desc,
+			false, /* delayable */
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
