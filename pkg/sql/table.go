@@ -436,11 +436,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 		log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 		return table, nil
 	}
-	table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
-	if err != nil {
-		return nil, err
-	}
-	return sqlbase.NewMutableExistingTableDescriptor(*table), nil
+	return sqlbase.GetMutableTableDescFromID(ctx, txn, tableID)
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -503,7 +499,7 @@ func (tc *TableCollection) hasUncommittedTables() bool {
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescriptor) {
 	tbl := uncommittedTable{
 		MutableTableDescriptor:   &desc,
-		ImmutableTableDescriptor: sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
+		ImmutableTableDescriptor: sqlbase.NewImmutableTableDescriptor(desc.TableDescriptor),
 	}
 	for i, table := range tc.uncommittedTables {
 		if table.MutableTableDescriptor.ID == desc.ID {
@@ -880,12 +876,8 @@ func (p *planner) writeTableDescToBatch(
 		}
 	} else {
 		// Only increment the table descriptor version once in this transaction.
-		// If the descriptor version had been incremented before it would have
-		// been placed in the uncommitted tables list.
-		if p.Tables().getUncommittedTableByID(tableDesc.ID).MutableTableDescriptor == nil {
-			if err := incrementVersion(ctx, tableDesc.TableDesc(), p.txn); err != nil {
-				return err
-			}
+		if err := maybeIncrementVersion(ctx, tableDesc, p.txn); err != nil {
+			return err
 		}
 
 		// Schedule a schema changer for later.

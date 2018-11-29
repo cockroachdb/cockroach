@@ -179,14 +179,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.TableDescriptor) error {
+	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return errDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Publish a new version for the table
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.TableDescriptor) error {
+	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return nil
 	}, nil); err != nil {
 		t.Fatal(err)
