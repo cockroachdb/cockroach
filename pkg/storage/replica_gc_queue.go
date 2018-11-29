@@ -264,6 +264,14 @@ func (rgcq *replicaGCQueue) process(
 			// look it up by RangeID) to disable the mechanism in #31875 for it.
 			// We should be able to use prefetching unconditionally to have this
 			// desc ready whenever we need it.
+			//
+			// NB: there's solid evidence that this phenomenon can actually lead
+			// to a large spike in Raft snapshots early in the life of a cluster
+			// (in particular when combined with a restore operation) when the
+			// removed replica has many pending splits and thus incurs a Raft
+			// snapshot for *each* of them. This typically happens for the last
+			// range:
+			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
 			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
