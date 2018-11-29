@@ -162,32 +162,51 @@ import (
 
 // Group wraps errgroup.
 type Group struct {
-	*errgroup.Group
-	// Done is set to ctx.Done().
+	// Done is the context cancellation channel (i.e. ctx.Done()) for a context
+	// which is canceled when the Group is canceled (i.e. either the incoming
+	// context is canceled, or a method passed to Go returns with an error, or
+	// Wait returns).
 	Done <-chan struct{}
-	ctx  context.Context
+
+	wrapped *errgroup.Group
+	ctx     context.Context
+}
+
+// Wait blocks until all function calls from the Go method have returned, then
+// returns the first non-nil error (if any) from them. If Wait() is invoked
+// after the context (originally supplied to WithContext) is canceled, Wait
+// returns an error, even if no Go invocation did. In particular, calling
+// Wait() after Done has been closed is guaranteed to return an error.
+func (g Group) Wait() error {
+	ctxErr := g.ctx.Err()
+	err := g.wrapped.Wait()
+	if err != nil {
+		return err
+	}
+	return ctxErr
 }
 
 // WithContext returns a new Group and an associated Context derived from ctx.
 func WithContext(ctx context.Context) Group {
 	grp, ctx := errgroup.WithContext(ctx)
 	return Group{
-		Group: grp,
-		Done:  ctx.Done(),
-		ctx:   ctx,
+		Done: ctx.Done(),
+
+		wrapped: grp,
+		ctx:     ctx,
 	}
+}
+
+// Go calls the given function in a new goroutine.
+func (g Group) Go(f func() error) {
+	g.wrapped.Go(f)
 }
 
 // GoCtx calls the given function in a new goroutine.
 func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.Group.Go(func() error {
+	g.wrapped.Go(func() error {
 		return f(g.ctx)
 	})
-}
-
-// Err returns the Group's ctx.Err().
-func (g Group) Err() error {
-	return g.ctx.Err()
 }
 
 // GroupWorkers runs num worker go routines in an errgroup.
