@@ -107,10 +107,10 @@ limit
  ├── columns: s:4(string)
  ├── side-effects
  ├── scan a@s_idx
- │    └── columns: a.s:4(string)
+ │    └── columns: s:4(string)
  └── subquery [type=int]
       └── scan a@s_idx
-           ├── columns: a.k:6(int!null)
+           ├── columns: k:6(int!null)
            ├── limit: 1
            ├── key: ()
            └── fd: ()-->(6)

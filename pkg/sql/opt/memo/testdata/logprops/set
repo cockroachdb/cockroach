@@ -138,7 +138,7 @@ select
            │              ├── union
            │              │    ├── columns: x:11(int) u:12(int)
            │              │    ├── left columns: x:6(int) uv.u:3(int)
-           │              │    ├── right columns: y:10(int) uv.v:8(int)
+           │              │    ├── right columns: y:10(int) v:8(int)
            │              │    ├── outer: (1,2)
            │              │    ├── key: (11,12)
            │              │    ├── project
@@ -147,7 +147,7 @@ select
            │              │    │    ├── fd: ()-->(6)
            │              │    │    ├── prune: (3,6)
            │              │    │    ├── scan uv
-           │              │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │              │    │    │    ├── columns: uv.u:3(int) v:4(int!null) rowid:5(int!null)
            │              │    │    │    ├── key: (5)
            │              │    │    │    ├── fd: (5)-->(3,4)
            │              │    │    │    ├── prune: (3-5)
@@ -155,12 +155,12 @@ select
            │              │    │    └── projections
            │              │    │         └── variable: xy.x [type=int, outer=(1)]
            │              │    └── project
-           │              │         ├── columns: y:10(int) uv.v:8(int!null)
+           │              │         ├── columns: y:10(int) v:8(int!null)
            │              │         ├── outer: (2)
            │              │         ├── fd: ()-->(10)
            │              │         ├── prune: (8,10)
            │              │         ├── scan uv
-           │              │         │    ├── columns: uv.u:7(int) uv.v:8(int!null) uv.rowid:9(int!null)
+           │              │         │    ├── columns: uv.u:7(int) v:8(int!null) rowid:9(int!null)
            │              │         │    ├── key: (9)
            │              │         │    ├── fd: (9)-->(7,8)
            │              │         │    ├── prune: (7-9)

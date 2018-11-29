@@ -423,9 +423,9 @@ project
  │    │    │    └── project
  │    │    │         ├── columns: expr:3(int)
  │    │    │         ├── scan a
- │    │    │         │    └── columns: a.x:1(int!null)
+ │    │    │         │    └── columns: x:1(int!null)
  │    │    │         └── projections
- │    │    │              └── a.x + 1 [type=int]
+ │    │    │              └── x + 1 [type=int]
  │    │    ├── project
  │    │    │    ├── columns: true:7(bool!null)
  │    │    │    ├── scan a
