@@ -200,16 +200,6 @@ func (ie *internalExecutorImpl) initConnEx(
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		// Once ex.run() returns, we call ex.resetExtraTxnState() to release the
-		// leases that might have been acquired by the connEx. If there is no
-		// higher-level txn, then the leases were already released when the implicit
-		// txn committed. But if there is a higher-level txn, they don't get
-		// released.
-		defer func() {
-			if err := ex.resetExtraTxnState(ctx, ex.server.dbCache); err != nil {
-				log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
-			}
-		}()
 		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
 			errCallback(err)
 		}
