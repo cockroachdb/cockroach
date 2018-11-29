@@ -404,10 +404,10 @@ func awsMachineType(cpus int) string {
 		return "c5d.2xlarge"
 	case cpus <= 16:
 		return "c5d.4xlarge"
-	case cpus <= 48:
-		return "c5d.12xlarge"
+	case cpus <= 36:
+		return "c5d.9xlarge"
 	default:
-		return "c5d.24xlarge"
+		return "c5d.18xlarge"
 	}
 }
 
