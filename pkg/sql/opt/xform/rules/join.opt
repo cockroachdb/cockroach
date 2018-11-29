@@ -67,6 +67,20 @@
 =>
 (GenerateZigzagJoins $scan $filters)
 
+# GenerateInvertedIndexZigzagJoins creates ZigzagJoin operators for inverted
+# indexes that can be constrained with two or more distinct constant values.
+# Inverted indexes contain one row for each path-to-leaf in a JSON value, so one
+# row in the primary index could generate multiple inverted index keys. This
+# property can be exploited by zigzag joining on the same inverted index, fixed
+# at any two of the JSON paths we are querying for.
+[GenerateInvertedIndexZigzagJoins, Explore]
+(Select
+    (Scan $scan:*) & (IsCanonicalScan $scan) & (HasInvertedIndexes $scan)
+    $filters:*
+)
+=>
+(GenerateInvertedIndexZigzagJoins $scan $filters)
+
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for both inner and left join).
