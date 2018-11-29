@@ -108,10 +108,10 @@ type Table interface {
 	IndexCount() int
 
 	// Index returns the ith index, where i < IndexCount. The table's primary
-	// index is always the 0th index, and is always present (use the
-	// opt.PrimaryIndex to select it). The primary index corresponds to the
-	// table's primary key. If a primary key was not explicitly specified, then
-	// the system implicitly creates one based on a hidden rowid column.
+	// index is always the 0th index, and is always present (use opt.PrimaryIndex
+	// to select it). The primary index corresponds to the table's primary key.
+	// If a primary key was not explicitly specified, then the system implicitly
+	// creates one based on a hidden rowid column.
 	Index(i int) Index
 
 	// StatisticCount returns the number of statistics available for the table.
@@ -119,6 +119,21 @@ type Table interface {
 
 	// Statistic returns the ith statistic, where i < StatisticCount.
 	Statistic(i int) TableStatistic
+
+	// MutationColumnCount returns the number of columns that are in the process
+	// of being added or dropped and that need to be set to their default values
+	// when inserting new rows. These columns are in the DELETE_AND_WRITE_ONLY
+	// state. See this RFC for more details:
+	//
+	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
+	//
+	MutationColumnCount() int
+
+	// MutationColumn returns a Column interface for one of the columns that is
+	// in the process of being added or dropped. The index of the column must be
+	// <= MutationColumnCount. The set of columns returned by MutationColumn are
+	// always disjoint from those returned by the Column method.
+	MutationColumn(i int) Column
 }
 
 // View is an interface to a database view, exposing only the information needed
@@ -149,12 +164,38 @@ type Column interface {
 	// DatumType returns the data type of the column.
 	DatumType() types.T
 
+	// ColTypeStr returns the SQL data type of the column, as a string. Note that
+	// this is sometimes different than DatumType().String(), since datum types
+	// are a subset of column types.
+	ColTypeStr() string
+
 	// IsNullable returns true if the column is nullable.
 	IsNullable() bool
 
 	// IsHidden returns true if the column is hidden (e.g., there is always a
 	// hidden column called rowid if there is no primary key on the table).
 	IsHidden() bool
+
+	// HasDefault returns true if the column has a default value. DefaultExprStr
+	// will be set to the SQL expression string in that case.
+	HasDefault() bool
+
+	// DefaultExprStr is set to the SQL expression string that describes the
+	// column's default value. It is used when the user does not provide a value
+	// for the column when inserting a row. Default values cannot depend on other
+	// columns.
+	DefaultExprStr() string
+
+	// IsComputed returns true if the column is a computed value. ComputedExprStr
+	// will be set to the SQL expression string in that case.
+	IsComputed() bool
+
+	// ComputedExprStr is set to the SQL expression string that describes the
+	// column's computed value. It is always used to provide the column's value
+	// when inserting or updating a row. Computed values cannot depend on other
+	// computed columns, but they can depend on all other columns, including
+	// columns with default values.
+	ComputedExprStr() string
 }
 
 // IndexColumn describes a single column that is part of an index definition.

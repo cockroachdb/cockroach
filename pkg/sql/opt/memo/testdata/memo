@@ -357,25 +357,20 @@ memo (optimized, ~4KB, required=[presentation: field:3])
  ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── [presentation: field:3]
  │         ├── best: (distinct-on G2 G3 cols=(3))
- │         └── cost: 0.07
+ │         └── cost: 0.04
  ├── G2: (explain G4 [presentation: k:1])
  │    └── []
  │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
- │         └── cost: 0.06
+ │         └── cost: 0.03
  ├── G3: (aggregations)
- ├── G4: (project G5 G6)
+ ├── G4: (values G5)
  │    └── [presentation: k:1]
- │         ├── best: (project G5 G6)
- │         └── cost: 0.05
- ├── G5: (values G7)
- │    └── []
- │         ├── best: (values G7)
+ │         ├── best: (values G5)
  │         └── cost: 0.02
- ├── G6: (projections G8)
- ├── G7: (scalar-list G9)
- ├── G8: (const 123)
- ├── G9: (tuple G10)
- └── G10: (scalar-list)
+ ├── G5: (scalar-list G6)
+ ├── G6: (tuple G7)
+ ├── G7: (scalar-list G8)
+ └── G8: (const 123)
 
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]

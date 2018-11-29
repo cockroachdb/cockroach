@@ -3499,16 +3499,12 @@ project
 opt expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
-project
+values
  ├── columns: exists:13(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(13)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
+ └── tuple [type=tuple{bool}]
       └── exists [type=bool]
            └── left-join
                 ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
@@ -3551,23 +3547,33 @@ SELECT i, y FROM a INNER JOIN xy ON (SELECT k+1) = x
 ----
 project
  ├── columns: i:2(int) y:7(int)
- └── inner-join
-      ├── columns: i:2(int) x:6(int!null) y:7(int) column9:9(int!null)
-      ├── fd: (6)-->(7), (6)==(9), (9)==(6)
-      ├── project
-      │    ├── columns: column9:9(int) i:2(int)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
-      │    └── projections
-      │         └── k + 1 [type=int, outer=(1)]
-      ├── scan xy
-      │    ├── columns: x:6(int!null) y:7(int)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) x:6(int!null) y:7(int) "?column?":8(int)
+      ├── key: (1,6)
+      ├── fd: (1)-->(2), (1,6)-->(7,8), (6)==(8), (8)==(6)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── inner-join
+      │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int)
+      │    ├── outer: (1)
       │    ├── key: (6)
-      │    └── fd: (6)-->(7)
+      │    ├── fd: ()-->(8), (6)-->(7)
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    ├── values
+      │    │    ├── columns: "?column?":8(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(8)
+      │    │    └── (k + 1,) [type=tuple{int}]
+      │    └── filters (true)
       └── filters
-           └── column9 = x [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
+           └── x = ?column? [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Right join + multiple subqueries.
 opt expect=HoistJoinSubquery
@@ -3576,21 +3582,42 @@ SELECT y FROM a RIGHT JOIN xy ON (SELECT k+1) = (SELECT x+1)
 project
  ├── columns: y:7(int)
  └── right-join-apply
-      ├── columns: k:1(int) y:7(int) "?column?":8(int) "?column?":9(int)
+      ├── columns: k:1(int) x:6(int!null) y:7(int) "?column?":8(int) "?column?":9(int)
+      ├── key: (1,6)
+      ├── fd: (1,6)-->(7-9)
       ├── scan a
       │    ├── columns: k:1(int!null)
       │    └── key: (1)
-      ├── project
-      │    ├── columns: "?column?":9(int) "?column?":8(int) y:7(int)
+      ├── inner-join-apply
+      │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int) "?column?":9(int)
       │    ├── outer: (1)
-      │    ├── fd: ()-->(8)
-      │    ├── scan xy
-      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    ├── key: (6)
+      │    ├── fd: ()-->(8), (6)-->(7,9)
+      │    ├── inner-join
+      │    │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int)
+      │    │    ├── outer: (1)
       │    │    ├── key: (6)
-      │    │    └── fd: (6)-->(7)
-      │    └── projections
-      │         ├── x + 1 [type=int, outer=(6)]
-      │         └── k + 1 [type=int, outer=(1)]
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    ├── values
+      │    │    │    ├── columns: "?column?":8(int)
+      │    │    │    ├── outer: (1)
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(8)
+      │    │    │    └── (k + 1,) [type=tuple{int}]
+      │    │    └── filters (true)
+      │    ├── values
+      │    │    ├── columns: "?column?":9(int)
+      │    │    ├── outer: (6)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(9)
+      │    │    └── (x + 1,) [type=tuple{int}]
+      │    └── filters (true)
       └── filters
            └── ?column? = ?column? [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
 
@@ -3736,19 +3763,27 @@ project
  │    │              ├── outer: (1,2)
  │    │              ├── cardinality: [3 - 3]
  │    │              ├── fd: ()-->(6,7)
- │    │              ├── project
- │    │              │    ├── columns: s:7(int) r:6(int)
+ │    │              ├── inner-join
+ │    │              │    ├── columns: r:6(int) s:7(int)
  │    │              │    ├── outer: (1,2)
  │    │              │    ├── cardinality: [1 - 1]
  │    │              │    ├── key: ()
  │    │              │    ├── fd: ()-->(6,7)
  │    │              │    ├── values
+ │    │              │    │    ├── columns: r:6(int)
+ │    │              │    │    ├── outer: (2)
  │    │              │    │    ├── cardinality: [1 - 1]
  │    │              │    │    ├── key: ()
- │    │              │    │    └── tuple [type=tuple]
- │    │              │    └── projections
- │    │              │         ├── k + 1 [type=int, outer=(1)]
- │    │              │         └── i + 1 [type=int, outer=(2)]
+ │    │              │    │    ├── fd: ()-->(6)
+ │    │              │    │    └── (i + 1,) [type=tuple{int}]
+ │    │              │    ├── values
+ │    │              │    │    ├── columns: s:7(int)
+ │    │              │    │    ├── outer: (1)
+ │    │              │    │    ├── cardinality: [1 - 1]
+ │    │              │    │    ├── key: ()
+ │    │              │    │    ├── fd: ()-->(7)
+ │    │              │    │    └── (k + 1,) [type=tuple{int}]
+ │    │              │    └── filters (true)
  │    │              ├── values
  │    │              │    ├── columns: column1:8(int)
  │    │              │    ├── outer: (6,7)

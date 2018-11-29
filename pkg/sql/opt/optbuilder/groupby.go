@@ -394,7 +394,7 @@ func (b *Builder) buildGrouping(
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
-		col := b.addColumn(outScope, label, e.ResolvedType(), e)
+		col := b.addColumn(outScope, label, e)
 		b.buildScalar(e, inScope, outScope, col, nil)
 		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
 	}
@@ -444,7 +444,7 @@ func (b *Builder) buildAggregateFunction(
 		// This synthesizes a new tempScope column, unless the argument is a
 		// simple VariableOp.
 		texpr := pexpr.(tree.TypedExpr)
-		col := b.addColumn(tempScope, "" /* label */, texpr.ResolvedType(), texpr)
+		col := b.addColumn(tempScope, "" /* label */, texpr)
 		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		if col.scalar != nil {
 			info.args[i] = col.scalar

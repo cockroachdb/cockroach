@@ -525,3 +525,21 @@ query T
 SELECT create_statement FROM [SHOW CREATE w3]
 ----
 CREATE VIEW w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+
+# Test CRUD privilege in view.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE VIEW crud_view AS SELECT a, b FROM [INSERT INTO t (a, b) VALUES (100, 100) RETURNING a, b]
+
+statement ok
+GRANT SELECT ON crud_view TO testuser
+
+user testuser
+
+query error user testuser does not have INSERT privilege on relation t
+SELECT * FROM crud_view
+
+user root

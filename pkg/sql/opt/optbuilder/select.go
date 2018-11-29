@@ -17,14 +17,16 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
 )
 
 // buildDataSource builds a set of memo groups that represent the given table
@@ -62,6 +64,7 @@ func (b *Builder) buildDataSource(
 
 	case *tree.TableName:
 		tn := source
+
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			if cte.used {
@@ -78,7 +81,7 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds := b.resolveDataSource(tn)
+		ds := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
@@ -107,10 +110,14 @@ func (b *Builder) buildDataSource(
 
 	case *tree.StatementSource:
 		outScope = b.buildStmt(source.Statement, inScope)
+		if len(outScope.cols) == 0 {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"statement source \"%v\" does not return any columns", source.Statement)})
+		}
 		return outScope
 
 	case *tree.TableRef:
-		ds := b.resolveDataSourceRef(source)
+		ds := b.resolveDataSourceRef(source, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
@@ -159,7 +166,7 @@ func (b *Builder) buildView(view opt.View, inScope *scope) (outScope *scope) {
 		defer func() { b.skipSelectPrivilegeChecks = false }()
 	}
 
-	outScope = b.buildSelect(sel, &scope{builder: b})
+	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
@@ -387,6 +394,12 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 				cols[j].table = tableName
 			}
 		}
+
+		if len(cols) == 0 {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name))})
+		}
+
 		outScope.ctes[ctes[i].Name.Alias.String()] = &cteSource{
 			name: ctes[i].Name,
 			cols: cols,
@@ -397,12 +410,25 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 	return outScope
 }
 
+// checkCTEUsage ensures that a CTE that contains a mutation (like INSERT) is
+// used at least once by the query. Otherwise, it might not be executed.
+func (b *Builder) checkCTEUsage(inScope *scope) {
+	for alias, source := range inScope.ctes {
+		if !source.used && source.expr.Relational().CanMutate {
+			panic(builderError{pgerror.UnimplementedWithIssueErrorf(24307,
+				"common table expression %q with side effects was not used in query", alias)})
+		}
+	}
+}
+
 // buildSelect builds a set of memo groups that represent the given select
 // statement.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
+func (b *Builder) buildSelect(
+	stmt *tree.Select, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
@@ -441,18 +467,19 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 
 	if with != nil {
 		inScope = b.buildCTE(with.CTEList, inScope)
+		defer b.checkCTEUsage(inScope)
 	}
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.SelectClause:
-		outScope = b.buildSelectClause(t, orderBy, inScope)
+		outScope = b.buildSelectClause(t, orderBy, desiredTypes, inScope)
 
 	case *tree.UnionClause:
-		outScope = b.buildUnion(t, inScope)
+		outScope = b.buildUnion(t, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
-		outScope = b.buildValuesClause(t, inScope)
+		outScope = b.buildValuesClause(t, desiredTypes, inScope)
 
 	default:
 		panic(fmt.Errorf("unknown select statement: %T", stmt.Select))
@@ -463,7 +490,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := b.addColumn(projectionsScope, "" /* label */, expr.ResolvedType(), expr)
+			col := b.addColumn(projectionsScope, "" /* label */, expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)
@@ -489,7 +516,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectClause(
-	sel *tree.SelectClause, orderBy tree.OrderBy, inScope *scope,
+	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []types.T, inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
 	projectionsScope := fromScope.replace()
@@ -498,7 +525,7 @@ func (b *Builder) buildSelectClause(
 	// function that refers to variables in fromScope or an ancestor scope,
 	// buildAggregateFunction is called which adds columns to the appropriate
 	// aggInScope and aggOutScope.
-	b.analyzeProjectionList(sel.Exprs, fromScope, projectionsScope)
+	b.analyzeProjectionList(sel.Exprs, desiredTypes, fromScope, projectionsScope)
 
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.

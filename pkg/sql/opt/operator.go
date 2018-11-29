@@ -27,11 +27,28 @@ import (
 type Operator uint16
 
 // String returns the name of the operator as a string.
-func (i Operator) String() string {
-	if i >= Operator(len(opNames)-1) {
-		return fmt.Sprintf("Operator(%d)", i)
+func (op Operator) String() string {
+	if op >= Operator(len(opNames)-1) {
+		return fmt.Sprintf("Operator(%d)", op)
 	}
-	return opNames[opIndexes[i]:opIndexes[i+1]]
+	return opNames[opNameIndexes[op]:opNameIndexes[op+1]]
+}
+
+// SyntaxTag returns the name of the operator using the SQL syntax that most
+// closely matches it.
+func (op Operator) SyntaxTag() string {
+	// Handle any special cases where default codegen tag isn't best choice as
+	// switch cases.
+	switch op {
+	default:
+		// Use default codegen tag, which is mechanically derived from the
+		// operator name.
+		if op >= Operator(len(opNames)-1) {
+			// Use UNKNOWN.
+			op = 0
+		}
+		return opSyntaxTags[opSyntaxTagIndexes[op]:opSyntaxTagIndexes[op+1]]
+	}
 }
 
 // Expr is a node in an expression tree. It offers methods to traverse and

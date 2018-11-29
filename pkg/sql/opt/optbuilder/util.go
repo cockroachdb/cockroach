@@ -201,13 +201,11 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 // addColumn adds a column to scope with the given label, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.
-func (b *Builder) addColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr,
-) *scopeColumn {
+func (b *Builder) addColumn(scope *scope, label string, expr tree.TypedExpr) *scopeColumn {
 	name := tree.Name(label)
 	scope.cols = append(scope.cols, scopeColumn{
 		name: name,
-		typ:  typ,
+		typ:  expr.ResolvedType(),
 		expr: expr,
 	})
 	return &scope.cols[len(scope.cols)-1]
@@ -381,28 +379,39 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	}
 }
 
+// resolveTable returns the data source in the catalog with the given name. If
+// the name does not resolve to a table, or if the current user does not have
+// the given privilege, then resolveTable raises an error.
+func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) opt.Table {
+	tab, ok := b.resolveDataSource(tn, priv).(opt.Table)
+	if !ok {
+		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+	}
+	return tab
+}
+
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
-// the right privileges, then resolveDataSource raises an error.
-func (b *Builder) resolveDataSource(tn *tree.TableName) opt.DataSource {
+// the given privilege, then resolveDataSource raises an error.
+func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt.DataSource {
 	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
 	if err != nil {
 		panic(builderError{err})
 	}
-	b.checkPrivilege(ds)
+	b.checkPrivilege(ds, priv)
 	return ds
 }
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches
 // the given TableRef spec. If no data source matches, or if the current user
-// does not have the right privileges, then resolveDataSourceFromRef raises an
+// does not have the given privilege, then resolveDataSourceFromRef raises an
 // error.
-func (b *Builder) resolveDataSourceRef(ref *tree.TableRef) opt.DataSource {
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) opt.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, ref.TableID)
 	if err != nil {
 		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
-	b.checkPrivilege(ds)
+	b.checkPrivilege(ds, priv)
 	return ds
 }
 
@@ -410,17 +419,15 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef) opt.DataSource {
 // access the given data source in the catalog. If not, then checkPrivilege
 // raises an error. It also adds the data source as a dependency to the
 // metadata, so that the privileges can be re-checked on reuse of the memo.
-//
-// TODO(andyk): Add privilegeKind field to Builder when privileges other than
-// SELECT are needed.
-func (b *Builder) checkPrivilege(ds opt.DataSource) {
-	var priv privilege.Kind
-	if !b.skipSelectPrivilegeChecks {
-		priv = privilege.SELECT
+func (b *Builder) checkPrivilege(ds opt.DataSource, priv privilege.Kind) {
+	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
 			panic(builderError{err})
 		}
+	} else {
+		// The check is skipped, so don't recheck when dependencies are checked.
+		priv = 0
 	}
 
 	// Add dependency on this data source to the metadata, so that the metadata

@@ -129,10 +129,10 @@ FROM (
   SELECT ((1,'2',true) AS e,f,g) AS x
 )
 ----
-render              ·         ·                                                                                                (e int, f string, g bool)                    ·
- │                  render 0  (((x)[tuple{int AS e, string AS f, bool AS g}]).e)[int]                                          ·                                            ·
- │                  render 1  (((x)[tuple{int AS e, string AS f, bool AS g}]).f)[string]                                       ·                                            ·
- │                  render 2  (((x)[tuple{int AS e, string AS f, bool AS g}]).g)[bool]                                         ·                                            ·
- └── render         ·         ·                                                                                                (x tuple{int AS e, string AS f, bool AS g})  ·
-      │             render 0  ((((1)[int], ('2')[string], (true)[bool]) AS e, f, g))[tuple{int AS e, string AS f, bool AS g}]  ·                                            ·
-      └── emptyrow  ·         ·                                                                                                ()                                           ·
+render       ·              ·                                                                                                (e int, f string, g bool)                    ·
+ │           render 0       (((x)[tuple{int AS e, string AS f, bool AS g}]).e)[int]                                          ·                                            ·
+ │           render 1       (((x)[tuple{int AS e, string AS f, bool AS g}]).f)[string]                                       ·                                            ·
+ │           render 2       (((x)[tuple{int AS e, string AS f, bool AS g}]).g)[bool]                                         ·                                            ·
+ └── values  ·              ·                                                                                                (x tuple{int AS e, string AS f, bool AS g})  ·
+·            size           1 column, 1 row                                                                                  ·                                            ·
+·            row 0, expr 0  ((((1)[int], ('2')[string], (true)[bool]) AS e, f, g))[tuple{int AS e, string AS f, bool AS g}]  ·                                            ·

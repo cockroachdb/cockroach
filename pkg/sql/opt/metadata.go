@@ -363,6 +363,27 @@ func (md *Metadata) AddTable(tab Table) TableID {
 	return tabID
 }
 
+// AddTableWithMutations first calls AddTable to add regular columns to the
+// metadata. It then appends any columns that are currently undergoing mutation
+// (i.e. being added or dropped from the table), and which need to be
+// initialized to their default value by INSERT statements. See this RFC for
+// more details:
+//
+//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
+//
+func (md *Metadata) AddTableWithMutations(tab Table) TableID {
+	tabID := md.AddTable(tab)
+	for i, n := 0, tab.MutationColumnCount(); i < n; i++ {
+		col := tab.MutationColumn(i)
+		md.cols = append(md.cols, mdColumn{
+			tabID: tabID,
+			label: string(col.ColName()),
+			typ:   col.DatumType(),
+		})
+	}
+	return tabID
+}
+
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) Table {

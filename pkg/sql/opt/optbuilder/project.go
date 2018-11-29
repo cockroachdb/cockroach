@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// constructProjectForScope constructs a projection if it will result in a different
-// set of columns than its input. Either way, it updates projectionsScope.group
-// with the output memo group ID.
+// constructProjectForScope constructs a projection if it will result in a
+// different set of columns than its input. Either way, it updates
+// projectionsScope.group with the output memo group ID.
 func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 	// Don't add an unnecessary "pass through" project.
 	if projectionsScope.hasSameColumns(inScope) {
@@ -61,12 +61,12 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 	return b.factory.ConstructProject(input, projections, passthrough)
 }
 
-// analyzeProjectionList analyzes the given list of select expressions, and
-// adds the resulting labels and typed expressions to outScope.
-//
-// As a side-effect, the appropriate scopes are updated with aggregations
-// (scope.groupby.aggs)
-func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outScope *scope) {
+// analyzeProjectionList analyzes the given list of SELECT clause expressions,
+// and adds the resulting labels and typed expressions to outScope. See the
+// header comment for analyzeSelectList.
+func (b *Builder) analyzeProjectionList(
+	selects tree.SelectExprs, desiredTypes []types.T, inScope, outScope *scope,
+) {
 	// We need to save and restore the previous values of the replaceSRFs field
 	// and the field in semaCtx in case we are recursively called within a
 	// subquery context.
@@ -77,7 +77,38 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 	inScope.context = "SELECT"
 	inScope.replaceSRFs = true
 
-	for _, e := range selects {
+	b.analyzeSelectList(selects, desiredTypes, inScope, outScope)
+}
+
+// analyzeReturningList analyzes the given list of RETURNING clause expressions,
+// and adds the resulting labels and typed expressions to outScope. See the
+// header comment for analyzeSelectList.
+func (b *Builder) analyzeReturningList(
+	returning tree.ReturningExprs, desiredTypes []types.T, inScope, outScope *scope,
+) {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+
+	// Ensure there are no special functions in the RETURNING clause.
+	b.semaCtx.Properties.Require("RETURNING", tree.RejectSpecial)
+	inScope.context = "RETURNING"
+
+	b.analyzeSelectList(tree.SelectExprs(returning), desiredTypes, inScope, outScope)
+}
+
+// analyzeSelectList is a helper function used by analyzeProjectionList and
+// analyzeReturningList. It normalizes names, expands wildcards, resolves types,
+// and adds resulting columns to outScope. The desiredTypes slice contains
+// target type hints for the resulting expressions.
+//
+// As a side-effect, the appropriate scopes are updated with aggregations
+// (scope.groupby.aggs)
+func (b *Builder) analyzeSelectList(
+	selects tree.SelectExprs, desiredTypes []types.T, inScope, outScope *scope,
+) {
+	for i, e := range selects {
 		// Start with fast path, looking for simple column reference.
 		texpr := b.resolveColRef(e.Expr, inScope)
 		if texpr == nil {
@@ -100,14 +131,19 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 					if outScope.cols == nil {
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
-					for i, e := range exprs {
-						b.addColumn(outScope, labels[i], e.ResolvedType(), e)
+					for j, e := range exprs {
+						b.addColumn(outScope, labels[j], e)
 					}
 					continue
 				}
 			}
 
-			texpr = inScope.resolveType(e.Expr, types.Any)
+			desired := types.Any
+			if i < len(desiredTypes) {
+				desired = desiredTypes[i]
+			}
+
+			texpr = inScope.resolveType(e.Expr, desired)
 		}
 
 		// Output column names should exactly match the original expression, so we
@@ -117,7 +153,7 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		label := b.getColName(e)
-		b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
+		b.addColumn(outScope, label, texpr)
 	}
 }
 

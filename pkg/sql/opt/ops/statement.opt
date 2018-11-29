@@ -1,0 +1,54 @@
+# statement.opt contains Optgen language definitions for all of Cockroach's
+# SQL statement operators, such as Insert and CreateTable. Although though many
+# of them have no return result, they are still treated as if they were
+# expressions with a zero row, zero column result.
+
+
+# Insert evaluates a relational input expression, and inserts values from it
+# into a target table. The input may be an arbitrarily complex expression:
+#
+#   INSERT INTO ab SELECT x, y+1 FROM xy ORDER BY y
+#
+# It can also be a simple VALUES clause:
+#
+#   INSERT INTO ab VALUES (1, 2)
+#
+# It may also return rows, which can be further composed:
+#
+#   SELECT a + b FROM [INSERT INTO ab VALUES (1, 2) RETURNING a, b]
+#
+# The Insert operator is capable of inserting values into computed columns and
+# mutation columns, which are not writable (or even visible in the case of
+# mutation columns) by SQL users.
+[Relational, Mutation]
+define Insert {
+    Input RelExpr
+
+    _ InsertPrivate
+}
+
+[Private]
+define InsertPrivate {
+    # Table identifies the table into which to insert. It is an id that can be
+    # passed to the Metadata.Table method in order to fetch opt.Table metadata.
+    Table TableID
+
+    # InputCols are columns from the Input expression that will be inserted into
+    # the target table. They must be a subset of the Input expression's output
+    # columns, but otherwise can be in any order. The count and order of columns
+    # corresponds to the count and order of the target table's columns; column
+    # values are read from the specified input columns and are then inserted into
+    # the corresponding table columns.
+    InputCols ColList
+
+    # Ordering is the ordering required of the input expression. Rows will be
+    # inserted into the target table in this order.
+    Ordering OrderingChoice
+
+    # NeedResults is true if the Insert operator returns output rows. One output
+    # row will be returned for each input row. The output row contains all
+    # columns in the table, including hidden columns, but not including any
+    # columns that are undergoing mutation (being added or dropped as part of
+    # online schema change).
+    NeedResults bool
+}

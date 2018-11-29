@@ -308,17 +308,12 @@ values
 opt expect=FoldIsNull
 SELECT NULL IS NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # FoldNonNullIsNull
@@ -326,32 +321,22 @@ project
 opt expect=FoldNonNullIsNull
 SELECT 1 IS NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]
 
 opt expect=FoldNonNullIsNull
 SELECT (1, 2, 3) IS NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -359,18 +344,12 @@ project
 opt expect=FoldIsNotNull
 SELECT NULL IS NOT NULL AS r, NULL IS NOT TRUE AS s
 ----
-project
- ├── columns: r:1(bool!null) s:2(bool!null)
+values
+ ├── columns: r:1(bool) s:2(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── false [type=bool]
-      └── true [type=bool]
+ └── (false, true) [type=tuple{bool, bool}]
 
 # --------------------------------------------------
 # FoldNonNullIsNotNull
@@ -396,17 +375,12 @@ project
 opt expect=FoldNonNullIsNotNull
 SELECT (1, 2, 3) IS NOT NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # CommuteNullIs
@@ -414,15 +388,9 @@ project
 opt expect=CommuteNullIs
 SELECT NULL IS NOT TRUE AS r, NULL IS TRUE AS s
 ----
-project
- ├── columns: r:1(bool!null) s:2(bool!null)
+values
+ ├── columns: r:1(bool) s:2(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+ └── (true, false) [type=tuple{bool, bool}]

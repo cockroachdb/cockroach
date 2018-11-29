@@ -40,6 +40,7 @@ func (g *opsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.genOperatorEnum()
 	g.genOperatorNames()
+	g.genOperatorSyntaxTags()
 	g.genOperatorsByTag()
 }
 
@@ -70,7 +71,24 @@ func (g *opsGen) genOperatorNames() {
 
 	fmt.Fprintf(g.w, "const opNames = \"%s\"\n\n", names.String())
 
-	fmt.Fprintf(g.w, "var opIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
+	fmt.Fprintf(g.w, "var opNameIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
+}
+
+func (g *opsGen) genOperatorSyntaxTags() {
+	var names bytes.Buffer
+	var indexes bytes.Buffer
+
+	fmt.Fprint(&names, "UNKNOWN")
+	fmt.Fprint(&indexes, "0, ")
+
+	for _, define := range g.sorted {
+		fmt.Fprintf(&indexes, "%d, ", names.Len())
+		fmt.Fprint(&names, syntaxCase(string(define.Name)))
+	}
+
+	fmt.Fprintf(g.w, "const opSyntaxTags = \"%s\"\n\n", names.String())
+
+	fmt.Fprintf(g.w, "var opSyntaxTagIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
 }
 
 func (g *opsGen) genOperatorsByTag() {
@@ -119,7 +137,6 @@ func sortDefines(defines lang.DefineSetExpr) lang.DefineSetExpr {
 //   InnerJoinApply => inner-join-apply
 func dashCase(s string) string {
 	var buf bytes.Buffer
-
 	for i, ch := range s {
 		if unicode.IsUpper(ch) {
 			if i != 0 {
@@ -131,6 +148,20 @@ func dashCase(s string) string {
 			buf.WriteRune(ch)
 		}
 	}
+	return buf.String()
+}
 
+// syntaxCase converts camel-case identifiers into "syntax case", where
+// uppercase letters in the middle of the identifier are interpreted as new
+// words and separated by a space from the previous word. Example:
+//   InnerJoinApply => INNER JOIN APPLY
+func syntaxCase(s string) string {
+	var buf bytes.Buffer
+	for i, ch := range s {
+		if unicode.IsUpper(ch) && i != 0 {
+			buf.WriteByte(' ')
+		}
+		buf.WriteRune(unicode.ToUpper(ch))
+	}
 	return buf.String()
 }

@@ -303,6 +303,7 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 		return
 	}
 
+	var item string
 	switch {
 	case isFirst && isLast:
 		// Match single item.
@@ -311,11 +312,11 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 				panic("noMatch is not yet fully supported by the list match single op")
 			}
 			g.w.nestIndent("if len(%s) != 1 {\n", context)
-		} else {
-			g.w.nestIndent("if len(%s) == 1 {\n", context)
-			g.w.writeIndent("_item := %s\n", g.makeListItemRef(context+"[0]", listItemTyp))
-			g.genMatch(matchItem, "_item", noMatch)
+			return
 		}
+
+		g.w.nestIndent("if len(%s) == 1 {\n", context)
+		item = g.makeListItemRef(context+"[0]", listItemTyp)
 
 	case isFirst && !isLast:
 		// Match first item in list.
@@ -323,8 +324,7 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 			panic("noMatch is not yet supported by the list match first op")
 		}
 		g.w.nestIndent("if len(%s) > 0 {\n", context)
-		g.w.writeIndent("_item := %s\n", g.makeListItemRef(context+"[0]", listItemTyp))
-		g.genMatch(matchItem, "_item", noMatch)
+		item = g.makeListItemRef(context+"[0]", listItemTyp)
 
 	case !isFirst && isLast:
 		// Match last item in list.
@@ -332,9 +332,7 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 			panic("noMatch is not yet supported by the list match last op")
 		}
 		g.w.nestIndent("if len(%s) > 0 {\n", context)
-		itemRef := g.makeListItemRef(fmt.Sprintf("%s[len(%s)-1]", context, context), listItemTyp)
-		g.w.writeIndent("_item := %s\n", itemRef)
-		g.genMatch(matchItem, "_item", noMatch)
+		item = g.makeListItemRef(fmt.Sprintf("%s[len(%s)-1]", context, context), listItemTyp)
 
 	case !isFirst && !isLast:
 		// Match any item in list.
@@ -342,7 +340,21 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 			panic("noMatch is not yet supported by the list match any op")
 		}
 		g.w.nestIndent("for i := range %s {\n", context)
-		g.w.writeIndent("_item := %s\n", g.makeListItemRef(context+"[i]", listItemTyp))
+		item = g.makeListItemRef(context+"[i]", listItemTyp)
+	}
+
+	// Store the expression in a variable, since it may be expensive to evaluate
+	// multiple times. If already binding the item, use that variable, else use
+	// a temporary _item variable.
+	switch matchItem.(type) {
+	case *lang.BindExpr:
+		g.genMatch(matchItem, item, noMatch)
+
+	case *lang.AnyExpr:
+		// Don't need to bind item in case of matching [ * ], [ ... * ... ], etc.
+
+	default:
+		g.w.writeIndent("_item := %s\n", item)
 		g.genMatch(matchItem, "_item", noMatch)
 	}
 }

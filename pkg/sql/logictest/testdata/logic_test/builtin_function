@@ -1987,8 +1987,12 @@ SELECT pg_catalog.pg_encoding_to_char(6), pg_catalog.pg_encoding_to_char(7)
 ----
 UTF8  NULL
 
+# TODO(jordan): Restore this to original form by removing FROM
+# clause once issue 32422 is fixed.
 query TITI
 SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
+FROM pg_class
+WHERE relname = 'pg_constraint'
 ----
 ::/0  0  ::/0  0
 

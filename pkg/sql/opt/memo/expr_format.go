@@ -139,6 +139,7 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 }
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
+	md := f.Memo.Metadata()
 	relational := e.Relational()
 	required := e.RequiredPhysical()
 	if required == nil {
@@ -158,7 +159,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr:
+	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr, *InsertExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -241,14 +242,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if t.Flags.NoIndexJoin {
 				tp.Childf("flags: no-index-join")
 			} else if t.Flags.ForceIndex {
-				idx := f.Memo.Metadata().Table(t.Table).Index(t.Flags.Index)
+				idx := md.Table(t.Table).Index(t.Flags.Index)
 				tp.Childf("flags: force-index=%s", idx.IdxName())
 			}
 		}
 
 	case *LookupJoinExpr:
 		idxCols := make(opt.ColList, len(t.KeyCols))
-		idx := f.Memo.Metadata().Table(t.Table).Index(t.Index)
+		idx := md.Table(t.Table).Index(t.Index)
 		for i := range idxCols {
 			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal)
 		}
@@ -257,6 +258,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *MergeJoinExpr:
 		tp.Childf("left ordering: %s", t.LeftEq)
 		tp.Childf("right ordering: %s", t.RightEq)
+
+	case *InsertExpr:
+		if len(colList) == 0 {
+			tp.Child("columns: <none>")
+		}
+		f.formatColList(e, tp, "table columns:", tableColsToList(md, t.Table))
+		f.formatColList(e, tp, "input columns:", t.InputCols)
+		if !t.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", t.Ordering)
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {
@@ -270,11 +281,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 		}
 
+		f.Buffer.Reset()
+		writeFlag := func(name string) {
+			if f.Buffer.Len() != 0 {
+				f.Buffer.WriteString(", ")
+			}
+			f.Buffer.WriteString(name)
+		}
+
 		if relational.CanHaveSideEffects {
-			tp.Child("side-effects")
+			writeFlag("side-effects")
+		}
+		if relational.CanMutate {
+			writeFlag("mutations")
 		}
 		if relational.HasPlaceholder {
-			tp.Child("has-placeholder")
+			writeFlag("has-placeholder")
+		}
+
+		if f.Buffer.Len() != 0 {
+			tp.Child(f.Buffer.String())
 		}
 	}
 
@@ -579,6 +605,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name())
 
+	case *InsertPrivate:
+		tab := f.Memo.metadata.Table(t.Table)
+		fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+
 	case *RowNumberPrivate:
 		if !t.Ordering.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
@@ -641,4 +671,16 @@ func isSimpleColumnName(label string) bool {
 		}
 	}
 	return true
+}
+
+// tableColsToList returns the list of columns in the given table, in the same
+// order they're defined in that table. This list contains mutation columns as
+// well as regular columns.
+func tableColsToList(md *opt.Metadata, tabID opt.TableID) opt.ColList {
+	tab := md.Table(tabID)
+	colList := make(opt.ColList, tab.ColumnCount()+tab.MutationColumnCount())
+	for i := range colList {
+		colList[i] = tabID.ColumnID(i)
+	}
+	return colList
 }

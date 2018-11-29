@@ -576,9 +576,6 @@ func (s *scope) FindSourceProvidingColumn(
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			// TODO(rytaft): Do not return a match if this column is being
-			// backfilled, or the column expression being resolved is not from
-			// a selector column expression from an UPDATE/DELETE.
 			if col.name == colName {
 				if col.table.TableName == "" && !col.hidden {
 					if candidateFromAnonSource != nil {
@@ -868,7 +865,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	srfScope := s.push()
 	var outCol *scopeColumn
 	if len(def.ReturnLabels) == 1 {
-		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc.ResolvedType(), typedFunc)
+		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc)
 	}
 	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol, nil)
 	srf := &srf{

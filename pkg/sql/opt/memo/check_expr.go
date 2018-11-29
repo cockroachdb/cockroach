@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CheckExpr does sanity checking on an Expr. This code is called in testrace
@@ -31,9 +30,9 @@ import (
 func (m *Memo) checkExpr(e opt.Expr) {
 	// RaceEnabled ensures that checks are run on every PR (as part of make
 	// testrace) while keeping the check code out of non-test builds.
-	if !util.RaceEnabled {
-		return
-	}
+	//if !util.RaceEnabled {
+	//	return
+	//}
 
 	// Check properties.
 	switch t := e.(type) {
@@ -158,6 +157,24 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		}
 		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
+		}
+
+	case *InsertExpr:
+		tab := m.Metadata().Table(t.Table)
+		if len(t.InputCols) != tab.ColumnCount()+tab.MutationColumnCount() {
+			panic("values not provided for all table columns")
+		}
+
+		// Output and ordering columns should never include mutation columns.
+		var mutationCols opt.ColSet
+		for i, n := tab.ColumnCount(), tab.MutationColumnCount(); i < n; i++ {
+			mutationCols.Add(int(t.InputCols[i]))
+		}
+		if t.Relational().OutputCols.Intersects(mutationCols) {
+			panic("output columns cannot include mutation columns")
+		}
+		if t.Ordering.ColSet().Intersects(mutationCols) {
+			panic("ordering columns cannot include mutation columns")
 		}
 
 	default:
