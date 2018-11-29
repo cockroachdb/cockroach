@@ -380,11 +380,24 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	p.optimizer.Init(p.EvalContext())
 	f := p.optimizer.Factory()
 
+	// If the current transaction has uncommitted DDL statements, we cannot rely
+	// on descriptor versions for detecting a "stale" memo. This is because
+	// descriptor versions are bumped at most once per transaction, even if there
+	// are multiple DDL operations; and transactions can be aborted leading to
+	// potential reuse of versions. To avoid these issues, we prevent saving a
+	// memo (for prepare) or reusing a saved memo (for execute).
+	noMemoReuse := p.Tables().hasUncommittedTables()
+
 	// We have three distinct code paths:
 	//   1. Prepare
 	//   2. Execute a previously prepared statement
 	//   3. Execute without prior Prepare
 	//
+	// A note on the hasUncommittedTables checks below. If the current transaction
+	// has uncommitted DDL statements, then we assume they may have changed schema
+	// on which the prepared state depends; this is a separate check because the
+	// descriptor versions are bumped at most once per transaction, even if there
+	// are multiple DDL operations.
 	if p.EvalContext().PrepareOnly {
 		// 1. We are preparing a statement.
 		//
@@ -392,7 +405,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		if err != nil {
 			return err
 		}
-		stmt.Prepared.Memo = memo
+		if !noMemoReuse {
+			stmt.Prepared.Memo = memo
+		}
 
 		// Construct a dummy plan that has correct output columns. Only output
 		// columns and placeholder types are needed.
@@ -408,7 +423,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	}
 
 	var execMemo *memo.Memo
-	if stmt.Prepared != nil && stmt.Prepared.Memo != nil {
+	if stmt.Prepared != nil && stmt.Prepared.Memo != nil && !noMemoReuse {
 		// 2. We are executing a previously prepared statement.
 
 		// If the prepared memo has been invalidated by schema or other changes,
@@ -437,9 +452,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 			execMemo = preparedMemo
 		}
 	} else {
-		// 3. We are executing a statement that was not prepared, or we fell back to
-		// the heuristic planner during prepare, or we decided that the prepared
-		// state cannot be reused (see tryReusePreparedState).
+		// 3. We are executing a statement that was not prepared, we fell back to
+		// the heuristic planner during prepare, or this transaction is changing a
+		// schema.
 		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
 		if err := bld.Build(); err != nil {
 			// isCorrelated is used in the fallback case to create a better error.
