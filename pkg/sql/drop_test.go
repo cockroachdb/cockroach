@@ -19,6 +19,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lib/pq"
@@ -994,10 +995,17 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
+	var enableAsync uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Turn on quick garbage collection.
 			AsyncExecQuickly: true,
+			AsyncExecNotification: func() error {
+				if atomic.LoadUint32(&enableAsync) == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1022,6 +1030,8 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	) {
 		t.Fatalf("different error than expected: %v", err)
 	}
+
+	atomic.StoreUint32(&enableAsync, 1)
 
 	testutils.SucceedsSoon(t, func() error {
 		return descExists(sqlDB, false, tableDescInterleaved.ID)
