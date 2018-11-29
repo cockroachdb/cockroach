@@ -292,6 +292,7 @@ func TestLint(t *testing.T) {
 			`\bsync\.(RW)?Mutex`,
 			"--",
 			"*.go",
+			":!*/doc.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
 		)

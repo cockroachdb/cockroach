@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package cmdq
+package spanlatch
 
 import (
 	"bytes"
@@ -25,22 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// TODO(nvanbenschoten):
-// 2. Add synchronized node and leafNode freelists
-// 3. Introduce immutability and a copy-on-write policy:
-// 4. Describe pedigree, changes, etc. of this implementation
-
 const (
-	degree  = 16
-	maxCmds = 2*degree - 1
-	minCmds = degree - 1
+	degree     = 16
+	maxLatches = 2*degree - 1
+	minLatches = degree - 1
 )
-
-// TODO(nvanbenschoten): remove.
-type cmd struct {
-	id   int64
-	span roachpb.Span
-}
 
 // cmp returns a value indicating the sort order relationship between
 // a and b. The comparison is performed lexicographically on
@@ -55,7 +44,7 @@ type cmd struct {
 //  c ==  0  if (a.span.Key, a.span.EndKey, a.id) == (b.span.Key, b.span.EndKey, b.id)
 //  c ==  1  if (a.span.Key, a.span.EndKey, a.id) >  (b.span.Key, b.span.EndKey, b.id)
 //
-func cmp(a, b *cmd) int {
+func cmp(a, b *latch) int {
 	c := bytes.Compare(a.span.Key, b.span.Key)
 	if c != 0 {
 		return c
@@ -93,7 +82,7 @@ func (b keyBound) compare(o keyBound) int {
 	return -1
 }
 
-func (b keyBound) contains(a *cmd) bool {
+func (b keyBound) contains(a *latch) bool {
 	c := bytes.Compare(a.span.Key, b.key)
 	if c == 0 {
 		return b.inc
@@ -101,7 +90,7 @@ func (b keyBound) contains(a *cmd) bool {
 	return c < 0
 }
 
-func upperBound(c *cmd) keyBound {
+func upperBound(c *latch) keyBound {
 	if len(c.span.EndKey) != 0 {
 		return keyBound{key: c.span.EndKey}
 	}
@@ -109,16 +98,16 @@ func upperBound(c *cmd) keyBound {
 }
 
 type leafNode struct {
-	ref   int32
-	count int16
-	leaf  bool
-	max   keyBound
-	cmds  [maxCmds]*cmd
+	ref     int32
+	count   int16
+	leaf    bool
+	max     keyBound
+	latches [maxLatches]*latch
 }
 
 type node struct {
 	leafNode
-	children [maxCmds + 1]*node
+	children [maxLatches + 1]*node
 }
 
 func leafToNode(ln *leafNode) *node {
@@ -218,7 +207,7 @@ func (n *node) clone() *node {
 	// triggering the race detector and looking like a data race.
 	c.count = n.count
 	c.max = n.max
-	c.cmds = n.cmds
+	c.latches = n.latches
 	if !c.leaf {
 		// Copy children and increase each refcount.
 		c.children = n.children
@@ -229,41 +218,41 @@ func (n *node) clone() *node {
 	return c
 }
 
-func (n *node) insertAt(index int, c *cmd, nd *node) {
+func (n *node) insertAt(index int, la *latch, nd *node) {
 	if index < int(n.count) {
-		copy(n.cmds[index+1:n.count+1], n.cmds[index:n.count])
+		copy(n.latches[index+1:n.count+1], n.latches[index:n.count])
 		if !n.leaf {
 			copy(n.children[index+2:n.count+2], n.children[index+1:n.count+1])
 		}
 	}
-	n.cmds[index] = c
+	n.latches[index] = la
 	if !n.leaf {
 		n.children[index+1] = nd
 	}
 	n.count++
 }
 
-func (n *node) pushBack(c *cmd, nd *node) {
-	n.cmds[n.count] = c
+func (n *node) pushBack(la *latch, nd *node) {
+	n.latches[n.count] = la
 	if !n.leaf {
 		n.children[n.count+1] = nd
 	}
 	n.count++
 }
 
-func (n *node) pushFront(c *cmd, nd *node) {
+func (n *node) pushFront(la *latch, nd *node) {
 	if !n.leaf {
 		copy(n.children[1:n.count+2], n.children[:n.count+1])
 		n.children[0] = nd
 	}
-	copy(n.cmds[1:n.count+1], n.cmds[:n.count])
-	n.cmds[0] = c
+	copy(n.latches[1:n.count+1], n.latches[:n.count])
+	n.latches[0] = la
 	n.count++
 }
 
 // removeAt removes a value at a given index, pulling all subsequent values
 // back.
-func (n *node) removeAt(index int) (*cmd, *node) {
+func (n *node) removeAt(index int) (*latch, *node) {
 	var child *node
 	if !n.leaf {
 		child = n.children[index+1]
@@ -271,17 +260,17 @@ func (n *node) removeAt(index int) (*cmd, *node) {
 		n.children[n.count] = nil
 	}
 	n.count--
-	out := n.cmds[index]
-	copy(n.cmds[index:n.count], n.cmds[index+1:n.count+1])
-	n.cmds[n.count] = nil
+	out := n.latches[index]
+	copy(n.latches[index:n.count], n.latches[index+1:n.count+1])
+	n.latches[n.count] = nil
 	return out, child
 }
 
 // popBack removes and returns the last element in the list.
-func (n *node) popBack() (*cmd, *node) {
+func (n *node) popBack() (*latch, *node) {
 	n.count--
-	out := n.cmds[n.count]
-	n.cmds[n.count] = nil
+	out := n.latches[n.count]
+	n.latches[n.count] = nil
 	if n.leaf {
 		return out, nil
 	}
@@ -291,7 +280,7 @@ func (n *node) popBack() (*cmd, *node) {
 }
 
 // popFront removes and returns the first element in the list.
-func (n *node) popFront() (*cmd, *node) {
+func (n *node) popFront() (*latch, *node) {
 	n.count--
 	var child *node
 	if !n.leaf {
@@ -299,23 +288,23 @@ func (n *node) popFront() (*cmd, *node) {
 		copy(n.children[:n.count+1], n.children[1:n.count+2])
 		n.children[n.count+1] = nil
 	}
-	out := n.cmds[0]
-	copy(n.cmds[:n.count], n.cmds[1:n.count+1])
-	n.cmds[n.count] = nil
+	out := n.latches[0]
+	copy(n.latches[:n.count], n.latches[1:n.count+1])
+	n.latches[n.count] = nil
 	return out, child
 }
 
-// find returns the index where the given cmd should be inserted into this
-// list. 'found' is true if the cmd already exists in the list at the given
+// find returns the index where the given latch should be inserted into this
+// list. 'found' is true if the latch already exists in the list at the given
 // index.
-func (n *node) find(c *cmd) (index int, found bool) {
+func (n *node) find(la *latch) (index int, found bool) {
 	// Logic copied from sort.Search. Inlining this gave
 	// an 11% speedup on BenchmarkBTreeDeleteInsert.
 	i, j := 0, int(n.count)
 	for i < j {
 		h := int(uint(i+j) >> 1) // avoid overflow when computing h
 		// i ≤ h < j
-		v := cmp(c, n.cmds[h])
+		v := cmp(la, n.latches[h])
 		if v == 0 {
 			return h, true
 		} else if v > 0 {
@@ -328,8 +317,8 @@ func (n *node) find(c *cmd) (index int, found bool) {
 }
 
 // split splits the given node at the given index. The current node shrinks,
-// and this function returns the cmd that existed at that index and a new node
-// containing all cmds/children after it.
+// and this function returns the latch that existed at that index and a new
+// node containing all latches/children after it.
 //
 // Before:
 //
@@ -348,8 +337,8 @@ func (n *node) find(c *cmd) (index int, found bool) {
 // |         x |     | z         |
 // +-----------+     +-----------+
 //
-func (n *node) split(i int) (*cmd, *node) {
-	out := n.cmds[i]
+func (n *node) split(i int) (*latch, *node) {
+	out := n.latches[i]
 	var next *node
 	if n.leaf {
 		next = newLeafNode()
@@ -357,9 +346,9 @@ func (n *node) split(i int) (*cmd, *node) {
 		next = newNode()
 	}
 	next.count = n.count - int16(i+1)
-	copy(next.cmds[:], n.cmds[i+1:n.count])
+	copy(next.latches[:], n.latches[i+1:n.count])
 	for j := int16(i); j < n.count; j++ {
-		n.cmds[j] = nil
+		n.latches[j] = nil
 	}
 	if !n.leaf {
 		copy(next.children[:], n.children[i+1:n.count+1])
@@ -371,7 +360,7 @@ func (n *node) split(i int) (*cmd, *node) {
 
 	next.max = next.findUpperBound()
 	if n.max.compare(next.max) != 0 && n.max.compare(upperBound(out)) != 0 {
-		// If upper bound wasn't from new node or cmd
+		// If upper bound wasn't from new node or latch
 		// at index i, it must still be from old node.
 	} else {
 		n.max = n.findUpperBound()
@@ -379,64 +368,64 @@ func (n *node) split(i int) (*cmd, *node) {
 	return out, next
 }
 
-// insert inserts a cmd into the subtree rooted at this node, making sure no
-// nodes in the subtree exceed maxCmds cmds. Returns true if an existing cmd was
-// replaced and false if a command was inserted. Also returns whether the node's
-// upper bound changes.
-func (n *node) insert(c *cmd) (replaced, newBound bool) {
-	i, found := n.find(c)
+// insert inserts a latch into the subtree rooted at this node, making sure no
+// nodes in the subtree exceed maxLatches latches. Returns true if an existing
+// latch was replaced and false if a latch was inserted. Also returns whether
+// the node's upper bound changes.
+func (n *node) insert(la *latch) (replaced, newBound bool) {
+	i, found := n.find(la)
 	if found {
-		n.cmds[i] = c
+		n.latches[i] = la
 		return true, false
 	}
 	if n.leaf {
-		n.insertAt(i, c, nil)
-		return false, n.adjustUpperBoundOnInsertion(c, nil)
+		n.insertAt(i, la, nil)
+		return false, n.adjustUpperBoundOnInsertion(la, nil)
 	}
-	if n.children[i].count >= maxCmds {
-		splitcmd, splitNode := mut(&n.children[i]).split(maxCmds / 2)
-		n.insertAt(i, splitcmd, splitNode)
+	if n.children[i].count >= maxLatches {
+		splitLa, splitNode := mut(&n.children[i]).split(maxLatches / 2)
+		n.insertAt(i, splitLa, splitNode)
 
-		switch cmp := cmp(c, n.cmds[i]); {
+		switch cmp := cmp(la, n.latches[i]); {
 		case cmp < 0:
 			// no change, we want first split node
 		case cmp > 0:
 			i++ // we want second split node
 		default:
-			n.cmds[i] = c
+			n.latches[i] = la
 			return true, false
 		}
 	}
-	replaced, newBound = mut(&n.children[i]).insert(c)
+	replaced, newBound = mut(&n.children[i]).insert(la)
 	if newBound {
-		newBound = n.adjustUpperBoundOnInsertion(c, nil)
+		newBound = n.adjustUpperBoundOnInsertion(la, nil)
 	}
 	return replaced, newBound
 }
 
-// removeMax removes and returns the maximum cmd from the subtree rooted at
-// this node.
-func (n *node) removeMax() *cmd {
+// removeMax removes and returns the maximum latch from the subtree rooted
+// at this node.
+func (n *node) removeMax() *latch {
 	if n.leaf {
 		n.count--
-		out := n.cmds[n.count]
-		n.cmds[n.count] = nil
+		out := n.latches[n.count]
+		n.latches[n.count] = nil
 		n.adjustUpperBoundOnRemoval(out, nil)
 		return out
 	}
 	child := mut(&n.children[n.count])
-	if child.count <= minCmds {
+	if child.count <= minLatches {
 		n.rebalanceOrMerge(int(n.count))
 		return n.removeMax()
 	}
 	return child.removeMax()
 }
 
-// remove removes a cmd from the subtree rooted at this node. Returns
-// the cmd that was removed or nil if no matching command was found.
+// remove removes a latch from the subtree rooted at this node. Returns
+// the latch that was removed or nil if no matching latch was found.
 // Also returns whether the node's upper bound changes.
-func (n *node) remove(c *cmd) (out *cmd, newBound bool) {
-	i, found := n.find(c)
+func (n *node) remove(la *latch) (out *latch, newBound bool) {
+	i, found := n.find(la)
 	if n.leaf {
 		if found {
 			out, _ = n.removeAt(i)
@@ -444,20 +433,20 @@ func (n *node) remove(c *cmd) (out *cmd, newBound bool) {
 		}
 		return nil, false
 	}
-	if n.children[i].count <= minCmds {
+	if n.children[i].count <= minLatches {
 		// Child not large enough to remove from.
 		n.rebalanceOrMerge(i)
-		return n.remove(c)
+		return n.remove(la)
 	}
 	child := mut(&n.children[i])
 	if found {
-		// Replace the cmd being removed with the max cmd in our left child.
-		out = n.cmds[i]
-		n.cmds[i] = child.removeMax()
+		// Replace the latch being removed with the max latch in our left child.
+		out = n.latches[i]
+		n.latches[i] = child.removeMax()
 		return out, n.adjustUpperBoundOnRemoval(out, nil)
 	}
-	// Cmd is not in this node and child is large enough to remove from.
-	out, newBound = child.remove(c)
+	// Latch is not in this node and child is large enough to remove from.
+	out, newBound = child.remove(la)
 	if newBound {
 		newBound = n.adjustUpperBoundOnRemoval(out, nil)
 	}
@@ -465,10 +454,10 @@ func (n *node) remove(c *cmd) (out *cmd, newBound bool) {
 }
 
 // rebalanceOrMerge grows child 'i' to ensure it has sufficient room to remove
-// a cmd from it while keeping it at or above minCmds.
+// a latch from it while keeping it at or above minLatches.
 func (n *node) rebalanceOrMerge(i int) {
 	switch {
-	case i > 0 && n.children[i-1].count > minCmds:
+	case i > 0 && n.children[i-1].count > minLatches:
 		// Rebalance from left sibling.
 		//
 		//          +-----------+
@@ -499,15 +488,15 @@ func (n *node) rebalanceOrMerge(i int) {
 		//
 		left := mut(&n.children[i-1])
 		child := mut(&n.children[i])
-		xCmd, grandChild := left.popBack()
-		yCmd := n.cmds[i-1]
-		child.pushFront(yCmd, grandChild)
-		n.cmds[i-1] = xCmd
+		xLa, grandChild := left.popBack()
+		yLa := n.latches[i-1]
+		child.pushFront(yLa, grandChild)
+		n.latches[i-1] = xLa
 
-		left.adjustUpperBoundOnRemoval(xCmd, grandChild)
-		child.adjustUpperBoundOnInsertion(yCmd, grandChild)
+		left.adjustUpperBoundOnRemoval(xLa, grandChild)
+		child.adjustUpperBoundOnInsertion(yLa, grandChild)
 
-	case i < int(n.count) && n.children[i+1].count > minCmds:
+	case i < int(n.count) && n.children[i+1].count > minLatches:
 		// Rebalance from right sibling.
 		//
 		//          +-----------+
@@ -538,13 +527,13 @@ func (n *node) rebalanceOrMerge(i int) {
 		//
 		right := mut(&n.children[i+1])
 		child := mut(&n.children[i])
-		xCmd, grandChild := right.popFront()
-		yCmd := n.cmds[i]
-		child.pushBack(yCmd, grandChild)
-		n.cmds[i] = xCmd
+		xLa, grandChild := right.popFront()
+		yLa := n.latches[i]
+		child.pushBack(yLa, grandChild)
+		n.latches[i] = xLa
 
-		right.adjustUpperBoundOnRemoval(xCmd, grandChild)
-		child.adjustUpperBoundOnInsertion(yCmd, grandChild)
+		right.adjustUpperBoundOnRemoval(xLa, grandChild)
+		child.adjustUpperBoundOnInsertion(yLa, grandChild)
 
 	default:
 		// Merge with either the left or right sibling.
@@ -575,15 +564,15 @@ func (n *node) rebalanceOrMerge(i int) {
 		child := mut(&n.children[i])
 		// Make mergeChild mutable, bumping the refcounts on its children if necessary.
 		_ = mut(&n.children[i+1])
-		mergeCmd, mergeChild := n.removeAt(i)
-		child.cmds[child.count] = mergeCmd
-		copy(child.cmds[child.count+1:], mergeChild.cmds[:mergeChild.count])
+		mergeLa, mergeChild := n.removeAt(i)
+		child.latches[child.count] = mergeLa
+		copy(child.latches[child.count+1:], mergeChild.latches[:mergeChild.count])
 		if !child.leaf {
 			copy(child.children[child.count+1:], mergeChild.children[:mergeChild.count+1])
 		}
 		child.count += mergeChild.count + 1
 
-		child.adjustUpperBoundOnInsertion(mergeCmd, mergeChild)
+		child.adjustUpperBoundOnInsertion(mergeLa, mergeChild)
 		mergeChild.decRef(false /* recursive */)
 	}
 }
@@ -593,7 +582,7 @@ func (n *node) rebalanceOrMerge(i int) {
 func (n *node) findUpperBound() keyBound {
 	var max keyBound
 	for i := int16(0); i < n.count; i++ {
-		up := upperBound(n.cmds[i])
+		up := upperBound(n.latches[i])
 		if max.compare(up) < 0 {
 			max = up
 		}
@@ -610,10 +599,10 @@ func (n *node) findUpperBound() keyBound {
 }
 
 // adjustUpperBoundOnInsertion adjusts the upper key bound for this node
-// given a cmd and an optional child node that was inserted. Returns true
-// is the upper bound was changed and false if not.
-func (n *node) adjustUpperBoundOnInsertion(c *cmd, child *node) bool {
-	up := upperBound(c)
+// given a latch and an optional child node that was inserted. Returns
+// true is the upper bound was changed and false if not.
+func (n *node) adjustUpperBoundOnInsertion(la *latch, child *node) bool {
+	up := upperBound(la)
 	if child != nil {
 		if up.compare(child.max) < 0 {
 			up = child.max
@@ -627,29 +616,31 @@ func (n *node) adjustUpperBoundOnInsertion(c *cmd, child *node) bool {
 }
 
 // adjustUpperBoundOnRemoval adjusts the upper key bound for this node
-// given a cmd and an optional child node that were removed. Returns true
-// is the upper bound was changed and false if not.
-func (n *node) adjustUpperBoundOnRemoval(c *cmd, child *node) bool {
-	up := upperBound(c)
+// given a latch and an optional child node that were removed. Returns
+// true is the upper bound was changed and false if not.
+func (n *node) adjustUpperBoundOnRemoval(la *latch, child *node) bool {
+	up := upperBound(la)
 	if child != nil {
 		if up.compare(child.max) < 0 {
 			up = child.max
 		}
 	}
 	if n.max.compare(up) == 0 {
+		// up was previous upper bound of n.
 		n.max = n.findUpperBound()
-		return true
+		return n.max.compare(up) != 0
 	}
 	return false
 }
 
 // btree is an implementation of an augmented interval B-Tree.
 //
-// btree stores cmds in an ordered structure, allowing easy insertion,
+// btree stores latches in an ordered structure, allowing easy insertion,
 // removal, and iteration. It represents intervals and permits an interval
 // search operation following the approach laid out in CLRS, Chapter 14.
-// The B-Tree stores cmds in order based on their start key and each B-Tree
-// node maintains the upper-bound end key of all cmds in its subtree.
+// The B-Tree stores latches in order based on their start key and each
+// B-Tree node maintains the upper-bound end key of all latches in its
+// subtree.
 //
 // Write operations are not safe for concurrent mutation by multiple
 // goroutines, but Read operations are.
@@ -658,7 +649,7 @@ type btree struct {
 	length int
 }
 
-// Reset removes all cmds from the btree. In doing so, it allows memory
+// Reset removes all latches from the btree. In doing so, it allows memory
 // held by the btree to be recycled. Failure to call this method before
 // letting a btree be GCed is safe in that it won't cause a memory leak,
 // but it will prevent btree nodes from being efficiently re-used.
@@ -679,12 +670,12 @@ func (t *btree) Clone() btree {
 	return c
 }
 
-// Delete removes a cmd equal to the passed in cmd from the tree.
-func (t *btree) Delete(c *cmd) {
+// Delete removes a latch equal to the passed in latch from the tree.
+func (t *btree) Delete(la *latch) {
 	if t.root == nil || t.root.count == 0 {
 		return
 	}
-	if out, _ := mut(&t.root).remove(c); out != nil {
+	if out, _ := mut(&t.root).remove(la); out != nil {
 		t.length--
 	}
 	if t.root.count == 0 && !t.root.leaf {
@@ -694,22 +685,22 @@ func (t *btree) Delete(c *cmd) {
 	}
 }
 
-// Set adds the given cmd to the tree. If a cmd in the tree already equals
-// the given one, it is replaced with the new cmd.
-func (t *btree) Set(c *cmd) {
+// Set adds the given latch to the tree. If a latch in the tree already
+// equals the given one, it is replaced with the new latch.
+func (t *btree) Set(la *latch) {
 	if t.root == nil {
 		t.root = newLeafNode()
-	} else if t.root.count >= maxCmds {
-		splitcmd, splitNode := mut(&t.root).split(maxCmds / 2)
+	} else if t.root.count >= maxLatches {
+		splitLa, splitNode := mut(&t.root).split(maxLatches / 2)
 		newRoot := newNode()
 		newRoot.count = 1
-		newRoot.cmds[0] = splitcmd
+		newRoot.latches[0] = splitLa
 		newRoot.children[0] = t.root
 		newRoot.children[1] = splitNode
 		newRoot.max = newRoot.findUpperBound()
 		t.root = newRoot
 	}
-	if replaced, _ := mut(&t.root).insert(c); !replaced {
+	if replaced, _ := mut(&t.root).insert(la); !replaced {
 		t.length++
 	}
 }
@@ -735,7 +726,7 @@ func (t *btree) Height() int {
 	return h
 }
 
-// Len returns the number of cmds currently in the tree.
+// Len returns the number of latches currently in the tree.
 func (t *btree) Len() int {
 	return t.length
 }
@@ -757,7 +748,7 @@ func (n *node) writeString(b *strings.Builder) {
 			if i != 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(n.cmds[i].span.String())
+			b.WriteString(n.latches[i].span.String())
 		}
 		return
 	}
@@ -766,7 +757,7 @@ func (n *node) writeString(b *strings.Builder) {
 		n.children[i].writeString(b)
 		b.WriteString(")")
 		if i < n.count {
-			b.WriteString(n.cmds[i].span.String())
+			b.WriteString(n.latches[i].span.String())
 		}
 	}
 }
@@ -856,14 +847,15 @@ func (i *iterator) ascend() {
 	i.pos = f.pos
 }
 
-// SeekGE seeks to the first cmd greater-than or equal to the provided cmd.
-func (i *iterator) SeekGE(c *cmd) {
+// SeekGE seeks to the first latch greater-than or equal to the provided
+// latch.
+func (i *iterator) SeekGE(la *latch) {
 	i.reset()
 	if i.n == nil {
 		return
 	}
 	for {
-		pos, found := i.n.find(c)
+		pos, found := i.n.find(la)
 		i.pos = int16(pos)
 		if found {
 			return
@@ -878,14 +870,14 @@ func (i *iterator) SeekGE(c *cmd) {
 	}
 }
 
-// SeekLT seeks to the first cmd less-than the provided cmd.
-func (i *iterator) SeekLT(c *cmd) {
+// SeekLT seeks to the first latch less-than the provided latch.
+func (i *iterator) SeekLT(la *latch) {
 	i.reset()
 	if i.n == nil {
 		return
 	}
 	for {
-		pos, found := i.n.find(c)
+		pos, found := i.n.find(la)
 		i.pos = int16(pos)
 		if found || i.n.leaf {
 			i.Prev()
@@ -895,7 +887,7 @@ func (i *iterator) SeekLT(c *cmd) {
 	}
 }
 
-// First seeks to the first cmd in the btree.
+// First seeks to the first latch in the btree.
 func (i *iterator) First() {
 	i.reset()
 	if i.n == nil {
@@ -907,7 +899,7 @@ func (i *iterator) First() {
 	i.pos = 0
 }
 
-// Last seeks to the last cmd in the btree.
+// Last seeks to the last latch in the btree.
 func (i *iterator) Last() {
 	i.reset()
 	if i.n == nil {
@@ -919,7 +911,7 @@ func (i *iterator) Last() {
 	i.pos = i.n.count - 1
 }
 
-// Next positions the iterator to the cmd immediately following
+// Next positions the iterator to the latch immediately following
 // its current position.
 func (i *iterator) Next() {
 	if i.n == nil {
@@ -944,7 +936,7 @@ func (i *iterator) Next() {
 	i.pos = 0
 }
 
-// Prev positions the iterator to the cmd immediately preceding
+// Prev positions the iterator to the latch immediately preceding
 // its current position.
 func (i *iterator) Prev() {
 	if i.n == nil {
@@ -975,31 +967,31 @@ func (i *iterator) Valid() bool {
 	return i.pos >= 0 && i.pos < i.n.count
 }
 
-// Cmd returns the cmd at the iterator's current position. It is illegal
-// to call Cmd if the iterator is not valid.
-func (i *iterator) Cmd() *cmd {
-	return i.n.cmds[i.pos]
+// Cur returns the latch at the iterator's current position. It is illegal
+// to call Latch if the iterator is not valid.
+func (i *iterator) Cur() *latch {
+	return i.n.latches[i.pos]
 }
 
-// An overlap scan is a scan over all cmds that overlap with the provided cmd
-// in order of the overlapping cmds' start keys. The goal of the scan is to
-// minimize the number of key comparisons performed in total. The algorithm
-// operates based on the following two invariants maintained by augmented
-// interval btree:
-// 1. all cmds are sorted in the btree based on their start key.
-// 2. all btree nodes maintain the upper bound end key of all cmds
+// An overlap scan is a scan over all latches that overlap with the provided
+// latch in order of the overlapping latches' start keys. The goal of the scan
+// is to minimize the number of key comparisons performed in total. The
+// algorithm operates based on the following two invariants maintained by
+// augmented interval btree:
+// 1. all latches are sorted in the btree based on their start key.
+// 2. all btree nodes maintain the upper bound end key of all latches
 //    in their subtree.
 //
 // The scan algorithm starts in "unconstrained minimum" and "unconstrained
 // maximum" states. To enter a "constrained minimum" state, the scan must reach
-// cmds in the tree with start keys above the search range's start key. Because
-// cmds in the tree are sorted by start key, once the scan enters the
+// latches in the tree with start keys above the search range's start key.
+// Because latches in the tree are sorted by start key, once the scan enters the
 // "constrained minimum" state it will remain there. To enter a "constrained
 // maximum" state, the scan must determine the first child btree node in a given
-// subtree that can have cmds with start keys above the search range's end key.
-// The scan then remains in the "constrained maximum" state until it traverse
-// into this child node, at which point it moves to the "unconstrained maximum"
-// state again.
+// subtree that can have latches with start keys above the search range's end
+// key. The scan then remains in the "constrained maximum" state until it
+// traverse into this child node, at which point it moves to the "unconstrained
+// maximum" state again.
 //
 // The scan algorithm works like a standard btree forward scan with the
 // following augmentations:
@@ -1014,19 +1006,19 @@ func (i *iterator) Cmd() *cmd {
 //    than the soft lower bound constraint.
 // 4. once the initial tranversal completes and the scan is in the left-most
 //    btree node whose upper bound overlaps the search range, key comparisons
-//    must be performed with each cmd in the tree. This is necessary because
-//    any of these cmds may have end keys that cause them to overlap with the
+//    must be performed with each latch in the tree. This is necessary because
+//    any of these latches may have end keys that cause them to overlap with the
 //    search range.
-// 5. once the scan reaches the lower bound constraint position (the first cmd
+// 5. once the scan reaches the lower bound constraint position (the first latch
 //    with a start key equal to or greater than the search range's start key),
 //    it can begin scaning without performing key comparisons. This is allowed
-//    because all commands from this point forward will have end keys that are
+//    because all latches from this point forward will have end keys that are
 //    greater than the search range's start key.
 // 6. once the scan reaches the upper bound constraint position, it terminates.
-//    It does so because the cmd at this position is the first cmd with a start
-//    key larger than the search range's end key.
+//    It does so because the latch at this position is the first latch with a
+//    start key larger than the search range's end key.
 type overlapScan struct {
-	c *cmd // search cmd
+	la *latch // search latch
 
 	// The "soft" lower-bound constraint.
 	constrMinN       *node
@@ -1038,27 +1030,27 @@ type overlapScan struct {
 	constrMaxPos int16
 }
 
-// FirstOverlap seeks to the first cmd in the btree that overlaps with the
-// provided search cmd.
-func (i *iterator) FirstOverlap(c *cmd) {
+// FirstOverlap seeks to the first latch in the btree that overlaps with the
+// provided search latch.
+func (i *iterator) FirstOverlap(la *latch) {
 	i.reset()
 	if i.n == nil {
 		return
 	}
 	i.pos = 0
-	i.o = overlapScan{c: c}
+	i.o = overlapScan{la: la}
 	i.constrainMinSearchBounds()
 	i.constrainMaxSearchBounds()
 	i.findNextOverlap()
 }
 
-// NextOverlap positions the iterator to the cmd immediately following
-// its current position that overlaps with the search cmd.
+// NextOverlap positions the iterator to the latch immediately following
+// its current position that overlaps with the search latch.
 func (i *iterator) NextOverlap() {
 	if i.n == nil {
 		return
 	}
-	if i.o.c == nil {
+	if i.o.la == nil {
 		// Invalid. Mixed overlap scan with non-overlap scan.
 		i.pos = i.n.count
 		return
@@ -1068,18 +1060,18 @@ func (i *iterator) NextOverlap() {
 }
 
 func (i *iterator) constrainMinSearchBounds() {
-	k := i.o.c.span.Key
+	k := i.o.la.span.Key
 	j := sort.Search(int(i.n.count), func(j int) bool {
-		return bytes.Compare(k, i.n.cmds[j].span.Key) <= 0
+		return bytes.Compare(k, i.n.latches[j].span.Key) <= 0
 	})
 	i.o.constrMinN = i.n
 	i.o.constrMinPos = int16(j)
 }
 
 func (i *iterator) constrainMaxSearchBounds() {
-	up := upperBound(i.o.c)
+	up := upperBound(i.o.la)
 	j := sort.Search(int(i.n.count), func(j int) bool {
-		return !up.contains(i.n.cmds[j])
+		return !up.contains(i.n.latches[j])
 	})
 	i.o.constrMaxN = i.n
 	i.o.constrMaxPos = int16(j)
@@ -1092,7 +1084,7 @@ func (i *iterator) findNextOverlap() {
 			i.ascend()
 		} else if !i.n.leaf {
 			// Iterate down tree.
-			if i.o.constrMinReached || i.n.children[i.pos].max.contains(i.o.c) {
+			if i.o.constrMinReached || i.n.children[i.pos].max.contains(i.o.la) {
 				par := i.n
 				pos := i.pos
 				i.descend(par, pos)
@@ -1121,14 +1113,14 @@ func (i *iterator) findNextOverlap() {
 
 		// Iterate across node.
 		if i.pos < i.n.count {
-			// Check for overlapping cmd.
+			// Check for overlapping latch.
 			if i.o.constrMinReached {
 				// Fast-path to avoid span comparison. i.o.constrMinReached
-				// tells us that all cmds have end keys above our search
+				// tells us that all latches have end keys above our search
 				// span's start key.
 				return
 			}
-			if upperBound(i.n.cmds[i.pos]).contains(i.o.c) {
+			if upperBound(i.n.latches[i.pos]).contains(i.o.la) {
 				return
 			}
 		}
