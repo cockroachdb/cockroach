@@ -412,8 +412,13 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		// 2. We are executing a previously prepared statement.
 
 		// If the prepared memo has been invalidated by schema or other changes,
-		// re-prepare it.
-		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+		// re-prepare it. If the current transaction has uncommitted DDL statements,
+		// then we assume they may have changed schema on which the prepared state
+		// depends; this is a separate check because the descriptor versions are
+		// bumped at most once per transaction, even if there are multiple DDL
+		// operations.
+		if p.Tables().hasUncommittedTables() ||
+			stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
 			var err error
 			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 			if err != nil {
@@ -438,8 +443,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		}
 	} else {
 		// 3. We are executing a statement that was not prepared, or we fell back to
-		// the heuristic planner during prepare, or we decided that the prepared
-		// state cannot be reused (see tryReusePreparedState).
+		// the heuristic planner during prepare.
 		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
 		if err := bld.Build(); err != nil {
 			// isCorrelated is used in the fallback case to create a better error.
