@@ -117,7 +117,7 @@ func (m *Manager) MustAcquireChCtx(
 
 func TestLatchManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Try latch with no overlapping already-acquired lathes.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
@@ -140,7 +140,7 @@ func TestLatchManager(t *testing.T) {
 
 func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Acquire latch for read-only span.
 	m.MustAcquire(spans("a", "", read), zeroTS)
@@ -151,7 +151,7 @@ func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
 
 func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Acquire latch for read-only span.
 	lg1 := m.MustAcquire(spans("a", "", read), zeroTS)
@@ -179,7 +179,7 @@ func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
 
 func TestLatchManagerMultipleOverlappingLatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Acquire multiple latches.
 	lg1C := m.MustAcquireCh(spans("a", "", write), zeroTS)
@@ -199,7 +199,7 @@ func TestLatchManagerMultipleOverlappingLatches(t *testing.T) {
 
 func TestLatchManagerMultipleOverlappingSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Acquire multiple latches.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
@@ -423,7 +423,7 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 					c.ts1, c.ts2 = c.ts2, c.ts1
 				}
 
-				m := New()
+				var m Manager
 				lg1 := m.MustAcquire(c.sp1, c.ts1)
 				lg2C := m.MustAcquireCh(c.sp2, c.ts2)
 				if c.dependent {
@@ -443,7 +443,7 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 
 func TestLatchManagerContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	m := New()
+	var m Manager
 
 	// Attempt to acquire three latches that all block on each other.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
@@ -471,7 +471,7 @@ func TestLatchManagerContextCancellation(t *testing.T) {
 func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
-			m := New()
+			var m Manager
 			ss := spans("a", "b", read)
 			for i := 0; i < size; i++ {
 				_ = m.MustAcquire(ss, zeroTS)
@@ -488,7 +488,7 @@ func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 	for _, readsPerWrite := range []int{0, 1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("readsPerWrite=%d", readsPerWrite), func(b *testing.B) {
-			m := New()
+			var m Manager
 			lgBuf := make(chan *Guard, 16)
 
 			spans := make([]spanset.SpanSet, b.N)
