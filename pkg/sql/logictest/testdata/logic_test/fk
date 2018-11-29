@@ -1535,3 +1535,37 @@ ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, paren
 
 statement ok
 DROP TABLE parent, child_duplicate_cols
+
+# Check that a FK cannot be added to a column being backfilled.
+# If this behavior is changed you should create a test similar to
+# TestCRUDWhileColumnBackfill to test that CRUD operations operating
+# with FK relationships work correctly over NON NULL columns that
+# are still being backfilled.
+subtest cannot_add_fk_on_col_needing_backfill
+
+statement ok
+CREATE TABLE parentid (
+    k INT NOT NULL PRIMARY KEY,
+    v INT NOT NULL
+);
+
+statement ok
+CREATE TABLE childid (
+    id INT NOT NULL PRIMARY KEY
+);
+
+# Make tables non-empty.
+statement ok
+INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
+
+statement error column \"id\" does not exist
+BEGIN; ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (id);
+
+statement ok
+ROLLBACK;
+
+statement error column \"id2\" does not exist
+BEGIN; ALTER TABLE childid ADD id2 INT UNIQUE NOT NULL DEFAULT 0; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id2) REFERENCES parentid (k);
+
+statement ok
+ROLLBACK;

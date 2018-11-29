@@ -652,7 +652,7 @@ INSERT INTO x VALUES (3)
 
 # Verify computed columns work.
 statement ok
-ALTER TABLE x ADD COLUMN c INT AS (a + 4) STORED
+ALTER TABLE x ADD COLUMN c INT NOT NULL AS (a + 4) STORED
 
 query TT
 SHOW CREATE TABLE x
@@ -660,7 +660,7 @@ SHOW CREATE TABLE x
 x  CREATE TABLE x (
     a INT NULL,
     b INT NULL AS (a * 2) STORED,
-    c INT NULL AS (a + 4) STORED,
+    c INT NOT NULL AS (a + 4) STORED,
     FAMILY "primary" (a, b, rowid, c)
 )
 

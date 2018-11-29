@@ -90,6 +90,7 @@ func newColOperator(
 
 		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
+		aggFns := make([]int, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return nil, errors.New("distinct aggregation not supported")
@@ -108,6 +109,7 @@ func newColOperator(
 			aggCols[i] = aggSpec.Aggregations[i].ColIdx
 
 			switch agg.Func {
+			case AggregatorSpec_AVG:
 			case AggregatorSpec_SUM_INT:
 			case AggregatorSpec_SUM:
 				switch aggTyps[i][0] {
@@ -120,8 +122,11 @@ func newColOperator(
 			default:
 				return nil, errors.Errorf("non-sum aggregation %s not supported", agg.Func)
 			}
+			aggFns[i] = int(agg.Func)
 		}
-		op, err = exec.NewOrderedAggregator(inputs[0], aggSpec.GroupCols, groupTyps, aggCols, aggTyps)
+		op, err = exec.NewOrderedAggregator(
+			inputs[0], aggSpec.GroupCols, groupTyps, aggFns, aggCols, aggTyps,
+		)
 		if err != nil {
 			return nil, err
 		}

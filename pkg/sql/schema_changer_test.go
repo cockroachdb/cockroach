@@ -480,8 +480,14 @@ func runSchemaChangeWithOperations(
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
-			t.Error(err)
+		if rand.Float32() < 0.5 {
+			if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
+				t.Error(err)
+			}
+		} else {
+			if _, err := sqlDB.Exec(`UPSERT INTO t.test (k,v) VALUES ($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 
@@ -495,8 +501,14 @@ func runSchemaChangeWithOperations(
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-			t.Error(err)
+		if rand.Float32() < 0.5 {
+			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
+		} else {
+			if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 
@@ -2180,9 +2192,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 }
 
-// Test an UPDATE using a primary and a secondary index in the middle
-// of a column backfill.
-func TestUpdateDuringColumnBackfill(t *testing.T) {
+// Test CRUD operations can read NULL values for NOT NULL columns
+// in the middle of a column backfill.
+func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	backfillNotification := make(chan bool)
 	continueBackfillNotification := make(chan bool)
@@ -2205,7 +2217,7 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 			DisableBackfillMigrations: true,
 		},
 	}
-	server, sqlDB, _ := serverutils.StartServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
@@ -2219,6 +2231,8 @@ CREATE TABLE t.test (
     FAMILY "primary" (k, v, length)
 );
 INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
+INSERT INTO t.test (k, v, length) VALUES (1, 2, 1);
+INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2226,15 +2240,34 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	// Run the column schema change in a separate goroutine.
 	notification := backfillNotification
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id int NOT NULL DEFAULT 0;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT NOT NULL DEFAULT 2;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
+	// Wait until the first mutation has processed through the state machine
+	// and has started backfilling.
 	<-notification
+
+	go func() {
+		// Create a column that uses the above column in an expression.
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD z INT AS (k + id) STORED;`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Wait until both mutations are queued up.
+	testutils.SucceedsSoon(t, func() error {
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if l := len(tableDesc.Mutations); l != 2 {
+			return errors.Errorf("number of mutations = %d", l)
+		}
+		return nil
+	})
 
 	// UPDATE the row using the secondary index.
 	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27000 WHERE v = 1`); err != nil {
@@ -2242,8 +2275,92 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	}
 
 	// UPDATE the row using the primary index.
-	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27001 WHERE k = 0`); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27001 WHERE k = 1`); err != nil {
 		t.Error(err)
+	}
+
+	// Use UPSERT instead of UPDATE.
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, length) VALUES (2, 3, 27000)`); err != nil {
+		t.Error(err)
+	}
+
+	// UPSERT inserts a new row.
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, length) VALUES (3, 4, 27000)`); err != nil {
+		t.Error(err)
+	}
+
+	// INSERT inserts a new row.
+	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, length) VALUES (4, 5, 270)`); err != nil {
+		t.Error(err)
+	}
+
+	// DELETE.
+	if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 1`); err != nil {
+		t.Error(err)
+	}
+
+	// DELETE using the secondary index.
+	if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE v = 4`); err != nil {
+		t.Error(err)
+	}
+
+	// Ensure that the newly added column cannot be supplied with any values.
+	if _, err := sqlDB.Exec(`UPDATE t.test SET id = 27000 WHERE k = 2`); !testutils.IsError(err,
+		`column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE t.test SET id = NULL WHERE k = 2`); !testutils.IsError(err,
+		`column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, id) VALUES (2, 3, 234)`); !testutils.IsError(
+		err, `column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, id) VALUES (2, 3, NULL)`); !testutils.IsError(
+		err, `column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, id) VALUES (4, 5, 270)`); !testutils.IsError(
+		err, `column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, id) VALUES (4, 5, NULL)`); !testutils.IsError(
+		err, `column "id" does not exist`) {
+		t.Errorf("err = %+v", err)
+	}
+
+	// Use column in an expression.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO t.test (k, v, length) VALUES (2, 1, 3) ON CONFLICT (k) DO UPDATE SET (k, v, length) = (id + 1, 1, 3)`,
+	); err != nil {
+		t.Error(err)
+	}
+
+	// SHOW CREATE TABLE doesn't show new columns.
+	row := sqlDB.QueryRow(`SHOW CREATE TABLE t.test`)
+	var scanName, create string
+	if err := row.Scan(&scanName, &create); err != nil {
+		t.Fatal(err)
+	}
+	if scanName != `t.public.test` {
+		t.Fatalf("expected table name %s, got %s", `test`, scanName)
+	}
+	expect := `CREATE TABLE test (
+	k INT NOT NULL,
+	v INT NOT NULL,
+	length INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (k ASC),
+	INDEX v_idx (v ASC),
+	FAMILY "primary" (k, v, length)
+)`
+	if create != expect {
+		t.Fatalf("got: %s\nexpected: %s", create, expect)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if l := len(tableDesc.Mutations); l != 2 {
+		t.Fatalf("number of mutations = %d", l)
 	}
 
 	close(continueBackfillNotification)
@@ -2252,6 +2369,36 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
+	}
+	// Check data!
+	rows, err := sqlDB.Query(`SELECT k, v, length, id, z FROM t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	expected := [][]int{
+		{0, 1, 27000, 2, 2},
+		{3, 1, 3, 2, 5},
+		{4, 5, 270, 2, 6},
+	}
+	count := 0
+	for ; rows.Next(); count++ {
+		var i1, i2, i3, i4, i5 *int
+		if err := rows.Scan(&i1, &i2, &i3, &i4, &i5); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		row := fmt.Sprintf("%d %d %d %d %d", *i1, *i2, *i3, *i4, *i5)
+		exp := expected[count]
+		expRow := fmt.Sprintf("%d %d %d %d %d", exp[0], exp[1], exp[2], exp[3], exp[4])
+		if row != expRow {
+			t.Errorf("expected %q but read %q", expRow, row)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Error(err)
+	} else if count != 3 {
+		t.Errorf("expected 3 rows but read %d", count)
 	}
 }
 
