@@ -380,75 +380,24 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	p.optimizer.Init(p.EvalContext())
 	f := p.optimizer.Factory()
 
-	// If the statement includes a PreparedStatement, then separate planning into
-	// two distinct phases:
+	// We have three distinct code paths:
+	//   1. Prepare
+	//   2. Execute a previously prepared statement
+	//   3. Execute without prior Prepare
 	//
-	//   PREPARE - Build the Memo (optbuild) and apply normalization rules to it.
-	//             If the query contains placeholders, values are not assigned
-	//             during this phase, as that only happens during the EXECUTE
-	//             phase. If the query does not contain placeholders, then also
-	//             apply exploration rules to the Memo so that there's even less
-	//             to do during the EXECUTE phase.
-	//
-	//   EXECUTE - Before the query can be executed, first any placeholders must
-	//             be assigned values. This can trigger additional normalization
-	//             rules, such as with this example:
-	//
-	//               SELECT * FROM abc WHERE b = $1 - 5
-	//
-	//             Without folding the Sub expression, any index on the "b" column
-	//             won't be found. This also means that after placeholders are
-	//             assigned, exploration rules must be applied (vs. applying them
-	//             during PREPARE when there are no placeholders).
-	//
-	//             Whether there were placeholders or not, after exploration the
-	//             plan tree must be built (execbuild). This tree is set as the
-	//             planner.curPlan, and the EXECUTE phase of planning is complete.
-	//
-	var prepStmt *PreparedStatement
-	inPreparePhase := p.EvalContext().PrepareOnly
-	if stmt.Prepared != nil {
-		// Only use memo if it was actually prepared. It may not have been in case
-		// of fallback to the heuristic planner.
-		if inPreparePhase || stmt.Prepared.Memo != nil {
-			prepStmt = stmt.Prepared
-		}
-	}
-
-	// If this is the prepare phase, or if a prepared memo:
-	//   1. doesn't yet exist, or
-	//   2. it's been invalidated by schema or other changes
-	//
-	// Then entirely rebuild the memo from the AST.
-	if inPreparePhase || prepStmt == nil || prepStmt.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
-		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
-		bld.KeepPlaceholders = prepStmt != nil
-		err := bld.Build()
+	if p.EvalContext().PrepareOnly {
+		// 1. We are preparing a statement.
+		//
+		memo, err := p.prepareMemo(ctx, &catalog, stmt)
 		if err != nil {
-			// isCorrelated is used in the fallback case to create a better error.
-			p.curPlan.isCorrelated = bld.IsCorrelated
 			return err
 		}
+		stmt.Prepared.Memo = memo
 
-		if prepStmt != nil {
-			// If the memo doesn't have placeholders, then fully optimize it, since
-			// it can be reused without further changes to build the execution tree.
-			if !f.Memo().HasPlaceholders() {
-				p.optimizer.Optimize()
-			}
-
-			// Detach the prepared memo from the factory and transfer its ownership
-			// to the prepared statement. DetachMemo will re-initialize the optimizer
-			// to an empty memo.
-			prepStmt.Memo = p.optimizer.DetachMemo()
-		}
-	}
-
-	// If in the PREPARE phase, construct a dummy plan that has correct output
-	// columns. Only output columns and placeholder types are needed.
-	if inPreparePhase {
-		md := prepStmt.Memo.Metadata()
-		physical := prepStmt.Memo.RootProps()
+		// Construct a dummy plan that has correct output columns. Only output
+		// columns and placeholder types are needed.
+		md := memo.Metadata()
+		physical := memo.RootProps()
 		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
 		for i, col := range physical.Presentation {
 			resultCols[i].Name = col.Label
@@ -458,24 +407,47 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return nil
 	}
 
-	// This is the EXECUTE phase, so finish optimization by assigning any
-	// remaining placeholders and applying exploration rules.
 	var execMemo *memo.Memo
-	if prepStmt == nil {
-		p.optimizer.Optimize()
-		execMemo = f.Memo()
-	} else {
-		if prepStmt.Memo.HasPlaceholders() {
-			// Reinitialize the optimizer and construct a new memo that is copied
-			// from the prepared memo, but with placeholders assigned.
-			if err := p.optimizer.Factory().AssignPlaceholders(prepStmt.Memo); err != nil {
+	if stmt.Prepared != nil && stmt.Prepared.Memo != nil {
+		// 2. We are executing a previously prepared statement.
+
+		// If the prepared memo has been invalidated by schema or other changes,
+		// re-prepare it.
+		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+			var err error
+			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
+			if err != nil {
+				return err
+			}
+		}
+
+		if preparedMemo := stmt.Prepared.Memo; preparedMemo.HasPlaceholders() {
+			// Finish optimization by assigning any remaining placeholders and
+			// applying exploration rules. Reinitialize the optimizer and construct a
+			// new memo that is copied from the prepared memo, but with placeholders
+			// assigned.
+			if err := f.AssignPlaceholders(preparedMemo); err != nil {
 				return err
 			}
 			p.optimizer.Optimize()
 			execMemo = f.Memo()
 		} else {
-			execMemo = prepStmt.Memo
+			// If there are no placeholders, the query was already fully optimized
+			// (see prepareMemo).
+			execMemo = preparedMemo
 		}
+	} else {
+		// 3. We are executing a statement that was not prepared, or we fell back to
+		// the heuristic planner during prepare, or we decided that the prepared
+		// state cannot be reused (see tryReusePreparedState).
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
+		if err := bld.Build(); err != nil {
+			// isCorrelated is used in the fallback case to create a better error.
+			p.curPlan.isCorrelated = bld.IsCorrelated
+			return err
+		}
+		p.optimizer.Optimize()
+		execMemo = f.Memo()
 	}
 
 	// Build the plan tree and store it in planner.curPlan.
@@ -499,6 +471,39 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	}
 
 	return nil
+}
+
+// prepareMemo builds the statement into a memo that can be stored for prepared
+// statements and can later be used as a starting point for optimization.
+func (p *planner) prepareMemo(
+	ctx context.Context, catalog *optCatalog, stmt Statement,
+) (*memo.Memo, error) {
+	// Build the Memo (optbuild) and apply normalization rules to it. If the
+	// query contains placeholders, values are not assigned during this phase,
+	// as that only happens during the EXECUTE phase. If the query does not
+	// contain placeholders, then also apply exploration rules to the Memo so
+	// that there's even less to do during the EXECUTE phase.
+	//
+	f := p.optimizer.Factory()
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), catalog, f, stmt.AST)
+	bld.KeepPlaceholders = true
+	if err := bld.Build(); err != nil {
+		// isCorrelated is used in the fallback case to create a better error.
+		// TODO(radu): setting the flag here is a bit hacky, ideally we would return
+		// it some other way.
+		p.curPlan.isCorrelated = bld.IsCorrelated
+		return nil, err
+	}
+	// If the memo doesn't have placeholders, then fully optimize it, since
+	// it can be reused without further changes to build the execution tree.
+	if !f.Memo().HasPlaceholders() {
+		p.optimizer.Optimize()
+	}
+
+	// Detach the prepared memo from the factory and transfer its ownership
+	// to the prepared statement. DetachMemo will re-initialize the optimizer
+	// to an empty memo.
+	return p.optimizer.DetachMemo(), nil
 }
 
 // hideHiddenColumn ensures that if the plan is returning some hidden
