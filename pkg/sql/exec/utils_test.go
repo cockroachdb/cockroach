@@ -341,6 +341,32 @@ func (f *finiteBatchSource) Next() ColBatch {
 	return NewMemBatch([]types.T{})
 }
 
+// randomLengthBatchSource is an Operator that forever returns the same batch at
+// a different length each time.
+type randomLengthBatchSource struct {
+	internalBatch ColBatch
+	rng           *rand.Rand
+}
+
+var _ Operator = &randomLengthBatchSource{}
+
+// newRandomLengthBatchSource returns a new Operator initialized to return a
+// batch of random length between [1, ColBatchSize) forever.
+func newRandomLengthBatchSource(batch ColBatch) *randomLengthBatchSource {
+	return &randomLengthBatchSource{
+		internalBatch: batch,
+	}
+}
+
+func (r *randomLengthBatchSource) Init() {
+	r.rng, _ = randutil.NewPseudoRand()
+}
+
+func (r *randomLengthBatchSource) Next() ColBatch {
+	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(ColBatchSize))))
+	return r.internalBatch
+}
+
 func TestOpTestInputOutput(t *testing.T) {
 	inputs := []tuples{
 		{
