@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -263,6 +264,18 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ZigzagJoinExpr:
 		tp.Childf("eq columns: %v = %v", t.LeftEqCols, t.RightEqCols)
+		leftVals := make([]tree.Datum, len(t.LeftFixedCols))
+		rightVals := make([]tree.Datum, len(t.RightFixedCols))
+		// FixedVals is always going to be a ScalarListExpr, containing tuples,
+		// containing one ScalarListExpr, containing ConstExprs.
+		for i := range t.LeftFixedCols {
+			leftVals[i] = t.FixedVals[0].Child(0).Child(i).(*ConstExpr).Value
+		}
+		for i := range t.RightFixedCols {
+			rightVals[i] = t.FixedVals[1].Child(0).Child(i).(*ConstExpr).Value
+		}
+		tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
+		tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)
 
 	case *MergeJoinExpr:
 		tp.Childf("left ordering: %s", t.LeftEq)
