@@ -317,16 +317,20 @@ func (s LeaseStore) WaitForOneVersion(
 	return tableDesc.Version, nil
 }
 
-func incrementVersion(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn,
+func maybeIncrementVersion(
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, txn *client.Txn,
 ) error {
+	// Already incremented, no-op.
+	if desc.Version == desc.ClusterVersion.Version+1 {
+		return nil
+	}
 	// Use SERIALIZABLE transactions so that the ModificationTime on the
 	// descriptor is the commit timestamp.
 	if txn.Isolation() != enginepb.SERIALIZABLE {
 		return pgerror.NewErrorf(pgerror.CodeInvalidTransactionStateError,
 			"transaction involving a schemas change needs to be SERIALIZABLE")
 	}
-	tableDesc.Version++
+	desc.Version++
 	// We need to set ModificationTime to the transaction's commit
 	// timestamp. Using CommitTimestamp() guarantees that the
 	// transaction will commit at the CommitTimestamp().
@@ -341,9 +345,9 @@ func incrementVersion(
 	// so updating this policy will also need to consider not doing
 	// that.
 	modTime := txn.CommitTimestamp()
-	tableDesc.ModificationTime = modTime
+	desc.ModificationTime = modTime
 	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-		tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+		desc.ID, desc.Name, desc.Version, modTime.GoTime())
 	return nil
 }
 
@@ -362,9 +366,9 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 func (s LeaseStore) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
-	update func(*sqlbase.TableDescriptor) error,
+	update func(*sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
-) (*sqlbase.Descriptor, error) {
+) (*sqlbase.ImmutableTableDescriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
@@ -375,21 +379,18 @@ func (s LeaseStore) Publish(
 			return nil, err
 		}
 
-		desc := &sqlbase.Descriptor{}
+		var tableDesc *sqlbase.MutableTableDescriptor
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err = s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			descKey := sqlbase.MakeDescMetadataKey(tableID)
-
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
-			if err := txn.GetProto(ctx, descKey, desc); err != nil {
+			var err error
+			tableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, tableID)
+			if err != nil {
 				return err
 			}
-			tableDesc := desc.GetTable()
-			if tableDesc == nil {
-				return errors.Errorf("ID %d is not a table", tableID)
-			}
+
 			if expectedVersion != tableDesc.Version {
 				// The version changed out from under us. Someone else must be
 				// performing a schema change operation.
@@ -409,7 +410,7 @@ func (s LeaseStore) Publish(
 					tableDesc.Version, version)
 			}
 
-			if err := incrementVersion(ctx, tableDesc, txn); err != nil {
+			if err := maybeIncrementVersion(ctx, tableDesc, txn); err != nil {
 				return err
 			}
 			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
@@ -421,7 +422,7 @@ func (s LeaseStore) Publish(
 				return err
 			}
 			b := txn.NewBatch()
-			b.Put(descKey, desc)
+			b.Put(sqlbase.MakeDescMetadataKey(tableID), sqlbase.WrapDescriptor(tableDesc))
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the
 				// descriptor change occurs first in the transaction. This is
@@ -443,7 +444,7 @@ func (s LeaseStore) Publish(
 
 		switch err {
 		case nil, errDidntUpdateDescriptor:
-			return desc, nil
+			return sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor), nil
 		case errLeaseVersionChanged:
 			// will loop around to retry
 		default:

@@ -179,7 +179,7 @@ func (t *leaseTest) mustRelease(
 }
 
 func (t *leaseTest) publish(ctx context.Context, nodeID uint32, descID sqlbase.ID) error {
-	_, err := t.node(nodeID).Publish(ctx, descID, func(*sqlbase.TableDescriptor) error {
+	_, err := t.node(nodeID).Publish(ctx, descID, func(*sqlbase.MutableTableDescriptor) error {
 		return nil
 	}, nil)
 	return err
@@ -393,7 +393,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n1.Publish(context.TODO(), descID, func(*sqlbase.MutableTableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -414,7 +414,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n2.Publish(context.TODO(), descID, func(*sqlbase.MutableTableDescriptor) error {
 			return nil
 		}, nil)
 		if err != nil {
@@ -437,14 +437,14 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	defer t.cleanup()
 
 	if _, err := t.node(1).Publish(
-		context.TODO(), keys.LeaseTableID, func(table *sqlbase.TableDescriptor) error {
+		context.TODO(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
 			table.Version++
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 	if _, err := t.node(1).Publish(
-		context.TODO(), keys.LeaseTableID, func(table *sqlbase.TableDescriptor) error {
+		context.TODO(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
 			table.Version--
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -1159,7 +1159,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 	// Increment the table version after the txn has started.
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	if _, err := leaseMgr.Publish(
-		context.TODO(), tableDesc.ID, func(table *sqlbase.TableDescriptor) error {
+		context.TODO(), tableDesc.ID, func(table *sqlbase.MutableTableDescriptor) error {
 			// Do nothing: increments the version.
 			return nil
 		}, nil); err != nil {
@@ -1622,11 +1622,10 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 		leaseMgr := t.node(1)
 		for timeutil.Now().Before(end) {
 			log.Infof(ctx, "publishing new descriptor")
-			desc, err := leaseMgr.Publish(ctx, descID, func(*sqlbase.TableDescriptor) error { return nil }, nil)
+			table, err := leaseMgr.Publish(ctx, descID, func(*sqlbase.MutableTableDescriptor) error { return nil }, nil)
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
 			}
-			table := desc.GetTable()
 
 			// Wait a little time to give a chance to other goroutines to
 			// race past.

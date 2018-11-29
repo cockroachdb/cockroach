@@ -26,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testTableDesc() *sqlbase.ImmutableTableDescriptor {
-	return sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{
+func testTableDesc(
+	t *testing.T, intermediate func(desc *MutableTableDescriptor),
+) *sqlbase.ImmutableTableDescriptor {
+	mut := sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
 		Name:     "test",
 		ID:       1001,
 		ParentID: 1000,
@@ -57,14 +59,16 @@ func testTableDesc() *sqlbase.ImmutableTableDescriptor {
 		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
 		FormatVersion: sqlbase.FamilyFormatVersion,
 	})
+	intermediate(mut)
+	if err := mut.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+	return sqlbase.NewImmutableTableDescriptor(mut.TableDescriptor)
 }
 
 func makeSelectNode(t *testing.T, p *planner) *renderNode {
-	desc := testTableDesc()
+	desc := testTableDesc(t, func(*MutableTableDescriptor) {})
 	sel := testInitDummySelectNode(t, p, desc)
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
 	numColumns := len(sel.sourceInfo[0].SourceColumns)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
 	p.extendedEvalCtx.IVarContainer = sel
