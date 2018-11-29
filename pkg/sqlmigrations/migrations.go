@@ -695,12 +695,9 @@ func upgradeDescsWithFn(
 							// concern: consider that dropping a large table can take several
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
-							table.Version++
 							now = txn.CommitTimestamp()
-							idVersions = append(idVersions,
-								sql.NewIDVersion(
-									table.Name, table.ID, table.Version-2,
-								))
+							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
+							table.Version++
 							// Use ValidateTable() instead of Validate()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
