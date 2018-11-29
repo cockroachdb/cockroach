@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CheckExpr does sanity checking on an Expr. This code is called in testrace
@@ -30,9 +31,9 @@ import (
 func (m *Memo) checkExpr(e opt.Expr) {
 	// RaceEnabled ensures that checks are run on every PR (as part of make
 	// testrace) while keeping the check code out of non-test builds.
-	//if !util.RaceEnabled {
-	//	return
-	//}
+	if !util.RaceEnabled {
+		return
+	}
 
 	// Check properties.
 	switch t := e.(type) {
