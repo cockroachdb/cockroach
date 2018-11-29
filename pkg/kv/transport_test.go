@@ -15,11 +15,18 @@
 package kv
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"google.golang.org/grpc"
 )
 
 func TestTransportMoveToFront(t *testing.T) {
@@ -96,4 +103,72 @@ func TestTransportMoveToFront(t *testing.T) {
 	if gt.clientIndex != 1 {
 		t.Fatalf("expected client index 1; got %d", gt.clientIndex)
 	}
+}
+
+// TestSpanImport tests that the gRPC transport ingests trace information that
+// came from gRPC responses (through the "snowball tracing" mechanism).
+func TestSpanImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	metrics := makeDistSenderMetrics()
+	gt := grpcTransport{
+		opts: SendOptions{
+			metrics: &metrics,
+		},
+	}
+	server := mockInternalClient{}
+	// Let's spice things up and simulate an error from the server.
+	expectedErr := "my expected error"
+	server.pErr = roachpb.NewErrorf(expectedErr)
+
+	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
+	defer cancel()
+
+	server.tr = opentracing.SpanFromContext(recCtx).Tracer().(*tracing.Tracer)
+
+	br, err := gt.sendBatch(recCtx, roachpb.NodeID(1), &server, roachpb.BatchRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !testutils.IsPError(br.Error, expectedErr) {
+		t.Fatalf("expected err: %s, got: %q", expectedErr, br.Error)
+	}
+	expectedMsg := "mockInternalClient processing batch"
+	if tracing.FindMsgInRecording(getRec(), expectedMsg) == -1 {
+		t.Fatalf("didn't find expected message in trace: %s", expectedMsg)
+	}
+}
+
+// mockInternalClient is an implementation of roachpb.InternalClient.
+// It simulates aspects of how the Node normally handles tracing in gRPC calls.
+type mockInternalClient struct {
+	tr   *tracing.Tracer
+	pErr *roachpb.Error
+}
+
+var _ roachpb.InternalClient = &mockInternalClient{}
+
+// Batch is part of the roachpb.InternalClient interface.
+func (m *mockInternalClient) Batch(
+	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
+	sp := m.tr.StartRootSpan("mock", nil /* logTags */, tracing.RecordableSpan)
+	defer sp.Finish()
+	tracing.StartRecording(sp, tracing.SnowballRecording)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+
+	log.Eventf(ctx, "mockInternalClient processing batch")
+	br := &roachpb.BatchResponse{}
+	br.Error = m.pErr
+	if rec := tracing.GetRecording(sp); rec != nil {
+		br.CollectedSpans = append(br.CollectedSpans, rec...)
+	}
+	return br, nil
+}
+
+// RangeFeed is part of the roachpb.InternalClient interface.
+func (m *mockInternalClient) RangeFeed(
+	ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	return nil, fmt.Errorf("unsupported RangeFeed call")
 }
