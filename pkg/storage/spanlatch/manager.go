@@ -327,14 +327,19 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, ts hlc.Timestamp, snap sn
 						return err
 					}
 				case spanset.SpanReadWrite:
-					// Wait for reads at equal or higher timestamps.
-					it := tr[spanset.SpanReadOnly].MakeIter()
-					if err := iterAndWait(ctx, &it, latch, ts, ignoreEarlier); err != nil {
+					// Wait for all other writes.
+					//
+					// It is cheaper to wait on an already released latch than
+					// it is an unreleased latch so we prefer waiting on longer
+					// latches first. We expect writes to take longer than reads
+					// to release their latches, so we wait on them first.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if err := iterAndWait(ctx, &it, latch, ts, ignoreNothing); err != nil {
 						return err
 					}
-					// Wait for all other writes.
-					it = tr[spanset.SpanReadWrite].MakeIter()
-					if err := iterAndWait(ctx, &it, latch, ts, ignoreNothing); err != nil {
+					// Wait for reads at equal or higher timestamps.
+					it = tr[spanset.SpanReadOnly].MakeIter()
+					if err := iterAndWait(ctx, &it, latch, ts, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
