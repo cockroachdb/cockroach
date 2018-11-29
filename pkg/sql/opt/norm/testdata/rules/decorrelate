@@ -3235,6 +3235,69 @@ project
  └── projections
       └── NOT CASE WHEN bool_or AND (scalar IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(9,11)]
 
+# Regress issue #32270: Panic when expression contains both correlated and
+# uncorrelated subquery.
+opt expect=HoistSelectSubquery
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy) OR EXISTS(SELECT * FROM xy WHERE x=k)
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) true_agg:11(bool)
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,11)
+      ├── group-by
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) true_agg:11(bool)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── internal-ordering: +1
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,11)
+      │    ├── left-join (merge)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.x:8(int) true:10(bool)
+      │    │    ├── left ordering: +1
+      │    │    ├── right ordering: +8
+      │    │    ├── key: (1,8)
+      │    │    ├── fd: (1)-->(2-5), ()~~>(10), (1,8)-->(10)
+      │    │    ├── ordering: +1
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-5)
+      │    │    │    └── ordering: +1
+      │    │    ├── project
+      │    │    │    ├── columns: true:10(bool!null) xy.x:8(int!null)
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: ()-->(10)
+      │    │    │    ├── ordering: +8 opt(10) [provided: +8]
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: xy.x:8(int!null)
+      │    │    │    │    ├── key: (8)
+      │    │    │    │    └── ordering: +8
+      │    │    │    └── projections
+      │    │    │         └── true [type=bool]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── const-not-null-agg [type=bool, outer=(10)]
+      │         │    └── variable: true [type=bool]
+      │         ├── const-agg [type=int, outer=(2)]
+      │         │    └── variable: i [type=int]
+      │         ├── const-agg [type=float, outer=(3)]
+      │         │    └── variable: f [type=float]
+      │         ├── const-agg [type=string, outer=(4)]
+      │         │    └── variable: s [type=string]
+      │         └── const-agg [type=jsonb, outer=(5)]
+      │              └── variable: j [type=jsonb]
+      └── filters
+           └── or [type=bool, outer=(11)]
+                ├── exists [type=bool]
+                │    └── scan xy
+                │         ├── columns: xy.x:6(int!null) xy.y:7(int)
+                │         ├── key: (6)
+                │         └── fd: (6)-->(7)
+                └── true_agg IS NOT NULL [type=bool]
+
 # --------------------------------------------------
 # HoistProjectSubquery
 # --------------------------------------------------
