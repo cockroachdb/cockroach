@@ -1401,7 +1401,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 		var version sqlbase.DescriptorVersion
-		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.TableDescriptor) error {
+		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.MutableTableDescriptor) error {
 			// Publish nothing; only update the version.
 			version = table.Version
 			return nil

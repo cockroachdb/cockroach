@@ -52,7 +52,7 @@ func makeIndexDescriptor(name string, columnNames []string) IndexDescriptor {
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := TableDescriptor{
+	desc := NewMutableCreatedTableDescriptor(TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Name:     "foo",
@@ -68,12 +68,12 @@ func TestAllocateIDs(t *testing.T) {
 		},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
 		FormatVersion: FamilyFormatVersion,
-	}
+	})
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
 
-	expected := TableDescriptor{
+	expected := NewMutableCreatedTableDescriptor(TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Version:  1,
@@ -110,7 +110,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextIndexID:    4,
 		NextMutationID: 1,
 		FormatVersion:  FamilyFormatVersion,
-	}
+	})
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
 		b, _ := json.MarshalIndent(desc, "", "  ")
@@ -1107,7 +1107,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 func TestFitColumnToFamily(t *testing.T) {
 	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
 
-	makeTestTableDescriptor := func(familyTypes [][]ColumnType) TableDescriptor {
+	makeTestTableDescriptor := func(familyTypes [][]ColumnType) *MutableTableDescriptor {
 		nextColumnID := ColumnID(8)
 		var desc TableDescriptor
 		for _, fTypes := range familyTypes {
@@ -1122,7 +1122,7 @@ func TestFitColumnToFamily(t *testing.T) {
 			}
 			desc.Families = append(desc.Families, family)
 		}
-		return desc
+		return NewMutableCreatedTableDescriptor(desc)
 	}
 
 	emptyFamily := []ColumnType{}
@@ -1231,14 +1231,14 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 }
 
 func TestUnvalidateConstraints(t *testing.T) {
-	desc := TableDescriptor{
+	desc := NewMutableCreatedTableDescriptor(TableDescriptor{
 		Name:          "test",
 		ParentID:      ID(1),
 		Columns:       []ColumnDescriptor{{Name: "a"}, {Name: "b"}, {Name: "c"}},
 		FormatVersion: FamilyFormatVersion,
 		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
-	}
+	})
 	desc.Indexes[0].ForeignKey = ForeignKeyReference{
 		Name:     "fk",
 		Table:    ID(1),
@@ -1249,7 +1249,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	lookup := func(_ ID) (*TableDescriptor, error) {
-		return &desc, nil
+		return desc.TableDesc(), nil
 	}
 
 	before, err := desc.GetConstraintInfoWithLookup(lookup)
