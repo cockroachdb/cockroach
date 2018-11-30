@@ -3406,7 +3406,7 @@ func (s *Store) processRaftSnapshotRequest(
 		if err := func() error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader)
+			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader, true /* authoritative */)
 			if err != nil {
 				// If the storage cannot accept the snapshot, return an
 				// error before passing it to RawNode.Step, since our
