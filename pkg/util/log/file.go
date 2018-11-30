@@ -119,6 +119,16 @@ func DirSet() bool { return logging.logDir.IsSet() }
 // (RFC3339) are converted from underscores.
 var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.log$`)
 
+// MakeFileInfo constructs a FileInfo from FileDetails and os.FileInfo.
+func MakeFileInfo(details FileDetails, info os.FileInfo) FileInfo {
+	return FileInfo{
+		Name:         info.Name(),
+		SizeBytes:    info.Size(),
+		ModTimeNanos: info.ModTime().UnixNano(),
+		Details:      details,
+	}
+}
+
 var (
 	pid      = os.Getpid()
 	program  = filepath.Base(os.Args[0])
@@ -175,7 +185,10 @@ func logName(prefix string, t time.Time) (name, link string) {
 
 var errMalformedName = errors.New("malformed log filename")
 
-func parseLogFilename(filename string) (FileDetails, error) {
+// ParseLogFilename parses a filename into FileDetails if it matches the pattern
+// for log files. If the filename does not match the log file pattern, an error
+// is returned.
+func ParseLogFilename(filename string) (FileDetails, error) {
 	matches := logFileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 6 {
 		return FileDetails{}, errMalformedName
@@ -275,14 +288,9 @@ func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 	programPrefix := removePeriods(l.prefix)
 	for _, info := range infos {
 		if info.Mode().IsRegular() {
-			details, err := parseLogFilename(info.Name())
+			details, err := ParseLogFilename(info.Name())
 			if err == nil && details.Program == programPrefix {
-				results = append(results, FileInfo{
-					Name:         info.Name(),
-					SizeBytes:    info.Size(),
-					ModTimeNanos: info.ModTime().UnixNano(),
-					Details:      details,
-				})
+				results = append(results, MakeFileInfo(details, info))
 			}
 		}
 	}
@@ -356,7 +364,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 	}
 
 	// Check that the file name is valid.
-	if _, err := parseLogFilename(filepath.Base(filename)); err != nil {
+	if _, err := ParseLogFilename(filepath.Base(filename)); err != nil {
 		return nil, err
 	}
 
