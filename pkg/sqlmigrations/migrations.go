@@ -820,7 +820,7 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, keys.JobsTableID)
+		desc, err := sqlbase.GetMutableTableDescFromID(ctx, txn, keys.JobsTableID)
 		if err != nil {
 			return err
 		}

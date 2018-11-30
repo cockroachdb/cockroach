@@ -549,7 +549,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 		if _, err := sc.leaseMgr.Publish(
 			ctx,
 			table.ID,
-			func(tbl *sqlbase.TableDescriptor) error {
+			func(tbl *sqlbase.MutableTableDescriptor) error {
 				if !tbl.Adding() {
 					return errDidntUpdateDescriptor
 				}
@@ -626,7 +626,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 	_, err = sc.leaseMgr.Publish(
 		ctx,
 		table.ID,
-		func(tbl *sqlbase.TableDescriptor) error {
+		func(tbl *sqlbase.MutableTableDescriptor) error {
 			found := false
 			for i := 0; i < len(tbl.GCMutations); i++ {
 				if other := tbl.GCMutations[i]; other.IndexID == mutation.IndexID {
@@ -716,7 +716,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	_, err := sc.leaseMgr.Publish(
 		ctx,
 		sc.tableID,
-		func(desc *sqlbase.TableDescriptor) error {
+		func(desc *sqlbase.MutableTableDescriptor) error {
 			if sc.testingKnobs.OldNamesDrainedNotification != nil {
 				sc.testingKnobs.OldNamesDrainedNotification()
 			}
@@ -889,7 +889,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) error {
-	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		var modified bool
 		// Apply mutations belonging to the same version.
 		for i, mutation := range desc.Mutations {
@@ -961,12 +961,12 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
-// Returns the updated of the descriptor.
-func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) {
+// Returns the updated descriptor.
+func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescriptor, error) {
 	isRollback := false
 	jobSucceeded := true
 	now := timeutil.Now().UnixNano()
-	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
 		jobSucceeded = true
@@ -1110,7 +1110,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	// where the indexes refer columns. Whenever a column schema change
 	// is reversed, any index mutation referencing it is also reversed.
 	var droppedMutations map[sqlbase.MutationID]struct{}
-	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
@@ -1288,7 +1288,7 @@ func (sc *SchemaChanger) createRollbackJob(
 // references one of the reversed columns. Execute this as a breadth
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
-	ctx context.Context, desc *sqlbase.TableDescriptor, columns map[string]struct{},
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, columns map[string]struct{},
 ) (map[sqlbase.MutationID]struct{}, error) {
 	dropMutations := make(map[sqlbase.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations

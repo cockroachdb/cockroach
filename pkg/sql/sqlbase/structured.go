@@ -219,6 +219,20 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 	return table, nil
 }
 
+// GetMutableTableDescFromID retrieves the table descriptor for the table
+// ID passed in using an existing txn. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a table.
+// Otherwise a mutable copy of the table is returned.
+func GetMutableTableDescFromID(
+	ctx context.Context, txn *client.Txn, id ID,
+) (*MutableTableDescriptor, error) {
+	table, err := GetTableDescFromID(ctx, txn, id)
+	if err != nil {
+		return nil, err
+	}
+	return NewMutableExistingTableDescriptor(*table), nil
+}
+
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
 // If there is an error, that error is returned immediately.
 func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error {
@@ -243,7 +257,7 @@ func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error
 // allocateName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
-func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
+func (desc *IndexDescriptor) allocateName(tableDesc *MutableTableDescriptor) {
 	segments := make([]string, 0, len(desc.ColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
 	segments = append(segments, desc.ColumnNames...)
@@ -588,7 +602,7 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
-func (desc *TableDescriptor) AllocateIDs() error {
+func (desc *MutableTableDescriptor) AllocateIDs() error {
 	// Only physical tables can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
@@ -645,7 +659,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	return err
 }
 
-func (desc *TableDescriptor) ensurePrimaryKey() error {
+func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
@@ -705,7 +719,7 @@ func (desc *IndexDescriptor) HasOldStoredColumns() bool {
 	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
 }
 
-func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
+func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
 	}
@@ -814,7 +828,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 	return nil
 }
 
-func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]ColumnID) {
+func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[string]ColumnID) {
 	if desc.NextFamilyID == 0 {
 		if len(desc.Families) == 0 {
 			desc.Families = []ColumnFamilyDescriptor{
@@ -872,7 +886,7 @@ func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]Colu
 				ColumnIDs:   []ColumnID{col.ID},
 			})
 		} else {
-			idx, ok := fitColumnToFamily(*desc, *col)
+			idx, ok := fitColumnToFamily(desc, *col)
 			if !ok {
 				idx = len(desc.Families)
 				desc.Families = append(desc.Families, ColumnFamilyDescriptor{
@@ -1557,7 +1571,7 @@ const FamilyHeuristicTargetBytes = 256
 //
 // Current heuristics:
 // - Put all columns in family 0.
-func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
+func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int, bool) {
 	// Fewer column families means fewer kv entries, which is generally faster.
 	// On the other hand, an update to any column in a family requires that they
 	// all are read and rewritten, so large (or numerous) columns that are not
@@ -1628,7 +1642,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 	return errors.New(result)
 }
 
-func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []string) error {
+func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.allNonDropColumns() {
@@ -1645,7 +1659,9 @@ func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []strin
 	return nil
 }
 
-func checkColumnsValidForInvertedIndex(tableDesc *TableDescriptor, indexColNames []string) error {
+func checkColumnsValidForInvertedIndex(
+	tableDesc *MutableTableDescriptor, indexColNames []string,
+) error {
 	if len((indexColNames)) > 1 {
 		return errors.New("indexing more than one column with an inverted index is not supported")
 	}
@@ -1666,17 +1682,17 @@ func checkColumnsValidForInvertedIndex(tableDesc *TableDescriptor, indexColNames
 }
 
 // AddColumn adds a column to the table.
-func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
+func (desc *MutableTableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)
 }
 
 // AddFamily adds a family to the table.
-func (desc *TableDescriptor) AddFamily(fam ColumnFamilyDescriptor) {
+func (desc *MutableTableDescriptor) AddFamily(fam ColumnFamilyDescriptor) {
 	desc.Families = append(desc.Families, fam)
 }
 
 // AddIndex adds an index to the table.
-func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
+func (desc *MutableTableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	if idx.Type == IndexDescriptor_FORWARD {
 		if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
 			return err
@@ -1713,7 +1729,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 // ifNotExists) is specified.
 //
 // AllocateIDs must be called before the TableDescriptor will be valid.
-func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
+func (desc *MutableTableDescriptor) AddColumnToFamilyMaybeCreate(
 	col string, family string, create bool, ifNotExists bool,
 ) error {
 	idx := int(-1)
@@ -1743,7 +1759,7 @@ func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
 }
 
 // RemoveColumnFromFamily removes a colID from the family it's assigned to.
-func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
+func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	for i, family := range desc.Families {
 		for j, c := range family.ColumnIDs {
 			if c == colID {
@@ -1762,7 +1778,9 @@ func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 
 // RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
-func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, newColName string) {
+func (desc *MutableTableDescriptor) RenameColumnDescriptor(
+	column ColumnDescriptor, newColName string,
+) {
 	colID := column.ID
 	column.Name = newColName
 	desc.UpdateColumnDescriptor(column)
@@ -1860,7 +1878,7 @@ func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[Colum
 }
 
 // UpdateColumnDescriptor updates an existing column descriptor.
-func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
+func (desc *MutableTableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == column.ID {
 			desc.Columns[i] = column
@@ -1958,7 +1976,9 @@ func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool
 }
 
 // RenameIndexDescriptor renames an index descriptor.
-func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) error {
+func (desc *MutableTableDescriptor) RenameIndexDescriptor(
+	index IndexDescriptor, name string,
+) error {
 	id := index.ID
 	if id == desc.PrimaryIndex.ID {
 		desc.PrimaryIndex.Name = name
@@ -2052,7 +2072,7 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
-func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
+func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
@@ -2091,11 +2111,11 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 
 	switch idx.Type {
 	case IndexDescriptor_FORWARD:
-		if err := checkColumnsValidForIndex(desc.TableDesc(), idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
 			return err
 		}
 	case IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(desc.TableDesc(), idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
 			return err
 		}
 	}

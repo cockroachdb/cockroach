@@ -38,27 +38,24 @@ import (
 func makeTestIndex(
 	t *testing.T, columns []string, dirs []encoding.Direction,
 ) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
-	desc := testTableDesc()
-	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
-		Name:        "foo",
-		ColumnNames: columns,
-	})
-	idx := &desc.Indexes[len(desc.Indexes)-1]
-	// Fill in the directions for the columns.
-	for i := range columns {
-		var dir sqlbase.IndexDescriptor_Direction
-		if dirs[i] == encoding.Ascending {
-			dir = sqlbase.IndexDescriptor_ASC
-		} else {
-			dir = sqlbase.IndexDescriptor_DESC
+	desc := testTableDesc(t, func(desc *MutableTableDescriptor) {
+		desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
+			Name:        "foo",
+			ColumnNames: columns,
+		})
+		idx := &desc.Indexes[len(desc.Indexes)-1]
+		// Fill in the directions for the columns.
+		for i := range columns {
+			var dir sqlbase.IndexDescriptor_Direction
+			if dirs[i] == encoding.Ascending {
+				dir = sqlbase.IndexDescriptor_ASC
+			} else {
+				dir = sqlbase.IndexDescriptor_DESC
+			}
+			idx.ColumnDirections = append(idx.ColumnDirections, dir)
 		}
-		idx.ColumnDirections = append(idx.ColumnDirections, dir)
-	}
-
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
-	return desc, idx
+	})
+	return desc, &desc.Indexes[len(desc.Indexes)-1]
 }
 
 // makeTestIndexFromStr creates a test index from a string that enumerates the

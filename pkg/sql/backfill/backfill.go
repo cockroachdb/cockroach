@@ -277,7 +277,7 @@ func ConvertBackfillError(
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc := protoutil.Clone(tableDesc.TableDesc()).(*sqlbase.TableDescriptor)
+	desc := sqlbase.NewMutableExistingTableDescriptor(*protoutil.Clone(tableDesc.TableDesc()).(*sqlbase.TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
 	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
@@ -289,7 +289,7 @@ func ConvertBackfillError(
 			return errors.Wrap(err, "backfill error")
 		}
 	}
-	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc), b)
+	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()), b)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.

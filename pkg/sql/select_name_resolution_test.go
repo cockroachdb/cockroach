@@ -51,12 +51,9 @@ func TestRetryResolveNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	desc := testTableDesc()
+	desc := testTableDesc(t, func(*MutableTableDescriptor) {})
 	p := makeTestPlanner()
 	s := testInitDummySelectNode(t, p, desc)
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
 
 	for i := 0; i < 2; i++ {
 		newExpr, _, _, err := p.resolveNamesForRender(expr, s)
