@@ -32,6 +32,7 @@ func registerTests(r *registry) {
 	registerDebugHeap(r)
 	registerDecommission(r)
 	registerDiskUsage(r)
+	registerDiskFull(r)
 	registerDrop(r)
 	registerElectionAfterRestart(r)
 	registerEncryption(r)

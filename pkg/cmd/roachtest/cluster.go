@@ -1425,6 +1425,10 @@ func (m *monitor) ExpectDeaths(count int32) {
 	atomic.AddInt32(&m.expDeaths, count)
 }
 
+func (m *monitor) ResetDeaths() {
+	atomic.StoreInt32(&m.expDeaths, 0)
+}
+
 var errGoexit = errors.New("Goexit() was called")
 
 func (m *monitor) Go(fn func(context.Context) error) {
