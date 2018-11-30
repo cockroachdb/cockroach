@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -899,11 +900,27 @@ func populateSessionsTable(
 			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
 		}
 
-		sessionID := BytesToClusterWideID(session.ID)
+		// TODO(knz): serverpb.Session is always constructed with an ID
+		// set from a 16-byte session ID. Yet we get crash reports
+		// that fail in BytesToClusterWideID() with a byte slice that's
+		// too short. See #32517.
+		var sessionID tree.Datum
+		if session.ID == nil {
+			telemetry.RecordError(
+				pgerror.NewInternalTrackingError(32517 /* issue */, "null"))
+			sessionID = tree.DNull
+		} else if len(session.ID) != 16 {
+			telemetry.RecordError(
+				pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
+			sessionID = tree.NewDString("<invalid>")
+		} else {
+			clusterSessionID := BytesToClusterWideID(session.ID)
+			sessionID = tree.NewDString(clusterSessionID.String())
+		}
 
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
-			tree.NewDString(sessionID.String()),
+			sessionID,
 			tree.NewDString(session.Username),
 			tree.NewDString(session.ClientAddress),
 			tree.NewDString(session.ApplicationName),
