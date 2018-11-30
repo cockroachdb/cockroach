@@ -496,7 +496,12 @@ func (tc *TableCollection) hasUncommittedTables() bool {
 	return len(tc.uncommittedTables) > 0
 }
 
-func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescriptor) {
+func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescriptor) error {
+	if desc.Version != desc.ClusterVersion.Version+1 {
+		return errors.Errorf(
+			"descriptor version %d not incremented from cluster version %d",
+			desc.Version, desc.ClusterVersion.Version)
+	}
 	tbl := uncommittedTable{
 		MutableTableDescriptor:   &desc,
 		ImmutableTableDescriptor: sqlbase.NewImmutableTableDescriptor(desc.TableDescriptor),
@@ -504,29 +509,24 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescript
 	for i, table := range tc.uncommittedTables {
 		if table.MutableTableDescriptor.ID == desc.ID {
 			tc.uncommittedTables[i] = tbl
-			return
+			return nil
 		}
 	}
 	tc.uncommittedTables = append(tc.uncommittedTables, tbl)
 	tc.releaseAllDescriptors()
+	return nil
 }
 
 // returns all the idVersion pairs that have undergone a schema change.
 // Returns nil for no schema changes. The version returned for each
-// schema change is Version - 2, because that's the one that will be
+// schema change is ClusterVersion - 1, because that's the one that will be
 // used when checking for table descriptor two version invariance.
 // Also returns strings representing the new <name, version> pairs
 func (tc *TableCollection) getTablesWithNewVersion() []IDVersion {
 	var tables []IDVersion
 	for _, table := range tc.uncommittedTables {
 		if mut := table.MutableTableDescriptor; !mut.IsNewTable() {
-			tables = append(tables, IDVersion{
-				name: mut.Name,
-				id:   mut.ID,
-				// Used to check that there are no leases at Version - 2.
-				// Note the version has already been incremented.
-				version: mut.Version - 2,
-			})
+			tables = append(tables, NewIDVersionPrev(&mut.ClusterVersion))
 		}
 	}
 	return tables
@@ -888,7 +888,9 @@ func (p *planner) writeTableDescToBatch(
 		return pgerror.NewAssertionErrorf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
-	p.Tables().addUncommittedTable(*tableDesc)
+	if err := p.Tables().addUncommittedTable(*tableDesc); err != nil {
+		return err
+	}
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)

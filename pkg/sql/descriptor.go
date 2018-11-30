@@ -128,7 +128,9 @@ func (p *planner) createDescriptorWithID(
 		if err := mutDesc.ValidateTable(st); err != nil {
 			return err
 		}
-		p.Tables().addUncommittedTable(*mutDesc)
+		if err := p.Tables().addUncommittedTable(*mutDesc); err != nil {
+			return err
+		}
 	}
 
 	if err := p.txn.Run(ctx, b); err != nil {
