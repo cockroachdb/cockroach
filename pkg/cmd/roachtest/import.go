@@ -71,10 +71,9 @@ func registerImportTPCH(r *registry) {
 		nodes   int
 		timeout time.Duration
 	}{
-		{4, 6 * time.Hour},
-		// TODO(peter,tschottdorf): re-enable
-		// {8, 4 * time.Hour},
-		// {32, 3 * time.Hour},
+		{4, 6 * time.Hour}, // typically 4-5h
+		{8, 4 * time.Hour}, // typically 3h
+		{32, 3 * time.Hour},
 	} {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
