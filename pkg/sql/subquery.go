@@ -156,14 +156,6 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 			copy(valuesCopy.D, values)
 			result = valuesCopy
 		}
-		another, err := s.plan.Next(params)
-		if err != nil {
-			return nil, err
-		}
-		if another {
-			err := fmt.Errorf("more than one row returned by a subquery used as an expression")
-			return nil, err
-		}
 		return result, nil
 
 	default:
@@ -289,6 +281,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			result.execMode = distsqlrun.SubqueryExecModeExists
 			t.SetType(types.Bool)
 		} else {
+			result.plan = &max1RowNode{plan: result.plan}
 			result.execMode = distsqlrun.SubqueryExecModeOneRow
 		}
 

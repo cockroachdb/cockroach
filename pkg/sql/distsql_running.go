@@ -18,6 +18,8 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"fmt"
 
 	"sync"
@@ -769,7 +771,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
 			}
 		default:
-			return fmt.Errorf("more than one row returned by a subquery used as an expression")
+			return pgerror.NewErrorf(pgerror.CodeCardinalityViolationError,
+				"more than one row returned by a subquery used as an expression")
 		}
 	default:
 		return fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode)
