@@ -119,7 +119,7 @@ func TestLatchManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var m Manager
 
-	// Try latch with no overlapping already-acquired lathes.
+	// Try latches with no overlapping already-acquired lathes.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
 	m.Release(lg1)
 
