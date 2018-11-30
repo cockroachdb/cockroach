@@ -170,7 +170,7 @@ func (r *Replica) AdminSplit(
 			return roachpb.AdminSplitResponse{}, pErr
 		}
 
-		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
+		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc(), true /* delayable */)
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
 		// the command with the updated descriptor.
 		if retry := causer.Visit(lastErr, func(err error) bool {
@@ -258,7 +258,10 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 //
 // See the comment on splitTrigger for details on the complexities.
 func (r *Replica) adminSplitWithDescriptor(
-	ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	args roachpb.AdminSplitRequest,
+	desc *roachpb.RangeDescriptor,
+	delayable bool,
 ) (roachpb.AdminSplitResponse, error) {
 	var reply roachpb.AdminSplitResponse
 
@@ -337,7 +340,11 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	leftDesc.EndKey = splitKey
 
-	extra := splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
+	var extra string
+	if delayable {
+		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
+	}
+	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
 		splitKey, rightDesc.RangeID, extra)
