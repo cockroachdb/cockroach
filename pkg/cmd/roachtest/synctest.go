@@ -22,7 +22,8 @@ import (
 	"path/filepath"
 )
 
-const nemesisScript = `#!/usr/bin/env bash
+func registerSyncTest(r *registry) {
+	const nemesisScript = `#!/usr/bin/env bash
 
 if [[ $1 == "on" ]]; then
   charybdefs-nemesis --probability
@@ -31,7 +32,6 @@ else
 fi
 `
 
-func registerSyncTest(r *registry) {
 	r.Add(testSpec{
 		Name:       "synctest",
 		MinVersion: `v2.2.0`,

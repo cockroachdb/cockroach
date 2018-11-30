@@ -214,6 +214,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // of sstables.
   options.target_file_size_base = 4 << 20;  // 4 MB
   options.target_file_size_multiplier = 2;
+  options.manual_wal_flush = true;
 
   // Because we open a long running rocksdb instance, we do not want the
   // manifest file to grow unbounded. Assuming each manifest entry is about 1
