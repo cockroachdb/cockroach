@@ -2247,57 +2247,70 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
 }
 
-func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
+func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableReplicateQueue = true
-	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
-	storeCfg.TestingKnobs.DisableMergeQueue = true
-	mtc := &multiTestContext{storeConfig: &storeCfg}
-	mtc.Start(t, 3)
-	defer mtc.Stop()
-	store0, store2 := mtc.Store(0), mtc.Store(2)
+	run := func(t *testing.T, withMerge bool) {
+		ctx := context.Background()
+		storeCfg := storage.TestStoreConfig(nil)
+		storeCfg.TestingKnobs.DisableReplicateQueue = true
+		storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+		storeCfg.TestingKnobs.DisableMergeQueue = true
+		mtc := &multiTestContext{storeConfig: &storeCfg}
+		mtc.Start(t, 3)
+		defer mtc.Stop()
+		store0, store2 := mtc.Store(0), mtc.Store(2)
 
-	// Create two ranges on store0 and store1.
-	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
-	if err != nil {
-		t.Fatal(err)
+		// Create two ranges on store0 and store1.
+		lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mtc.replicateRange(lhsDesc.RangeID, 1)
+		mtc.replicateRange(rhsDesc.RangeID, 1)
+
+		// Abandon a replica of the LHS on store2.
+		mtc.replicateRange(lhsDesc.RangeID, 2)
+		var lhsRepl2 *storage.Replica
+		testutils.SucceedsSoon(t, func() error {
+			lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
+			return err
+		})
+		mtc.unreplicateRange(lhsDesc.RangeID, 2)
+
+		if withMerge {
+			// Merge the two ranges together.
+			args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+			_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
+
+		// Attempt to re-add the merged range to store2. This should succeed
+		// immediately because there are no overlapping replicas that would interfere
+		// with the widening of the existing LHS replica.
+		if err := mtc.dbs[0].AdminChangeReplicas(
+			ctx, lhsDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA,
+			[]roachpb.ReplicationTarget{{
+				NodeID:  mtc.idents[2].NodeID,
+				StoreID: mtc.idents[2].StoreID,
+			}},
+		); !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
+			t.Fatal(err)
+		}
+
+		if err := store2.ManualReplicaGC(lhsRepl2); err != nil {
+			t.Fatal(err)
+		}
+
+		mtc.replicateRange(lhsDesc.RangeID, 2)
+		// Give store2 the lease to force all commands to be applied, including the
+		// ChangeReplicas.
+		mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
 	}
-	mtc.replicateRange(lhsDesc.RangeID, 1)
-	mtc.replicateRange(rhsDesc.RangeID, 1)
 
-	// Abandon a replica of the LHS on store2.
-	mtc.replicateRange(lhsDesc.RangeID, 2)
-	var lhsRepl2 *storage.Replica
-	testutils.SucceedsSoon(t, func() error {
-		lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
-		return err
-	})
-	mtc.unreplicateRange(lhsDesc.RangeID, 2)
-
-	// Merge the two ranges together.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Attempt to re-add the merged range to store2. This should succeed
-	// immediately because there are no overlapping replicas that would interfere
-	// with the widening of the existing LHS replica.
-	mtc.replicateRange(lhsDesc.RangeID, 2)
-
-	if newLHSRepl2, err := store2.GetReplica(lhsDesc.RangeID); err != nil {
-		t.Fatal(err)
-	} else if lhsRepl2 != newLHSRepl2 {
-		t.Fatalf("store2 created new lhs repl to receive preemptive snapshot post merge")
-	}
-
-	// Give store2 the lease to force all commands to be applied, including the
-	// ChangeReplicas.
-	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+	testutils.RunTrueAndFalse(t, "withMerge", run)
 }
 
 // slowSnapRaftHandler delays any snapshots to rangeID until waitCh is closed.
