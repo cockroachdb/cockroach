@@ -598,8 +598,15 @@ func TestMakePriority(t *testing.T) {
 	const trials = 100000
 	values := make([][trials]int32, len(userPs))
 	for i, userPri := range userPs {
-		for t := 0; t < trials; t++ {
-			values[i][t] = MakePriority(userPri)
+		for tr := 0; tr < trials; tr++ {
+			p := MakePriority(userPri)
+			if p == MinTxnPriority {
+				t.Fatalf("unexpected min txn priority")
+			}
+			if p == MaxTxnPriority {
+				t.Fatalf("unexpected max txn priority")
+			}
+			values[i][tr] = p
 		}
 	}
 
