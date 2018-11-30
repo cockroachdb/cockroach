@@ -227,11 +227,15 @@ type Factory interface {
 	// FOR SESSION statement.
 	ConstructShowTrace(typ tree.ShowTraceType, compact bool) (Node, error)
 
-	// ConstructInsert creates a node that implements an INSERT statement. Each
-	// tabCols parameter maps input columns into corresponding table columns, by
-	// ordinal position. The rowsNeeded parameter is true if a RETURNING clause
-	// needs the inserted row(s) as output.
-	ConstructInsert(input Node, table opt.Table, rowsNeeded bool) (Node, error)
+	// ConstructInsert creates a node that implements an INSERT statement. The
+	// input columns are inserted into a subset of columns in the table, in the
+	// same order they're defined. The insertCols set contains the ordinal
+	// positions of columns in the table into which values are inserted. The
+	// rowsNeeded parameter is true if a RETURNING clause needs the inserted
+	// row(s) as output.
+	ConstructInsert(
+		input Node, table opt.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
+	) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

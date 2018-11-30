@@ -962,15 +962,15 @@ func (b *logicalPropsBuilder) buildInsertProps(ins *InsertExpr, rel *props.Relat
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, col := range ins.InsertCols {
-		// Column is mutation column if its ordinal is >= count of regular columns
-		// in the table.
-		if i < tab.ColumnCount() {
-			rel.OutputCols.Add(int(col))
+		if opt.IsMutationColumn(tab, i) {
+			continue
+		}
 
-			// Also add to NotNullCols here, in order to avoid another loop below.
-			if !tab.Column(i).IsNullable() {
-				rel.NotNullCols.Add(int(col))
-			}
+		rel.OutputCols.Add(int(col))
+
+		// Also add to NotNullCols here, in order to avoid another loop below.
+		if !tab.Column(i).IsNullable() {
+			rel.NotNullCols.Add(int(col))
 		}
 	}
 
@@ -1275,7 +1275,8 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	cs := opt.ColSet{}
 	tab := md.Table(tabID)
 	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
+		// Non-null mutation columns can be null during backfill.
+		if !tab.Column(i).IsNullable() && !opt.IsMutationColumn(tab, i) {
 			cs.Add(int(tabID.ColumnID(i)))
 		}
 	}

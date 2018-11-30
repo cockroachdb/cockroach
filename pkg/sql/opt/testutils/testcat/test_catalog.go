@@ -315,7 +315,7 @@ type Table struct {
 	Stats          TableStats
 	IsVirtual      bool
 	Catalog        opt.Catalog
-	Mutations      []*Column
+	Mutations      []opt.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -353,12 +353,23 @@ func (tt *Table) IsVirtualTable() bool {
 
 // ColumnCount is part of the opt.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns)
+	return len(tt.Columns) + len(tt.Mutations)
 }
 
 // Column is part of the opt.Table interface.
 func (tt *Table) Column(i int) opt.Column {
-	return tt.Columns[i]
+	if i < len(tt.Columns) {
+		return tt.Columns[i]
+	}
+	return tt.Mutations[i-len(tt.Columns)].Column
+}
+
+// MutationColumn is part of the opt.Table interface.
+func (tt *Table) MutationColumn(i int) (col opt.MutationColumn, ok bool) {
+	if i < len(tt.Columns) {
+		return opt.MutationColumn{}, false
+	}
+	return tt.Mutations[i-len(tt.Columns)], true
 }
 
 // LookupColumnOrdinal is part of the opt.Table interface.
@@ -388,16 +399,6 @@ func (tt *Table) StatisticCount() int {
 // Statistic is part of the opt.Table interface.
 func (tt *Table) Statistic(i int) opt.TableStatistic {
 	return tt.Stats[i]
-}
-
-// MutationColumnCount is part of the opt.Table interface.
-func (tt *Table) MutationColumnCount() int {
-	return len(tt.Mutations)
-}
-
-// MutationColumn is part of the opt.Table interface.
-func (tt *Table) MutationColumn(i int) opt.Column {
-	return tt.Mutations[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -549,11 +550,18 @@ func (tc *Column) ComputedExprStr() string {
 	return *tc.ComputedExpr
 }
 
-// IsMutation is true if the column should be treated as if it were recently
-// added via a schema change, and is still being back-filled. Any INSERT ops
-// must fill in its default value.
-func (tc *Column) IsMutation() bool {
-	return strings.HasSuffix(tc.Name, ":mutation")
+// AsMutationColumn returns this column as an opt.MutationColumn struct if the
+// column should be treated as if it were recently added or dropped via a schema
+// change, and is still being back-filled. For testing purposes, this is
+// indicated in the table schema by suffixing the column name with :write-only
+// or :delete-only.
+func (tc *Column) AsMutationColumn() (_ opt.MutationColumn, ok bool) {
+	if strings.HasSuffix(tc.Name, ":write-only") {
+		return opt.MutationColumn{Column: tc, IsDeleteOnly: false}, true
+	} else if strings.HasSuffix(tc.Name, ":delete-only") {
+		return opt.MutationColumn{Column: tc, IsDeleteOnly: true}, true
+	}
+	return opt.MutationColumn{}, false
 }
 
 // TableStat implements the opt.TableStatistic interface for testing purposes.

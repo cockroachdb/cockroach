@@ -602,7 +602,7 @@ CREATE TABLE t29494 (
    FAMILY "primary" (x, rowid)
 )
 
-# Check that the new column is not usable in RETURNING
+# Check that the new column is not usable in RETURNING.
 statement error column "y" does not exist
 INSERT INTO t29494(x) VALUES (123) RETURNING y
 
@@ -616,6 +616,44 @@ query I
 INSERT INTO t29494(x) VALUES (123) RETURNING *
 ----
 123
+
+statement ok
+COMMIT
+
+# ------------------------------------------------------------------------------
+# Insert rows into table during drop column schema change.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN; ALTER TABLE mutation DROP COLUMN y
+
+# Check that the dropped column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE mutation]
+----
+CREATE TABLE mutation (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that values cannot be inserted into the dropped column.
+statement error column "y" does not exist
+INSERT INTO mutation(x, y) VALUES (2, 2)
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE mutation DROP COLUMN y
+
+# TODO(andyk): re-enable once issue #32759 is fixed.
+#query I
+#INSERT INTO mutation(x) VALUES (3) RETURNING *
+#----
+#3
 
 statement ok
 COMMIT

@@ -35,8 +35,15 @@ type scopeColumn struct {
 
 	// id is an identifier for this column, which is unique across all the
 	// columns in the query.
-	id     opt.ColumnID
+	id opt.ColumnID
+
+	// hidden is true if the column is not selected by a '*' wildcard operator.
+	// The column must be explicitly referenced by name, or otherwise is hidden.
 	hidden bool
+
+	// mutation is true if the column is in process of being dropped or added to
+	// the table. It should not be visible to variable references.
+	mutation bool
 
 	// descending indicates whether this column is sorted in descending order.
 	// This field is only used for ordering columns.

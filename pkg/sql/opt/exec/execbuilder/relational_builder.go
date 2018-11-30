@@ -957,14 +957,20 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	input, err = b.ensureColumns(input, ins.InsertCols, nil, ins.ProvidedPhysical().Ordering)
+
+	// Construct list of columns that only contains columns that need to be
+	// inserted (e.g. delete-only mutation columns don't need to be inserted).
+	colList := make(opt.ColList, 0, len(ins.InsertCols))
+	colList = appendColsWhenPresent(colList, ins.InsertCols)
+	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the Insert node.
 	tab := b.mem.Metadata().Table(ins.Table)
-	node, err := b.factory.ConstructInsert(input.root, tab, ins.NeedResults)
+	insertOrds := ordinalSetFromColList(ins.InsertCols)
+	node, err := b.factory.ConstructInsert(input.root, tab, insertOrds, ins.NeedResults)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -974,7 +980,9 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	ep := execPlan{root: node}
 	if ins.NeedResults {
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			ep.outputCols.Set(int(ins.InsertCols[i]), i)
+			if !opt.IsMutationColumn(tab, i) {
+				ep.outputCols.Set(int(ins.InsertCols[i]), i)
+			}
 		}
 	}
 	return ep, nil
@@ -1105,4 +1113,29 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// appendColsWhenPresent appends non-zero column IDs from the src list into the
+// dst list, and returns the possibly grown list.
+func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
+	for _, col := range src {
+		if col != 0 {
+			dst = append(dst, col)
+		}
+	}
+	return dst
+}
+
+// ordinalSetFromColList returns the set of ordinal positions of each non-zero
+// column ID in the given list. This is used with mutation operators, which
+// maintain lists that correspond to the target table, with zero column IDs
+// indicating columns that are not involved in the mutation.
+func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
+	var res opt.ColSet
+	for i, col := range colList {
+		if col != 0 {
+			res.Add(i)
+		}
+	}
+	return res
 }

@@ -346,7 +346,8 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
-// self-join query).
+// self-join query). All columns, including mutation columns, are added to the
+// metadata.
 func (md *Metadata) AddTable(tab Table) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
@@ -368,27 +369,6 @@ func (md *Metadata) AddTable(tab Table) TableID {
 		})
 	}
 
-	return tabID
-}
-
-// AddTableWithMutations first calls AddTable to add regular columns to the
-// metadata. It then appends any columns that are currently undergoing mutation
-// (i.e. being added or dropped from the table), and which need to be
-// initialized to their default value by INSERT statements. See this RFC for
-// more details:
-//
-//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
-//
-func (md *Metadata) AddTableWithMutations(tab Table) TableID {
-	tabID := md.AddTable(tab)
-	for i, n := 0, tab.MutationColumnCount(); i < n; i++ {
-		col := tab.MutationColumn(i)
-		md.cols = append(md.cols, mdColumn{
-			tabID: tabID,
-			label: string(col.ColName()),
-			typ:   col.DatumType(),
-		})
-	}
 	return tabID
 }
 

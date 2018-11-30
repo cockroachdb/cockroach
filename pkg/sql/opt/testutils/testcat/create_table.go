@@ -245,8 +245,8 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	// Add mutation columns to the Mutations list.
-	if col.IsMutation() {
-		tt.Mutations = append(tt.Mutations, col)
+	if mutCol, ok := col.AsMutationColumn(); ok {
+		tt.Mutations = append(tt.Mutations, mutCol)
 	} else {
 		tt.Columns = append(tt.Columns, col)
 	}

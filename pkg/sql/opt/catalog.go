@@ -95,8 +95,23 @@ type Table interface {
 	ColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
-	// position within the table, where i < ColumnCount.
+	// position within the table, where i < ColumnCount. Note that the Columns
+	// collection includes mutation columns, if present.
+	//
+	// Use the MutationColumn method to discover if a column is a mutation column
+	// and to get more information about it.
 	Column(i int) Column
+
+	// MutationColumn returns information about the column at the ith ordinal
+	// position within the table, if it is a mutation column. Mutation columns are
+	// in the process of being added or dropped from the table, and may need to
+	// have default or computed values set when inserting or updating rows. See
+	// this RFC for more details:
+	//
+	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
+	//
+	// If the column is not a mutation column, then ok=false.
+	MutationColumn(i int) (col MutationColumn, ok bool)
 
 	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
 	// Note that this takes the internal column ID, and has no relation to
@@ -119,21 +134,6 @@ type Table interface {
 
 	// Statistic returns the ith statistic, where i < StatisticCount.
 	Statistic(i int) TableStatistic
-
-	// MutationColumnCount returns the number of columns that are in the process
-	// of being added or dropped and that need to be set to their default values
-	// when inserting new rows. These columns are in the DELETE_AND_WRITE_ONLY
-	// state. See this RFC for more details:
-	//
-	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
-	//
-	MutationColumnCount() int
-
-	// MutationColumn returns a Column interface for one of the columns that is
-	// in the process of being added or dropped. The index of the column must be
-	// <= MutationColumnCount. The set of columns returned by MutationColumn are
-	// always disjoint from those returned by the Column method.
-	MutationColumn(i int) Column
 }
 
 // View is an interface to a database view, exposing only the information needed
@@ -196,6 +196,19 @@ type Column interface {
 	// computed columns, but they can depend on all other columns, including
 	// columns with default values.
 	ComputedExprStr() string
+}
+
+// MutationColumn describes a single column that is being added to a table or
+// dropped from a table. Mutation columns require special handling by mutation
+// operators like Insert, Update, and Delete.
+type MutationColumn struct {
+	// Column is the Table.Column that is being added or dropped.
+	Column Column
+
+	// IsDeleteOnly is true if the column only needs special handling by Delete
+	// operations; Update and Insert operations can ignore the column. See
+	// sqlbase.DescriptorMutation_DELETE_ONLY for more information.
+	IsDeleteOnly bool
 }
 
 // IndexColumn describes a single column that is part of an index definition.
@@ -477,4 +490,12 @@ func FormatCatalogView(view View, tp treeprinter.Node) {
 	child := tp.Childf("VIEW %s%s", view.Name().TableName, buf.String())
 
 	child.Child(view.Query())
+}
+
+// IsMutationColumn is a convenience function that returns true if the column at
+// the given ordinal position is a mutation column. See Table.MutationColumn for
+// more details.
+func IsMutationColumn(table Table, i int) bool {
+	_, ok := table.MutationColumn(i)
+	return ok
 }

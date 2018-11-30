@@ -290,28 +290,44 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			target := c.ColumnName
 			for j := range scope.cols {
 				col := &scope.cols[j]
-				if col.name == target {
-					if index != -1 {
-						// There is more than one projection alias that matches the clause.
-						// Here, SQL92 is specific as to what should be done: if the
-						// underlying expression is known and it is equivalent, then just
-						// accept that and ignore the ambiguity. This plays nice with
-						// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
-						// ambiguity error.
-						if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-							panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
-								"%s \"%s\" is ambiguous", op, target)})
-						}
-						// Use the index of the first matching column.
-						continue
-					}
-					index = j
+				if col.name != target {
+					continue
 				}
+
+				if err := checkNoMutationColumn(col); err != nil {
+					panic(builderError{err})
+				}
+
+				if index != -1 {
+					// There is more than one projection alias that matches the clause.
+					// Here, SQL92 is specific as to what should be done: if the
+					// underlying expression is known and it is equivalent, then just
+					// accept that and ignore the ambiguity. This plays nice with
+					// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
+					// ambiguity error.
+					if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
+						panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+							"%s \"%s\" is ambiguous", op, target)})
+					}
+					// Use the index of the first matching column.
+					continue
+				}
+				index = j
 			}
 		}
 	}
 
 	return index
+}
+
+// checkNoMutationColumn returns an error if the given column is in process of
+// being added or dropped from the table. It cannot be referenced in so.
+func checkNoMutationColumn(col *scopeColumn) error {
+	if col.mutation {
+		return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+			"column %q is being backfilled", tree.ErrString(&col.name))
+	}
+	return nil
 }
 
 // flattenTuples extracts the members of tuples into a list of columns.

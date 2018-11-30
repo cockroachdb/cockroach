@@ -48,13 +48,17 @@ exec-ddl
 CREATE TABLE mutation (
     m INT PRIMARY KEY,
     n INT,
-    "o:mutation" INT DEFAULT(10),
-    "p:mutation" STRING AS ("o:mutation" + n) STORED
+    "o:write-only" INT DEFAULT(10),
+    "p:delete-only" INT,
+    "q:write-only" INT AS ("o:write-only" + n) STORED
 )
 ----
 TABLE mutation
  ├── m int not null
  ├── n int
+ ├── o:write-only int
+ ├── p:delete-only int
+ ├── q:write-only int
  └── INDEX primary
       └── m int not null
 
@@ -411,7 +415,7 @@ SELECT * FROM [INSERT INTO abcde VALUES (1)]
 ----
 error (0A000): statement source "INSERT INTO abcde VALUES (1)" does not return any columns
 
-# Use CTE.
+# Use CTE with multiple variables.
 build
 WITH a AS (SELECT y, y+1 FROM xyz) INSERT INTO abcde SELECT * FROM a
 ----
@@ -997,7 +1001,7 @@ insert xyz
                      └── const: 1 [type=int]
 
 # ------------------------------------------------------------------------------
-# Tests with mutations.
+# Tests with mutation columns.
 # ------------------------------------------------------------------------------
 
 # Test mutation columns with default and computed values.
@@ -1007,16 +1011,16 @@ INSERT INTO mutation (m, n) VALUES (1, 2)
 insert mutation
  ├── columns: <none>
  ├── insert:
- │    ├──  column1:5(int) => m:1(int)
- │    ├──  column2:6(int) => n:2(int)
- │    ├──  column7:7(int) => "o:mutation":3(int)
- │    └──  column8:8(int) => "p:mutation":4(string)
+ │    ├──  column1:6(int) => m:1(int)
+ │    ├──  column2:7(int) => n:2(int)
+ │    ├──  column8:8(int) => "o:write-only":3(int)
+ │    └──  column9:9(int) => "q:write-only":5(int)
  └── project
-      ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int!null)
+      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
       ├── project
-      │    ├── columns: column7:7(int!null) column1:5(int) column2:6(int)
+      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
@@ -1024,7 +1028,7 @@ insert mutation
       │         └── const: 10 [type=int]
       └── projections
            └── plus [type=int]
-                ├── variable: column7 [type=int]
+                ├── variable: column8 [type=int]
                 └── variable: column2 [type=int]
 
 # Use RETURNING clause and ensure that mutation columns aren't projected.
@@ -1032,18 +1036,18 @@ build
 INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
 ----
 insert mutation
- ├── columns: m:5(int!null) n:6(int)
+ ├── columns: m:6(int!null) n:7(int)
  ├── insert:
- │    ├──  column1:5(int!null) => m:1(int)
- │    ├──  column2:6(int) => n:2(int)
- │    ├──  column7:7(int) => "o:mutation":3(int)
- │    └──  column8:8(int) => "p:mutation":4(string)
+ │    ├──  column1:6(int!null) => m:1(int)
+ │    ├──  column2:7(int) => n:2(int)
+ │    ├──  column8:8(int) => "o:write-only":3(int)
+ │    └──  column9:9(int) => "q:write-only":5(int)
  └── project
-      ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int!null)
+      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
       ├── project
-      │    ├── columns: column7:7(int!null) column1:5(int) column2:6(int)
+      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
@@ -1051,17 +1055,23 @@ insert mutation
       │         └── const: 10 [type=int]
       └── projections
            └── plus [type=int]
-                ├── variable: column7 [type=int]
+                ├── variable: column8 [type=int]
                 └── variable: column2 [type=int]
 
-# Try to reference mutation column in RETURNING clause.
+# Try to reference write-only mutation column in RETURNING clause.
 build
-INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING "o:mutation"
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING "o:write-only"
 ----
-error (42703): column "o:mutation" does not exist
+error (42703): column "o:write-only" does not exist
+
+# Try to reference delete-only mutation column in RETURNING clause.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING "p:delete-only"
+----
+error (42703): column "p:delete-only" does not exist
 
 # Try to insert into mutation column.
 build
-INSERT INTO mutation (m, n, "o:mutation") VALUES (1, 2, 3)
+INSERT INTO mutation (m, n, "q:write-only") VALUES (1, 2, 3)
 ----
-error (42703): column "o:mutation" does not exist
+error (42703): column "q:write-only" does not exist

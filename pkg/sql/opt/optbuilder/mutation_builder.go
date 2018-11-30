@@ -78,7 +78,7 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alia
 	mb.md = b.factory.Metadata()
 	mb.op = op
 	mb.tab = tab
-	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount()+tab.MutationColumnCount())
+	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount())
 
 	if op == opt.InsertOp {
 		mb.insertColList = make(opt.ColList, cap(mb.targetColList))
@@ -90,9 +90,8 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alia
 		mb.alias = tab.Name()
 	}
 
-	// Add the table and its columns to metadata. Include columns undergoing write
-	// mutations, since default values will need to be inserted into those.
-	mb.tabID = mb.md.AddTableWithMutations(tab)
+	// Add the table and its columns (including mutation columns) to metadata.
+	mb.tabID = mb.md.AddTable(tab)
 }
 
 // addTargetNamedColsForInsert adds a list of user-specified column names to the
@@ -108,6 +107,11 @@ func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 			tabCol := mb.tab.Column(ord)
 			if tabCol.ColName() == name {
 				colID := mb.tabID.ColumnID(ord)
+
+				// Mutation columns cannot be targeted with input values.
+				if opt.IsMutationColumn(mb.tab, ord) {
+					break
+				}
 
 				// Computed columns cannot be targeted with input values.
 				if tabCol.IsComputed() {
@@ -246,6 +250,11 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		tabCol := mb.tab.Column(i)
 		if tabCol.IsHidden() {
+			continue
+		}
+
+		// Don't allow targeting of mutation columns.
+		if opt.IsMutationColumn(mb.tab, i) {
 			continue
 		}
 
@@ -461,16 +470,20 @@ func (mb *mutationBuilder) addSynthesizedCols(
 ) {
 	var projectionsScope *scope
 
-	for i, n := 0, mb.tab.ColumnCount()+mb.tab.MutationColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
 		if colList[i] != 0 {
 			continue
 		}
 
-		// Get column metadata, including any mutation columns.
-		tabCol := tableColumnByOrdinal(mb.tab, i)
+		// Skip delete-only mutation columns, since they are ignored by all
+		// mutation operators that synthesize columns.
+		if mut, ok := mb.tab.MutationColumn(i); ok && mut.IsDeleteOnly {
+			continue
+		}
 
 		// Invoke addCol to determine whether column should be added.
+		tabCol := mb.tab.Column(i)
 		if !addCol(tabCol) {
 			continue
 		}
@@ -512,10 +525,6 @@ func (mb *mutationBuilder) addSynthesizedCols(
 // returns columns in the same order and with the same names as the target
 // table.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
-	if len(mb.outScope.cols) != len(mb.insertColList) {
-		panic("expected insert column count to match table column count")
-	}
-
 	private := memo.MutationPrivate{
 		Table:       mb.tabID,
 		InsertCols:  mb.insertColList,
@@ -530,17 +539,20 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 		// 3. Mark hidden columns.
 		inScope := mb.outScope.replace()
 		inScope.expr = mb.outScope.expr
-		inScope.cols = make([]scopeColumn, mb.tab.ColumnCount())
-		for i := 0; i < len(inScope.cols); i++ {
-			outCol := mb.outScope.getColumn(mb.insertColList[i])
-
-			inScope.cols[i] = *outCol
-			inScope.cols[i].table = *mb.alias
-			inScope.cols[i].name = mb.tab.Column(i).ColName()
-
-			if mb.tab.Column(i).IsHidden() {
-				inScope.cols[i].hidden = true
+		inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
+		n := 0
+		for i, col := range mb.insertColList {
+			if opt.IsMutationColumn(mb.tab, i) {
+				continue
 			}
+
+			outCol := mb.outScope.getColumn(col)
+			inScope.cols = inScope.cols[:n+1]
+			inScope.cols[n] = *outCol
+			inScope.cols[n].table = *mb.alias
+			inScope.cols[n].name = mb.tab.Column(i).ColName()
+			inScope.cols[n].hidden = mb.tab.Column(i).IsHidden()
+			n++
 		}
 
 		outScope := inScope.replace()
@@ -575,7 +587,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 // reuse.
 func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
 	if mb.parsedExprs == nil {
-		mb.parsedExprs = make([]tree.Expr, mb.tab.ColumnCount()+mb.tab.MutationColumnCount())
+		mb.parsedExprs = make([]tree.Expr, mb.tab.ColumnCount())
 	}
 
 	// Return expression from cache, if it was already parsed previously.
@@ -585,7 +597,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 	}
 
 	var exprStr string
-	tabCol := tableColumnByOrdinal(mb.tab, ord)
+	tabCol := mb.tab.Column(ord)
 	switch {
 	case tabCol.IsComputed():
 		exprStr = tabCol.ComputedExprStr()
@@ -665,14 +677,4 @@ func checkDatumTypeFitsColumnType(col opt.Column, typ types.T) {
 	panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.ColTypeStr(), tree.ErrNameString(&colName))})
-}
-
-// tableColumnByOrdinal returns the table column with the given ordinal
-// position, including any mutation columns, as if they were appended to end of
-// regular column list.
-func tableColumnByOrdinal(tab opt.Table, ord int) opt.Column {
-	if ord < tab.ColumnCount() {
-		return tab.Column(ord)
-	}
-	return tab.MutationColumn(ord - tab.ColumnCount())
 }

@@ -4,7 +4,7 @@ CREATE TABLE abcde (
     b INT,
     c INT NOT NULL DEFAULT (10),
     d INT AS (b + c + 1) STORED,
-    "e:mutation" INT
+    "e:write-only" INT
 )
 ----
 TABLE abcde
@@ -13,6 +13,7 @@ TABLE abcde
  ├── c int not null
  ├── d int
  ├── rowid int not null (hidden)
+ ├── e:write-only int
  └── INDEX primary
       └── rowid int not null (hidden)
 
@@ -42,7 +43,7 @@ insert abcde
  │    ├──  column10:10(int) => c:3(int)
  │    ├──  column13:13(int) => d:4(int)
  │    ├──  column11:11(int) => rowid:5(int)
- │    └──  column12:12(unknown) => "e:mutation":6(int)
+ │    └──  column12:12(unknown) => "e:write-only":6(int)
  ├── internal-ordering: +8,+9
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
@@ -97,7 +98,7 @@ project
       │    ├──  column10:10(int!null) => c:3(int)
       │    ├──  column13:13(int) => d:4(int)
       │    ├──  column11:11(int!null) => rowid:5(int)
-      │    └──  column12:12(unknown) => "e:mutation":6(int)
+      │    └──  column12:12(unknown) => "e:write-only":6(int)
       ├── internal-ordering: +8,+9
       ├── side-effects, mutations
       ├── fd: ()-->(10), (8)-->(13)
@@ -147,7 +148,7 @@ insert abcde
  │    ├──  column9:9(int!null) => c:3(int)
  │    ├──  column12:12(int) => d:4(int)
  │    ├──  column10:10(int!null) => rowid:5(int)
- │    └──  column11:11(unknown) => "e:mutation":6(int)
+ │    └──  column11:11(unknown) => "e:write-only":6(int)
  ├── cardinality: [1 - 1]
  ├── side-effects, mutations
  ├── key: ()
@@ -203,7 +204,7 @@ project
       │    ├──  column11:11(int!null) => c:3(int)
       │    ├──  column14:14(int) => d:4(int)
       │    ├──  column12:12(int!null) => rowid:5(int)
-      │    └──  column13:13(unknown) => "e:mutation":6(int)
+      │    └──  column13:13(unknown) => "e:write-only":6(int)
       ├── side-effects, mutations
       ├── fd: ()-->(8,11), (10)-->(14)
       └── project

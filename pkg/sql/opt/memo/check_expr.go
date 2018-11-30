@@ -162,19 +162,27 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		if len(t.InsertCols) != tab.ColumnCount()+tab.MutationColumnCount() {
-			panic("values not provided for all table columns")
+		var mutCols opt.ColSet
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			mut, ok := tab.MutationColumn(i)
+			if ok {
+				mutCols.Add(int(t.InsertCols[i]))
+			}
+
+			// Ensure that insert columns include all columns except for delete-only
+			// mutation columns (which do not need to be part of INSERT).
+			if !ok || !mut.IsDeleteOnly {
+				if t.InsertCols[i] == 0 {
+					panic("values not provided for all table columns")
+				}
+			}
 		}
 
 		// Output and ordering columns should never include mutation columns.
-		var mutationCols opt.ColSet
-		for i, n := tab.ColumnCount(), tab.MutationColumnCount(); i < n; i++ {
-			mutationCols.Add(int(t.InsertCols[i]))
-		}
-		if t.Relational().OutputCols.Intersects(mutationCols) {
+		if t.Relational().OutputCols.Intersects(mutCols) {
 			panic("output columns cannot include mutation columns")
 		}
-		if t.Ordering.ColSet().Intersects(mutationCols) {
+		if t.Ordering.ColSet().Intersects(mutCols) {
 			panic("ordering columns cannot include mutation columns")
 		}
 
