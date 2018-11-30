@@ -259,7 +259,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 			latches := lg.latches(s, a)
 			for i := range latches {
 				latch := &latches[i]
-				latch.id = m.nextID()
+				latch.id = m.nextIDLocked()
 				switch a {
 				case spanset.SpanReadOnly:
 					// Add reads to the readSet. They only need to enter
@@ -277,7 +277,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 	}
 }
 
-func (m *Manager) nextID() uint64 {
+func (m *Manager) nextIDLocked() uint64 {
 	m.idAlloc++
 	return m.idAlloc
 }
