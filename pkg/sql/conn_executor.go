@@ -503,9 +503,13 @@ func (s *Server) newConnExecutor(
 			log.Errorf(ctx, "error setting up client session: %v", err)
 			return nil, err
 		}
+	} else {
+		// It's possible there were no defaults, for example when the
+		// connEx is serving an internal executor. In that case we still
+		// need to populate appStats according to the configured
+		// application name.
+		ex.appStats = s.sqlStats.getStatsForApplication(ex.sessionData.ApplicationName)
 	}
-
-	ex.appStats = s.sqlStats.getStatsForApplication(sd.ApplicationName)
 
 	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.tables = TableCollection{

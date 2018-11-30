@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"net/url"
@@ -351,5 +352,47 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if atomic.LoadInt64(&injectedErr) == 0 {
 		t.Fatal("test didn't inject the error; it must have failed to find " +
 			"the EndTransaction with the expected key")
+	}
+}
+
+func TestAppNameStatisticsInitialization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Prepare a session with a custom application name.
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(security.RootUser),
+		Host:     s.ServingAddr(),
+		RawQuery: "sslmode=disable&application_name=mytest",
+	}
+	rawSQL, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rawSQL.Close()
+	sqlDB := sqlutils.MakeSQLRunner(rawSQL)
+
+	// Issue a query to be registered in stats.
+	sqlDB.Exec(t, "SELECT version()")
+
+	// Verify the query shows up in stats.
+	rows := sqlDB.Query(t, "SELECT application_name, key FROM crdb_internal.node_statement_statistics")
+	defer rows.Close()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var appName, key string
+		if err := rows.Scan(&appName, &key); err != nil {
+			t.Fatal(err)
+		}
+		counts[appName+":"+key]++
+	}
+	if counts["mytest:SELECT version()"] == 0 {
+		t.Fatalf("query was not counted properly: %+v", counts)
 	}
 }
