@@ -244,6 +244,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *max1RowNode:
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *windowNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err

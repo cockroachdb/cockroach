@@ -13,18 +13,19 @@ SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 query TTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-root                          ·             ·
- ├── split                    ·             ·
- │    └── values              ·             ·
- │                            size          1 column, 1 row
- └── subquery                 ·             ·
-      │                       id            @S1
-      │                       original sql  (SELECT 42)
-      │                       exec mode     one row
-      └── limit               ·             ·
-           │                  count         2
-           └── render         ·             ·
-                └── emptyrow  ·             ·
+root                               ·             ·
+ ├── split                         ·             ·
+ │    └── values                   ·             ·
+ │                                 size          1 column, 1 row
+ └── subquery                      ·             ·
+      │                            id            @S1
+      │                            original sql  (SELECT 42)
+      │                            exec mode     one row
+      └── limit                    ·             ·
+           │                       count         2
+           └── max1row             ·             ·
+                └── render         ·             ·
+                     └── emptyrow  ·             ·
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
