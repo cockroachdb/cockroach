@@ -17,7 +17,6 @@ package testcat
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -315,7 +314,7 @@ type Table struct {
 	Stats          TableStats
 	IsVirtual      bool
 	Catalog        opt.Catalog
-	Mutations      []*Column
+	Mutations      []opt.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -353,12 +352,15 @@ func (tt *Table) IsVirtualTable() bool {
 
 // ColumnCount is part of the opt.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns)
+	return len(tt.Columns) + len(tt.Mutations)
 }
 
 // Column is part of the opt.Table interface.
 func (tt *Table) Column(i int) opt.Column {
-	return tt.Columns[i]
+	if i < len(tt.Columns) {
+		return tt.Columns[i]
+	}
+	return &tt.Mutations[i-len(tt.Columns)]
 }
 
 // LookupColumnOrdinal is part of the opt.Table interface.
@@ -388,16 +390,6 @@ func (tt *Table) StatisticCount() int {
 // Statistic is part of the opt.Table interface.
 func (tt *Table) Statistic(i int) opt.TableStatistic {
 	return tt.Stats[i]
-}
-
-// MutationColumnCount is part of the opt.Table interface.
-func (tt *Table) MutationColumnCount() int {
-	return len(tt.Mutations)
-}
-
-// MutationColumn is part of the opt.Table interface.
-func (tt *Table) MutationColumn(i int) opt.Column {
-	return tt.Mutations[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -547,13 +539,6 @@ func (tc *Column) DefaultExprStr() string {
 // ComputedExprStr is part of the opt.Column interface.
 func (tc *Column) ComputedExprStr() string {
 	return *tc.ComputedExpr
-}
-
-// IsMutation is true if the column should be treated as if it were recently
-// added via a schema change, and is still being back-filled. Any INSERT ops
-// must fill in its default value.
-func (tc *Column) IsMutation() bool {
-	return strings.HasSuffix(tc.Name, ":mutation")
 }
 
 // TableStat implements the opt.TableStatistic interface for testing purposes.

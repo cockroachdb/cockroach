@@ -29,6 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+const (
+	excludeMutations = false
+	includeMutations = true
+)
+
 // buildDataSource builds a set of memo groups that represent the given table
 // expression. For example, if the tree.TableExpr consists of a single table,
 // the resulting set of memo groups will consist of a single group with a
@@ -84,7 +89,7 @@ func (b *Builder) buildDataSource(
 		ds := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
-			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
+			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case opt.View:
 			return b.buildView(t, inScope)
 		default:
@@ -257,7 +262,7 @@ func (b *Builder) buildScanFromTableRef(
 			ordinals[i] = ord
 		}
 	}
-	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, inScope)
+	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, excludeMutations, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -268,7 +273,12 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tab opt.Table, tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
+	tab opt.Table,
+	tn *tree.TableName,
+	ordinals []int,
+	indexFlags *tree.IndexFlags,
+	includeMutations bool,
+	inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab)
@@ -280,24 +290,31 @@ func (b *Builder) buildScan(
 
 	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, colCount)
+	outScope.cols = make([]scopeColumn, 0, colCount)
 	for i := 0; i < colCount; i++ {
 		ord := i
 		if ordinals != nil {
 			ord = ordinals[i]
 		}
 
+		// Exclude any mutation columns if they were not requested.
+		isMutation := opt.IsMutationColumn(tab, ord)
+		if !includeMutations && isMutation {
+			continue
+		}
+
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
 		name := col.ColName()
-		outScope.cols[i] = scopeColumn{
-			id:     colID,
-			name:   name,
-			table:  *tn,
-			typ:    col.DatumType(),
-			hidden: col.IsHidden(),
-		}
+		outScope.cols = append(outScope.cols, scopeColumn{
+			id:       colID,
+			name:     name,
+			table:    *tn,
+			typ:      col.DatumType(),
+			hidden:   col.IsHidden() || isMutation,
+			mutation: isMutation,
+		})
 	}
 
 	if tab.IsVirtualTable() {

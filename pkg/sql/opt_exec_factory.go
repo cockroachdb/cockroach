@@ -77,10 +77,7 @@ func (ef *execFactory) ConstructScan(
 	// Create a scanNode.
 	scan := ef.planner.Scan()
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
-	}
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
+		wantedColumns: makeWantedColumns(table, cols),
 	}
 
 	// initTable checks that the current user has the correct privilege to access
@@ -508,15 +505,9 @@ func (ef *execFactory) ConstructIndexJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+		wantedColumns: makeWantedColumns(table, cols),
 	}
-
-	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := tabDesc.Columns[c]
-		colDescs = append(colDescs, desc)
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
-	}
+	colDescs := makeColDescList(table, cols)
 
 	// TODO(justin): this would be something besides a scanNode in the general
 	// case of a lookup join.
@@ -575,11 +566,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, lookupCols.Len()),
-	}
-
-	for c, ok := lookupCols.Next(0); ok; c, ok = lookupCols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
+		wantedColumns: makeWantedColumns(table, lookupCols),
 	}
 
 	tableScan := ef.planner.Scan()
@@ -875,18 +862,11 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 }
 
 func (ef *execFactory) ConstructInsert(
-	input exec.Node, table opt.Table, rowsNeeded bool,
+	input exec.Node, table opt.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	tabDesc := table.(*optTable).desc
-	colCount := len(tabDesc.Columns)
-	colDescs := make([]sqlbase.ColumnDescriptor, colCount+table.MutationColumnCount())
-	copy(colDescs, tabDesc.Columns)
-
-	// Append any mutation columns.
-	for i := colCount; i < len(colDescs); i++ {
-		colDescs[i] = *table.MutationColumn(i - colCount).(*sqlbase.ColumnDescriptor)
-	}
+	colDescs := makeColDescList(table, insertCols)
 
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.TablesNeededForFKs(
@@ -979,4 +959,39 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 	rb.r.render = append(rb.r.render, expr)
 	rb.r.columns = append(rb.r.columns, sqlbase.ResultColumn{Name: colName, Typ: expr.ResolvedType()})
+}
+
+// makeColDescList returns a list of table column descriptors. Columns are
+// included if their ordinal position in the table schema is in the cols set.
+func makeColDescList(table opt.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
+	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
+	for i, n := 0, table.ColumnCount(); i < n; i++ {
+		if !cols.Contains(i) {
+			continue
+		}
+		colDescs = append(colDescs, *extractColumnDescriptor(table.Column(i)))
+	}
+	return colDescs
+}
+
+// makeWantedColumns constructs a list of descriptor IDs for columns in the
+// given table. Columns are specified in the cols set, by ordinal position in
+// the table schema.
+func makeWantedColumns(table opt.Table, cols exec.ColumnOrdinalSet) []tree.ColumnID {
+	wantedColumns := make([]tree.ColumnID, 0, cols.Len())
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		desc := extractColumnDescriptor(table.Column(c))
+		wantedColumns = append(wantedColumns, tree.ColumnID(desc.ID))
+	}
+	return wantedColumns
+}
+
+// extractColumnDescriptor extracts the underlying sqlbase.ColumnDescriptor from
+// the given opt.Column. If the column is a mutation column, this involves one
+// level of indirection.
+func extractColumnDescriptor(col opt.Column) *sqlbase.ColumnDescriptor {
+	if mut, ok := col.(*opt.MutationColumn); ok {
+		return mut.Column.(*sqlbase.ColumnDescriptor)
+	}
+	return col.(*sqlbase.ColumnDescriptor)
 }

@@ -576,24 +576,30 @@ func (s *scope) FindSourceProvidingColumn(
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.name == colName {
-				if col.table.TableName == "" && !col.hidden {
-					if candidateFromAnonSource != nil {
-						moreThanOneCandidateFromAnonSource = true
-						break
-					}
-					candidateFromAnonSource = col
-				} else if !col.hidden {
-					if candidateWithPrefix != nil {
-						moreThanOneCandidateWithPrefix = true
-					}
-					candidateWithPrefix = col
-				} else if allowHidden {
-					if hiddenCandidate != nil {
-						moreThanOneHiddenCandidate = true
-					}
-					hiddenCandidate = col
+			if col.name != colName {
+				continue
+			}
+
+			if err := checkNoMutationColumn(col); err != nil {
+				return nil, nil, -1, err
+			}
+
+			if col.table.TableName == "" && !col.hidden {
+				if candidateFromAnonSource != nil {
+					moreThanOneCandidateFromAnonSource = true
+					break
 				}
+				candidateFromAnonSource = col
+			} else if !col.hidden {
+				if candidateWithPrefix != nil {
+					moreThanOneCandidateWithPrefix = true
+				}
+				candidateWithPrefix = col
+			} else if allowHidden {
+				if hiddenCandidate != nil {
+					moreThanOneHiddenCandidate = true
+				}
+				hiddenCandidate = col
 			}
 		}
 
