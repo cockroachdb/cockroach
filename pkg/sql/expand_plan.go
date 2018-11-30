@@ -283,6 +283,9 @@ func doExpandPlan(
 	case *windowNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
+	case *max1RowNode:
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+
 	case *sortNode:
 		if !n.ordering.IsPrefixOf(params.desiredOrdering) {
 			params.desiredOrdering = n.ordering
@@ -750,6 +753,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.source = p.simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
 	case *limitNode:
+		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
+
+	case *max1RowNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
 	case *spoolNode:

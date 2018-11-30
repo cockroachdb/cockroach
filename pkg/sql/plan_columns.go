@@ -124,6 +124,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:
 		return getPlanColumns(n.source.plan, mut)
+	case *max1RowNode:
+		return getPlanColumns(n.plan, mut)
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
 	case *spoolNode:

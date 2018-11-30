@@ -164,6 +164,10 @@ func (f *stubFactory) ConstructLimit(
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructMax1Row(input exec.Node) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {

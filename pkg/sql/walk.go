@@ -290,6 +290,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.plan = v.visit(n.plan)
 
+	case *max1RowNode:
+		n.plan = v.visit(n.plan)
+
 	case *distinctNode:
 		if v.observer.attr == nil {
 			n.plan = v.visit(n.plan)
@@ -692,7 +695,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&joinNode{}):                 "join",
 	reflect.TypeOf(&limitNode{}):                "limit",
 	reflect.TypeOf(&lookupJoinNode{}):           "lookup-join",
-	reflect.TypeOf(&zigzagJoinNode{}):           "zigzag-join",
+	reflect.TypeOf(&max1RowNode{}):              "max1row",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&projectSetNode{}):           "project set",
 	reflect.TypeOf(&relocateNode{}):             "relocate",
@@ -728,4 +731,5 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&virtualTableNode{}):         "virtual table values",
 	reflect.TypeOf(&windowNode{}):               "window",
 	reflect.TypeOf(&zeroNode{}):                 "norows",
+	reflect.TypeOf(&zigzagJoinNode{}):           "zigzag-join",
 }
