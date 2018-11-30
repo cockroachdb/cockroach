@@ -1,0 +1,7 @@
+I181130 22:14:34.828612 740 storage/store_rebalancer.go:277  [n1,s1,store-rebalancer] load-based lease transfers successfully brought s1 down to 37128.65 qps (mean=29834.62, upperThreshold=37293.27)
+I181130 22:14:37.516378 441 server/status/runtime.go:465  [n1] runtime stats: 900 MiB RSS, 1509 goroutines, 421 MiB/144 MiB/777 MiB GO alloc/idle/total, 96 MiB/144 MiB CGO alloc/total, 154632.4 CGO/sec, 2206.9/216.0 %(u/s)time, 0.4 %gc (43x), 182 MiB/204 MiB (r/w)net
+I181130 22:14:47.400515 437 gossip/gossip.go:555  [n1] gossip status (ok, 3 nodes)
+gossip client (0/3 cur/max conns)
+gossip server (2/3 cur/max conns, infos 4077/2242 sent/received, bytes 1275332B/555352B sent/received)
+  2: ajwerner-test-0002:26257 (8m0s)
+  3: ajwerner-test-0003:26257 (8m0s)
