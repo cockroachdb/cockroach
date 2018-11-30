@@ -158,6 +158,15 @@ func NewAssertionErrorf(format string, args ...interface{}) error {
 	return err
 }
 
+// NewInternalTrackingError instantiates an error
+// meant for use with telemetry.ReportError directly.
+func NewInternalTrackingError(issue int, detail string) error {
+	prefix := fmt.Sprintf("#%d.%s", issue, detail)
+	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: %s", prefix)
+	err.InternalCommand = prefix + " " + captureTrace()
+	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+}
+
 func captureTrace() string {
 	var pc [50]uintptr
 	n := runtime.Callers(3, pc[:])
