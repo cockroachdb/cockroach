@@ -250,10 +250,10 @@ type optTable struct {
 	// calls to the SecondaryIndex method for the same index.
 	wrappers map[*sqlbase.IndexDescriptor]*optIndex
 
-	// mutations is a list of the DELETE_AND_WRITE_ONLY mutation column
-	// descriptors. These are present when the table is undergoing an online
-	// schema change where one or more columns are being added or dropped.
-	mutations []*sqlbase.ColumnDescriptor
+	// mutations is a list of mutation columns associated with this table. These
+	// are present when the table is undergoing an online schema change where one
+	// or more columns are being added or dropped.
+	mutations []opt.MutationColumn
 }
 
 var _ opt.Table = &optTable{}
@@ -272,6 +272,20 @@ func newOptTable(
 			}
 		}
 		ot.stats = ot.stats[:n]
+	}
+
+	// Prepare any mutation columns.
+	if len(desc.Mutations) != 0 {
+		ot.mutations = make([]opt.MutationColumn, 0, len(ot.desc.Mutations))
+		for i := range ot.desc.Mutations {
+			m := &ot.desc.Mutations[i]
+			if c := m.GetColumn(); c != nil {
+				ot.mutations = append(ot.mutations, opt.MutationColumn{
+					Column:       c,
+					IsDeleteOnly: m.State == sqlbase.DescriptorMutation_DELETE_ONLY,
+				})
+			}
+		}
 	}
 
 	// The opt.Table interface requires that table names be fully qualified.
@@ -305,12 +319,15 @@ func (ot *optTable) IsVirtualTable() bool {
 
 // ColumnCount is part of the opt.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.Columns)
+	return len(ot.desc.Columns) + len(ot.mutations)
 }
 
 // Column is part of the opt.Table interface.
 func (ot *optTable) Column(i int) opt.Column {
-	return &ot.desc.Columns[i]
+	if i < len(ot.desc.Columns) {
+		return &ot.desc.Columns[i]
+	}
+	return &ot.mutations[i-len(ot.desc.Columns)]
 }
 
 // IndexCount is part of the opt.Table interface.
@@ -352,33 +369,6 @@ func (ot *optTable) StatisticCount() int {
 // Statistic is part of the opt.Table interface.
 func (ot *optTable) Statistic(i int) opt.TableStatistic {
 	return &ot.stats[i]
-}
-
-// MutationColumnCount is part of the opt.Table interface.
-func (ot *optTable) MutationColumnCount() int {
-	ot.ensureMutations()
-	return len(ot.mutations)
-}
-
-// MutationColumn is part of the opt.Table interface.
-func (ot *optTable) MutationColumn(i int) opt.Column {
-	return ot.mutations[i]
-}
-
-// ensureMutations adds any DELETE_AND_WRITE_ONLY column mutations to the table
-// wrapper's list of mutations, to be returned by the MutationColumn method.
-func (ot *optTable) ensureMutations() {
-	if ot.mutations == nil && len(ot.desc.Mutations) != 0 {
-		ot.mutations = make([]*sqlbase.ColumnDescriptor, 0, len(ot.desc.Mutations))
-		for i := range ot.desc.Mutations {
-			m := &ot.desc.Mutations[i]
-			if m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				if c := m.GetColumn(); c != nil {
-					ot.mutations = append(ot.mutations, c)
-				}
-			}
-		}
-	}
 }
 
 func (ot *optTable) ensureColMap() {

@@ -411,3 +411,50 @@ render                              ·         ·                      ("?column
                           └── scan  ·         ·                      (k, v)                                  ·
 ·                                   table     kv@primary             ·                                       ·
 ·                                   spans     ALL                    ·                                       ·
+
+# ------------------------------------------------------------------------------
+# Insert rows into table during schema changes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN; ALTER TABLE mutation DROP COLUMN y
+
+# Ensure that default value is still inserted into y, since y is write-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
+----
+render                 ·              ·                      (x)                          ·
+ │                     render 0       x                      ·                            ·
+ └── run               ·              ·                      (x, rowid[hidden])           ·
+      └── insert       ·              ·                      (x, rowid[hidden])           ·
+           │           into           mutation(x, rowid, y)  ·                            ·
+           └── values  ·              ·                      (column1, column5, column6)  ·
+·                      size           3 columns, 1 row       ·                            ·
+·                      row 0, expr 0  2                      ·                            ·
+·                      row 0, expr 1  unique_rowid()         ·                            ·
+·                      row 0, expr 2  10                     ·                            ·
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
+
+# Ensure that value is *not* inserted into z, since z is delete-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
+----
+count             ·              ·                      ()                           ·
+ └── insert       ·              ·                      ()                           ·
+      │           into           mutation(x, y, rowid)  ·                            ·
+      └── values  ·              ·                      (column1, column2, column7)  ·
+·                 size           3 columns, 1 row       ·                            ·
+·                 row 0, expr 0  2                      ·                            ·
+·                 row 0, expr 1  2                      ·                            ·
+·                 row 0, expr 2  unique_rowid()         ·                            ·
+
+statement ok
+ROLLBACK
