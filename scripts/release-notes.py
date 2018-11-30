@@ -44,6 +44,7 @@ shamin = 9
 
 # FIXME(knz): This probably needs to use the .mailmap.
 author_aliases = {
+    'changangela': "Angela Chang",
     'dianasaur323': "Diana Hsieh",
     'kena': "Raphael 'kena' Poss",
     'vivekmenezes': "Vivek Menezes",
@@ -78,9 +79,10 @@ crdb_folk = set([
     "Andrew Kimball",
     "Andrew Werner",
     "Andy Woods",
+    "Angela Chang",
     "Arjun Narayan",
     "Ben Darnell",
-    "Bilal Akthar",
+    "Bilal Akhtar",
     "Bob Vawter",
     "Bram Gruneir",
     "Celia La",
@@ -115,6 +117,7 @@ crdb_folk = set([
     "Rich Loveland",
     "Richard Wu",
     "Ridwan Sharif",
+    "Roland Crosby",
     "Sean Loiselle",
     "Solon Gordon",
     "Spencer Kimball",
