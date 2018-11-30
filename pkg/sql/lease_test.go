@@ -1553,7 +1553,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		// This can hang waiting for one version before tx.Commit() is
 		// called below, so it is executed in another goroutine
 		if err := txRetry.Commit(); !testutils.IsError(err,
-			`HandledRetryableTxnError: cannot publish new versions for tables: \[\{kv2 53 1\}\], old versions still in use`,
+			`HandledRetryableTxnError: cannot publish new versions for tables: \[\{kv1 53 1\}\], old versions still in use`,
 		) {
 			t.Errorf("err = %v", err)
 		}

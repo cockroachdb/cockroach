@@ -284,12 +284,12 @@ func newPartition(id roachpb.RangeID) *partition {
 
 func (p *partition) evict() (bytes, entries int32) {
 	const evicted = 0
-	// a partition size is never equal to evicted while a partition exists and
-	// Cache.mu is not held because a partition caries the byte size of its struct
-	// and does not permit concurrent mutations. Atomically setting the size to
-	// zero is used to signal the partition that it has been evicted and changes
-	// which have happened concurrent to the eviction should not be reflected in
-	// Cache.
+	// A partition size is never equal to evicted while a partition exists and
+	// Cache.mu is not held because a partition carries the byte size of its
+	// struct and does not permit concurrent mutations. Atomically setting the
+	// size to zero is used to signal the partition that it has been evicted and
+	// changes which have happened concurrent to the eviction should not be
+	// reflected in Cache.
 	cs := p.loadSize()
 	for !p.setSize(cs, evicted) {
 		cs = p.loadSize()
