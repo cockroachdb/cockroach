@@ -405,37 +405,128 @@ func (s *Store) reserveSnapshot(
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
+// The authoritative bool determines whether the check is carried out with the
+// intention of actually applying the snapshot (in which case an existing replica
+// must exist and have its raftMu locked) or as a preliminary check.
 func (s *Store) canApplySnapshot(
-	ctx context.Context, snapHeader *SnapshotRequest_Header,
+	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
 ) (*ReplicaPlaceholder, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.canApplySnapshotLocked(ctx, snapHeader)
+	return s.canApplySnapshotLocked(ctx, snapHeader, authoritative)
 }
 
 func (s *Store) canApplySnapshotLocked(
-	ctx context.Context, snapHeader *SnapshotRequest_Header,
+	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
 ) (*ReplicaPlaceholder, error) {
 	desc := *snapHeader.State.Desc
-	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
-		// We have an initialized replica. Preemptive snapshots can be applied with
-		// no further checks if they do not widen the existing replica. Raft
-		// snapshots can be applied with no further checks even if they widen the
-		// existing replica—we can't reject them at this point—but see the comments
-		// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
-		existingDesc := (*Replica)(v).Desc()
-		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
-			return nil, nil
+
+	// First, check for an existing Replica.
+	//
+	// We call canApplySnapshotLocked twice for each snapshot application. In
+	// the first case, it's an optimization early before having received any
+	// data (and we don't use the placeholder if one is returned), and the
+	// replica may or may not be present.
+	//
+	// The second call happens right before we actually plan to apply the
+	// snapshot (and a Replica is always in place at that point). This means
+	// that without a Replica, we can have false positives, but if we have a
+	// replica it needs to take everything into account.
+	//
+	// TODO(tbg): untangle these two use cases.
+	if v, ok := s.mu.replicas.Load(
+		int64(desc.RangeID),
+	); !ok {
+		if authoritative {
+			return nil, errors.Errorf("authoritative call requires a replica present")
+		}
+	} else {
+		existingRepl := (*Replica)(v)
+		// The raftMu is held which allows us to use the existing replica as a
+		// placeholder when we decide that the snapshot can be applied. As long
+		// as the caller releases the raftMu only after feeding the snapshot
+		// into the replica, this is safe.
+		if authoritative {
+			existingRepl.raftMu.AssertHeld()
 		}
 
-		// We have a preemptive snapshot that widens an existing replica. Proceed
-		// by checking the keyspace covered by the snapshot but not the existing
-		// replica.
-		desc.StartKey = existingDesc.EndKey
+		existingRepl.mu.RLock()
+		existingDesc := existingRepl.descRLocked()
+		existingIsInitialized := existingRepl.isInitializedRLocked()
+		existingIsPreemptive := existingRepl.mu.replicaID == 0
+		existingRepl.mu.RUnlock()
+
+		if existingIsInitialized {
+			if !snapHeader.IsPreemptive() {
+				// Regular Raft snapshots can't be refused at this point,
+				// even if they widen the existing replica. See the comments
+				// in Replica.maybeAcquireSnapshotMergeLock for how this is
+				// made safe.
+				//
+				// NB: we expect the replica to know its replicaID at this point
+				// (i.e. !existingIsPreemptive), though perhaps it's possible
+				// that this isn't true if the leader initiates a Raft snapshot
+				// (that would provide a range descriptor with this replica in
+				// it) but this node reboots (temporarily forgetting its
+				// replicaID) before the snapshot arrives.
+				return nil, nil
+			}
+
+			if existingIsPreemptive {
+				// Allow applying a preemptive snapshot on top of another
+				// preemptive snapshot. We only need to acquire a placeholder
+				// for the part (if any) of the new snapshot that extends past
+				// the old one. If there's no such overlap, return early; if
+				// there is, "forward" the descriptor's StartKey so that the
+				// later code will only check the overlap.
+				//
+				// NB: morally it would be cleaner to ask for the existing
+				// replica to be GC'ed first, but consider that the preemptive
+				// snapshot was likely left behind by a failed attempt to
+				// up-replicate. This is a relatively common scenario and not
+				// worth discarding and resending another snapshot for. Let the
+				// snapshot through, which means "pretending that it doesn't
+				// intersect the existing replica".
+				if !existingDesc.EndKey.Less(desc.EndKey) {
+					return nil, nil
+				}
+				desc.StartKey = existingDesc.EndKey
+			}
+			// NB: If the existing snapshot is *not* preemptive (i.e. the above
+			// branch wasn't taken), the overlap check below will hit an error.
+			// This path is hit after a rapid up-down-upreplication to the same
+			// store and will resolve as the replicaGCQueue removes the existing
+			// replica. We are pretty sure that the existing replica is gc'able,
+			// because a preemptive snapshot implies that someone is trying to
+			// add this replica to the group at the moment. (We are not however,
+			// sure enough that this couldn't happen by accident to GC the
+			// replica ourselves - the replica GC queue will perform the proper
+			// check).
+		} else if snapHeader.IsPreemptive() {
+			// Morally, the existing replica now has a nonzero replica ID
+			// because we already know that it is not initialized (i.e. has no
+			// data). Interestingly, the case in which it has a zero replica ID
+			// is also possible and should see the snapshot accepted as it
+			// occurs when a preemptive snapshot is handled: we first create a
+			// Replica in this state, run this check, and then apply the
+			// preemptive snapshot.
+			if !existingIsPreemptive {
+				// This is similar to the case of a preemptive snapshot hitting
+				// a fully initialized replica (i.e. not a preemptive snapshot)
+				// at the end of the last branch (which we don't allow), but
+				// since an uninitialized range doesn't have key bounds, we have
+				// to error out directly.
+				return nil, errors.Errorf("unable to apply preemptive snapshot on Replica with replicaID %s", existingRepl)
+			}
+		}
 	}
 
-	// We don't have the range, or we have an uninitialized placeholder, or the
-	// existing range is less wide. Will we be able to create/initialize it?
+	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
+	// snapshot for. Is there a conflicting existing placeholder or an
+	// overlapping range?
+
+	// NB: this check seems redundant since placeholders are also represented in
+	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
 		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
@@ -487,7 +578,7 @@ func (s *Store) canApplySnapshotLocked(
 				msg += "; initiated GC:"
 			}
 		}
-		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
+		return nil, errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
 	}
 
 	placeholder := &ReplicaPlaceholder{
@@ -517,7 +608,7 @@ func (s *Store) receiveSnapshot(
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if _, err := s.canApplySnapshot(ctx, header); err != nil {
+	if _, err := s.canApplySnapshot(ctx, header, false /* authoritative */); err != nil {
 		return sendSnapshotError(stream,
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
 		)
