@@ -25,12 +25,12 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/debug"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -183,6 +184,100 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
+}
+
+var debugMergeLogsCommand = &cobra.Command{
+	Use:   "merge-logs <log file globs>",
+	Short: "merge multiple log files from different machines into a single stream",
+	Long: `
+Takes a list of glob patterns (not left exclusively to the shell because of
+MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a 
+single stream printed to stdout. Files not matching the log file name pattern
+are ignored. If log lines appear out of order within a file (which happens), the
+timestamp is ratcheted to the highest value seen so far. The command supports
+efficient time filtering as well as multiline regexp pattern matching via flags.
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runDebugMergeLogs,
+}
+
+func parseFromAndTo(cmd *cobra.Command) (from, to time.Time, err error) {
+	if from, err = parseTime(cmd.Flag("from").Value.String()); err != nil {
+		err = errors.Errorf("failed to parse from: %v", err)
+	} else if to, err = parseTime(cmd.Flag("to").Value.String()); err != nil {
+		err = errors.Errorf("failed to parse to: %v", err)
+	}
+	return from, to, err
+}
+
+func parseTime(ts string) (time.Time, error) {
+	if ts == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("060102 15:04:05.999999", ts)
+	if err != nil {
+		return t, errors.Errorf("failed to parse %s as time: %v", ts, err)
+	}
+	return t.UTC(), nil
+}
+
+func parseRegexp(cmd *cobra.Command, flagName string) (*regexp.Regexp, error) {
+	str := cmd.Flag(flagName).Value.String()
+	if str == "" {
+		return nil, nil
+	}
+	return regexp.Compile(str)
+}
+
+func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
+	from, to, err := parseFromAndTo(cmd)
+	if err != nil {
+		return err
+	}
+	filter, err := parseRegexp(cmd, "filter")
+	if err != nil {
+		return errors.Errorf("failed to parse filter: %v", err)
+	}
+	program, err := parseRegexp(cmd, "program")
+	if err != nil {
+		return errors.Errorf("failed to parse program: %v", err)
+	}
+	prefixTmpl, err := template.New("prefix").Parse(cmd.Flag("prefix").Value.String())
+	if err != nil {
+		return errors.Errorf("failed to compile prefix template: %v", err)
+	}
+	s, err := newLogStreamFromPatterns(args, program, from, to)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	var outBuf bytes.Buffer
+	e, ok := s.peek()
+	if !ok { // Print a single '\n' if we aren't printing logs.
+		_, err := out.Write([]byte{'\n'})
+		return err
+	}
+	for ok {
+		fi := s.fileInfo()
+		outBuf.Reset()
+		if err := prefixTmpl.Execute(&outBuf, fi); err != nil {
+			return err
+		}
+		if err := e.Format(&outBuf); err != nil {
+			return err
+		}
+		if filter == nil || filter.Match(outBuf.Bytes()) {
+			if _, err := io.Copy(out, &outBuf); err != nil {
+				return err
+			}
+		}
+		s.pop()
+		e, ok = s.peek()
+	}
+	if err := s.error(); err != nil && err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -1251,6 +1346,13 @@ func init() {
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
+
+	f = debugMergeLogsCommand.Flags()
+	f.String("from", "", "Time (in format \"060102 15:04:05.999999\") before which messages should be filtered.")
+	f.String("to", "", "Time (in format \"060102 15:04:05.999999\") after which messages should be filtered.")
+	f.String("filter", "", "If present acts as a regexp to filter log messages.")
+	f.String("prefix", "{{ .Details.Host }}> ", "Template pattern used a prefix to merged log messages. Evaluated on log.FileInfo")
+	f.String("program", "^cockroach$", "Regular expression used to select whether a program's log files should be read")
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1281,6 +1383,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
+	debugMergeLogsCommand,
 )
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
