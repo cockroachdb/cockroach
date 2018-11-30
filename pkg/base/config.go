@@ -490,7 +490,20 @@ type RaftConfig struct {
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
 
+	// When a Replica with an empty log (i.e. last index zero), drop rejecting
+	// MsgAppResp for the first few ticks to allow the split trigger to perform
+	// the split.
+	//
+	// -1 to disable.
 	RaftPostSplitSuppressSnapshotTicks int
+	// Splitting a range which has a replica needing a snapshot results in two
+	// ranges in that state. The delay configured here slows down splits when in
+	// that situation (limiting to those splits not run through the split
+	// queue). The most important target here are the splits performed by
+	// backup/restore.
+	//
+	// -1 to disable.
+	RaftDelaySplitToSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -531,6 +544,18 @@ func (cfg *RaftConfig) SetDefaults() {
 
 	if cfg.RaftPostSplitSuppressSnapshotTicks == 0 {
 		cfg.RaftPostSplitSuppressSnapshotTicks = defaultRaftPostSplitSuppressSnapshotTicks
+	}
+
+	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
+		// The Raft Ticks interval defaults to 200ms, and
+		// RaftPostSplitSuppressSnapshotTicks to 20 ticks. A total of 120 ticks is
+		// ~24s which experimentally has been shown to allow the small pile (<100)
+		// of Raft snapshots observed at the beginning of an import/restore to be
+		// resolved.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 100
+		if cfg.RaftPostSplitSuppressSnapshotTicks > 0 {
+			cfg.RaftDelaySplitToSuppressSnapshotTicks += cfg.RaftPostSplitSuppressSnapshotTicks
+		}
 	}
 }
 
