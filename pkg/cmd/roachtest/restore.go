@@ -218,8 +218,7 @@ func registerRestore(r *registry) {
 		timeout time.Duration
 	}{
 		{10, 6 * time.Hour},
-		// TODO(peter,tschottdorf): re-enable
-		// {32, 3 * time.Hour},
+		{32, 3 * time.Hour},
 	} {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
