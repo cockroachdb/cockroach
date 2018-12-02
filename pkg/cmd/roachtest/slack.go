@@ -107,8 +107,9 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	default:
 		prefix = "GCE"
 	}
-	message := fmt.Sprintf("[%s] %s: %d passed, %d failed, %d skipped",
-		prefix, branch, len(stablePass), len(stableFail), len(skipped))
+	message := fmt.Sprintf("[%s] %s: %d+%d passed, %d+%d failed, %d skipped",
+		prefix, branch, len(stablePass), len(unstablePass),
+		len(stableFail), len(unstableFail), len(skipped))
 
 	{
 		status := "good"
@@ -135,26 +136,25 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 		title string
 		color string
 	}{
-		{stableFail, "Failures", "danger"},
+		{stablePass, "Successes [stable]", "good"},
+		{stableFail, "Failures [stable]", "danger"},
 		{unstablePass, "Successes [unstable]", "good"},
 		{unstableFail, "Failures [unstable]", "warning"},
 		{skipped, "Skipped", "warning"},
 	}
 	for _, d := range data {
-		if len(d.tests) > 0 {
-			sortTests(d.tests)
-			var buf bytes.Buffer
-			for _, t := range d.tests {
-				fmt.Fprintf(&buf, "%s\n", t.Name())
-			}
-			params.Attachments = append(params.Attachments,
-				slack.Attachment{
-					Color:    d.color,
-					Title:    d.title,
-					Text:     buf.String(),
-					Fallback: message,
-				})
+		sortTests(d.tests)
+		var buf bytes.Buffer
+		for _, t := range d.tests {
+			fmt.Fprintf(&buf, "%s\n", t.Name())
 		}
+		params.Attachments = append(params.Attachments,
+			slack.Attachment{
+				Color:    d.color,
+				Title:    fmt.Sprintf("%s: %d", d.title, len(d.tests)),
+				Text:     buf.String(),
+				Fallback: message,
+			})
 	}
 
 	if _, _, err := client.PostMessage(channel, "", params); err != nil {
