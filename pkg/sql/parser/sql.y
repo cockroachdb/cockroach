@@ -166,9 +166,6 @@ func (u *sqlSymUnion) stmt() tree.Statement {
     }
     return nil
 }
-func (u *sqlSymUnion) stmts() []tree.Statement {
-    return u.val.([]tree.Statement)
-}
 func (u *sqlSymUnion) cte() *tree.CTE {
     if cte, ok := u.val.(*tree.CTE); ok {
         return cte
@@ -571,8 +568,7 @@ func newNameFromStr(s string) *tree.Name {
   union sqlSymUnion
 }
 
-%type <[]tree.Statement> stmt_block
-%type <[]tree.Statement> stmt_list
+%type <tree.Statement> stmt_block
 %type <tree.Statement> stmt
 
 %type <tree.Statement> alter_stmt
@@ -1027,28 +1023,9 @@ func newNameFromStr(s string) *tree.Name {
 %%
 
 stmt_block:
-  stmt_list
+  stmt
   {
-    sqllex.(*lexer).stmts = $1.stmts()
-  }
-
-stmt_list:
-  stmt_list ';' stmt
-  {
-    l := $1.stmts()
-    s := $3.stmt()
-    if s != nil {
-      l = append(l, s)
-    }
-    $$.val = l
-  }
-| stmt
-  {
-    $$.val = []tree.Statement(nil)
-    s := $1.stmt()
-    if s != nil {
-       $$.val = []tree.Statement{s}
-    }
+    sqllex.(*lexer).stmt = $1.stmt()
   }
 
 stmt:
