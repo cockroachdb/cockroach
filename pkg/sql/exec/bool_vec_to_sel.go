@@ -68,7 +68,9 @@ func (p *boolVecToSelOp) Next() ColBatch {
 		}
 
 		// Zero our output column for next time.
-		copy(p.outputCol, zeroBoolVec)
+		for i := range p.outputCol {
+			p.outputCol[i] = false
+		}
 
 		batch.SetLength(idx)
 		return batch
@@ -77,4 +79,14 @@ func (p *boolVecToSelOp) Next() ColBatch {
 
 func (p *boolVecToSelOp) Init() {
 	p.input.Init()
+}
+
+func boolVecToSel64(vec []bool, sel []uint64) []uint64 {
+	l := uint64(len(vec))
+	for i := uint64(0); i < l; i++ {
+		if vec[i] {
+			sel = append(sel, i)
+		}
+	}
+	return sel
 }

@@ -64,32 +64,11 @@ func _ASSIGN_LT(_, _, _ string) bool {
 
 // */}}
 
-type sortSpec struct {
-	sortCol    uint32
-	inputTypes []types.T
-}
-
-// sortState represents the state of the processor.
-type sortState int
-
-const (
-	sortSpooling sortState = iota
-
-	sortEmitting
-)
-
-func NewSorter(input Operator, inputTypes []types.T, sortCol uint32) (Operator, error) {
-	t := inputTypes[sortCol]
+func newSingleSorter(t types.T) (colSorter, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
-		return &sort_TYPEOp{
-			input: input,
-			spec: sortSpec{
-				sortCol:    sortCol,
-				inputTypes: inputTypes,
-			},
-		}, nil
+		return &sort_TYPEOp{}, nil
 	// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported sort type %s", t)
@@ -99,100 +78,63 @@ func NewSorter(input Operator, inputTypes []types.T, sortCol uint32) (Operator, 
 // {{range .}}
 
 type sort_TYPEOp struct {
-	spec sortSpec
-
-	input Operator
-
-	state sortState
-	// nTuples is the number of tuples we've seen from our input.
-	nTuples uint64
-	// values stores all the values from the input
-	values []ColVec
-	order  []uint64
-
-	sortCol []_GOTYPE
-
-	// emitted is the index of the last value that was emitted by Next()
-	emitted uint64
-	output  ColBatch
+	sortCol      []_GOTYPE
+	order        []uint64
+	workingSpace []uint64
 }
 
-var _ Operator = &sort_TYPEOp{}
+func (s *sort_TYPEOp) init(col ColVec, order []uint64, workingSpace []uint64) {
+	s.sortCol = col._TemplateType()
+	s.order = order
+	s.workingSpace = workingSpace
+}
 
-func (p *sort_TYPEOp) Init() {
-	p.input.Init()
-	p.output = NewMemBatch(p.spec.inputTypes)
-	p.values = make([]ColVec, len(p.spec.inputTypes))
-	for i := 0; i < len(p.spec.inputTypes); i++ {
-		p.values[i] = newMemColumn(p.spec.inputTypes[i], 0)
+func (s *sort_TYPEOp) sort() {
+	n := len(s.sortCol)
+	s.quickSort(0, n, maxDepth(n))
+}
+
+func (s *sort_TYPEOp) reorder() {
+	// Initialize our index vector to the inverse of the order vector. This
+	// creates what is known as a permutation. Position i in the permutation has
+	// the output index for the value at position i in the original ordering of
+	// the data we sorted. For example, if we were sorting the column [d,c,a,b],
+	// the order vector would be [2,3,1,0], and the permutation would be
+	// [3,2,0,1].
+	index := s.workingSpace
+	for idx, ord := range s.order {
+		index[int(ord)] = uint64(idx)
+	}
+	// Once we have our permutation, we apply it to our value column by following
+	// each cycle within the permutation until we reach the identity. This
+	// algorithm takes just O(n) swaps to reorder the sortCol. It also returns
+	// the index array to an ordinal list in the process.
+	for i := range index {
+		for index[i] != uint64(i) {
+			s.sortCol[index[i]], s.sortCol[i] = s.sortCol[i], s.sortCol[index[i]]
+			index[i], index[index[i]] = index[index[i]], index[i]
+		}
 	}
 }
 
-func (p *sort_TYPEOp) Next() ColBatch {
-	switch p.state {
-	case sortSpooling:
-		p.spool()
-		p.state = sortEmitting
-		fallthrough
-	case sortEmitting:
-		newEmitted := p.emitted + ColBatchSize
-		if newEmitted > p.nTuples {
-			newEmitted = p.nTuples
-		}
-		p.output.SetLength(uint16(newEmitted - p.emitted))
-		if p.output.Length() == 0 {
-			return p.output
-		}
-
-		sortColIdx := int(p.spec.sortCol)
-		for j := 0; j < len(p.values); j++ {
-			if j == sortColIdx {
-				// the sortCol'th vec is already sorted, so just fill it directly.
-				p.output.ColVec(j).Copy(p.values[j], p.emitted, newEmitted, p.spec.inputTypes[j])
-			} else {
-				p.output.ColVec(j).CopyWithSelInt64(p.values[j], p.order[p.emitted:], p.output.Length(), p.spec.inputTypes[j])
-			}
-		}
-		p.emitted = newEmitted
-		return p.output
-	default:
-		panic(fmt.Sprintf("invalid sorter state %d", p.state))
+func (s *sort_TYPEOp) sortPartitions(partitions []uint64) {
+	if len(partitions) < 1 {
+		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
-
-}
-
-func (p *sort_TYPEOp) spool() {
-	batch := p.input.Next()
-	for ; batch.Length() != 0; batch = p.input.Next() {
-		// First, copy all vecs into values.
-		for i := 0; i < len(p.values); i++ {
-			if batch.Selection() == nil {
-				p.values[i].Append(batch.ColVec(i),
-					p.spec.inputTypes[i],
-					p.nTuples,
-					batch.Length(),
-				)
-			} else {
-				p.values[i].AppendWithSel(batch.ColVec(i),
-					batch.Selection(),
-					batch.Length(),
-					p.spec.inputTypes[i],
-					p.nTuples,
-				)
-			}
+	order := s.order
+	sortCol := s.sortCol
+	for i, partitionStart := range partitions {
+		var partitionEnd uint64
+		if i == len(partitions)-1 {
+			partitionEnd = uint64(len(order))
+		} else {
+			partitionEnd = partitions[i+1]
 		}
-		p.nTuples += uint64(batch.Length())
+		s.order = order[partitionStart:partitionEnd]
+		s.sortCol = sortCol[partitionStart:partitionEnd]
+		n := int(partitionEnd - partitionStart)
+		s.quickSort(0, n, maxDepth(n))
 	}
-
-	p.order = make([]uint64, p.nTuples)
-	for i := uint64(0); i < uint64(len(p.order)); i++ {
-		p.order[i] = i
-	}
-
-	p.sortCol = p.values[p.spec.sortCol]._TemplateType()
-
-	n := p.Len()
-	p.quickSort(0, n, maxDepth(n))
 }
 
 func (s *sort_TYPEOp) Less(i, j int) bool {
@@ -210,7 +152,7 @@ func (s *sort_TYPEOp) Swap(i, j int) {
 }
 
 func (s *sort_TYPEOp) Len() int {
-	return int(s.nTuples)
+	return len(s.order)
 }
 
 // {{end}}
