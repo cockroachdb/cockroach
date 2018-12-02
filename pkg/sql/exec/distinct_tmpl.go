@@ -109,6 +109,26 @@ func newSingleOrderedDistinct(
 	}
 }
 
+// partitioner is a simple implementation of sorted distinct that's useful for
+// other operators that need to partition an arbitrarily-sized ColVec.
+type partitioner interface {
+	// partition partitions the input colVec of size n, writing true to the
+	// outputCol for every value that differs from the previous one.
+	partition(colVec ColVec, outputCol []bool, n uint64)
+}
+
+// newPartitioner returns a new partitioner on type t.
+func newPartitioner(t types.T) (partitioner, error) {
+	switch t {
+	// {{range .}}
+	case _TYPES_T:
+		return partitioner_TYPE{}, nil
+	// {{end}}
+	default:
+		return nil, errors.Errorf("unsupported partition type %s", t)
+	}
+}
+
 // {{range .}}
 
 // sortedDistinct_TYPEOp runs a distinct on the column in sortedDistinctCol,
@@ -198,6 +218,27 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 	p.foundFirstRow = true
 
 	return batch
+}
+
+// partitioner_TYPE partitions an arbitrary-length colVec by running a distinct
+// operation over it. It writes the same format to outputCol that sorted
+// distinct does: true for every row that differs from the previous row in the
+// input column.
+type partitioner_TYPE struct{}
+
+func (p partitioner_TYPE) partition(colVec ColVec, outputCol []bool, n uint64) {
+	col := colVec._TemplateType()
+	lastVal := col[0]
+	outputCol[0] = true
+	outputCol = outputCol[1:n]
+	col = col[1:n]
+	for i := range col {
+		v := col[i]
+		var unique bool
+		_ASSIGN_NE("unique", "v", "lastVal")
+		outputCol[i] = outputCol[i] || unique
+		lastVal = v
+	}
 }
 
 // {{end}}
