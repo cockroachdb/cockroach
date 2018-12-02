@@ -78,7 +78,7 @@ func (p *coalescerOp) Next() ColBatch {
 					bufferCol.CopyWithSelInt16(fromCol, sel[leftover:batchSize], batchSize-leftover, t)
 				} else {
 					toCol.Append(fromCol, t, uint64(p.group.Length()), leftover)
-					bufferCol.Copy(fromCol, int(leftover), int(batchSize), t)
+					bufferCol.Copy(fromCol, uint64(leftover), uint64(batchSize), t)
 				}
 			}
 		}
