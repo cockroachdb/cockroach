@@ -11,47 +11,47 @@ CREATE TABLE pg_catalog.t (x INT)
 query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
-query T
+query TT
 SHOW TABLES FROM pg_catalog
 ----
-pg_am
-pg_attrdef
-pg_attribute
-pg_auth_members
-pg_class
-pg_collation
-pg_constraint
-pg_database
-pg_depend
-pg_description
-pg_enum
-pg_extension
-pg_foreign_data_wrapper
-pg_foreign_server
-pg_foreign_table
-pg_index
-pg_indexes
-pg_inherits
-pg_language
-pg_namespace
-pg_operator
-pg_proc
-pg_range
-pg_rewrite
-pg_roles
-pg_seclabel
-pg_sequence
-pg_settings
-pg_shdescription
-pg_shseclabel
-pg_stat_activity
-pg_tables
-pg_tablespace
-pg_trigger
-pg_type
-pg_user
-pg_user_mapping
-pg_views
+pg_am                   NULL
+pg_attrdef              NULL
+pg_attribute            NULL
+pg_auth_members         NULL
+pg_class                NULL
+pg_collation            NULL
+pg_constraint           NULL
+pg_database             NULL
+pg_depend               NULL
+pg_description          NULL
+pg_enum                 NULL
+pg_extension            NULL
+pg_foreign_data_wrapper NULL
+pg_foreign_server       NULL
+pg_foreign_table        NULL
+pg_index                NULL
+pg_indexes              NULL
+pg_inherits             NULL
+pg_language             NULL
+pg_namespace            NULL
+pg_operator             NULL
+pg_proc                 NULL
+pg_range                NULL
+pg_rewrite              NULL
+pg_roles                NULL
+pg_seclabel             NULL
+pg_sequence             NULL
+pg_settings             NULL
+pg_shdescription        NULL
+pg_shseclabel           NULL
+pg_stat_activity        NULL
+pg_tables               NULL
+pg_tablespace           NULL
+pg_trigger              NULL
+pg_type                 NULL
+pg_user                 NULL
+pg_user_mapping         NULL
+pg_views                NULL
 
 # Verify "pg_catalog" is a regular db name
 
@@ -75,47 +75,47 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 
 # Verify pg_catalog handles reflection correctly.
 
-query T
+query TT
 SHOW TABLES FROM test.pg_catalog
 ----
-pg_am
-pg_attrdef
-pg_attribute
-pg_auth_members
-pg_class
-pg_collation
-pg_constraint
-pg_database
-pg_depend
-pg_description
-pg_enum
-pg_extension
-pg_foreign_data_wrapper
-pg_foreign_server
-pg_foreign_table
-pg_index
-pg_indexes
-pg_inherits
-pg_language
-pg_namespace
-pg_operator
-pg_proc
-pg_range
-pg_rewrite
-pg_roles
-pg_seclabel
-pg_sequence
-pg_settings
-pg_shdescription
-pg_shseclabel
-pg_stat_activity
-pg_tables
-pg_tablespace
-pg_trigger
-pg_type
-pg_user
-pg_user_mapping
-pg_views
+pg_am                   NULL
+pg_attrdef              NULL
+pg_attribute            NULL
+pg_auth_members         NULL
+pg_class                NULL
+pg_collation            NULL
+pg_constraint           NULL
+pg_database             NULL
+pg_depend               NULL
+pg_description          NULL
+pg_enum                 NULL
+pg_extension            NULL
+pg_foreign_data_wrapper NULL
+pg_foreign_server       NULL
+pg_foreign_table        NULL
+pg_index                NULL
+pg_indexes              NULL
+pg_inherits             NULL
+pg_language             NULL
+pg_namespace            NULL
+pg_operator             NULL
+pg_proc                 NULL
+pg_range                NULL
+pg_rewrite              NULL
+pg_roles                NULL
+pg_seclabel             NULL
+pg_sequence             NULL
+pg_settings             NULL
+pg_shdescription        NULL
+pg_shseclabel           NULL
+pg_stat_activity        NULL
+pg_tables               NULL
+pg_tablespace           NULL
+pg_trigger              NULL
+pg_type                 NULL
+pg_user                 NULL
+pg_user_mapping         NULL
+pg_views                NULL
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
@@ -591,6 +591,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  ind
 633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
 633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
 961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1112802205  3710069875  3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                  0 0 0     0 0 0      NULL      NULL
 1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
 1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
 1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      1661428263 0           0 0       0 0        NULL      NULL
@@ -623,6 +624,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 633004885   0                           1
 633004886   0                           1
 961325075   0                           1
+1112802205  0                           1
+1112802205  0                           2
+1112802205  0                           3
 1168848597  0                           1
 1168848597  0                           2
 1849259112  0                           1

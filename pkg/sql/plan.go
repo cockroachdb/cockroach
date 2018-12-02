@@ -773,6 +773,8 @@ func (p *planner) newPlan(
 		return p.CancelQueries(ctx, n)
 	case *tree.CancelSessions:
 		return p.CancelSessions(ctx, n)
+	case *tree.CommentOnTable:
+		return p.CommentOnTable(ctx, n)
 	case *tree.ControlJobs:
 		return p.ControlJobs(ctx, n)
 	case *tree.Scrub:

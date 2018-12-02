@@ -9,42 +9,42 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query T
+query TT
 SHOW TABLES FROM crdb_internal
 ----
-backward_dependencies
-builtin_functions
-cluster_queries
-cluster_sessions
-cluster_settings
-create_statements
-feature_usage
-forward_dependencies
-gossip_alerts
-gossip_liveness
-gossip_network
-gossip_nodes
-index_columns
-jobs
-kv_node_status
-kv_store_status
-leases
-node_build_info
-node_metrics
-node_queries
-node_runtime_info
-node_sessions
-node_statement_statistics
-partitions
-ranges
-ranges_no_leases
-schema_changes
-session_trace
-session_variables
-table_columns
-table_indexes
-tables
-zones
+backward_dependencies      NULL
+builtin_functions          NULL
+cluster_queries            NULL
+cluster_sessions           NULL
+cluster_settings           NULL
+create_statements          NULL
+feature_usage              NULL
+forward_dependencies       NULL
+gossip_alerts              NULL
+gossip_liveness            NULL
+gossip_network             NULL
+gossip_nodes               NULL
+index_columns              NULL
+jobs                       NULL
+kv_node_status             NULL
+kv_store_status            NULL
+leases                     NULL
+node_build_info            NULL
+node_metrics               NULL
+node_queries               NULL
+node_runtime_info          NULL
+node_sessions              NULL
+node_statement_statistics  NULL
+partitions                 NULL
+ranges                     NULL
+ranges_no_leases           NULL
+schema_changes             NULL
+session_trace              NULL
+session_variables          NULL
+table_columns              NULL
+table_indexes              NULL
+tables                     NULL
+zones                      NULL
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
