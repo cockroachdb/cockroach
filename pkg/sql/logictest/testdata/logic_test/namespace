@@ -7,27 +7,27 @@ statement ok
 CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
 
 # "public" with the current database designates the public schema
-query T
+query TT
 SHOW TABLES FROM public
 ----
-a
+a NULL
 
 # To access all tables in database "public", one must specify
 # its public schema explicitly.
-query T
+query TT
 SHOW TABLES FROM public.public
 ----
-t
+t NULL
 
 # Of course one can also list the tables in "public" by making it the
 # current database.
 statement ok
 SET database = public
 
-query T
+query TT
 SHOW TABLES
 ----
-t
+t NULL
 
 statement ok
 SET database = test; DROP DATABASE public

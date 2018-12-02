@@ -328,4 +328,10 @@ const (
 	LocationsTableID       = 21
 	LivenessRangesID       = 22
 	RoleMembersTableID     = 23
+	CommentsTableID        = 24
+
+	// CommentType is type for system.comments
+	// DatabaseCommentType = 0
+	TableCommentType = 1
+	// ColumnCommentType   = 2
 )

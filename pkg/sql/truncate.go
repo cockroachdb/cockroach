@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -271,6 +272,42 @@ func (p *planner) truncateTable(
 	key := tKey.Key()
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
+		return err
+	}
+
+	// Reassign comment.
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+		ctx,
+		"select-comment",
+		p.txn,
+		`SELECT comment FROM system.comments WHERE object_id=$1`,
+		id)
+	if err != nil {
+		return err
+	}
+
+	if comment != nil {
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+			ctx,
+			"upsert-comment",
+			p.txn,
+			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
+			keys.TableCommentType,
+			newID,
+			comment[0])
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.TableCommentType,
+		id)
+	if err != nil {
 		return err
 	}
 

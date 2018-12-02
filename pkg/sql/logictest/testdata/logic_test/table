@@ -39,11 +39,14 @@ CREATE TABLE dup_unique (a int, unique (a,a))
 statement ok
 CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 
-query T colnames
+statement ok
+COMMENT ON TABLE a IS 'a_comment'
+
+query TT colnames
 SHOW TABLES FROM test
 ----
-table_name
-a
+table_name  comment
+a           a_comment
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -114,15 +117,15 @@ a            INT        false        NULL            ·                      {pr
 b            INT        false        NULL            ·                      {primary}  false
 c            INT        false        NULL            ·                      {primary}  false
 
-query T
+query TT
 SHOW TABLES FROM test
 ----
-a
-b
-c
-d
-e
-f
+a a_comment
+b NULL
+c NULL
+d NULL
+e NULL
+f NULL
 
 statement ok
 SET DATABASE = ""

@@ -190,6 +190,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add progress to system.jobs",
 		workFn: addJobsProgress,
 	},
+	{
+		// Introduced in v2.1.
+		// TODO(hueypark): bake this migration into v2.2.
+		name:             "create system.comment table",
+		workFn:           createCommentTable,
+		newDescriptorIDs: staticIDs(keys.CommentsTableID),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -501,6 +508,10 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 		}
 	}
 	return err
+}
+
+func createCommentTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.CommentsTable)
 }
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)

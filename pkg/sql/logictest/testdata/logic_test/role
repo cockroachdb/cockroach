@@ -45,7 +45,7 @@ role_name  member  is_admin
 statement error role name "public" is reserved
 CREATE USER public
 
-statement error cannot drop special role public
+statement error cannot drop user or role public: grants still exist on system.public.comments
 DROP USER public
 
 statement ok
@@ -82,15 +82,15 @@ SHOW DATABASES
 ----
 publicdb
 
-query T
+query TT
 SHOW TABLES FROM publicdb
 ----
-publictable
+publictable NULL
 
-query T
+query TT
 SHOW TABLES FROM privatedb
 ----
-publictable
+publictable NULL
 
 statement ok
 SELECT * FROM publicdb.publictable
@@ -124,6 +124,6 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query T
+query TT
 SHOW TABLES FROM publicdb
 ----

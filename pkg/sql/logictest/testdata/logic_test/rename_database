@@ -121,10 +121,10 @@ user root
 statement ok
 CREATE VIEW t.v AS SELECT k,v FROM u.kv
 
-query T
+query TT
 SHOW TABLES FROM u
 ----
-kv
+kv NULL
 
 statement error cannot rename database because view "t.public.v" depends on table "kv"
 ALTER DATABASE u RENAME TO v

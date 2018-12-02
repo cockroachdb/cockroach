@@ -41,12 +41,34 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 	}
 
 	const getTablesQuery = `
-  SELECT table_name
-    FROM %[1]s.information_schema.tables
-   WHERE table_schema = %[2]s
-ORDER BY table_schema, table_name`
+SELECT
+	i.table_name, c.comment
+FROM
+	%[1]s.information_schema.tables AS i
+	LEFT JOIN crdb_internal.tables AS t
+	ON
+		i.table_name = t.name
+		AND i.table_catalog = t.database_name
+	LEFT JOIN system.comments AS c
+	ON t.table_id = c.object_id
+WHERE
+	table_schema = %[2]s
+	AND (t.state = %[3]s OR t.state IS NULL)
+	AND (t.database_name = %[4]s OR t.database_name IS NULL)
+ORDER BY
+	table_schema, table_name`
 
-	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, &n.CatalogName, lex.EscapeSQLString(n.Schema())),
-		func(_ context.Context) error { return nil }, nil)
+	query := fmt.Sprintf(
+		getTablesQuery,
+		&n.CatalogName,
+		lex.EscapeSQLString(n.Schema()),
+		lex.EscapeSQLString(sqlbase.TableDescriptor_PUBLIC.String()),
+		lex.EscapeSQLString(n.CatalogName.Normalize()))
+
+	return p.delegateQuery(
+		ctx,
+		"SHOW TABLES",
+		query,
+		func(_ context.Context) error { return nil },
+		nil)
 }

@@ -265,7 +265,7 @@ func (s *adminServer) DatabaseDetails(
 	{
 		const nameCol = "table_name"
 		scanner := makeResultScanner(cols)
-		if a, e := len(cols), 1; a != e {
+		if a, e := len(cols), 2; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {

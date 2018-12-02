@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -213,6 +214,16 @@ CREATE TABLE system.role_members (
   INDEX ("role"),
   INDEX ("member")
 );`
+
+	// comments stores comments(database, table, column...).
+	CommentsTableSchema = `
+CREATE TABLE system.comments (
+   type      INT NOT NULL,    -- type of object, to distinguish between db, table, column and others
+   object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
+   sub_id    INT NOT NULL,    -- sub ID for columns inside table, 0 for pure table
+   comment   STRING NOT NULL, -- the comment
+   PRIMARY KEY (type, object_id, sub_id)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -252,6 +263,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.TableStatisticsTableID: privilege.ReadWriteData,
 	keys.LocationsTableID:       privilege.ReadWriteData,
 	keys.RoleMembersTableID:     privilege.ReadWriteData,
+	keys.CommentsTableID:        privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -821,6 +833,38 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	// CommentsTable is the descriptor for the comments table.
+	CommentsTable = TableDescriptor{
+		Name:     "comments",
+		ID:       keys.CommentsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "type", ID: 1, Type: colTypeInt},
+			{Name: "object_id", ID: 2, Type: colTypeInt},
+			{Name: "sub_id", ID: 3, Type: colTypeInt},
+			{Name: "comment", ID: 4, Type: colTypeString},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []ColumnID{1, 2, 3}},
+			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+		},
+		NextFamilyID: 5,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"type", "object_id", "sub_id"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2, 3},
+		},
+		NextIndexID:    2,
+		Privileges:     newCommentPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -903,4 +947,24 @@ func IsSystemConfigID(id ID) bool {
 // IsReservedID returns whether this ID is for any system object.
 func IsReservedID(id ID) bool {
 	return id > 0 && id <= keys.MaxReservedDescID
+}
+
+// newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
+func newCommentPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       AdminRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       PublicRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: priv.ToBitField(),
+			},
+		},
+	}
 }

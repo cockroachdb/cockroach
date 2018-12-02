@@ -6,11 +6,11 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
-query T
+query TT
 SHOW TABLES FROM test
 ----
-a
-b
+a NULL
+b NULL
 
 statement ok
 INSERT INTO a VALUES (3),(7),(2)
@@ -30,10 +30,10 @@ SELECT status, running_status FROM [SHOW JOBS]
 ----
 running  waiting for GC TTL
 
-query T
+query TT
 SHOW TABLES FROM test
 ----
-b
+b NULL
 
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a

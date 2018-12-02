@@ -138,24 +138,25 @@ information_schema
 pg_catalog
 public
 
-query T colnames
+query TT colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-table_name
-descriptor
-eventlog
-jobs
-lease
-locations
-namespace
-rangelog
-role_members
-settings
-table_statistics
-ui
-users
-web_sessions
-zones
+table_name        comment
+comments          NULL
+descriptor        NULL
+eventlog          NULL
+jobs              NULL
+lease             NULL
+locations         NULL
+namespace         NULL
+rangelog          NULL
+role_members      NULL
+settings          NULL
+table_statistics  NULL
+ui                NULL
+users             NULL
+web_sessions      NULL
+zones             NULL
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -181,11 +182,11 @@ information_schema
 pg_catalog
 public
 
-query T colnames
+query TT colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-table_name
-foo
+table_name comment
+foo NULL
 
 
 query T colnames
