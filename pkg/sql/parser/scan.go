@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -677,7 +678,7 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 			}
 			b[i] = byte(c)
 		}
-		lval.str = string(b)
+		lval.str = *(*string)(unsafe.Pointer(&b))
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
@@ -859,7 +860,7 @@ outer:
 	}
 
 	lval.id = BCONST
-	lval.str = string(buf)
+	lval.str = *(*string)(unsafe.Pointer(&buf))
 	return true
 }
 
@@ -895,7 +896,7 @@ outer:
 	}
 
 	lval.id = BITCONST
-	lval.str = string(buf)
+	lval.str = *(*string)(unsafe.Pointer(&buf))
 	return true
 }
 
@@ -994,6 +995,6 @@ outer:
 		return false
 	}
 
-	lval.str = string(buf)
+	lval.str = *(*string)(unsafe.Pointer(&buf))
 	return true
 }

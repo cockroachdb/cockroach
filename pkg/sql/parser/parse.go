@@ -41,7 +41,7 @@ type Parser struct {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
-	return parseWithDepth(1, sql)
+	return p.parseWithDepth(1, sql)
 }
 
 func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList, err error) {
