@@ -928,8 +928,7 @@ CREATE TABLE pg_catalog.pg_description (
 	classoid OID,
 	objsubid INT,
 	description STRING
-);
-`,
+)`,
 	populate: func(
 		ctx context.Context,
 		p *planner,

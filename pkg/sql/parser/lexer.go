@@ -37,7 +37,7 @@ type lexer struct {
 	// token returned by Lex().
 	lastPos int
 
-	stmts     []tree.Statement
+	stmt      tree.Statement
 	lastError *parseErr
 }
 
@@ -47,7 +47,7 @@ func (l *lexer) init(
 	l.in = sql
 	l.tokens = tokens
 	l.lastPos = -1
-	l.stmts = nil
+	l.stmt = nil
 	l.lastError = nil
 
 	l.nakedIntType = nakedIntType
