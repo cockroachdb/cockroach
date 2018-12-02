@@ -76,9 +76,7 @@ func (ef *execFactory) ConstructScan(
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	colCfg := scanColumnsConfig{
-		wantedColumns: makeWantedColumns(table, cols),
-	}
+	colCfg := makeScanColumnsConfig(table, cols)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -504,9 +502,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	colCfg := scanColumnsConfig{
-		wantedColumns: makeWantedColumns(table, cols),
-	}
+	colCfg := makeScanColumnsConfig(table, cols)
 	colDescs := makeColDescList(table, cols)
 
 	// TODO(justin): this would be something besides a scanNode in the general
@@ -565,10 +561,7 @@ func (ef *execFactory) ConstructLookupJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
-	colCfg := scanColumnsConfig{
-		wantedColumns: makeWantedColumns(table, lookupCols),
-	}
-
+	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
@@ -979,14 +972,17 @@ func makeColDescList(table opt.Table, cols exec.ColumnOrdinalSet) []sqlbase.Colu
 	return colDescs
 }
 
-// makeWantedColumns constructs a list of descriptor IDs for columns in the
-// given table. Columns are specified in the cols set, by ordinal position in
-// the table schema.
-func makeWantedColumns(table opt.Table, cols exec.ColumnOrdinalSet) []tree.ColumnID {
-	wantedColumns := make([]tree.ColumnID, 0, cols.Len())
+// makeScanColumnsConfig builds a scanColumnsConfig struct by constructing a
+// list of descriptor IDs for columns in the given cols set. Columns are
+// identified by their ordinal position in the table schema.
+func makeScanColumnsConfig(table opt.Table, cols exec.ColumnOrdinalSet) scanColumnsConfig {
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+		visibility:    publicAndNonPublicColumns,
+	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
 		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
-		wantedColumns = append(wantedColumns, tree.ColumnID(desc.ID))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
-	return wantedColumns
+	return colCfg
 }
