@@ -2891,6 +2891,13 @@ func TestUnimplementedSyntax(t *testing.T) {
 	}
 }
 
+func TestParseOne(t *testing.T) {
+	_, err := parser.ParseOne("SELECT 1; SELECT 2")
+	if !testutils.IsError(err, "expected 1 statement") {
+		t.Errorf("unexpected error %s", err)
+	}
+}
+
 func BenchmarkParse(b *testing.B) {
 	testCases := []struct {
 		name, query string

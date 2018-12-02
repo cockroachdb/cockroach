@@ -39,6 +39,7 @@ type Parser struct {
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
+	stmtBuf    [1]tree.Statement
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -53,22 +54,68 @@ func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
-func (p *Parser) parseWithDepth(
-	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (stmts tree.StatementList, err error) {
-	p.scanner.init(sql)
-	tokens := p.tokBuf[:0]
-	var tok sqlSymType
+func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
+	var lval sqlSymType
+	tokens = p.tokBuf[:0]
+
+	// Scan the first token.
 	for {
-		p.scanner.scan(&tok)
-		if tok.id == 0 {
-			break
+		p.scanner.scan(&lval)
+		if lval.id == 0 {
+			return "", nil, true
 		}
-		tokens = append(tokens, tok)
-		if tok.id == ERROR {
+		if lval.id != ';' {
 			break
 		}
 	}
+
+	startPos := lval.pos
+	// We make the resulting token positions match the returned string.
+	lval.pos = 0
+	tokens = append(tokens, lval)
+	for {
+		if lval.id == ERROR {
+			return p.scanner.in[startPos:], tokens, true
+		}
+		posBeforeScan := p.scanner.pos
+		p.scanner.scan(&lval)
+		if lval.id == 0 || lval.id == ';' {
+			return p.scanner.in[startPos:posBeforeScan], tokens, (lval.id == 0)
+		}
+		lval.pos -= startPos
+		tokens = append(tokens, lval)
+	}
+}
+
+func (p *Parser) parseWithDepth(
+	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
+) (stmts tree.StatementList, err error) {
+	res := tree.StatementList(p.stmtBuf[:0])
+	p.scanner.init(sql)
+	for {
+		sql, tokens, done := p.scanOneStmt()
+		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
+		if err != nil {
+			return nil, err
+		}
+		if stmt != nil {
+			res = append(res, stmt)
+		}
+		if done {
+			break
+		}
+	}
+	return res, nil
+}
+
+// parse parses a statement from the given scanned tokens.
+func (p *Parser) parse(
+	depth int,
+	sql string,
+	tokens []sqlSymType,
+	nakedIntType *coltypes.TInt,
+	nakedSerialType *coltypes.TSerial,
+) (tree.Statement, error) {
 	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		lastError := p.lexer.lastError
@@ -89,7 +136,7 @@ func (p *Parser) parseWithDepth(
 		err.Detail = lastError.detail
 		return nil, err
 	}
-	return p.lexer.stmts, nil
+	return p.lexer.stmt, nil
 }
 
 // unaryNegation constructs an AST node for a negation. This attempts
@@ -109,7 +156,8 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (tree.StatementList, error) {
-	return parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	var p Parser
+	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
@@ -119,14 +167,8 @@ func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, 
 	if nakedIntType == coltypes.Int4 {
 		nakedSerialType = coltypes.Serial4
 	}
-	return parseWithDepth(1, sql, nakedIntType, nakedSerialType)
-}
-
-func parseWithDepth(
-	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (tree.StatementList, error) {
 	var p Parser
-	return p.parseWithDepth(depth+1, sql, nakedIntType, nakedSerialType)
+	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
@@ -136,7 +178,8 @@ func parseWithDepth(
 // bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (tree.Statement, error) {
-	stmts, err := parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	var p Parser
+	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 	if err != nil {
 		return nil, err
 	}
@@ -223,3 +266,41 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 
 	return cast.Type, nil
 }
+
+//func (p *Parser) SplitStmts(sql string) []string {
+//	var res []string
+//
+//	p.scanner.init(sql)
+//	var lval sqlSymType
+//	lastStart := -1
+//	for {
+//		posBeforeScan := p.scanner.pos
+//		p.scanner.scan(&lval)
+//		switch lval.id {
+//		case 0:
+//			// Done.
+//			if lastStart != -1 {
+//				res = append(res, sql[lastStart:posBeforeScan])
+//			}
+//			return res
+//
+//		case ERROR:
+//			if lastStart == -1 {
+//				lastStart = posBeforeScan
+//			}
+//			res = append(res, sql[lastStart:])
+//			return res
+//
+//		case ';':
+//			if lastStart != -1 {
+//				res = append(res, sql[lastStart:posBeforeScan])
+//			}
+//			lastStart = -1
+//
+//		default:
+//			if lastStart == -1 {
+//				lastStart = lval.pos
+//			}
+//		}
+//	}
+//}
