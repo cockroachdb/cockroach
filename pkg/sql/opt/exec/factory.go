@@ -236,6 +236,22 @@ type Factory interface {
 	ConstructInsert(
 		input Node, table opt.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
+
+	// ConstructUpdate creates a node that implements an UPDATE statement. The
+	// input contains columns that were fetched from the target table, and that
+	// provide existing values that can be used to formulate the new encoded
+	// value that will be written back to the table (updating any column in a
+	// family requires having the values of all other columns). The input also
+	// contains computed columns that provide new values for any updated columns.
+	//
+	// The fetchCols and updateCols sets contain the ordinal positions of the
+	// fetch and update columns in the target table. The input must contain those
+	// columns in the same order as they appear in the table schema, with the
+	// fetch columns first and the update columns second. The rowsNeeded parameter
+	// is true if a RETURNING clause needs the updated row(s) as output.
+	ConstructUpdate(
+		input Node, table opt.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
+	) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

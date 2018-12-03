@@ -192,3 +192,9 @@ func (f *stubFactory) ConstructInsert(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructUpdate(
+	input exec.Node, table opt.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

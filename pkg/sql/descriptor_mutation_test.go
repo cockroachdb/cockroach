@@ -286,7 +286,8 @@ CREATE INDEX allidx ON t.test (k, v);
 					} else {
 						_, err = sqlDB.Exec(`INSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`)
 					}
-					if !testutils.IsError(err, `column "i" does not exist`) {
+					if !testutils.IsError(err, `column "i" does not exist`) &&
+						!testutils.IsError(err, `column "i" is being backfilled`) {
 						t.Fatal(err)
 					}
 					if useUpsert {
@@ -304,7 +305,8 @@ CREATE INDEX allidx ON t.test (k, v);
 					} else {
 						_, err = sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`)
 					}
-					if !testutils.IsError(err, "(IN|UP)SERT has more expressions than target columns, 3 expressions for 2 targets") {
+					if !testutils.IsError(err, "(IN|UP)SERT has more expressions than target columns, 3 expressions for 2 targets") &&
+						!testutils.IsError(err, `column "i" is being backfilled`) {
 						t.Fatal(err)
 					}
 
@@ -390,7 +392,8 @@ CREATE INDEX allidx ON t.test (k, v);
 						}
 					} else {
 						_, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
-						if !testutils.IsError(err, `column "i" does not exist`) {
+						if !testutils.IsError(err, `column "i" does not exist`) &&
+							!testutils.IsError(err, `column "i" is being backfilled`) {
 							t.Fatal(err)
 						}
 					}
@@ -726,7 +729,8 @@ CREATE INDEX allidx ON t.test (k, v);
 					}
 				} else {
 					_, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
-					if !testutils.IsError(err, `column "i" does not exist`) {
+					if !testutils.IsError(err, `column "i" does not exist`) &&
+						!testutils.IsError(err, `column "i" is being backfilled`) {
 						t.Error(err)
 					}
 				}
@@ -739,7 +743,8 @@ CREATE INDEX allidx ON t.test (k, v);
 				// TODO(vivek): Fix this error to return the same is being
 				// backfilled error.
 				_, err = sqlDB.Exec(`UPDATE t.test SET i = 'u' WHERE k = 'a'`)
-				if !testutils.IsError(err, `column "i" does not exist`) {
+				if !testutils.IsError(err, `column "i" does not exist`) &&
+					!testutils.IsError(err, `column "i" is being backfilled`) {
 					t.Error(err)
 				}
 				_, err = sqlDB.Exec(`DELETE FROM t.test WHERE i < 'a'`)

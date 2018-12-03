@@ -108,10 +108,10 @@ CREATE TABLE v (
 )
 
 statement ok
-UPDATE v SET a = DEFAULT
+UPDATE v SET b = DEFAULT
 
 statement ok
-UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
+UPDATE v SET (b, c) = (DEFAULT, DEFAULT)
 
 query TTBTTTB colnames
 SHOW COLUMNS FROM v

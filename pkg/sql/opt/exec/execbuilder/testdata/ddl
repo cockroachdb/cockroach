@@ -238,18 +238,18 @@ COMMIT
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM v
 ----
-tree                      field     description       columns                ordering
-render                    ·         ·                 (k)                    ·
- │                        render 0  test.public.kv.k  ·                      ·
- └── run                  ·         ·                 (k, v, z)              ·
-      └── update          ·         ·                 (k, v, z)              ·
-           │              table     kv                ·                      ·
-           │              set       v                 ·                      ·
-           └── render     ·         ·                 (k, v, z, "?column?")  "?column?"=CONST; k!=NULL; key(k)
-                │         render 0  test.public.kv.k  ·                      ·
-                │         render 1  test.public.kv.v  ·                      ·
-                │         render 2  test.public.kv.z  ·                      ·
-                │         render 3  444               ·                      ·
-                └── scan  ·         ·                 (k, v, z)              k!=NULL; key(k)
-·                         table     kv@primary        ·                      ·
-·                         spans     /1-               ·                      ·
+tree                      field     description  columns             ordering
+render                    ·         ·            (k)                 ·
+ │                        render 0  k            ·                   ·
+ └── run                  ·         ·            (k, v, z)           ·
+      └── update          ·         ·            (k, v, z)           ·
+           │              table     kv           ·                   ·
+           │              set       v            ·                   ·
+           └── render     ·         ·            (k, v, z, column7)  ·
+                │         render 0  k            ·                   ·
+                │         render 1  v            ·                   ·
+                │         render 2  z            ·                   ·
+                │         render 3  444          ·                   ·
+                └── scan  ·         ·            (k, v, z)           ·
+·                         table     kv@primary   ·                   ·
+·                         spans     /1-          ·                   ·

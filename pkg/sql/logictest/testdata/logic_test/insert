@@ -640,7 +640,9 @@ CREATE TABLE mutation (
 )
 
 # Check that values cannot be inserted into the dropped column.
-statement error column "y" does not exist
+# Error is different between HP and CBO, but is reasonable in both cases. Just
+# verify there's an error that references column y.
+statement error column "y"
 INSERT INTO mutation(x, y) VALUES (2, 2)
 
 statement ok

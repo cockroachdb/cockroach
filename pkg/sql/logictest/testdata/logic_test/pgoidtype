@@ -40,42 +40,26 @@ SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof(
 ----
 regproc  regprocedure  regtype
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint  pg_constraint
 
 query error pgcode 42P01 relation "foo.pg_constraint" does not exist
 SELECT 'foo.pg_constraint'::REGCLASS
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint  pg_constraint
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint  pg_constraint
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint  139623798
 
@@ -91,24 +75,16 @@ WHERE relname = 'pg_constraint'
 ----
 139623798  pg_constraint  139623798  pg_constraint  pg_constraint
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 upper  upper  upper  2896429946
 
 query error invalid function name
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OOO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 upper  upper  2896429946
 
@@ -130,48 +106,28 @@ SELECT 'blah(, )'::REGPROC
 query error more than one function named 'sqrt'
 SELECT 'sqrt'::REGPROC
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OOOO
 SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 array_in  array_in  array_in  array_in
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OOOO
 SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 array_in  array_in  array_in  array_in
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 public  2397796629
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 boolean  16
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OO
 SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 numeric  numeric
 
@@ -195,22 +151,14 @@ SELECT 'blah'::REGTYPE
 
 ## Test other cast syntaxes
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query O
 SELECT CAST ('pg_constraint' AS REGCLASS)
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 # This forces the b_expr form of the cast syntax.
 query OO
 SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 pg_constraint  139623798
 
@@ -341,21 +289,13 @@ SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE 
 ----
 false
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query TTTTT
 SELECT crdb_internal.create_regtype(10, 'foo'), crdb_internal.create_regclass(10, 'foo'), crdb_internal.create_regproc(10, 'foo'), crdb_internal.create_regprocedure(10, 'foo'), crdb_internal.create_regnamespace(10, 'foo')
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 foo foo foo foo foo
 
-# TODO(jordan): Restore this to original form by removing FROM
-# clause once issue 32422 is fixed.
 query OOOOO
 SELECT crdb_internal.create_regtype(10, 'foo')::oid, crdb_internal.create_regclass(10, 'foo')::oid, crdb_internal.create_regproc(10, 'foo')::oid, crdb_internal.create_regprocedure(10, 'foo')::oid, crdb_internal.create_regnamespace(10, 'foo')::oid
-FROM pg_class
-WHERE relname = 'pg_constraint'
 ----
 10 10 10 10 10
 
