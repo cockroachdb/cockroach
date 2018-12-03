@@ -155,6 +155,7 @@ func createTestNode(
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(
+	ctx context.Context,
 	addr net.Addr,
 	engines []engine.Engine,
 	gossipBS net.Addr,
@@ -163,12 +164,12 @@ func createAndStartTestNode(
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
+		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
 		cfg.Settings.Version.ServerVersion, node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := node.start(context.Background(), addr, bootstrappedEngines, newEngines,
+	if err := node.start(ctx, addr, bootstrappedEngines, newEngines,
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
@@ -245,10 +246,11 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
+		ctx, cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -262,13 +264,14 @@ func TestBootstrapNewStore(t *testing.T) {
 	})
 	defer engines.Close()
 	_, _, node, stopper := createAndStartTestNode(
+		ctx,
 		util.TestAddr,
 		engines,
 		util.TestAddr,
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	// Non-initialized stores (in this case the new in-memory-based
 	// store) will be bootstrapped by the node upon start. This happens
@@ -310,14 +313,17 @@ func bootstrapNodeConfig() storage.StoreConfig {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop(context.TODO())
+	defer engineStopper.Stop(ctx)
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
 
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		ctx, cfg, []engine.Engine{e},
+		cfg.Settings.Version.BootstrapVersion(),
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -325,26 +331,28 @@ func TestNodeJoin(t *testing.T) {
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	_, server1Addr, node1, stopper1 := createAndStartTestNode(
+		ctx,
 		util.TestAddr,
 		engines1,
 		util.TestAddr,
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper1.Stop(context.TODO())
+	defer stopper1.Stop(ctx)
 
 	// Create a new node.
 	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e2)
 	engines2 := []engine.Engine{e2}
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
+		ctx,
 		util.TestAddr,
 		engines2,
 		server1Addr,
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper2.Stop(context.TODO())
+	defer stopper2.Stop(ctx)
 
 	// Verify new node is able to bootstrap its store.
 	testutils.SucceedsSoon(t, func() error {
@@ -726,24 +734,28 @@ func TestNodeStatusWritten(t *testing.T) {
 // collection of different localities.
 func TestStartNodeWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		cfg := bootstrapNodeConfig()
 		if _, err := bootstrapCluster(
-			context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+			ctx, cfg, []engine.Engine{e},
+			cfg.Settings.Version.BootstrapVersion(),
+			kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}
 		_, _, node, stopper := createAndStartTestNode(
+			ctx,
 			util.TestAddr,
 			[]engine.Engine{e},
 			util.TestAddr,
 			locality,
 			t,
 		)
-		defer stopper.Stop(context.TODO())
+		defer stopper.Stop(ctx)
 
 		// Check the node to make sure the locality was propagated to its
 		// nodeDescriptor.
