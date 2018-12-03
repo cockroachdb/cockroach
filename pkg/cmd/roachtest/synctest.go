@@ -36,7 +36,6 @@ fi
 		Name:       "synctest",
 		MinVersion: `v2.2.0`,
 		Nodes:      nodes(1),
-		Stable:     true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")

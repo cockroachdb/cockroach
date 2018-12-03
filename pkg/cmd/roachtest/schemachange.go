@@ -27,9 +27,8 @@ import (
 
 func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange/mixed/kv`,
-		Nodes:  nodes(5),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  `schemachange/mixed/kv`,
+		Nodes: nodes(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 

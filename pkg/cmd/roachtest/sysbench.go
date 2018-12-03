@@ -131,8 +131,6 @@ func registerSysbench(r *registry) {
 		r.Add(testSpec{
 			Name:  fmt.Sprintf("sysbench/%s/nodes=%d", w, n),
 			Nodes: nodes(n+1, cpu(cpus)),
-			// TODO(nvanbenschoten): Wait for this to stabilize.
-			Stable: false,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

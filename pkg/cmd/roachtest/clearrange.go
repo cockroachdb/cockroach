@@ -30,7 +30,6 @@ func registerClearRange(r *registry) {
 			Timeout:    90 * time.Minute,
 			MinVersion: `v2.1.0`,
 			Nodes:      nodes(10),
-			Stable:     true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
