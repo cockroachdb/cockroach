@@ -15,6 +15,7 @@
 package jobutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"reflect"
@@ -37,33 +38,28 @@ import (
 )
 
 // WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(db *gosql.DB, jobID int64) error {
-	var jobFailedErr error
-	err := retry.ForDuration(time.Minute*2, func() error {
+func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
+	t.Helper()
+	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
 		var payloadBytes []byte
-		if err := db.QueryRow(
-			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status, &payloadBytes); err != nil {
-			return errors.Wrap(err, "could not query job table")
-		}
+		db.QueryRow(
+			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
-			jobFailedErr = errors.New("job failed")
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
+				t.Fatalf("job failed: %s", payload.Error)
 			}
-			return nil
+			t.Fatalf("job failed")
 		}
 		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
-	})
-	if jobFailedErr != nil {
-		return jobFailedErr
+	}); err != nil {
+		t.Fatal(err)
 	}
-	return err
 }
 
 // RunJob runs the provided job control statement, intializing, notifying and
@@ -89,7 +85,7 @@ func RunJob(
 	*allowProgressIota = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
-		_, err := db.DB.Exec(query, args...)
+		_, err := db.DB.ExecContext(context.TODO(), query, args...)
 		errCh <- err
 	}()
 	select {

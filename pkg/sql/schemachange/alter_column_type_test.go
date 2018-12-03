@@ -326,7 +326,7 @@ func TestColumnConversions(t *testing.T) {
 					}
 
 					// Insert the test data.
-					if tx, err := sqlDB.DB.Begin(); err != nil {
+					if tx, err := db.Begin(); err != nil {
 						t.Fatal(err)
 					} else {
 						for i, v := range insert {
