@@ -558,6 +558,7 @@ func (oi *optIndex) ForeignKey() (opt.ForeignKeyReference, bool) {
 		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
 		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
 		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
 	}
 	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
 }

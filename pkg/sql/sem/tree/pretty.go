@@ -1356,6 +1356,10 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 				),
 			)
 		}
+		// We omit MATCH SIMPLE because it is the default.
+		if node.References.Match != MatchSimple {
+			d = pretty.ConcatSpace(d, pretty.Text(node.References.Match.String()))
+		}
 		if ref := p.Doc(&node.References.Actions); ref != pretty.Nil {
 			d = p.nestUnder(d, ref)
 		}

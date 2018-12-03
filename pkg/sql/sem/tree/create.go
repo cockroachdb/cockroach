@@ -209,6 +209,7 @@ type ColumnTableDef struct {
 		Col            Name
 		ConstraintName Name
 		Actions        ReferenceActions
+		Match          CompositeKeyMatchMethod
 	}
 	Computed struct {
 		Computed bool
@@ -314,6 +315,7 @@ func NewColumnTableDef(
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 			d.References.Actions = t.Actions
+			d.References.Match = t.Match
 		case *ColumnComputedDef:
 			d.Computed.Computed = true
 			d.Computed.Expr = t.Expr
@@ -412,6 +414,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.References.Col)
 			ctx.WriteByte(')')
 		}
+		if node.References.Match != MatchSimple {
+			ctx.WriteByte(' ')
+			ctx.WriteString(node.References.Match.String())
+		}
 		ctx.FormatNode(&node.References.Actions)
 	}
 	if node.IsComputed() {
@@ -489,6 +495,7 @@ type ColumnFKConstraint struct {
 	Table   TableName
 	Col     Name // empty-string means use PK
 	Actions ReferenceActions
+	Match   CompositeKeyMatchMethod
 }
 
 // ColumnComputedDef represents the description of a computed column.
@@ -635,6 +642,27 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 	}
 }
 
+// CompositeKeyMatchMethod is the algorithm use when matching composite keys.
+// See https://github.com/cockroachdb/cockroach/issues/20305 or
+// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+// different composite foreign key matching methods.
+type CompositeKeyMatchMethod int
+
+// The values for CompositeKeyMatchMethod.
+const (
+	MatchSimple CompositeKeyMatchMethod = iota
+	MatchFull
+)
+
+var compositeKeyMatchMethodName = [...]string{
+	MatchSimple: "MATCH SIMPLE",
+	MatchFull:   "MATCH FULL",
+}
+
+func (c CompositeKeyMatchMethod) String() string {
+	return compositeKeyMatchMethodName[c]
+}
+
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
@@ -642,6 +670,7 @@ type ForeignKeyConstraintTableDef struct {
 	FromCols NameList
 	ToCols   NameList
 	Actions  ReferenceActions
+	Match    CompositeKeyMatchMethod
 }
 
 // Format implements the NodeFormatter interface.
@@ -661,6 +690,11 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		ctx.FormatNode(&node.ToCols)
 		ctx.WriteByte(')')
+	}
+
+	if node.Match != MatchSimple {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.Match.String())
 	}
 
 	ctx.FormatNode(&node.Actions)
@@ -939,6 +973,7 @@ func (node *CreateTable) HoistConstraints() {
 					ToCols:   targetCol,
 					Name:     col.References.ConstraintName,
 					Actions:  col.References.Actions,
+					Match:    col.References.Match,
 				})
 				col.References.Table = nil
 			}

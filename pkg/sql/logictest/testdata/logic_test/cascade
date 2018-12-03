@@ -255,7 +255,7 @@ SELECT
 statement ok
 DROP TABLE c2, c1, b2, b1, a;
 
-subtest DeleteCascade_CompositeFKs
+subtest DeleteCascade_CompositeFKs_MatchSimple
 ### Basic Delete Cascade with composite FKs
 #     a
 #    / \
@@ -306,6 +306,95 @@ CREATE TABLE c2 (
  ,b_id STRING
  ,x INT
  ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1', 1);
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1', 1, 1), ('b1-pk2', 'a-pk1', 1, 2);
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1', 1, 1), ('b2-pk2', 'a-pk1', 1, 2);
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c1-pk4-b1-pk2', 'b1-pk2', 1)
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c2-pk4-b1-pk2', 'b1-pk2', 1)
+;
+
+# ON DELETE CASCADE
+statement ok
+DELETE FROM a WHERE id = 'a-pk1';
+
+query IIIII
+SELECT
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+;
+----
+0 0 0 0 0
+
+# Clean up after the test.
+statement ok
+DROP TABLE c2, c1, b2, b1, a;
+
+subtest DeleteCascade_CompositeFKs_MatchFull
+### Basic Delete Cascade with composite FKs
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+ ,x INT
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) MATCH FULL ON DELETE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) MATCH FULL ON DELETE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) MATCH FULL ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) MATCH FULL ON DELETE CASCADE
 );
 
 statement ok
@@ -1020,7 +1109,7 @@ updated updated updated updated updated
 statement ok
 DROP TABLE c2, c1, b2, b1, a;
 
-subtest UpdateCascade_CompositeFKs
+subtest UpdateCascade_CompositeFKs_MatchSimple
 ### Basic Update Cascade with composite FKs
 #     a
 #    / \
@@ -1071,6 +1160,117 @@ CREATE TABLE c2 (
  ,b_id STRING
  ,x INT
  ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1', 1);
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1', 1, 1), ('b1-pk2', 'a-pk1', 1, 2);
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1', 1, 1), ('b2-pk2', 'a-pk1', 1, 2);
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c1-pk4-b1-pk2', 'b1-pk2', 1)
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c2-pk4-b1-pk2', 'b1-pk2', 1)
+;
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE a SET x = 2 WHERE x = 1;
+
+query TI
+SELECT * FROM a;
+----
+a-pk1 2
+
+query TTII rowsort
+SELECT * FROM b1;
+----
+b1-pk1  a-pk1  2  1
+b1-pk2  a-pk1  2  2
+
+query TTII rowsort
+SELECT * FROM b2;
+----
+b2-pk1  a-pk1  2  1
+b2-pk2  a-pk1  2  2
+
+query TTI rowsort
+SELECT * FROM c1;
+----
+c1-pk1-b1-pk1  b1-pk1  2
+c1-pk2-b1-pk1  b1-pk1  2
+c1-pk3-b1-pk2  b1-pk2  2
+c1-pk4-b1-pk2  b1-pk2  2
+
+query TTI rowsort
+SELECT * FROM c2;
+----
+c2-pk1-b1-pk1  b1-pk1  2
+c2-pk2-b1-pk1  b1-pk1  2
+c2-pk3-b1-pk2  b1-pk2  2
+c2-pk4-b1-pk2  b1-pk2  2
+
+# Clean up after the test.
+statement ok
+DROP TABLE c2, c1, b2, b1, a;
+
+subtest UpdateCascade_CompositeFKs_MatchFull
+### Basic Update Cascade with composite FKs
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+ ,x INT
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) MATCH FULL ON UPDATE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) MATCH FULL ON UPDATE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) MATCH FULL ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) MATCH FULL ON UPDATE CASCADE
 );
 
 statement ok
@@ -3225,7 +3425,7 @@ UPDATE a SET id = 'updated' WHERE id = 'original';
 statement ok
 DROP TABLE b, a;
 
-subtest NoNullCascades
+subtest NoNullCascades_NonComposite
 
 # First with a non-composite index
 statement ok
@@ -3252,7 +3452,9 @@ a  b
 statement ok
 DROP TABLE example;
 
-# With a composite index
+subtest NoNullCascades_MatchSimple
+# Note that these matches use a composite index with MATCH SIMPLE.
+
 statement ok
 CREATE TABLE a (
   x INT
@@ -3271,8 +3473,6 @@ CREATE TABLE b (
 statement ok
 INSERT INTO a VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
 INSERT INTO b VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
-
-# Note that these matches use MATCH SIMPLE.
 
 # What we start with.
 query II colnames
@@ -3326,3 +3526,177 @@ NULL  4
 # Clean up after the test.
 statement ok
 DROP TABLE b, a;
+
+subtest NoNullCascades_MatchFull
+# Note that these matches use a composite index with MATCH FULL.
+
+statement ok
+CREATE TABLE a (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+);
+
+statement ok
+CREATE TABLE b (
+  x INT
+ ,y INT
+ ,INDEX (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES a (x, y) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
+INSERT INTO b VALUES (NULL, NULL), (3, 3);
+
+# What we start with
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+3    3
+
+# Remove everything from a. x=3,y=3 should be the only cascading value.
+statement ok
+DELETE FROM a;
+
+# A match consisting of only NULLs is not cascaded.
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+
+# Just make sure that a is empty.
+query II colnames
+SELECT * FROM a ORDER BY x;
+----
+x    y
+
+# Now try the same with updates.
+statement ok
+TRUNCATE b, a;
+INSERT INTO a VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
+INSERT INTO b VALUES (NULL, NULL), (6, 6);
+
+# For this test, only x=6,y=6 should cascade.
+statement ok
+UPDATE a SET y = y*10 WHERE y > 0;
+UPDATE a SET x = x*10 WHERE x > 0;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL  NULL
+60    60
+
+# Clean up after the test.
+statement ok
+DROP TABLE b, a;
+
+subtest MatchFullViaCascade
+# Test to ensure that setting a null value cannot cascade into a MATCH FULL fk
+# reference.
+
+statement ok
+CREATE TABLE a (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+);
+
+statement ok
+CREATE TABLE b (
+  x INT DEFAULT 1
+ ,y INT DEFAULT NULL
+ ,UNIQUE (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES a (x, y) MATCH SIMPLE ON DELETE SET DEFAULT ON UPDATE SET DEFAULT
+);
+
+statement ok
+CREATE TABLE c (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES b (x, y) MATCH FULL ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES (2,2);
+INSERT INTO b VALUES (2,2);
+INSERT INTO c VALUES (2,2);
+
+# C's MATCH FULL should reject this.
+statement error MATCH FULL does not allow mixing of null and nonnull values
+DELETE FROM a;
+
+# Again, for the same reason.
+statement error MATCH FULL does not allow mixing of null and nonnull values
+UPDATE a SET x = 3 WHERE x = 2;
+
+# Ensure nothing has changed.
+query II colnames
+SELECT * from a;
+----
+x y
+2 2
+
+statement ok
+DROP TABLE c, b, a;
+
+# Now repeat the same test but make it ON DELETE SET NULL and ON UPDATE CASCADE.
+
+statement ok
+CREATE TABLE a (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+);
+
+statement ok
+CREATE TABLE b (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES a (x, y) MATCH SIMPLE ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES b (x, y) MATCH FULL ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES (2,2), (3,3);
+INSERT INTO b VALUES (2,2), (3,3);
+INSERT INTO c VALUES (2,2), (3,3);
+
+# This will populate b and c with (null, null) where (2,2) used to be.
+statement ok
+DELETE FROM a WHERE x = 2;
+
+# We can't cascade the null value though to c, since it would break MATCH FULL.
+statement error MATCH FULL does not allow mixing of null and nonnull values
+UPDATE a SET x = NULL WHERE x = 3;
+
+statement error MATCH FULL does not allow mixing of null and nonnull values
+UPDATE a SET y = NULL WHERE y = 3;
+
+# Now update (3,3) to (null, null) which should cascade.
+statement ok
+UPDATE a SET x = NULL, y = NULL WHERE x = 3;
+
+query II colnames
+SELECT * from c;
+----
+x     y
+NULL  NULL
+NULL  NULL
+
+statement ok
+DROP TABLE c, b, a;

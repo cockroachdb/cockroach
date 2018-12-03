@@ -205,6 +205,13 @@ message ForeignKeyReference {
     CASCADE = 4;
   }
 
+  // Match is the algorithm used to compare composite keys.
+  enum Match {
+    option (gogoproto.goproto_enum_stringer) = false;
+    SIMPLE = 0;
+    FULL = 1;
+  }
+
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
@@ -214,6 +221,9 @@ message ForeignKeyReference {
   optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
   optional Action on_delete = 6 [(gogoproto.nullable) = false];
   optional Action on_update = 7 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional Match match = 8 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
