@@ -78,7 +78,7 @@ INSERT INTO abcde VALUES (1, 2, 3)
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int) => a:1(int)
  │    ├──  column2:8(int) => b:2(int)
  │    ├──  column3:9(int) => c:3(int)
@@ -110,7 +110,7 @@ INSERT INTO abcde VALUES (1)
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int) => a:1(int)
  │    ├──  column8:8(unknown) => b:2(int)
  │    ├──  column9:9(int) => c:3(int)
@@ -134,7 +134,7 @@ INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  y:8(int) => a:1(int)
  │    ├──  column10:10(unknown) => b:2(int)
  │    ├──  column11:11(int) => c:3(int)
@@ -162,7 +162,7 @@ INSERT INTO xyz VALUES ($1, $2, $3)
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:4(string) => x:1(string)
  │    ├──  column2:5(int) => y:2(int)
  │    └──  column3:6(float) => z:3(float)
@@ -179,7 +179,7 @@ INSERT INTO abcde VALUES (2, null, null)
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int) => a:1(int)
  │    ├──  column2:8(unknown) => b:2(int)
  │    ├──  column3:9(unknown) => c:3(int)
@@ -207,7 +207,7 @@ INSERT INTO abcde SELECT 2, $1 + 1, $1 + 1
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  "?column?":7(int) => a:1(int)
  │    ├──  "?column?":8(int) => b:2(int)
  │    ├──  "?column?":8(int) => c:3(int)
@@ -242,7 +242,7 @@ INSERT INTO uv DEFAULT VALUES
 ----
 insert uv
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column4:4(unknown) => u:1(decimal)
  │    ├──  column4:4(unknown) => v:2(bytes)
  │    └──  column5:5(int) => rowid:3(int)
@@ -260,7 +260,7 @@ INSERT INTO abcde ((VALUES (1, DEFAULT, 2), (2, 3, 4), (3, 2, DEFAULT), (4, DEFA
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int) => a:1(int)
  │    ├──  column2:8(int) => b:2(int)
  │    ├──  column3:9(int) => c:3(int)
@@ -318,7 +318,7 @@ project
  ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
  └── insert abcde
       ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  "?column?":7(int!null) => a:1(int)
       │    ├──  column8:8(unknown) => b:2(int)
       │    ├──  column9:9(int!null) => c:3(int)
@@ -346,7 +346,7 @@ project
  ├── columns: "?column?":11(int) "?column?":12(unknown)
  ├── insert abcde
  │    ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
- │    ├── insert:
+ │    ├── insert-mapping:
  │    │    ├──  "?column?":7(int!null) => a:1(int)
  │    │    ├──  column8:8(unknown) => b:2(int)
  │    │    ├──  column9:9(int!null) => c:3(int)
@@ -379,7 +379,7 @@ project
  ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
  └── insert abcde
       ├── columns: column1:7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  column1:7(int!null) => a:1(int)
       │    ├──  column8:8(unknown) => b:2(int)
       │    ├──  column9:9(int!null) => c:3(int)
@@ -421,7 +421,7 @@ WITH a AS (SELECT y, y+1 FROM xyz) INSERT INTO abcde SELECT * FROM a
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  y:2(int) => a:5(int)
  │    ├──  "?column?":4(int) => b:6(int)
  │    ├──  column11:11(int) => c:7(int)
@@ -450,14 +450,14 @@ insert abcde
                 │    └── variable: column11 [type=int]
                 └── const: 1 [type=int]
 
-# Use CTE.
+# Use CTE with multiple variables.
 build
 WITH a AS (SELECT y, y+1 FROM xyz), b AS (SELECT y+1, y FROM xyz)
 INSERT INTO abcde TABLE a UNION TABLE b
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  y:15(int) => a:9(int)
  │    ├──  "?column?":16(int) => b:10(int)
  │    ├──  column17:17(int) => c:11(int)
@@ -530,7 +530,7 @@ select
                 ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column14:14(int)
                 └── insert abcde
                      ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column13:13(int!null) column14:14(int)
-                     ├── insert:
+                     ├── insert-mapping:
                      │    ├──  column1:10(int!null) => a:4(int)
                      │    ├──  column2:11(int) => b:5(int)
                      │    ├──  column12:12(int!null) => c:6(int)
@@ -568,7 +568,7 @@ INSERT INTO abcde (c, b, a) VALUES (1, 2, 3)
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column3:9(int) => a:1(int)
  │    ├──  column2:8(int) => b:2(int)
  │    ├──  column1:7(int) => c:3(int)
@@ -600,7 +600,7 @@ INSERT INTO abcde (a) VALUES (1)
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int) => a:1(int)
  │    ├──  column8:8(unknown) => b:2(int)
  │    ├──  column9:9(int) => c:3(int)
@@ -626,7 +626,7 @@ project
  ├── columns: a:7(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:7(int!null)
  └── insert abcde
       ├── columns: column1:7(int!null) column2:8(int!null) column9:9(unknown) column10:10(int!null)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  column1:7(int!null) => a:1(int)
       │    ├──  column9:9(unknown) => b:2(int)
       │    ├──  column10:10(int!null) => c:3(int)
@@ -652,7 +652,7 @@ RETURNING *, rowid
 ----
 insert abcde
  ├── columns: a:9(int!null) b:8(int) c:7(int) d:11(int) e:9(int!null) rowid:10(int!null)
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column3:9(int!null) => a:1(int)
  │    ├──  column2:8(int) => b:2(int)
  │    ├──  column1:7(int) => c:3(int)
@@ -684,6 +684,31 @@ insert abcde
                 │    ├── variable: column2 [type=int]
                 │    └── variable: column1 [type=int]
                 └── const: 1 [type=int]
+
+# Verify that there is no compile-time error when trying to insert a NULL
+# DEFAULT value into a not-null column (it will fail at runtime).
+build
+INSERT INTO abcde (a) VALUES (DEFAULT)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:7(unknown) => a:1(int)
+ │    ├──  column8:8(unknown) => b:2(int)
+ │    ├──  column9:9(int) => c:3(int)
+ │    ├──  column8:8(unknown) => d:4(int)
+ │    ├──  column1:7(unknown) => e:5(int)
+ │    └──  column10:10(int) => rowid:6(int)
+ └── project
+      ├── columns: column8:8(unknown) column9:9(int!null) column10:10(int) column1:7(unknown)
+      ├── values
+      │    ├── columns: column1:7(unknown)
+      │    └── tuple [type=tuple{unknown}]
+      │         └── null [type=unknown]
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 10 [type=int]
+           └── function: unique_rowid [type=int]
 
 # Mismatched type.
 build
@@ -727,12 +752,6 @@ INSERT INTO abcde (a, unk) VALUES (1, 2)
 ----
 error (42703): column "unk" does not exist
 
-# Cannot insert null into non-null column.
-build
-INSERT INTO abcde (b, c) VALUES (1, 2)
-----
-error (23502): null value in column "a" violates not-null constraint
-
 # Return values from insert.
 build
 INSERT INTO abcde (b, a) SELECT x::int, y FROM xyz RETURNING *
@@ -741,7 +760,7 @@ project
  ├── columns: a:8(int!null) b:10(int) c:11(int!null) d:13(int) e:8(int!null)
  └── insert abcde
       ├── columns: y:8(int!null) x:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  y:8(int!null) => a:1(int)
       │    ├──  x:10(int) => b:2(int)
       │    ├──  column11:11(int!null) => c:3(int)
@@ -775,7 +794,7 @@ INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
 ----
 insert abcde
  ├── columns: a:8(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:8(int!null) rowid:7(int!null)
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column2:8(int!null) => a:1(int)
  │    ├──  column9:9(unknown) => b:2(int)
  │    ├──  column10:10(int!null) => c:3(int)
@@ -801,7 +820,7 @@ project
  ├── columns: a:10(int!null) b:8(int) c:11(int!null) d:13(int) e:10(int!null)
  └── insert abcde
       ├── columns: y:8(int) "?column?":10(int!null) column11:11(int!null) column12:12(int!null) column13:13(int)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  "?column?":10(int!null) => a:1(int)
       │    ├──  y:8(int) => b:2(int)
       │    ├──  column11:11(int!null) => c:3(int)
@@ -840,7 +859,7 @@ INSERT INTO xyz VALUES ($1, $2 + 1, $3 + 1)
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:4(string) => x:1(string)
  │    ├──  column2:5(int) => y:2(int)
  │    └──  column3:6(float) => z:3(float)
@@ -861,7 +880,7 @@ INSERT INTO xyz (z, y, x) VALUES ($1 + 1, $2 + 1, $3)
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column3:6(string) => x:1(string)
  │    ├──  column2:5(int) => y:2(int)
  │    └──  column1:4(float) => z:3(float)
@@ -882,7 +901,7 @@ INSERT INTO xyz ((SELECT $1, $2 + 1, $3 + 1))
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  "?column?":4(string) => x:1(string)
  │    ├──  "?column?":5(int) => y:2(int)
  │    └──  "?column?":6(float) => z:3(float)
@@ -905,7 +924,7 @@ INSERT INTO xyz (x, y, z) SELECT $1, $2 + 1, $3 + 1
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  "?column?":4(string) => x:1(string)
  │    ├──  "?column?":5(int) => y:2(int)
  │    └──  "?column?":6(float) => z:3(float)
@@ -928,7 +947,7 @@ INSERT INTO xyz (SELECT $1, $2 + 1, $3 + 1) UNION ALL (SELECT $1, $2 + 1, $3 + 1
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  "?column?":10(string) => x:1(string)
  │    ├──  "?column?":11(int) => y:2(int)
  │    └──  "?column?":12(float) => z:3(float)
@@ -967,7 +986,7 @@ INSERT INTO xyz (x, z, y) SELECT $1, $2 + 1, $3 + 1 UNION ALL SELECT $1, $2 + 1,
 ----
 insert xyz
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  "?column?":10(string) => x:1(string)
  │    ├──  "?column?":12(int) => y:2(int)
  │    └──  "?column?":11(float) => z:3(float)
@@ -1010,7 +1029,7 @@ INSERT INTO mutation (m, n) VALUES (1, 2)
 ----
 insert mutation
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:6(int) => m:1(int)
  │    ├──  column2:7(int) => n:2(int)
  │    ├──  column8:8(int) => o:3(int)
@@ -1037,7 +1056,7 @@ INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
 ----
 insert mutation
  ├── columns: m:6(int!null) n:7(int)
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:6(int!null) => m:1(int)
  │    ├──  column2:7(int) => n:2(int)
  │    ├──  column8:8(int) => o:3(int)
@@ -1074,4 +1093,4 @@ error (42703): column "p" does not exist
 build
 INSERT INTO mutation (m, n, q) VALUES (1, 2, 3)
 ----
-error (42703): column "q" does not exist
+error (42P10): column "q" is being backfilled

@@ -37,7 +37,7 @@ INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z
 ----
 insert abcde
  ├── columns: <none>
- ├── insert:
+ ├── insert-mapping:
  │    ├──  y:8(int) => a:1(int)
  │    ├──  y:8(int) => b:2(int)
  │    ├──  column10:10(int) => c:3(int)
@@ -92,7 +92,7 @@ project
  ├── prune: (8,10,13)
  └── insert abcde
       ├── columns: y:8(int!null) column10:10(int!null) column11:11(int!null) column13:13(int)
-      ├── insert:
+      ├── insert-mapping:
       │    ├──  y:8(int!null) => a:1(int)
       │    ├──  y:8(int!null) => b:2(int)
       │    ├──  column10:10(int!null) => c:3(int)
@@ -142,7 +142,7 @@ INSERT INTO abcde (a, b) (VALUES (1, 2)) RETURNING *, rowid;
 ----
 insert abcde
  ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:12(int) rowid:10(int!null)
- ├── insert:
+ ├── insert-mapping:
  │    ├──  column1:7(int!null) => a:1(int)
  │    ├──  column2:8(int) => b:2(int)
  │    ├──  column9:9(int!null) => c:3(int)
@@ -197,10 +197,10 @@ project
  ├── fd: ()-->(8,11)
  ├── prune: (8,11)
  └── insert abcde
-      ├── columns: y:8(int!null) int:10(int) column11:11(int!null) column12:12(int!null) column14:14(int)
-      ├── insert:
+      ├── columns: y:8(int!null) int8:10(int) column11:11(int!null) column12:12(int!null) column14:14(int)
+      ├── insert-mapping:
       │    ├──  y:8(int!null) => a:1(int)
-      │    ├──  int:10(int) => b:2(int)
+      │    ├──  int8:10(int) => b:2(int)
       │    ├──  column11:11(int!null) => c:3(int)
       │    ├──  column14:14(int) => d:4(int)
       │    ├──  column12:12(int!null) => rowid:5(int)
