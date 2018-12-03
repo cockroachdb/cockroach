@@ -312,7 +312,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *registry) {
 	r.Add(testSpec{
-		Name:       "cdc/w=1000/nodes=3/init=false",
+		Name:       "cdc/tpcc-1000",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Stable:     false,
@@ -329,7 +329,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=true",
+		Name:       "cdc/initial-scan",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Stable:     false,
@@ -346,10 +346,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
+		Name:       "cdc/sink-chaos",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -363,10 +363,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/w=100/init=false/crdbChaos=true",
+		Name:       "cdc/crdb-chaos",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -381,13 +381,13 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/ledger/nodes=3/init=true",
+		Name:       "cdc/ledger",
 		MinVersion: "2.1.0",
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
 		Nodes:  nodes(4, cpu(16)),
-		Stable: false,
+		Stable: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
@@ -411,7 +411,7 @@ func registerCDC(r *registry) {
 		Name:       "cdc/bank",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4),
-		Stable:     false,
+		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},
