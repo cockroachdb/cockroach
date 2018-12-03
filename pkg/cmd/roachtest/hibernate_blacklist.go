@@ -188,7 +188,6 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.hql.CriteriaHQLAlignmentTest.testCountReturnValues":                                                                                                          "5807",
 	"org.hibernate.test.hql.DeleteQuerySubqueryReferencingTargetPropertyTest.testSubQueryReferencingTargetProperty":                                                                  "31670",
 	"org.hibernate.test.hql.DeleteWithSubqueryTest.testDeleteMemberOf":                                                                                                               "31670",
-	"org.hibernate.test.hql.InsertWithSubSelectTest.testInsert":                                                                                                                      "31721",
 	"org.hibernate.test.hql.ScrollableCollectionFetchingTest.testScrollingJoinFetchesForward":                                                                                        "5807",
 	"org.hibernate.test.hql.ScrollableCollectionFetchingTest.testScrollingJoinFetchesPositioning":                                                                                    "5807",
 	"org.hibernate.test.hql.ScrollableCollectionFetchingTest.testScrollingJoinFetchesReverse":                                                                                        "5807",
