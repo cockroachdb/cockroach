@@ -38,7 +38,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	const numRows = 100
-	if err := tests.CreateKVTable(sqlDB.DB, "kv", numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")

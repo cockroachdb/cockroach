@@ -85,8 +85,9 @@ func TestDistBackfill(t *testing.T) {
 		SplitTable(t, tc, descNumToStr, i, n*n/numNodes*i)
 	}
 
-	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	r.DB.SetMaxOpenConns(1)
+	db := tc.ServerConn(0)
+	db.SetMaxOpenConns(1)
+	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "SET DISTSQL = OFF")
 	if _, err := tc.ServerConn(0).Exec(`CREATE INDEX foo ON numtostr (str)`); err != nil {
 		t.Fatal(err)

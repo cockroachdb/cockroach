@@ -1099,7 +1099,9 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	return nil
 }
 
-func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.SQLRunner, func()) {
+func setupPartitioningTestCluster(
+	ctx context.Context, t testing.TB,
+) (*gosql.DB, *sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 	resetZoneConfig := config.TestingSetDefaultZoneConfig(cfg)
@@ -1138,7 +1140,7 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 	// config changes may flake (#25488).
 	tc.WaitForNodeStatuses(t)
 
-	return sqlDB, func() {
+	return tc.Conns[0], sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
 		resetZoneConfig()
 	}
@@ -1153,7 +1155,7 @@ func TestInitialPartitioning(t *testing.T) {
 	testCases := allPartitioningTests(rng)
 
 	ctx := context.Background()
-	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
 
 	for _, test := range testCases {
@@ -1167,7 +1169,7 @@ func TestInitialPartitioning(t *testing.T) {
 			sqlDB.Exec(t, test.parsed.createStmt)
 			sqlDB.Exec(t, test.parsed.zoneConfigStmts)
 
-			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, sqlDB.DB))
+			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, db))
 		})
 	}
 }
@@ -1259,7 +1261,7 @@ func TestRepartitioning(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
 
 	for _, test := range testCases {
@@ -1274,7 +1276,7 @@ func TestRepartitioning(t *testing.T) {
 				sqlDB.Exec(t, test.old.parsed.createStmt)
 				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
 
-				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, sqlDB.DB))
+				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, db))
 			}
 
 			{
@@ -1338,7 +1340,7 @@ func TestRepartitioning(t *testing.T) {
 				// does not apply a new zone config). This is fine.
 				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
 
-				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, sqlDB.DB))
+				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, db))
 			}
 		})
 	}
