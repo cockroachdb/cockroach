@@ -194,17 +194,44 @@ func spanForIndexValues(
 	table *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	prefixLen int,
+	match sqlbase.ForeignKeyReference_Match,
 	indexColIDs map[sqlbase.ColumnID]int,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (roachpb.Span, error) {
-	// This implements the check for MATCH SIMPLE.
 	// See https://github.com/cockroachdb/cockroach/issues/20305 or
-	// https://www.postgresql.org/docs/11/sql-createtable.html.
-	for _, rowIndex := range indexColIDs {
-		if values[rowIndex] == tree.DNull {
+	// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+	// different composite foreign key matching methods.
+	switch match {
+	case sqlbase.ForeignKeyReference_SIMPLE:
+		for _, rowIndex := range indexColIDs {
+			if values[rowIndex] == tree.DNull {
+				return roachpb.Span{}, nil
+			}
+		}
+	case sqlbase.ForeignKeyReference_FULL:
+		var nulls, notNulls bool
+		for _, rowIndex := range indexColIDs {
+			if values[rowIndex] == tree.DNull {
+				nulls = true
+			} else {
+				notNulls = true
+			}
+			if nulls && notNulls {
+				// TODO(bram): expand this error to show more details.
+				return roachpb.Span{}, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+					"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s",
+					values,
+				)
+			}
+		}
+		// Only if all the values are all null should we skip the FK check for
+		// MATCH FULL.
+		if nulls {
 			return roachpb.Span{}, nil
 		}
+	default:
+		return roachpb.Span{}, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
 	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
@@ -226,6 +253,7 @@ func batchRequestForIndexValues(
 	referencedIndex *sqlbase.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
+	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 ) (roachpb.BatchRequest, map[sqlbase.ColumnID]int, error) {
 
@@ -253,6 +281,7 @@ func batchRequestForIndexValues(
 			referencingTable,
 			referencingIndex,
 			prefixLen,
+			match,
 			colIDtoRowIndex,
 			values.originalValues.At(i),
 			keyPrefix,
@@ -278,6 +307,7 @@ func spanForPKValues(
 		table,
 		&table.PrimaryIndex,
 		len(table.PrimaryIndex.ColumnIDs),
+		sqlbase.ForeignKeyReference_SIMPLE, /* primary key lookup can always use MATCH SIMPLE */
 		fetchColIDtoRowIndex,
 		values,
 		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
@@ -481,6 +511,7 @@ func (c *cascader) deleteRows(
 	referencedIndex *sqlbase.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
+	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	traceKV bool,
 ) (*sqlbase.RowContainer, map[sqlbase.ColumnID]int, int, error) {
@@ -493,7 +524,7 @@ func (c *cascader) deleteRows(
 		)
 	}
 	req, _, err := batchRequestForIndexValues(
-		ctx, referencedIndex, referencingTable, referencingIndex, values,
+		ctx, referencedIndex, referencingTable, referencingIndex, match, values,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -633,6 +664,7 @@ func (c *cascader) updateRows(
 	referencedIndex *sqlbase.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
+	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
 	traceKV bool,
@@ -715,7 +747,7 @@ func (c *cascader) updateRows(
 	for i := values.startIndex; i < values.endIndex; i++ {
 		// Extract a single value to update at a time.
 		req, valueColIDtoRowIndex, err := batchRequestForIndexValues(
-			ctx, referencedIndex, referencingTable, referencingIndex, cascadeQueueElement{
+			ctx, referencedIndex, referencingTable, referencingIndex, match, cascadeQueueElement{
 				startIndex:      i,
 				endIndex:        i + 1,
 				originalValues:  values.originalValues,
@@ -1016,6 +1048,7 @@ func (c *cascader) cascadeAll(
 							&referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
+							ref.Match,
 							elem,
 							traceKV,
 						)
@@ -1041,6 +1074,7 @@ func (c *cascader) cascadeAll(
 							&referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
+							ref.Match,
 							elem,
 							referencingIndex.ForeignKey.OnDelete,
 							traceKV,
@@ -1071,6 +1105,7 @@ func (c *cascader) cascadeAll(
 							&referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
+							ref.Match,
 							elem,
 							referencingIndex.ForeignKey.OnUpdate,
 							traceKV,

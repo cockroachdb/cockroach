@@ -16,7 +16,7 @@ package row
 
 import (
 	"context"
-	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -468,20 +468,52 @@ func checkIdx(
 ) error {
 outer:
 	for i, fk := range fks[idx] {
-		// This implements the check for MATCH SIMPLE.
 		// See https://github.com/cockroachdb/cockroach/issues/20305 or
-		// https://www.postgresql.org/docs/11/sql-createtable.html.
-		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-			found, ok := fk.ids[colID]
-			if !ok {
-				panic(fmt.Sprintf("fk ids (%v) missing column id %d", fk.ids, colID))
+		// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+		// different composite foreign key matching methods.
+		switch fk.ref.Match {
+		case sqlbase.ForeignKeyReference_SIMPLE:
+			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
+				found, ok := fk.ids[colID]
+				if !ok {
+					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
+				}
+				if row[found] == tree.DNull {
+					continue outer
+				}
 			}
-			if row[found] == tree.DNull {
-				continue outer
+			if err := checker.addCheck(row, &fks[idx][i]); err != nil {
+				return err
 			}
-		}
-		if err := checker.addCheck(row, &fks[idx][i]); err != nil {
-			return err
+		case sqlbase.ForeignKeyReference_FULL:
+			var nulls, notNulls bool
+			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
+				found, ok := fk.ids[colID]
+				if !ok {
+					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
+				}
+				if row[found] == tree.DNull {
+					nulls = true
+				} else {
+					notNulls = true
+				}
+				if nulls && notNulls {
+					// TODO(bram): expand this error to show more details.
+					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+						"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
+						row, fk.ref.Name,
+					)
+				}
+			}
+			// Never check references for MATCH FULL that are all nulls.
+			if nulls {
+				continue
+			}
+			if err := checker.addCheck(row, &fks[idx][i]); err != nil {
+				return err
+			}
+		default:
+			return pgerror.NewAssertionErrorf("unknown composite key match type: %v", fk.ref.Match)
 		}
 	}
 	return nil
@@ -639,6 +671,7 @@ type baseFKHelper struct {
 	searchPrefix []byte                   // prefix of keys in searchIdx
 	ids          map[sqlbase.ColumnID]int // col IDs
 	dir          FKCheck                  // direction of check
+	ref          sqlbase.ForeignKeyReference
 }
 
 func makeBaseFKHelper(
@@ -650,7 +683,13 @@ func makeBaseFKHelper(
 	alloc *sqlbase.DatumAlloc,
 	dir FKCheck,
 ) (baseFKHelper, error) {
-	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].Table, dir: dir}
+	b := baseFKHelper{
+		txn:         txn,
+		writeIdx:    writeIdx,
+		searchTable: otherTables[ref.Table].Table,
+		dir:         dir,
+		ref:         ref,
+	}
 	if b.searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
@@ -676,18 +715,46 @@ func makeBaseFKHelper(
 		return b, err
 	}
 
-	// This implements the check for MATCH SIMPLE.
 	// See https://github.com/cockroachdb/cockroach/issues/20305 or
-	// https://www.postgresql.org/docs/11/sql-createtable.html.
+	// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+	// different composite foreign key matching methods.
 	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
-	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
-		if found, ok := colMap[writeColID]; ok {
-			b.ids[searchIdx.ColumnIDs[i]] = found
-		} else {
-			return b, errSkipUnusedFK
+	switch ref.Match {
+	case sqlbase.ForeignKeyReference_SIMPLE:
+		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
+			if found, ok := colMap[writeColID]; ok {
+				b.ids[searchIdx.ColumnIDs[i]] = found
+			} else {
+				return b, errSkipUnusedFK
+			}
 		}
+		return b, nil
+	case sqlbase.ForeignKeyReference_FULL:
+		var missingColumns []string
+		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
+			if found, ok := colMap[writeColID]; ok {
+				b.ids[searchIdx.ColumnIDs[i]] = found
+			} else {
+				missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
+			}
+		}
+		switch len(missingColumns) {
+		case 0:
+			return b, nil
+		case 1:
+			return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
+		case b.prefixLen:
+			// All the columns are nulls, don't check the foreign key.
+			return b, errSkipUnusedFK
+		default:
+			sort.Strings(missingColumns)
+			return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
+		}
+	default:
+		return baseFKHelper{}, pgerror.NewAssertionErrorf(
+			"unknown composite key match type: %v", ref.Match,
+		)
 	}
-	return b, nil
 }
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {

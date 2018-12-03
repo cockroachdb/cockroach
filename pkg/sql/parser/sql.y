@@ -421,6 +421,9 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) transactionModes() tree.TransactionModes {
     return u.val.(tree.TransactionModes)
 }
+func (u *sqlSymUnion) compositeKeyMatchMethod() tree.CompositeKeyMatchMethod {
+  return u.val.(tree.CompositeKeyMatchMethod)
+}
 func (u *sqlSymUnion) referenceAction() tree.ReferenceAction {
     return u.val.(tree.ReferenceAction)
 }
@@ -925,7 +928,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]tree.NamedColumnQualification> col_qual_list
 %type <tree.NamedColumnQualification> col_qualification
 %type <tree.ColumnQualification> col_qualification_elem
-%type <empty> key_match
+%type <tree.CompositeKeyMatchMethod> key_match
 %type <tree.ReferenceActions> reference_actions
 %type <tree.ReferenceAction> reference_action reference_on_delete reference_on_update
 
@@ -4240,6 +4243,7 @@ col_qualification_elem:
       Table: name,
       Col: tree.Name($3),
       Actions: $5.referenceActions(),
+      Match: $4.compositeKeyMatchMethod(),
     }
  }
 | AS '(' a_expr ')' STORED
@@ -4350,6 +4354,7 @@ constraint_elem:
       Table: name,
       FromCols: $4.nameList(),
       ToCols: $8.nameList(),
+      Match: $9.compositeKeyMatchMethod(),
       Actions: $10.referenceActions(),
     }
   }
@@ -4409,14 +4414,23 @@ opt_column_list:
 // table. MATCH PARTIAL is not yet implemented. (Of course, NOT NULL
 // constraints can be applied to the referencing column(s) to prevent
 // these cases from arising.)"
-//
-// Note: CockroachDB's silent default is closer in semantics to pg's
-// MATCH FULL. This is arguably a bug. See discussion in #20305.
 key_match:
-  MATCH FULL { return unimplementedWithIssueDetail(sqllex, 20305, "match full") }
-| MATCH PARTIAL { return unimplementedWithIssueDetail(sqllex, 20305, "match partial") }
-| MATCH SIMPLE { return unimplementedWithIssueDetail(sqllex, 20305, "match simple") }
-| /* EMPTY */ {}
+  MATCH SIMPLE
+  {
+    $$.val = tree.MatchSimple
+  }
+| MATCH FULL
+  {
+    $$.val = tree.MatchFull
+  }
+| MATCH PARTIAL
+  {
+    return unimplementedWithIssueDetail(sqllex, 20305, "match partial")
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.MatchSimple
+  }
 
 // We combine the update and delete actions into one value temporarily for
 // simplicity of parsing, and then break them down again in the calling

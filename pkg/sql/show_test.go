@@ -187,9 +187,29 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL,
 	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
-	INDEX t7_auto_index_fk_i_ref_items (i ASC, j ASC),
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
-	INDEX t7_auto_index_fk_k_ref_items (k ASC),
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
+	FAMILY "primary" (i, j, k, rowid)
+)`,
+		},
+		// Check that FK dependencies using MATCH FULL on a non-composite key still
+		// show
+		{
+			stmt: `CREATE TABLE %s (
+	i int8,
+	j int8,
+	k int REFERENCES items (c) MATCH FULL,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
+)`,
+			expect: `CREATE TABLE %s (
+	i INT8 NULL,
+	j INT8 NULL,
+	k INT8 NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) MATCH FULL,
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -203,7 +223,7 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	x INT8 NULL,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
-	INDEX t8_auto_index_fk_ref (x ASC),
+	INDEX %[1]s_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)
 )`,
 		},
@@ -221,9 +241,9 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
-	INDEX t9_auto_index_fk_i_ref_items (i ASC, j ASC),
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) ON DELETE SET NULL,
-	INDEX t9_auto_index_fk_k_ref_items (k ASC),
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -254,10 +274,33 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (x)
 ) INTERLEAVE IN PARENT o.public.foo (x)`,
 		},
+		// Check that FK dependencies using MATCH FULL and MATCH SIMPLE are both
+		// pretty-printed properly.
+		{
+			stmt: `CREATE TABLE %s (
+	i int DEFAULT 1,
+	j int DEFAULT 2,
+	k int DEFAULT 3,
+	l int DEFAULT 4,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
+	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
+)`,
+			expect: `CREATE TABLE %s (
+	i INT8 NULL DEFAULT 1:::INT8,
+	j INT8 NULL DEFAULT 2:::INT8,
+	k INT8 NULL DEFAULT 3:::INT8,
+	l INT8 NULL DEFAULT 4:::INT8,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE,
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC, l ASC),
+	FAMILY "primary" (i, j, k, l, rowid)
+)`,
+		},
 	}
 	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d/%s", i, strings.Replace(test.stmt, "\n", "", -1)), func(t *testing.T) {
-			name := fmt.Sprintf("t%d", i)
+		name := fmt.Sprintf("t%d", i)
+		t.Run(name, func(t *testing.T) {
 			if test.expect == "" {
 				test.expect = test.stmt
 			}

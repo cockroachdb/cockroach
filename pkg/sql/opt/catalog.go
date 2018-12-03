@@ -352,6 +352,9 @@ type ForeignKeyReference struct {
 	// PrefixLen contains the length of columns that form the foreign key
 	// relation in the current and destination indexes.
 	PrefixLen int32
+
+	// Match contains the method used for comparing composite foreign keys.
+	Match tree.CompositeKeyMatchMethod
 }
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
