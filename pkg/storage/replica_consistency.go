@@ -51,7 +51,7 @@ const (
 	// because the checksum might never be computed for a replica if that replica
 	// is caught up via a snapshot and never performs the ComputeChecksum
 	// operation.
-	collectChecksumTimeout = 5 * time.Second
+	collectChecksumTimeout = 15 * time.Second
 )
 
 // CheckConsistency runs a consistency check on the range. It first applies a
