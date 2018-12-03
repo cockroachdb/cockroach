@@ -635,6 +635,24 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 	}
 }
 
+// CompositeKeyMatchMethod is the algorithm use when matching composite keys.
+type CompositeKeyMatchMethod int
+
+// The values for CompositeKeyMatchMethod.
+const (
+	MatchSimple CompositeKeyMatchMethod = iota
+	MatchFull
+)
+
+var compositeKeyMatchMethodName = [...]string{
+	MatchSimple: "MATCH SIMPLE",
+	MatchFull:   "MATCH FULL",
+}
+
+func (c CompositeKeyMatchMethod) String() string {
+	return compositeKeyMatchMethodName[c]
+}
+
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
@@ -642,6 +660,7 @@ type ForeignKeyConstraintTableDef struct {
 	FromCols NameList
 	ToCols   NameList
 	Actions  ReferenceActions
+	Match    CompositeKeyMatchMethod
 }
 
 // Format implements the NodeFormatter interface.
@@ -661,6 +680,12 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		ctx.FormatNode(&node.ToCols)
 		ctx.WriteByte(')')
+	}
+
+	// The matching method is only relevant for composite keys.
+	if len(node.FromCols) > 1 {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.Match.String())
 	}
 
 	ctx.FormatNode(&node.Actions)
