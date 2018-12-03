@@ -58,7 +58,7 @@ select
  ├── fd: ()-->(5)
  ├── insert xyz
  │    ├── columns: a:4(int!null) b:5(string!null) c:6(float)
- │    ├── insert:
+ │    ├── insert-mapping:
  │    │    ├──  b:5(string!null) => x:1(string)
  │    │    ├──  a:4(int!null) => y:2(int)
  │    │    └──  c:6(float) => z:3(float)
@@ -90,7 +90,7 @@ INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE False RETURNING *
 ----
 insert xyz
  ├── columns: x:5(string!null) y:4(int!null) z:6(float)
- ├── insert:
+ ├── insert-mapping:
  │    ├──  b:5(string!null) => x:1(string)
  │    ├──  a:4(int!null) => y:2(int)
  │    └──  c:6(float) => z:3(float)

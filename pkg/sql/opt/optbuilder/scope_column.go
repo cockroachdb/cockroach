@@ -38,11 +38,12 @@ type scopeColumn struct {
 	id opt.ColumnID
 
 	// hidden is true if the column is not selected by a '*' wildcard operator.
-	// The column must be explicitly referenced by name, or otherwise is hidden.
+	// The column must be explicitly referenced by name, or otherwise is not
+	// included.
 	hidden bool
 
-	// mutation is true if the column is in process of being dropped or added to
-	// the table. It should not be visible to variable references.
+	// mutation is true if the column is in the process of being dropped or added
+	// to the table. It should not be visible to variable references.
 	mutation bool
 
 	// descending indicates whether this column is sorted in descending order.
