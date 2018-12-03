@@ -371,7 +371,8 @@ type insertRun struct {
 	// rowIdxToRetIdx is the mapping from the ordering of rows in
 	// insertCols to the ordering in the result rows, used when
 	// rowsNeeded is set to populate resultRowBuffer and the row
-	// container.
+	// container. The return index is -1 if the column for the row
+	// index is not public.
 	rowIdxToRetIdx []int
 
 	// autoCommit indicates whether the last KV batch processed by
@@ -423,7 +424,12 @@ func (n *insertNode) startExec(params runParams) error {
 
 		n.run.rowIdxToRetIdx = make([]int, len(n.run.insertCols))
 		for i, col := range n.run.insertCols {
-			n.run.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+			if idx, ok := colIDToRetIndex[col.ID]; !ok {
+				// Column must be write only and not public.
+				n.run.rowIdxToRetIdx[i] = -1
+			} else {
+				n.run.rowIdxToRetIdx[i] = idx
+			}
 		}
 	}
 
@@ -549,8 +555,11 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if n.run.rows != nil {
 		for i, val := range rowVals {
 			// The downstream consumer will want the rows in the order of
-			// the table descriptor, not that of insertCols. Reorder them.
-			n.run.resultRowBuffer[n.run.rowIdxToRetIdx[i]] = val
+			// the table descriptor, not that of insertCols. Reorder them
+			// and ignore non-public columns.
+			if idx := n.run.rowIdxToRetIdx[i]; idx >= 0 {
+				n.run.resultRowBuffer[idx] = val
+			}
 		}
 		if _, err := n.run.rows.AddRow(params.ctx, n.run.resultRowBuffer); err != nil {
 			return err
