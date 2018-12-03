@@ -39,21 +39,17 @@ const (
 	// TestTimeUntilStoreDead is the test value for TimeUntilStoreDead to
 	// quickly mark stores as dead.
 	TestTimeUntilStoreDead = 5 * time.Millisecond
-
-	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
-	// prevents the store pool from marking stores as dead.
-	TestTimeUntilStoreDeadOff = 24 * time.Hour
 )
 
-// declinedReservationsTimeout needs to be non-zero to prevent useless retries
+// DeclinedReservationsTimeout needs to be non-zero to prevent useless retries
 // in the replicateQueue.process() retry loop.
-var declinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
+var DeclinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.declined_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
 	1*time.Second,
 )
 
-var failedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
+var FailedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
@@ -715,17 +711,17 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	// timeout period has passed.
 	switch reason {
 	case throttleDeclined:
-		timeout := declinedReservationsTimeout.Get(&sp.st.SV)
+		timeout := DeclinedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
-		if log.V(2) {
+		if log.V(0) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot declined, s%d will be throttled for %s until %s",
 				storeID, timeout, detail.throttledUntil)
 		}
 	case throttleFailed:
-		timeout := failedReservationsTimeout.Get(&sp.st.SV)
+		timeout := FailedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
-		if log.V(2) {
+		if log.V(0) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
 				storeID, timeout, detail.throttledUntil)

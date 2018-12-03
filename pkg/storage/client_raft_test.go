@@ -2861,10 +2861,15 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
-	defer mtc.Stop()
+	// Disable declined and failed reservations. Their default values are on
+	// the order of seconds whereas we'll only advance the manual clock used
+	// in this test very slowly, leading to timeouts otherwise.
+	mtc.declinedReservationsTimeout = time.Nanosecond
+	mtc.failedReservationsTimeout = time.Nanosecond
 
 	zone := config.DefaultSystemZoneConfig()
 	mtc.Start(t, int(*zone.NumReplicas+1))
+	defer mtc.Stop()
 
 	var nonDeadStores []*storage.Store
 	for i, s := range mtc.stores {

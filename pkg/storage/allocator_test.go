@@ -52,6 +52,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
+// prevents the store pool from marking stores as dead.
+const TestTimeUntilStoreDeadOff = 24 * time.Hour
+
 const firstRange = roachpb.RangeID(1)
 
 var firstRangeInfo = testRangeInfo([]roachpb.ReplicaDescriptor{}, firstRange)
