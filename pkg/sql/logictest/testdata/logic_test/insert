@@ -628,49 +628,32 @@ CREATE TABLE t32759(x INT, y INT NOT NULL DEFAULT(10), z INT)
 statement ok
 BEGIN; ALTER TABLE t32759 DROP COLUMN y
 
-query II colnames
-INSERT INTO t32759(x, z) VALUES (1, 4) RETURNING *
-----
-x  z
-1  4
-
-statement ok
-COMMIT
-
-# ------------------------------------------------------------------------------
-# Insert rows into table during drop column schema change.
-# ------------------------------------------------------------------------------
-
-statement ok
-CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
-
-statement ok
-BEGIN; ALTER TABLE mutation DROP COLUMN y
-
 # Check that the dropped column is not visible
 query T
-SELECT create_statement FROM [SHOW CREATE mutation]
+SELECT create_statement FROM [SHOW CREATE t32759]
 ----
-CREATE TABLE mutation (
+CREATE TABLE t32759 (
    x INT NULL,
-   FAMILY "primary" (x, rowid)
+   z INT NULL,
+   FAMILY "primary" (x, z, rowid)
 )
 
 # Check that values cannot be inserted into the dropped column.
-statement error column "y" does not exist
-INSERT INTO mutation(x, y) VALUES (2, 2)
+# HP and CBO return different errors, so accept both.
+statement error [column "y" does not exist | column "y" is being backfilled]
+INSERT INTO t32759(x, y, z) VALUES (2, 2, 2)
 
 statement ok
 ROLLBACK
 
 statement ok
-BEGIN; ALTER TABLE mutation DROP COLUMN y
+BEGIN; ALTER TABLE t32759 DROP COLUMN y
 
-# TODO(andyk): re-enable once issue #32759 is fixed.
-#query I
-#INSERT INTO mutation(x) VALUES (3) RETURNING *
-#----
-#3
+query II colnames
+INSERT INTO t32759(x, z) VALUES (1, 4) RETURNING *
+----
+x  z
+1  4
 
 statement ok
 COMMIT

@@ -895,8 +895,7 @@ func (ef *execFactory) ConstructInsert(
 	var returnCols sqlbase.ResultColumns
 	if rowsNeeded {
 		// Insert always returns all non-mutation columns, in the same order they
-		// are defined in the table. Note that the columns and order can be
-		// different than tabCols.
+		// are defined in the table.
 		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
 	}
 
@@ -927,6 +926,100 @@ func (ef *execFactory) ConstructInsert(
 	// We could use serializeNode here, but using rowCountNode is an
 	// optimization that saves on calls to Next() by the caller.
 	return &rowCountNode{source: ins}, nil
+}
+
+func (ef *execFactory) ConstructUpdate(
+	input exec.Node, table opt.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
+) (exec.Node, error) {
+	// Derive table and column descriptors.
+	tabDesc := table.(*optTable).desc
+	fetchColDescs := makeColDescList(table, fetchCols)
+
+	// Add each column to update as a sourceSlot. The CBO only uses scalarSlot,
+	// since it compiles tuples and subqueries into a simple sequence of target
+	// columns.
+	updateColDescs := makeColDescList(table, updateCols)
+	sourceSlots := make([]sourceSlot, len(updateColDescs))
+	for i := range sourceSlots {
+		sourceSlots[i] = scalarSlot{column: updateColDescs[i], sourceIndex: len(fetchColDescs) + i}
+	}
+
+	// Determine the foreign key tables involved in the update.
+	fkTables, err := row.TablesNeededForFKs(
+		ef.planner.extendedEvalCtx.Context,
+		*tabDesc,
+		row.CheckUpdates,
+		ef.planner.LookupTableByID,
+		ef.planner.CheckPrivilege,
+		ef.planner.analyzeExpr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table updater, which does the bulk of the work. In the HP,
+	// the updater derives the columns that need to be fetched. By contrast, the
+	// CBO will have already determined the set of fetch and update columns, and
+	// passes those sets into the updater (which will basically be a no-op).
+	ru, err := row.MakeUpdater(
+		ef.planner.txn,
+		tabDesc,
+		fkTables,
+		updateColDescs,
+		fetchColDescs,
+		row.UpdaterDefault,
+		ef.planner.EvalContext(),
+		&ef.planner.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine the relational type of the generated update node.
+	// If rows are not needed, no columns are returned.
+	var returnCols sqlbase.ResultColumns
+	if rowsNeeded {
+		// Update always returns all non-mutation columns, in the same order they
+		// are defined in the table.
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+	}
+
+	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
+	// the explanatory comments in updateRun.
+	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	for i, col := range ru.UpdateCols {
+		updateColsIdx[col.ID] = i
+	}
+
+	upd := updateNodePool.Get().(*updateNode)
+	*upd = updateNode{
+		source:  input.(planNode),
+		columns: returnCols,
+		run: updateRun{
+			tu:          tableUpdater{ru: ru},
+			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			rowsNeeded:  rowsNeeded,
+			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
+				Cols:         ru.FetchCols,
+				Mapping:      ru.FetchColIDtoRowIndex,
+			},
+			sourceSlots:   sourceSlots,
+			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx: updateColsIdx,
+		},
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{source: &serializeNode{source: upd}}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: upd}, nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.
@@ -980,6 +1073,11 @@ func makeColDescList(table opt.Table, cols exec.ColumnOrdinalSet) []sqlbase.Colu
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
 func makeScanColumnsConfig(table opt.Table, cols exec.ColumnOrdinalSet) scanColumnsConfig {
+	// Set visibility=publicAndNonPublicColumns, since all columns in the "cols"
+	// set should be projected, regardless of whether they're public or non-
+	// public. The caller decides which columns to include (or not include). Note
+	// that when wantedColumns is non-empty, the visibility flag will never
+	// trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 		visibility:    publicAndNonPublicColumns,
