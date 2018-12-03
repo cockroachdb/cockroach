@@ -408,8 +408,9 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.TODO())
 
-	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	r.DB.SetMaxOpenConns(1)
+	db := tc.ServerConn(0)
+	db.SetMaxOpenConns(1)
+	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE DATABASE test")
 
 	r.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
@@ -435,7 +436,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	runQuery := func() error {
 		log.Infof(context.TODO(), "running test query")
 		var res int
-		if err := r.DB.QueryRow("SELECT sum(xsquared) FROM t").Scan(&res); err != nil {
+		if err := db.QueryRow("SELECT sum(xsquared) FROM t").Scan(&res); err != nil {
 			return err
 		}
 		if exp := (n * (n + 1) * (2*n + 1)) / 6; res != exp {
@@ -500,8 +501,9 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	r.DB.SetMaxOpenConns(1)
+	db := tc.ServerConn(0)
+	db.SetMaxOpenConns(1)
+	r := sqlutils.MakeSQLRunner(db)
 
 	// Force the query to be distributed.
 	r.Exec(t, "SET DISTSQL = ON")
@@ -510,7 +512,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	// fully initialized and ready to do rebalancing yet, so wrap this in a
 	// SucceedsSoon.
 	testutils.SucceedsSoon(t, func() error {
-		_, err := r.DB.Exec(
+		_, err := db.Exec(
 			fmt.Sprintf(`ALTER TABLE nums SPLIT AT VALUES (1);
 									 ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1);`,
 				tc.Server(1).GetFirstStoreID(),
@@ -547,7 +549,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 
 	// Verify correctness.
 	var res int
-	if err := r.DB.QueryRow(query).Scan(&res); err != nil {
+	if err := db.QueryRow(query).Scan(&res); err != nil {
 		t.Fatal(err)
 	}
 	if res != numNodes {

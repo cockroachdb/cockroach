@@ -608,7 +608,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Create a test table with a secondary index.
-	if err := tests.CreateKVTable(sqlDB.DB, "kv", numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -639,7 +639,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	}
 
 	// Verify that dropping the index fails with a "CCL required" error.
-	_, err = sqlDB.DB.Exec(`DROP INDEX t.kv@foo`)
+	_, err = sqlDBRaw.Exec(`DROP INDEX t.kv@foo`)
 	if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code != sqlbase.CodeCCLRequired {
 		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
 	}
@@ -951,7 +951,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
 	const numRows = 100
-	sqlutils.CreateTable(t, sqlDB.DB, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
+	sqlutils.CreateTable(t, sqlDBRaw, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	// Set TTL so the data is deleted immediately.
 	sqlDB.Exec(t, `ALTER TABLE test.t CONFIGURE ZONE USING gc.ttlseconds = 1`)
@@ -985,7 +985,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// deleted, despite the interleaved modification to the table descriptor.
 	close(blockSchemaChanges)
 	testutils.SucceedsSoon(t, func() error {
-		return descExists(sqlDB.DB, false, tableDesc.ID)
+		return descExists(sqlDBRaw, false, tableDesc.ID)
 	})
 	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 }

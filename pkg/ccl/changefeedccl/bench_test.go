@@ -39,7 +39,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		numRows = 100
 	}
 	bankTable := bank.FromRows(numRows).Tables()[0]
-	timestamps, _, err := loadWorkloadBatches(sqlDB.DB, bankTable)
+	timestamps, _, err := loadWorkloadBatches(sqlDBRaw, bankTable)
 	if err != nil {
 		b.Fatal(err)
 	}

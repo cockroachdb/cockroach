@@ -124,12 +124,12 @@ func TestFixture(t *testing.T) {
 		t.Errorf(`expected no fixtures but got: %+v`, fixtures)
 	}
 
-	fixture, err := MakeFixture(ctx, sqlDB.DB, gcs, config, gen)
+	fixture, err := MakeFixture(ctx, db, gcs, config, gen)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	_, err = MakeFixture(ctx, sqlDB.DB, gcs, config, gen)
+	_, err = MakeFixture(ctx, db, gcs, config, gen)
 	if !testutils.IsError(err, `already exists`) {
 		t.Fatalf(`expected 'already exists' error got: %+v`, err)
 	}
@@ -143,7 +143,7 @@ func TestFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
-	if err := RestoreFixture(ctx, sqlDB.DB, fixture, `test`); err != nil {
+	if err := RestoreFixture(ctx, db, fixture, `test`); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,

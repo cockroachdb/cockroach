@@ -324,7 +324,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 		// Rollback a CANCEL.
 		{
-			txn, err := sqlDB.DB.Begin()
+			txn, err := outerDB.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -342,7 +342,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		// Rollback a PAUSE.
 		{
-			txn, err := sqlDB.DB.Begin()
+			txn, err := outerDB.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -358,7 +358,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		// Now pause it for reals.
 		{
-			txn, err := sqlDB.DB.Begin()
+			txn, err := outerDB.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +380,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 		// Rollback a RESUME.
 		{
-			txn, err := sqlDB.DB.Begin()
+			txn, err := outerDB.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -394,7 +394,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		// Commit a RESUME.
 		{
-			txn, err := sqlDB.DB.Begin()
+			txn, err := outerDB.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
