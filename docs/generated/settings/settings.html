@@ -52,6 +52,7 @@
 <tr><td><code>server.failed_reservation_timeout</code></td><td>duration</td><td><code>5s</code></td><td>the amount of time to consider the store throttled for up-replication after a failed reservation call</td></tr>
 <tr><td><code>server.heap_profile.max_profiles</code></td><td>integer</td><td><code>5</code></td><td>maximum number of profiles to be kept. Profiles with lower score are GC'ed, but latest profile is always kept</td></tr>
 <tr><td><code>server.heap_profile.system_memory_threshold_fraction</code></td><td>float</td><td><code>0.85</code></td><td>fraction of system memory beyond which if Rss increases, then heap profile is triggered</td></tr>
+<tr><td><code>server.host_based_authentication.configuration</code></td><td>string</td><td><code></code></td><td>host-based authentication configuration to use during connection authentication</td></tr>
 <tr><td><code>server.rangelog.ttl</code></td><td>duration</td><td><code>720h0m0s</code></td><td>if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours</td></tr>
 <tr><td><code>server.remote_debugging.mode</code></td><td>string</td><td><code>local</code></td><td>set to enable remote debugging, localhost-only or disable (any, local, off)</td></tr>
 <tr><td><code>server.shutdown.drain_wait</code></td><td>duration</td><td><code>0s</code></td><td>the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process</td></tr>
