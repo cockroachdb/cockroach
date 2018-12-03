@@ -164,7 +164,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
 	ca.pollerDoneCh = make(chan struct{})
-	go func(ctx context.Context) {
+	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.pollerDoneCh)
 		var err error
 		if storage.RangefeedEnabled.Get(&ca.flowCtx.Settings.SV) {
@@ -177,7 +177,10 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		// state stateTrailingMeta`), so return the error via a channel.
 		ca.errCh <- err
 		ca.cancel()
-	}(ctx)
+	}); err != nil {
+		ca.errCh <- err
+		ca.cancel()
+	}
 
 	return ctx
 }

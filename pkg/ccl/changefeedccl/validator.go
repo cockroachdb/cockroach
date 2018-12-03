@@ -176,6 +176,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	if !v.resolved.Less(newResolved) {
 		return nil
 	}
+	initialScanComplete := v.resolved != (hlc.Timestamp{})
 	v.resolved = newResolved
 
 	// NB: Intentionally not stable sort because it shouldn't matter.
@@ -191,17 +192,23 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		row := v.buffer[0]
 		v.buffer = v.buffer[1:]
 
-		if row.updated != lastUpdated {
-			if lastUpdated != (hlc.Timestamp{}) {
-				if err := v.fingerprint(lastUpdated); err != nil {
+		// If we have already completed the initial scan, verify the fingerprint at
+		// every point in time. Before the initial scan is complete, the fingerprint
+		// table might not have the earliest version of every row present in the
+		// table.
+		if initialScanComplete {
+			if row.updated != lastUpdated {
+				if lastUpdated != (hlc.Timestamp{}) {
+					if err := v.fingerprint(lastUpdated); err != nil {
+						return err
+					}
+				}
+				if err := v.fingerprint(row.updated.Prev()); err != nil {
 					return err
 				}
 			}
-			if err := v.fingerprint(row.updated.Prev()); err != nil {
-				return err
-			}
+			lastUpdated = row.updated
 		}
-		lastUpdated = row.updated
 
 		value := make(map[string]interface{})
 		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
