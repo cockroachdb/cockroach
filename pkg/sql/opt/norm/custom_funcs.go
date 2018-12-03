@@ -324,7 +324,7 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 	case memo.ScalarPropsExpr:
 		return &t.ScalarProps(c.mem).Shared
 	}
-	panic(fmt.Sprintf("no logical properties available for node: %s", e))
+	panic(fmt.Sprintf("no logical properties available for node: %v", e))
 }
 
 // ----------------------------------------------------------------------
