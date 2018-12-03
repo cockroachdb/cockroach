@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -66,9 +67,14 @@ const (
 
 	// AuthParam is the query parameter for the cluster settings named
 	// key in a URI.
-	AuthParam         = "AUTH"
-	authParamImplicit = "implicit"
-	authParamDefault  = "default"
+	AuthParam          = "AUTH"
+	authParamImplicit  = "implicit"
+	authParamDefault   = "default"
+	authParamSpecified = "specified"
+
+	// CredentialsParam is the query parameter for the base64-encoded contents of
+	// the Google Application Credentials JSON file.
+	CredentialsParam = "CREDENTIALS"
 
 	cloudstoragePrefix = "cloudstorage"
 	cloudstorageGS     = cloudstoragePrefix + ".gs"
@@ -125,6 +131,7 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Prefix:         uri.Path,
 			Auth:           uri.Query().Get(AuthParam),
 			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
+			Credentials:    uri.Query().Get(CredentialsParam),
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	case "azure":
@@ -667,6 +674,7 @@ func makeGCSStorage(
 	opts := []option.ClientOption{option.WithScopes(scope)}
 
 	// "default": only use the key in the settings; error if not present.
+	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
 	switch conf.Auth {
@@ -686,6 +694,24 @@ func makeGCSStorage(
 			}
 			opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 		}
+	case authParamSpecified:
+		if conf.Credentials == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				AuthParam,
+				authParamSpecified,
+				CredentialsParam,
+			)
+		}
+		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("decoding value of %s", CredentialsParam))
+		}
+		source, err := google.JWTConfigFromJSON(decodedKey, scope)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
+		}
+		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 	case authParamImplicit:
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials

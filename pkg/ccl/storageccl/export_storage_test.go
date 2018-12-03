@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -457,6 +458,24 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 	t.Run("default", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault), false)
+	})
+	t.Run("specified", func(t *testing.T) {
+		credentials := os.Getenv("GS_JSONKEY")
+		if credentials == "" {
+			t.Skip("GS_JSONKEY env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		testExportStore(t,
+			fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				AuthParam,
+				authParamSpecified,
+				CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+			false,
+		)
 	})
 	t.Run("implicit", func(t *testing.T) {
 		// Only test these if they exist.
