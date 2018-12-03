@@ -619,3 +619,20 @@ INSERT INTO t29494(x) VALUES (123) RETURNING *
 
 statement ok
 COMMIT
+
+subtest regression_32759
+
+statement ok
+CREATE TABLE t32759(x INT, y INT NOT NULL DEFAULT(10), z INT)
+
+statement ok
+BEGIN; ALTER TABLE t32759 DROP COLUMN y
+
+query II colnames
+INSERT INTO t32759(x, z) VALUES (1, 4) RETURNING *
+----
+x  z
+1  4
+
+statement ok
+COMMIT
