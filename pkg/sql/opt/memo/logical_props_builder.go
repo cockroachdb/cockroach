@@ -1000,7 +1000,74 @@ func (b *logicalPropsBuilder) buildInsertProps(ins *InsertExpr, rel *props.Relat
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildInsert(ins, rel)
+		b.sb.buildMutation(ins, rel)
+	}
+}
+
+func (b *logicalPropsBuilder) buildUpdateProps(upd *UpdateExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, upd, &rel.Shared)
+
+	// If no columns are output by the operator, then all other properties retain
+	// default values.
+	if !upd.NeedResults {
+		return
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(upd.Table)
+	inputProps := upd.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// Output columns are a combination of non-zero UpdateCols and FetchCols. If
+	// a column has been updated, then UpdateCols is used, else FetchCols is used.
+	// Only non-mutation columns are output columns.
+	for i, col := range upd.UpdateCols {
+		if opt.IsMutationColumn(tab, i) {
+			continue
+		}
+
+		if col == 0 {
+			col = upd.FetchCols[i]
+		}
+
+		if col != 0 {
+			rel.OutputCols.Add(int(col))
+
+			// Also add to NotNullCols here, in order to avoid another loop below.
+			if !tab.Column(i).IsNullable() {
+				rel.NotNullCols.Add(int(col))
+			}
+		}
+	}
+
+	// Not Null Columns
+	// ----------------
+	// Start with set of not null columns computed above. Add any not null columns
+	// from input that are also output columns.
+	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
+	rel.NotNullCols.IntersectionWith(rel.OutputCols)
+
+	// Outer Columns
+	// -------------
+	// Outer columns were already derived by buildSharedProps.
+
+	// Functional Dependencies
+	// -----------------------
+	// Start with copy of FuncDepSet from input, then possibly simplify by calling
+	// ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Inherit cardinality from input.
+	rel.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildMutation(upd, rel)
 	}
 }
 
@@ -1082,7 +1149,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			shared.CanHaveSideEffects = true
 		}
 
-	case *InsertExpr:
+	case *InsertExpr, *UpdateExpr:
 		shared.CanHaveSideEffects = true
 		shared.CanMutate = true
 	}
@@ -1274,6 +1341,9 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	cs := opt.ColSet{}
 	tab := md.Table(tabID)
+
+	// Only iterate over non-mutation columns, since even non-null mutation
+	// columns can be null during backfill.
 	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
 		if !tab.Column(i).IsNullable() && !opt.IsMutationColumn(tab, i) {

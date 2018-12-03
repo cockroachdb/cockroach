@@ -346,8 +346,8 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
-// self-join query). All columns, including mutation columns, are added to the
-// metadata.
+// self-join query). All columns are added to the metadata. If mutation columns
+// are present, they are added after active columns.
 func (md *Metadata) AddTable(tab Table) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {

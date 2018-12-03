@@ -450,7 +450,7 @@ insert abcde
                 │    └── variable: column11 [type=int]
                 └── const: 1 [type=int]
 
-# Use CTE.
+# Use CTE with multiple variables.
 build
 WITH a AS (SELECT y, y+1 FROM xyz), b AS (SELECT y+1, y FROM xyz)
 INSERT INTO abcde TABLE a UNION TABLE b
@@ -1074,4 +1074,4 @@ error (42703): column "p:delete-only" does not exist
 build
 INSERT INTO mutation (m, n, "q:write-only") VALUES (1, 2, 3)
 ----
-error (42703): column "q:write-only" does not exist
+error (42P10): column "q:write-only" is being backfilled

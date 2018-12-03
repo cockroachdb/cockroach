@@ -159,7 +159,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr, *InsertExpr:
+	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+		*InsertExpr, *UpdateExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -265,6 +266,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		tpChild := tp.Child("insert:")
 		f.formatMutation(e, tpChild, t.InsertCols, t.Table)
+		if !t.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", t.Ordering)
+		}
+
+	case *UpdateExpr:
+		if len(colList) == 0 {
+			tp.Child("columns: <none>")
+		}
+		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+		tpChild := tp.Child("update:")
+		f.formatMutation(e, tpChild, t.UpdateCols, t.Table)
 		if !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}

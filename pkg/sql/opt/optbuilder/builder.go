@@ -195,6 +195,9 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
 
+	case *tree.Update:
+		return b.buildUpdate(stmt, inScope)
+
 	default:
 		panic(unimplementedf("unsupported statement: %T", stmt))
 	}

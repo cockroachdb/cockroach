@@ -580,8 +580,8 @@ func (s *scope) FindSourceProvidingColumn(
 				continue
 			}
 
-			if err := checkNoMutationColumn(col); err != nil {
-				return nil, nil, -1, err
+			if col.mutation {
+				return nil, nil, -1, makeBackfillError(col.name)
 			}
 
 			if col.table.TableName == "" && !col.hidden {
