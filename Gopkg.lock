@@ -219,6 +219,22 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:56af5ecd34d4f9a58f49148e4845cb8d3e5e0d89b5cb04bcffcfc34706f9b144"
+  name = "github.com/baidubce/bce-sdk-go"
+  packages = [
+    "auth",
+    "bce",
+    "http",
+    "services/bos",
+    "services/bos/api",
+    "util",
+    "util/log",
+  ]
+  pruneopts = "UT"
+  revision = "2976d82612c2339ed8fc0160142e1360a4fc93fd"
+
+[[projects]]
+  branch = "master"
   digest = "1:927f2f9632311e72cc76586aebff836c12c0132150afc2fe251f616e41522595"
   name = "github.com/benesch/cgosymbolizer"
   packages = ["."]
@@ -1655,6 +1671,8 @@
     "github.com/aws/aws-sdk-go/service/s3/s3manager",
     "github.com/axiomhq/hyperloglog",
     "github.com/backtrace-labs/go-bcd",
+    "github.com/baidubce/bce-sdk-go/bce",
+    "github.com/baidubce/bce-sdk-go/services/bos",
     "github.com/benesch/cgosymbolizer",
     "github.com/biogo/store/llrb",
     "github.com/cenkalti/backoff",
