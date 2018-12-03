@@ -104,6 +104,10 @@ func printForeignKeyConstraint(
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	idx.ColNamesString()
+	if fk.Match != sqlbase.ForeignKeyReference_SIMPLE {
+		buf.WriteByte(' ')
+		buf.WriteString(fk.Match.String())
+	}
 	if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
 		buf.WriteString(fk.OnDelete.String())

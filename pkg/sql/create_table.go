@@ -528,6 +528,7 @@ func ResolveFK(
 		SharedPrefixLen: int32(len(srcCols)),
 		OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
 		OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
 	}
 
 	if ts != NewTable {
