@@ -1,0 +1,60 @@
+# LogicTest: local-opt
+
+# Use multiple column families.
+
+statement ok
+CREATE TABLE t9 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d, e),
+  CHECK (a > b),
+  CHECK (d IS NULL)
+)
+
+# TODO(andyk): Add optimizations to CBO to fetch only needed columns.
+# Only column families that are needed to validate check constraints are fetched.
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE t9 SET b = 2 WHERE a = 5
+----
+count                ·         ·             ()                         ·
+ └── update          ·         ·             ()                         ·
+      │              table     t9            ·                          ·
+      │              set       b             ·                          ·
+      │              check 0   t9.a > t9.b   ·                          ·
+      │              check 1   t9.d IS NULL  ·                          ·
+      └── render     ·         ·             (a, b, c, d, e, column11)  ·
+           │         render 0  a             ·                          ·
+           │         render 1  b             ·                          ·
+           │         render 2  c             ·                          ·
+           │         render 3  d             ·                          ·
+           │         render 4  e             ·                          ·
+           │         render 5  2             ·                          ·
+           └── scan  ·         ·             (a, b, c, d, e)            ·
+·                    table     t9@primary    ·                          ·
+·                    spans     /5-/5/#       ·                          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
+----
+count                ·         ·             ()                         ·
+ └── update          ·         ·             ()                         ·
+      │              table     t9            ·                          ·
+      │              set       a             ·                          ·
+      │              check 0   t9.a > t9.b   ·                          ·
+      │              check 1   t9.d IS NULL  ·                          ·
+      └── render     ·         ·             (a, b, c, d, e, column11)  ·
+           │         render 0  a             ·                          ·
+           │         render 1  b             ·                          ·
+           │         render 2  c             ·                          ·
+           │         render 3  d             ·                          ·
+           │         render 4  e             ·                          ·
+           │         render 5  2             ·                          ·
+           └── scan  ·         ·             (a, b, c, d, e)            ·
+·                    table     t9@primary    ·                          ·
+·                    spans     /5-/5/#       ·                          ·
