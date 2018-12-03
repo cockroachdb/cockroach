@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -108,20 +107,13 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		}
 	}
 
-	expectCCLRequired := func(q string) {
-		t.Helper()
-		const expErr = "requires a CCL binary"
-		if _, err := sqlDB.DB.Exec(q); !testutils.IsError(err, expErr) {
-			t.Fatalf("expected %q error, but got %+v", expErr, err)
-		}
-	}
-
 	// TODO(benesch): introduce a "STRIP CCL" command to make it possible to
 	// remove CCL features from a table using an OSS binary.
-	expectCCLRequired(`ALTER TABLE t.kv PARTITION BY NOTHING`)
-	expectCCLRequired(`ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
-	expectCCLRequired(`ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
-	expectCCLRequired(`ALTER PARTITION p2 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	reqCCLErr := "requires a CCL binary"
+	sqlDB.ExpectErr(t, reqCCLErr, `ALTER TABLE t.kv PARTITION BY NOTHING`)
+	sqlDB.ExpectErr(t, reqCCLErr, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
+	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p2 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
 
 	// Odd exception: removing partitioning is, in fact, possible when there are
 	// no zone configs for the table's indices or partitions.

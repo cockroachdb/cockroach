@@ -658,10 +658,7 @@ COPY t (a, b, c) FROM stdin;
 			}
 			t.Log(q)
 			dataString = tc.data
-			_, err := db.Exec(q, srv.URL)
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("unexpected: %v", err)
-			}
+			sqlDB.ExpectErr(t, tc.err, q, srv.URL)
 			for query, res := range tc.query {
 				sqlDB.CheckQueryResults(t, query, res)
 			}
@@ -1161,14 +1158,13 @@ func TestImportCSVStmt(t *testing.T) {
 			var result int
 			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
 			testNum++
-			if err := sqlDB.DB.QueryRow(query, tc.args...).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
-			); err != nil {
-				if !testutils.IsError(err, tc.err) {
-					t.Fatalf("%s: %+v (%#v)", query, err, tc.args)
-				}
+			if tc.err != "" {
+				sqlDB.ExpectErr(t, tc.err, query, tc.args...)
 				return
 			}
+			sqlDB.QueryRow(t, query, tc.args...).Scan(
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+			)
 
 			jobPrefix := `IMPORT TABLE `
 			if !hasTransform {
@@ -1188,19 +1184,16 @@ func TestImportCSVStmt(t *testing.T) {
 			isEmpty := len(tc.files) == 1 && tc.files[0] == empty[0]
 
 			if hasTransform {
-				if err := sqlDB.DB.QueryRow(`SELECT count(*) FROM t`).Scan(&unused); !testutils.IsError(
-					err, "does not exist",
-				) {
-					t.Fatal(err)
-				}
+				sqlDB.ExpectErr(
+					t, "does not exist",
+					`SELECT count(*) FROM t`,
+				)
 				testNum++
-				if err := sqlDB.DB.QueryRow(
-					`RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, intodb,
+				sqlDB.QueryRow(
+					t, `RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, intodb,
 				).Scan(
 					&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
-				); err != nil {
-					t.Fatal(err)
-				}
+				)
 				if expected, actual := expectedRows, restored.rows; expected != actual && !isEmpty {
 					t.Fatalf("expected %d rows, got %d", expected, actual)
 				}
@@ -1279,26 +1272,26 @@ func TestImportCSVStmt(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
 
 		// Specify wrong number of columns.
-		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s)`, files[0]))
-		if !testutils.IsError(err, "expected 1 fields, got 2") {
-			t.Fatalf("unexpected: %v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "expected 1 fields, got 2",
+			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s)`, files[0]),
+		)
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
-		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, files[0]), schema[0])
-		if !testutils.IsError(err, `file specifies a schema for table t`) {
-			t.Fatalf("unexpected: %v", err)
-		}
+		sqlDB.ExpectErr(
+			t, `file specifies a schema for table t`,
+			fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, files[0]), schema[0],
+		)
 
 		// Expect it to succeed with correct columns.
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
 
 		// A second attempt should fail fast. A "slow fail" is the error message
 		// "restoring table desc and namespace entries: table already exists".
-		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
-		if !testutils.IsError(err, `relation "t" already exists`) {
-			t.Fatalf("unexpected: %v", err)
-		}
+		sqlDB.ExpectErr(
+			t, `relation "t" already exists`,
+			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]),
+		)
 	})
 
 	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
@@ -1329,31 +1322,36 @@ func TestImportCSVStmt(t *testing.T) {
 
 		data = ",5,e,7,,"
 		t.Run(data, func(t *testing.T) {
-			if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `row 1: parse "a" as INT: could not parse ""`) {
-				t.Fatalf("unexpected: %v", err)
-			}
-			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "a" violates not-null constraint`) {
-				t.Fatalf("unexpected: %v", err)
-			}
+			sqlDB.ExpectErr(
+				t, `row 1: parse "a" as INT: could not parse ""`,
+				query, srv.URL,
+			)
+			sqlDB.ExpectErr(
+				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+				query+nullif, srv.URL,
+			)
 		})
 		data = "2,5,e,,,"
 		t.Run(data, func(t *testing.T) {
-			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "d" violates not-null constraint`) {
-				t.Fatalf("unexpected: %v", err)
-			}
+			sqlDB.ExpectErr(
+				t, `row 1: generate insert row: null value in column "d" violates not-null constraint`,
+				query+nullif, srv.URL,
+			)
 		})
 		data = "2,,e,,,"
 		t.Run(data, func(t *testing.T) {
-			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"b" violates not-null constraint`) {
-				t.Fatalf("unexpected: %v", err)
-			}
+			sqlDB.ExpectErr(
+				t, `"b" violates not-null constraint`,
+				query+nullif, srv.URL,
+			)
 		})
 
 		data = "2,5,,,,"
 		t.Run(data, func(t *testing.T) {
-			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"c" violates not-null constraint`) {
-				t.Fatalf("unexpected: %v", err)
-			}
+			sqlDB.ExpectErr(
+				t, `"c" violates not-null constraint`,
+				query+nullif, srv.URL,
+			)
 		})
 
 		data = "2,5,e,-1,,"
@@ -2045,11 +2043,7 @@ func TestImportMysql(t *testing.T) {
 					}
 				}
 			} else {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM simple LIMIT 1`)
-				expected := "does not exist"
-				if !testutils.IsError(err, expected) {
-					t.Fatalf("expected %s, got %v", expected, err)
-				}
+				sqlDB.ExpectErr(t, "does not exist", `SELECT 1 FROM simple LIMIT 1`)
 			}
 
 			if c.expected&expectSecond != 0 {
@@ -2063,11 +2057,7 @@ func TestImportMysql(t *testing.T) {
 					}
 				}
 			} else {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM second LIMIT 1`)
-				expected := "does not exist"
-				if !testutils.IsError(err, expected) {
-					t.Fatalf("expected %s, got %v", expected, err)
-				}
+				sqlDB.ExpectErr(t, "does not exist", `SELECT 1 FROM second LIMIT 1`)
 			}
 			if c.expected&expectEverything != 0 {
 				res := sqlDB.QueryStr(t, "SELECT i, c, iw, fl, d53, j FROM everything ORDER BY i")
@@ -2095,11 +2085,7 @@ func TestImportMysql(t *testing.T) {
 					}
 				}
 			} else {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM everything LIMIT 1`)
-				expected := "does not exist"
-				if !testutils.IsError(err, expected) {
-					t.Fatalf("expected %s, got %v", expected, err)
-				}
+				sqlDB.ExpectErr(t, "does not exist", `SELECT 1 FROM everything LIMIT 1`)
 			}
 		})
 	}
@@ -2351,18 +2337,10 @@ func TestImportPgDump(t *testing.T) {
 			}
 
 			if c.expected == expectSecond {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM simple LIMIT 1`)
-				expected := "does not exist"
-				if !testutils.IsError(err, expected) {
-					t.Fatalf("expected %s, got %v", expected, err)
-				}
+				sqlDB.ExpectErr(t, "does not exist", `SELECT 1 FROM simple LIMIT 1`)
 			}
 			if c.expected == expectSimple {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM second LIMIT 1`)
-				expected := "does not exist"
-				if !testutils.IsError(err, expected) {
-					t.Fatalf("expected %s, got %v", expected, err)
-				}
+				sqlDB.ExpectErr(t, "does not exist", `SELECT 1 FROM second LIMIT 1`)
 			}
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
