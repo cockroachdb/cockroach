@@ -207,9 +207,11 @@ type multiTestContext struct {
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
-	transportStopper   *stop.Stopper
-	engineStoppers     []*stop.Stopper
-	timeUntilStoreDead time.Duration
+	transportStopper            *stop.Stopper
+	engineStoppers              []*stop.Stopper
+	timeUntilStoreDead          time.Duration
+	declinedReservationsTimeout time.Duration
+	failedReservationsTimeout   time.Duration
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
@@ -244,6 +246,8 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engineStoppers = nil
 		mCopy.injEngines = false
 		mCopy.timeUntilStoreDead = 0
+		mCopy.failedReservationsTimeout = 0
+		mCopy.declinedReservationsTimeout = 0
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -292,6 +296,20 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		m.nodeDialer, nil, m.transportStopper,
 	)
 
+	const basicallyForever = 24 * time.Hour
+	if m.timeUntilStoreDead == 0 {
+		m.timeUntilStoreDead = basicallyForever
+	}
+	if m.declinedReservationsTimeout == 0 {
+		m.declinedReservationsTimeout = basicallyForever
+	}
+	if m.failedReservationsTimeout == 0 {
+		m.failedReservationsTimeout = basicallyForever
+	}
+
+	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
+	storage.DeclinedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.declinedReservationsTimeout)
+	storage.FailedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.failedReservationsTimeout)
 	for idx := 0; idx < numStores; idx++ {
 		m.addStore(idx)
 	}
@@ -679,7 +697,6 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
-	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
 	m.storePools[idx] = storage.NewStorePool(
 		m.storeConfig.AmbientCtx,
 		m.storeConfig.Settings,
@@ -741,9 +758,6 @@ func (m *multiTestContext) addStore(idx int) {
 		m.transportStopper,
 		metric.NewRegistry(),
 	)
-	if m.timeUntilStoreDead == 0 {
-		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
-	}
 
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
