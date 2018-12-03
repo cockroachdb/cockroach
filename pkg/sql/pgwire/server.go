@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -139,6 +140,11 @@ type Server struct {
 		draining      bool
 	}
 
+	auth struct {
+		syncutil.RWMutex
+		conf *hba.Conf
+	}
+
 	sqlMemoryPool mon.BytesMonitor
 	connMonitor   mon.BytesMonitor
 
@@ -212,6 +218,17 @@ func MakeServer(
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.Unlock()
+
+	connAuthConf.SetOnChange(&st.SV, func() {
+		val := connAuthConf.Get(&st.SV)
+		server.auth.Lock()
+		defer server.auth.Unlock()
+		if val == "" {
+			server.auth.conf = nil
+		} else {
+			server.auth.conf, _ = hba.Parse(val)
+		}
+	})
 
 	return server
 }
@@ -473,11 +490,16 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
 			baseSQLMemoryBudget, err)
 	}
+
+	s.auth.RLock()
+	auth := s.auth.conf
+	s.auth.RUnlock()
+
 	return serveConn(
 		ctx, conn, sArgs,
 		connResultsBufferSize.Get(&s.execCfg.Settings.SV),
 		&s.metrics, reserved, s.SQLServer,
-		s.IsDraining, s.execCfg.InternalExecutor, s.stopper, s.cfg.Insecure)
+		s.IsDraining, s.execCfg.InternalExecutor, s.stopper, s.cfg.Insecure, auth)
 }
 
 func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
