@@ -1,0 +1,1281 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    e INT AS (a) STORED
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
+TABLE xyz
+ ├── x string not null
+ ├── y int
+ ├── z float
+ └── INDEX primary
+      └── x string not null
+
+exec-ddl
+CREATE TABLE uv (
+    u DECIMAL,
+    v BYTES
+)
+----
+TABLE uv
+ ├── u decimal
+ ├── v bytes
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE mutation (
+    m INT PRIMARY KEY,
+    n INT,
+    "o:write-only" INT DEFAULT(10),
+    "p:write-only" INT AS (o + n) STORED
+)
+----
+TABLE mutation
+ ├── m int not null
+ ├── n int
+ ├── o int
+ ├── p int
+ └── INDEX primary
+      └── m int not null
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+# Set single column.
+build
+UPDATE abcde SET a=2 WHERE a=1
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => a:1(int)
+ │    ├──  column14:14(int) => d:4(int)
+ │    └──  column13:13(int) => e:5(int)
+ └── project
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+      ├── project
+      │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── select
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── filters
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: a [type=int]
+      │    │              └── const: 1 [type=int]
+      │    └── projections
+      │         └── const: 2 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: b [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Set all non-computed columns.
+build
+UPDATE abcde SET a=1, b=2, c=3, rowid=4
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => a:1(int)
+ │    ├──  column14:14(int) => b:2(int)
+ │    ├──  column15:15(int) => c:3(int)
+ │    ├──  column17:17(int) => d:4(int)
+ │    ├──  column13:13(int) => e:5(int)
+ │    └──  column16:16(int) => rowid:6(int)
+ └── project
+      ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── project
+      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column14 [type=int]
+                │    └── variable: column15 [type=int]
+                └── const: 1 [type=int]
+
+# Set all non-computed columns in reverse order.
+build
+UPDATE abcde SET rowid=1, c=2, b=3, a=4
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column16:16(int) => a:1(int)
+ │    ├──  column15:15(int) => b:2(int)
+ │    ├──  column14:14(int) => c:3(int)
+ │    ├──  column17:17(int) => d:4(int)
+ │    ├──  column16:16(int) => e:5(int)
+ │    └──  column13:13(int) => rowid:6(int)
+ └── project
+      ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── project
+      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column15 [type=int]
+                │    └── variable: column14 [type=int]
+                └── const: 1 [type=int]
+
+# Set all non-computed columns to NULL.
+build
+UPDATE abcde SET a=NULL, b=NULL, c=NULL, rowid=NULL
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(unknown) => a:1(int)
+ │    ├──  column13:13(unknown) => b:2(int)
+ │    ├──  column13:13(unknown) => c:3(int)
+ │    ├──  column13:13(unknown) => d:4(int)
+ │    ├──  column13:13(unknown) => e:5(int)
+ │    └──  column13:13(unknown) => rowid:6(int)
+ └── project
+      ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           └── null [type=unknown]
+
+# Set columns using variable expressions.
+build
+UPDATE abcde SET a=a+1, b=b*c WHERE b>e
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => a:1(int)
+ │    ├──  column14:14(int) => b:2(int)
+ │    ├──  column15:15(int) => d:4(int)
+ │    └──  column13:13(int) => e:5(int)
+ └── project
+      ├── columns: column15:15(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null) column13:13(int) column14:14(int)
+      ├── project
+      │    ├── columns: column13:13(int) column14:14(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
+      │    ├── select
+      │    │    ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── filters
+      │    │         └── gt [type=bool]
+      │    │              ├── variable: b [type=int]
+      │    │              └── variable: e [type=int]
+      │    └── projections
+      │         ├── plus [type=int]
+      │         │    ├── variable: a [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── mult [type=int]
+      │              ├── variable: b [type=int]
+      │              └── variable: c [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column14 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Set columns using aliased expressions.
+build
+UPDATE abcde AS foo SET a=foo.b, b=foo.c
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  b:8(int) => a:1(int)
+ │    ├──  c:9(int) => b:2(int)
+ │    ├──  column13:13(int) => d:4(int)
+ │    └──  b:8(int) => e:5(int)
+ └── project
+      ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: c [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Use WHERE, ORDER BY, LIMIT.
+build
+UPDATE abcde SET b=1 WHERE a>0 ORDER BY a LIMIT 10
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => b:2(int)
+ │    ├──  column14:14(int) => d:4(int)
+ │    └──  a:7(int) => e:5(int)
+ ├── internal-ordering: +7
+ └── project
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+      ├── ordering: +7
+      ├── project
+      │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── ordering: +7 opt(13)
+      │    ├── limit
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── internal-ordering: +7
+      │    │    ├── ordering: +7
+      │    │    ├── sort
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── ordering: +7
+      │    │    │    └── select
+      │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         ├── scan abcde
+      │    │    │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         └── filters
+      │    │    │              └── gt [type=bool]
+      │    │    │                   ├── variable: a [type=int]
+      │    │    │                   └── const: 0 [type=int]
+      │    │    └── const: 10 [type=int]
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Infer types.
+build
+UPDATE xyz SET y=1, z=1
+----
+update xyz
+ ├── columns: <none>
+ ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── update-mapping:
+ │    ├──  column7:7(int) => y:2(int)
+ │    └──  column8:8(float) => z:3(float)
+ └── project
+      ├── columns: column7:7(int!null) column8:8(float!null) x:4(string!null) y:5(int) z:6(float)
+      ├── scan xyz
+      │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      └── projections
+           ├── const: 1 [type=int]
+           └── const: 1.0 [type=float]
+
+# Use placeholders.
+build
+UPDATE xyz SET x=$1, y=$2, z=$3
+----
+update xyz
+ ├── columns: <none>
+ ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── update-mapping:
+ │    ├──  column7:7(string) => x:1(string)
+ │    ├──  column8:8(int) => y:2(int)
+ │    └──  column9:9(float) => z:3(float)
+ └── project
+      ├── columns: column7:7(string) column8:8(int) column9:9(float) x:4(string!null) y:5(int) z:6(float)
+      ├── scan xyz
+      │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      └── projections
+           ├── placeholder: $1 [type=string]
+           ├── placeholder: $2 [type=int]
+           └── placeholder: $3 [type=float]
+
+# Duplicate expressions with placeholders.
+build
+UPDATE abcde SET a=$1 + 1, b=$1 + 1 WHERE c=10
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => a:1(int)
+ │    ├──  column13:13(int) => b:2(int)
+ │    ├──  column14:14(int) => d:4(int)
+ │    └──  column13:13(int) => e:5(int)
+ └── project
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── project
+      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── select
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── filters
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: c [type=int]
+      │    │              └── const: 10 [type=int]
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── placeholder: $1 [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Correlated subquery.
+build
+SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [UPDATE abcde SET b=y, c=z::int+1 RETURNING *])
+----
+select
+ ├── columns: x:1(string!null) y:2(int) z:3(float)
+ ├── scan xyz
+ │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
+ └── filters
+      └── exists [type=bool]
+           └── project
+                ├── columns: a:10(int!null) y:16(int) column17:17(int) column18:18(int)
+                └── update abcde
+                     ├── columns: a:10(int!null) rowid:15(int!null) y:16(int) column17:17(int) column18:18(int)
+                     ├── fetch columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                     ├── update-mapping:
+                     │    ├──  y:16(int) => b:5(int)
+                     │    ├──  column17:17(int) => c:6(int)
+                     │    ├──  column18:18(int) => d:7(int)
+                     │    └──  a:10(int!null) => e:8(int)
+                     └── project
+                          ├── columns: column18:18(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null) y:16(int) column17:17(int)
+                          ├── project
+                          │    ├── columns: y:16(int) column17:17(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                          │    ├── scan abcde
+                          │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                          │    └── projections
+                          │         ├── variable: xyz.y [type=int]
+                          │         └── plus [type=int]
+                          │              ├── cast: INT8 [type=int]
+                          │              │    └── variable: z [type=float]
+                          │              └── const: 1 [type=int]
+                          └── projections
+                               └── plus [type=int]
+                                    ├── plus [type=int]
+                                    │    ├── variable: y [type=int]
+                                    │    └── variable: column17 [type=int]
+                                    └── const: 1 [type=int]
+
+# Unknown target table.
+build
+UPDATE unknown SET x=1
+----
+error: no data source matches prefix: "unknown"
+
+# Unknown target column.
+build
+UPDATE abcde SET f=1
+----
+error (42703): column "f" does not exist
+
+# Test SET type checking.
+build
+UPDATE xyz SET x=1, y=1, z=1
+----
+error (42804): value type int doesn't match type STRING of column "x"
+
+# Try to use non-returning UPDATE as expression.
+build
+SELECT * FROM [UPDATE abcde SET a=1]
+----
+error (0A000): statement source "UPDATE abcde SET a = 1" does not return any columns
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [UPDATE abcde SET a=b RETURNING *]) UPDATE abcde SET a=b
+----
+error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+
+# With alias, original table name should be inaccessible.
+build
+UPDATE abcde AS foo SET a=abcde.b
+----
+error (42P01): no data source matches prefix: abcde
+
+# ------------------------------------------------------------------------------
+# Test RETURNING.
+# ------------------------------------------------------------------------------
+
+# Return values from update.
+build
+UPDATE abcde SET a=2 WHERE a=1 RETURNING *
+----
+project
+ ├── columns: a:13(int!null) b:8(int) c:9(int) d:14(int) e:13(int!null)
+ └── update abcde
+      ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── update-mapping:
+      │    ├──  column13:13(int!null) => a:1(int)
+      │    ├──  column14:14(int) => d:4(int)
+      │    └──  column13:13(int!null) => e:5(int)
+      └── project
+           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+           ├── project
+           │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── select
+           │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    ├── scan abcde
+           │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    └── filters
+           │    │         └── eq [type=bool]
+           │    │              ├── variable: a [type=int]
+           │    │              └── const: 1 [type=int]
+           │    └── projections
+           │         └── const: 2 [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: b [type=int]
+                     │    └── variable: c [type=int]
+                     └── const: 1 [type=int]
+
+# Return values from aliased table.
+build
+UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
+----
+project
+ ├── columns: "?column?":15(int) "?column?":16(int)
+ ├── update abcde
+ │    ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
+ │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │    ├── update-mapping:
+ │    │    ├──  column13:13(int!null) => a:1(int)
+ │    │    ├──  column14:14(int) => d:4(int)
+ │    │    └──  column13:13(int!null) => e:5(int)
+ │    └── project
+ │         ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+ │         ├── project
+ │         │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    ├── select
+ │         │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    ├── scan abcde
+ │         │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    └── filters
+ │         │    │         └── eq [type=bool]
+ │         │    │              ├── variable: a [type=int]
+ │         │    │              └── const: 1 [type=int]
+ │         │    └── projections
+ │         │         └── const: 2 [type=int]
+ │         └── projections
+ │              └── plus [type=int]
+ │                   ├── plus [type=int]
+ │                   │    ├── variable: b [type=int]
+ │                   │    └── variable: c [type=int]
+ │                   └── const: 1 [type=int]
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: column13 [type=int]
+      │    └── const: 1 [type=int]
+      └── mult [type=int]
+           ├── variable: b [type=int]
+           └── variable: column14 [type=int]
+
+# Use returning UPDATE as a FROM expression.
+build
+SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b RETURNING *]
+----
+project
+ ├── columns: a:13(int!null) d:14(int)
+ └── project
+      ├── columns: b:8(int) c:9(int) column13:13(int!null) column14:14(int)
+      └── update abcde
+           ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
+           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           ├── update-mapping:
+           │    ├──  column13:13(int!null) => a:1(int)
+           │    ├──  column14:14(int) => d:4(int)
+           │    └──  column13:13(int!null) => e:5(int)
+           ├── internal-ordering: +8
+           └── sort
+                ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
+                ├── ordering: +8
+                └── project
+                     ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+                     ├── project
+                     │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                     │    ├── select
+                     │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                     │    │    ├── scan abcde
+                     │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                     │    │    └── filters
+                     │    │         └── gt [type=bool]
+                     │    │              ├── variable: a [type=int]
+                     │    │              └── const: 0 [type=int]
+                     │    └── projections
+                     │         └── const: 2 [type=int]
+                     └── projections
+                          └── plus [type=int]
+                               ├── plus [type=int]
+                               │    ├── variable: b [type=int]
+                               │    └── variable: c [type=int]
+                               └── const: 1 [type=int]
+
+# Return hidden column.
+build
+UPDATE abcde SET rowid=rowid+1 RETURNING rowid
+----
+project
+ ├── columns: rowid:13(int!null)
+ └── update abcde
+      ├── columns: a:7(int!null) b:8(int) c:9(int) column13:13(int!null) column14:14(int)
+      ├── fetch columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      ├── update-mapping:
+      │    ├──  column14:14(int) => d:4(int)
+      │    ├──  a:7(int!null) => e:5(int)
+      │    └──  column13:13(int!null) => rowid:6(int)
+      └── project
+           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+           ├── project
+           │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── scan abcde
+           │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    └── projections
+           │         └── plus [type=int]
+           │              ├── variable: rowid [type=int]
+           │              └── const: 1 [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: b [type=int]
+                     │    └── variable: c [type=int]
+                     └── const: 1 [type=int]
+
+# Try to use aggregate function in RETURNING clause.
+build
+UPDATE abcde SET b=1 RETURNING sum(a)
+----
+error: sum(): aggregate functions are not allowed in RETURNING
+
+# Try to use SRF in RETURNING clause.
+build
+UPDATE abcde SET c=1 RETURNING generate_series(1, 10)
+----
+error: generate_series(): generator functions are not allowed in RETURNING
+
+# ------------------------------------------------------------------------------
+# Test DEFAULT values.
+# ------------------------------------------------------------------------------
+
+# Use DEFAULT expressions in RHS of SET expressions.
+build
+UPDATE abcde SET b=DEFAULT, c=DEFAULT
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(unknown) => b:2(int)
+ │    ├──  column14:14(int) => c:3(int)
+ │    ├──  column13:13(unknown) => d:4(int)
+ │    └──  a:7(int) => e:5(int)
+ └── project
+      ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           ├── null [type=unknown]
+           └── const: 10 [type=int]
+
+# Allow not-null column to be updated with NULL DEFAULT value (would fail at
+# runtime if there are any rows to update).
+build
+UPDATE abcde SET a=DEFAULT
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(unknown) => a:1(int)
+ │    ├──  column14:14(int) => d:4(int)
+ │    └──  column13:13(unknown) => e:5(int)
+ └── project
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(unknown)
+      ├── project
+      │    ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         └── null [type=unknown]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: b [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+build
+UPDATE abcde SET c=1+DEFAULT
+----
+error (42601): DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
+
+# ------------------------------------------------------------------------------
+# Test tuples.
+# ------------------------------------------------------------------------------
+
+build
+UPDATE abcde SET (a, b, c) = (1, 2, 3)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(int) => a:1(int)
+ │    ├──  column14:14(int) => b:2(int)
+ │    ├──  column15:15(int) => c:3(int)
+ │    ├──  column16:16(int) => d:4(int)
+ │    └──  column13:13(int) => e:5(int)
+ └── project
+      ├── columns: column16:16(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null)
+      ├── project
+      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── const: 3 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column14 [type=int]
+                │    └── variable: column15 [type=int]
+                └── const: 1 [type=int]
+
+build
+UPDATE abcde SET (c) = (NULL), (b, a) = (1, 2)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column15:15(int) => a:1(int)
+ │    ├──  column14:14(int) => b:2(int)
+ │    ├──  column13:13(unknown) => c:3(int)
+ │    ├──  column13:13(unknown) => d:4(int)
+ │    └──  column15:15(int) => e:5(int)
+ └── project
+      ├── columns: column13:13(unknown) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 1 [type=int]
+           └── const: 2 [type=int]
+
+# Tuples + DEFAULT.
+build
+UPDATE abcde SET (b, c)=(DEFAULT, DEFAULT)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(unknown) => b:2(int)
+ │    ├──  column14:14(int) => c:3(int)
+ │    ├──  column13:13(unknown) => d:4(int)
+ │    └──  a:7(int) => e:5(int)
+ └── project
+      ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           ├── null [type=unknown]
+           └── const: 10 [type=int]
+
+# Tuples + non-null DEFAULT.
+build
+UPDATE abcde SET (a, b)=(DEFAULT, DEFAULT)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column13:13(unknown) => a:1(int)
+ │    ├──  column13:13(unknown) => b:2(int)
+ │    ├──  column13:13(unknown) => d:4(int)
+ │    └──  column13:13(unknown) => e:5(int)
+ └── project
+      ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── scan abcde
+      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── projections
+           └── null [type=unknown]
+
+build
+UPDATE abcde SET (a, b)=(1, 2, 3)
+----
+error: number of columns (2) does not match number of values (3)
+
+build
+UPDATE abcde SET (a, b, a)=(1, 2, 3)
+----
+error: multiple assignments to the same column "a"
+
+build
+UPDATE abcde SET (a, unk)=(1, 2)
+----
+error (42703): column "unk" does not exist
+
+build
+UPDATE abcde SET (a, d)=(1, 2)
+----
+error (55000): cannot write directly to computed column "d"
+
+# ------------------------------------------------------------------------------
+# Test subqueries.
+# ------------------------------------------------------------------------------
+
+# Update single column.
+build
+UPDATE abcde SET (a)=(SELECT 1 AS one)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  one:13(int) => a:1(int)
+ │    ├──  column14:14(int) => d:4(int)
+ │    └──  one:13(int) => e:5(int)
+ └── project
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
+      ├── left-join-apply
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── max1-row
+      │    │    ├── columns: one:13(int!null)
+      │    │    └── project
+      │    │         ├── columns: one:13(int!null)
+      │    │         ├── values
+      │    │         │    └── tuple [type=tuple]
+      │    │         └── projections
+      │    │              └── const: 1 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: b [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Update all updatable columns.
+build
+UPDATE abcde SET (a, b, c, rowid)=(SELECT x::int, y, z::int, y+1 AS y1 FROM xyz)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  x:16(int) => a:1(int)
+ │    ├──  y:14(int) => b:2(int)
+ │    ├──  z:17(int) => c:3(int)
+ │    ├──  column19:19(int) => d:4(int)
+ │    ├──  x:16(int) => e:5(int)
+ │    └──  y1:18(int) => rowid:6(int)
+ └── project
+      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
+      ├── left-join-apply
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── max1-row
+      │    │    ├── columns: y:14(int) x:16(int) z:17(int) y1:18(int)
+      │    │    └── project
+      │    │         ├── columns: x:16(int) z:17(int) y1:18(int) y:14(int)
+      │    │         ├── scan xyz
+      │    │         │    └── columns: xyz.x:13(string!null) y:14(int) xyz.z:15(float)
+      │    │         └── projections
+      │    │              ├── cast: INT8 [type=int]
+      │    │              │    └── variable: xyz.x [type=string]
+      │    │              ├── cast: INT8 [type=int]
+      │    │              │    └── variable: xyz.z [type=float]
+      │    │              └── plus [type=int]
+      │    │                   ├── variable: y [type=int]
+      │    │                   └── const: 1 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: y [type=int]
+                │    └── variable: z [type=int]
+                └── const: 1 [type=int]
+
+# Update using combination of subquery and tuple SET expressions.
+build
+UPDATE abcde SET (a, b)=(SELECT y, y+1 AS y1 FROM xyz), (c, rowid)=(1, 2)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  y:14(int) => a:1(int)
+ │    ├──  y1:16(int) => b:2(int)
+ │    ├──  column17:17(int) => c:3(int)
+ │    ├──  column19:19(int) => d:4(int)
+ │    ├──  y:14(int) => e:5(int)
+ │    └──  column18:18(int) => rowid:6(int)
+ └── project
+      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
+      ├── project
+      │    ├── columns: column17:17(int!null) column18:18(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    ├── left-join-apply
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── max1-row
+      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    └── project
+      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── scan xyz
+      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         └── projections
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: y [type=int]
+      │    │    │                   └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: y1 [type=int]
+                │    └── variable: column17 [type=int]
+                └── const: 1 [type=int]
+
+# Use subquery SET expression after other expressions.
+build
+UPDATE abcde SET a=1, (b)=(2), (c, rowid)=(SELECT y, y+1 AS y1 FROM xyz)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column17:17(int) => a:1(int)
+ │    ├──  column18:18(int) => b:2(int)
+ │    ├──  y:14(int) => c:3(int)
+ │    ├──  column19:19(int) => d:4(int)
+ │    ├──  column17:17(int) => e:5(int)
+ │    └──  y1:16(int) => rowid:6(int)
+ └── project
+      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
+      ├── project
+      │    ├── columns: column17:17(int!null) column18:18(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    ├── left-join-apply
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── max1-row
+      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    └── project
+      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── scan xyz
+      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         └── projections
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: y [type=int]
+      │    │    │                   └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column18 [type=int]
+                │    └── variable: y [type=int]
+                └── const: 1 [type=int]
+
+# Multiple subqueries in SET expressions.
+build
+UPDATE abcde SET (b, a)=(SELECT y, y+1 AS y1 FROM xyz), (c, rowid)=(SELECT 1 AS one, 2 AS two)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  y1:16(int) => a:1(int)
+ │    ├──  y:14(int) => b:2(int)
+ │    ├──  one:17(int) => c:3(int)
+ │    ├──  column19:19(int) => d:4(int)
+ │    ├──  y1:16(int) => e:5(int)
+ │    └──  two:18(int) => rowid:6(int)
+ └── project
+      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) one:17(int) two:18(int)
+      ├── left-join-apply
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) one:17(int) two:18(int)
+      │    ├── left-join-apply
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── scan abcde
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── max1-row
+      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    └── project
+      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── scan xyz
+      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         └── projections
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: y [type=int]
+      │    │    │                   └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    ├── max1-row
+      │    │    ├── columns: one:17(int!null) two:18(int!null)
+      │    │    └── project
+      │    │         ├── columns: one:17(int!null) two:18(int!null)
+      │    │         ├── values
+      │    │         │    └── tuple [type=tuple]
+      │    │         └── projections
+      │    │              ├── const: 1 [type=int]
+      │    │              └── const: 2 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: y [type=int]
+                │    └── variable: one [type=int]
+                └── const: 1 [type=int]
+
+# Incorporate desired types when compiling subquery.
+build
+UPDATE xyz SET x='foo', (z, y)=(SELECT 2 AS two, 3 AS three)
+----
+update xyz
+ ├── columns: <none>
+ ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── update-mapping:
+ │    ├──  column9:9(string) => x:1(string)
+ │    ├──  three:8(int) => y:2(int)
+ │    └──  two:7(float) => z:3(float)
+ └── project
+      ├── columns: column9:9(string!null) x:4(string!null) y:5(int) z:6(float) two:7(float) three:8(int)
+      ├── left-join-apply
+      │    ├── columns: x:4(string!null) y:5(int) z:6(float) two:7(float) three:8(int)
+      │    ├── scan xyz
+      │    │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │    ├── max1-row
+      │    │    ├── columns: two:7(float!null) three:8(int!null)
+      │    │    └── project
+      │    │         ├── columns: two:7(float!null) three:8(int!null)
+      │    │         ├── values
+      │    │         │    └── tuple [type=tuple]
+      │    │         └── projections
+      │    │              ├── const: 2.0 [type=float]
+      │    │              └── const: 3 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── const: 'foo' [type=string]
+
+# SET expression contains correlated subquery + alias.
+build
+UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=abcde1.a)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── update-mapping:
+ │    ├──  column19:19(int) => b:2(int)
+ │    ├──  column20:20(int) => d:4(int)
+ │    └──  a:7(int) => e:5(int)
+ └── project
+      ├── columns: column20:20(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column19:19(int)
+      ├── project
+      │    ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         └── subquery [type=int]
+      │              └── max1-row
+      │                   ├── columns: b:14(int)
+      │                   └── project
+      │                        ├── columns: b:14(int)
+      │                        └── select
+      │                             ├── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int) rowid:18(int!null)
+      │                             ├── scan abcde
+      │                             │    └── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int) rowid:18(int!null)
+      │                             └── filters
+      │                                  └── eq [type=bool]
+      │                                       ├── variable: rowid [type=int]
+      │                                       └── variable: a [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column19 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Too many values.
+build
+UPDATE abcde SET (a, b)=(SELECT y, y+1 AS y1, y+2 AS y2 FROM xyz)
+----
+error: number of columns (2) does not match number of values (3)
+
+# Too few values.
+build
+UPDATE abcde SET (a, b, c)=(SELECT y, y+1 AS y1 FROM xyz)
+----
+error: number of columns (3) does not match number of values (2)
+
+# Try to update same column.
+build
+UPDATE abcde SET (a, b)=(1, 2), (c, b)=(SELECT y, y+1 AS y1 FROM xyz)
+----
+error: multiple assignments to the same column "b"
+
+# Target type does not match subquery result.
+build
+UPDATE xyz SET (x, y)=(SELECT a, b FROM abcde WHERE a>0)
+----
+error (42804): value type int doesn't match type STRING of column "x"
+
+# ------------------------------------------------------------------------------
+# Test CTEs.
+# ------------------------------------------------------------------------------
+
+# Use CTE within WHERE clause.
+build
+WITH cte AS (SELECT x FROM xyz) UPDATE abcde SET a=b WHERE EXISTS(SELECT * FROM cte)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+ ├── update-mapping:
+ │    ├──  b:11(int) => a:4(int)
+ │    ├──  column16:16(int) => d:7(int)
+ │    └──  b:11(int) => e:8(int)
+ └── project
+      ├── columns: column16:16(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+      ├── select
+      │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+      │    └── filters
+      │         └── exists [type=bool]
+      │              └── project
+      │                   ├── columns: x:1(string!null)
+      │                   └── scan xyz
+      │                        └── columns: x:1(string!null) y:2(int) z:3(float)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: b [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# Use CTE within SET expression.
+build
+WITH a AS (SELECT y, y+1 AS y1 FROM xyz) UPDATE abcde SET (a, b) = (SELECT * FROM a)
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int)
+ ├── update-mapping:
+ │    ├──  y:2(int) => a:5(int)
+ │    ├──  y1:4(int) => b:6(int)
+ │    ├──  column17:17(int) => d:8(int)
+ │    └──  y:2(int) => e:9(int)
+ └── project
+      ├── columns: column17:17(int) y:2(int) y1:4(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+      ├── left-join-apply
+      │    ├── columns: y:2(int) y1:4(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+      │    ├── max1-row
+      │    │    ├── columns: y:2(int) y1:4(int)
+      │    │    └── project
+      │    │         ├── columns: y1:4(int) y:2(int)
+      │    │         ├── scan xyz
+      │    │         │    └── columns: x:1(string!null) y:2(int) z:3(float)
+      │    │         └── projections
+      │    │              └── plus [type=int]
+      │    │                   ├── variable: y [type=int]
+      │    │                   └── const: 1 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: y1 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with mutations.
+# ------------------------------------------------------------------------------
+
+# Test update that doesn't require mutation column to be recalculated.
+build
+UPDATE mutation SET m=1
+----
+update mutation
+ ├── columns: <none>
+ ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── update-mapping:
+ │    ├──  column9:9(int) => m:1(int)
+ │    └──  column10:10(int) => p:4(int)
+ └── project
+      ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
+      ├── project
+      │    ├── columns: column9:9(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    ├── scan mutation
+      │    │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── variable: o [type=int]
+                └── variable: n [type=int]
+
+# Test update that requires computed mutation column to be recalculated.
+build
+UPDATE mutation SET m=1, n=2
+----
+update mutation
+ ├── columns: <none>
+ ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── update-mapping:
+ │    ├──  column9:9(int) => m:1(int)
+ │    ├──  column10:10(int) => n:2(int)
+ │    └──  column11:11(int) => p:4(int)
+ └── project
+      ├── columns: column11:11(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null) column10:10(int!null)
+      ├── project
+      │    ├── columns: column9:9(int!null) column10:10(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    ├── scan mutation
+      │    │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── variable: o [type=int]
+                └── variable: column10 [type=int]
+
+# Ensure that ORDER BY wildcard does not select mutation columns.
+build
+UPDATE mutation SET m=1 ORDER BY mutation.*
+----
+update mutation
+ ├── columns: <none>
+ ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── update-mapping:
+ │    ├──  column9:9(int) => m:1(int)
+ │    └──  column10:10(int) => p:4(int)
+ ├── internal-ordering: +5,+6
+ └── project
+      ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
+      ├── ordering: +5,+6
+      ├── project
+      │    ├── columns: column9:9(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    ├── ordering: +5 opt(9)
+      │    ├── scan mutation
+      │    │    ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    │    └── ordering: +5
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── projections
+           └── plus [type=int]
+                ├── variable: o [type=int]
+                └── variable: n [type=int]
+
+# Use column "o" from higher scope that is shadowed by mutation column "o".
+build
+SELECT * FROM abcde AS mno(m, n, o) WHERE EXISTS(SELECT * FROM [UPDATE mutation SET m=o RETURNING *])
+----
+project
+ ├── columns: m:1(int!null) n:2(int) o:3(int) d:4(int) e:5(int)
+ └── select
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      ├── scan abcde
+      │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      └── filters
+           └── exists [type=bool]
+                └── update mutation
+                     ├── columns: n:12(int) o:15(int!null)
+                     ├── fetch columns: m:11(int) n:12(int) mutation.o:13(int) p:14(int)
+                     ├── update-mapping:
+                     │    ├──  o:15(int!null) => m:7(int)
+                     │    └──  column16:16(int) => p:10(int)
+                     └── project
+                          ├── columns: column16:16(int) m:11(int!null) n:12(int) mutation.o:13(int) p:14(int) o:15(int)
+                          ├── project
+                          │    ├── columns: o:15(int) m:11(int!null) n:12(int) mutation.o:13(int) p:14(int)
+                          │    ├── scan mutation
+                          │    │    └── columns: m:11(int!null) n:12(int) mutation.o:13(int) p:14(int)
+                          │    └── projections
+                          │         └── variable: c [type=int]
+                          └── projections
+                               └── plus [type=int]
+                                    ├── variable: mutation.o [type=int]
+                                    └── variable: n [type=int]
+
+# Try to return a mutation column.
+build
+UPDATE mutation SET m=1 RETURNING o
+----
+error (42703): column "o" does not exist
+
+# Try to update a mutation column.
+build
+UPDATE mutation SET o=10
+----
+error (42P10): column "o" is being backfilled
+
+# Try to use mutation column in WHERE clause.
+build
+UPDATE mutation SET m=1 WHERE o=10
+----
+error (42P10): column "o" is being backfilled
+
+# Try to use mutation column in SET expression.
+build
+UPDATE mutation SET m=o
+----
+error (42P10): column "o" is being backfilled
+
+# Try to use mutation column in ORDER BY expression.
+build
+UPDATE mutation SET m=1 ORDER BY o
+----
+error (42P10): column "o" is being backfilled

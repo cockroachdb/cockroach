@@ -294,8 +294,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 					continue
 				}
 
-				if err := checkNoMutationColumn(col); err != nil {
-					panic(builderError{err})
+				if col.mutation {
+					panic(builderError{makeBackfillError(col.name)})
 				}
 
 				if index != -1 {
@@ -320,14 +320,11 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 	return index
 }
 
-// checkNoMutationColumn returns an error if the given column is in process of
-// being added or dropped from the table. It cannot be referenced in so.
-func checkNoMutationColumn(col *scopeColumn) error {
-	if col.mutation {
-		return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
-			"column %q is being backfilled", tree.ErrString(&col.name))
-	}
-	return nil
+// makeBackfillError returns an error indicating that the column of the given
+// name is currently being backfilled and cannot be referenced.
+func makeBackfillError(name tree.Name) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+		"column %q is being backfilled", tree.ErrString(&name))
 }
 
 // flattenTuples extracts the members of tuples into a list of columns.
