@@ -51,10 +51,6 @@ type (
 	// ImmutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ImmutableTableDescriptor = sqlbase.ImmutableTableDescriptor
-	// UncachedTableDescriptor is provided for convenience and to make the
-	// interface definitions below more intuitive.
-	// It is an immutable descriptor read from the store.
-	UncachedTableDescriptor = sqlbase.TableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = sqlbase.TableDescriptor

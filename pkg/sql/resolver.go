@@ -193,15 +193,11 @@ func (p *planner) ResolveMutableTableDescriptor(
 
 func (p *planner) ResolveUncachedTableDescriptor(
 	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
-) (_ *UncachedTableDescriptor, err error) {
-	var table *ImmutableTableDescriptor
+) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = ResolveExistingObject(ctx, p, tn, required, requiredType)
 	})
-	if table == nil {
-		return nil, err
-	}
-	return table.TableDesc(), err
+	return table, err
 }
 
 // ResolveTargetObject determines a valid target path for an object
