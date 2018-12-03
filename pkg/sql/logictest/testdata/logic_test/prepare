@@ -746,5 +746,17 @@ EXECUTE change_schema_uncommitted
 a  c
 1  10
 
+# Change the schema again and verify that the previously prepared plan is not
+# reused. Testing this is important because the second schema change won't
+# bump the table descriptor version again.
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO d
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  d
+1  10
+
 statement ok
 ROLLBACK TRANSACTION
