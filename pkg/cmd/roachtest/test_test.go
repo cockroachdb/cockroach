@@ -38,21 +38,12 @@ func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
 	r.Add(testSpec{
-		Name:   "pass",
-		Stable: true,
+		Name: "pass",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "fail",
-		Stable: true,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Fatal("failed")
-		},
-	})
-	r.Add(testSpec{
-		Name:   "fail-unstable",
-		Stable: false,
+		Name: "fail",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
@@ -105,8 +96,7 @@ func TestRegistryStatus(t *testing.T) {
 	r.out = &buf
 	r.statusInterval = 20 * time.Millisecond
 	r.Add(testSpec{
-		Name:   `status`,
-		Stable: true,
+		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("waiting")
 			var wg sync.WaitGroup
@@ -159,8 +149,7 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	r.statusInterval = 20 * time.Millisecond
 
 	r.Add(testSpec{
-		Name:   `status`,
-		Stable: true,
+		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			for i := 0; i < 100; i++ {
 				time.Sleep(r.statusInterval)
@@ -191,7 +180,6 @@ func TestRegistryRunTimeout(t *testing.T) {
 	r.Add(testSpec{
 		Name:    `timeout`,
 		Timeout: 10 * time.Millisecond,
-		Stable:  true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			<-ctx.Done()
 		},
@@ -211,11 +199,9 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 	r := newRegistry()
 	r.out = &buf
 	r.Add(testSpec{
-		Name:   "parent",
-		Stable: true,
+		Name: "parent",
 		SubTests: []testSpec{{
-			Name:   "child",
-			Stable: true,
+			Name: "child",
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				t.Fatal("failed")
 			},
@@ -244,9 +230,8 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	r.out = &buf
 
 	r.Add(testSpec{
-		Name:   `expired`,
-		Stable: true,
-		Nodes:  nodes(1, nodeLifetimeOption(time.Second)),
+		Name:  `expired`,
+		Nodes: nodes(1, nodeLifetimeOption(time.Second)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			panic("not reached")
 		},

@@ -27,9 +27,8 @@ import (
 
 func registerBackup(r *registry) {
 	r.Add(testSpec{
-		Name:   `backup2TB`,
-		Nodes:  nodes(10),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  `backup2TB`,
+		Nodes: nodes(10),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes
 
@@ -62,7 +61,6 @@ func registerBackup(r *registry) {
 	r.Add(testSpec{
 		Name:    `backupTPCC`,
 		Nodes:   nodes(3),
-		Stable:  false,
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")

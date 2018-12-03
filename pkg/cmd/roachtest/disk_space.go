@@ -321,7 +321,6 @@ func registerDiskUsage(r *registry) {
 				Name:       fmt.Sprintf("disk_space/tc=%s", testCase.name),
 				Nodes:      nodes(numNodes),
 				MinVersion: "2.1", // cockroach debug ballast
-				Stable:     true,  // DO NOT COPY to new tests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					if local {
 						duration = 30 * time.Minute

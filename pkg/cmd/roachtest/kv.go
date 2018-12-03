@@ -64,7 +64,6 @@ func registerKV(r *registry) {
 					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
 					MinVersion: minVersion,
 					Nodes:      nodes(n+1, cpu(8)),
-					Stable:     true, // DO NOT COPY to new tests
 					Run: func(ctx context.Context, t *test, c *cluster) {
 						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
 					},
@@ -79,7 +78,6 @@ func registerKVQuiescenceDead(r *registry) {
 		Name:       "kv/quiescence/nodes=3",
 		Nodes:      nodes(4),
 		MinVersion: "2.1.0",
-		Stable:     false, // added 6/7/2018
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
@@ -173,7 +171,6 @@ func registerKVSplits(r *registry) {
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
 			Timeout: item.timeout,
 			Nodes:   nodes(4),
-			Stable:  false, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				nodes := c.nodes - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
