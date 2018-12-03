@@ -698,3 +698,17 @@ ROLLBACK; BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
 INSERT INTO t29497(x) VALUES (1) ON CONFLICT (x) DO UPDATE SET y = 456
+
+statement ok
+ROLLBACK
+
+subtest regression_32762
+
+statement ok
+CREATE TABLE t32762(x INT, y INT, UNIQUE (x,y), CONSTRAINT y_not_null CHECK (y IS NOT NULL))
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x;
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
