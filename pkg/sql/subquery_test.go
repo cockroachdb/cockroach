@@ -36,7 +36,7 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
+	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
 	params := runParams{ctx: context.TODO(), p: p, extendedEvalCtx: &p.extendedEvalCtx}
