@@ -117,9 +117,6 @@ var (
 	// will send to a follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
-
-	defaultRaftPostSplitSuppressSnapshotTicks = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_POST_SPLIT_SUPPRESS_SNAPSHOT_TICKS", 20)
 )
 
 type lazyHTTPClient struct {
@@ -490,12 +487,6 @@ type RaftConfig struct {
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
 
-	// When a Replica with an empty log (i.e. last index zero), drop rejecting
-	// MsgAppResp for the first few ticks to allow the split trigger to perform
-	// the split.
-	//
-	// -1 to disable.
-	RaftPostSplitSuppressSnapshotTicks int
 	// Splitting a range which has a replica needing a snapshot results in two
 	// ranges in that state. The delay configured here slows down splits when in
 	// that situation (limiting to those splits not run through the split
@@ -542,20 +533,14 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
 
-	if cfg.RaftPostSplitSuppressSnapshotTicks == 0 {
-		cfg.RaftPostSplitSuppressSnapshotTicks = defaultRaftPostSplitSuppressSnapshotTicks
-	}
-
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
-		// The Raft Ticks interval defaults to 200ms, and
-		// RaftPostSplitSuppressSnapshotTicks to 20 ticks. A total of 120 ticks is
-		// ~24s which experimentally has been shown to allow the small pile (<100)
-		// of Raft snapshots observed at the beginning of an import/restore to be
-		// resolved.
-		cfg.RaftDelaySplitToSuppressSnapshotTicks = 100
-		if cfg.RaftPostSplitSuppressSnapshotTicks > 0 {
-			cfg.RaftDelaySplitToSuppressSnapshotTicks += cfg.RaftPostSplitSuppressSnapshotTicks
-		}
+		// The Raft Ticks interval defaults to 200ms, and an election is 15
+		// ticks. Add a generous amount of ticks to make sure even a backed up
+		// Raft snapshot queue is going to make progress when a (not overly
+		// concurrent) amount of splits happens.
+		// The resulting delay configured here is north of 20s by default, which
+		// experimentally has shown to be enough.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 60
 	}
 }
 

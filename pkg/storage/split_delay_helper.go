@@ -60,6 +60,19 @@ func (sdh *splitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
 }
 
 func (sdh *splitDelayHelper) NumAttempts() int {
+	// There is a related mechanism regarding snapshots and splits that is worth
+	// pointing out here: Incoming MsgApp (see the _ assignment below) are
+	// dropped if they are addressed to uninitialized replicas likely to become
+	// initialized via a split trigger. These MsgApp are sent approximately once
+	// per heartbeat interval, but sometimes there's an additional delay thanks
+	// to having to wait for a GC run. In effect, it shouldn't take more than a
+	// small number of heartbeats until the follower leaves probing status, so
+	// NumAttempts should at least match that.
+	_ = maybeDropMsgApp // guru assignment
+	// Snapshots can come up for other reasons and at the end of the day, the
+	// delay introduced here needs to make sure that the snapshot queue
+	// processes at a higher rate than splits happen, so the number of attempts
+	// will typically be much higher than what's suggested by maybeDropMsgApp.
 	return (*Replica)(sdh).store.cfg.RaftDelaySplitToSuppressSnapshotTicks
 }
 
@@ -76,14 +89,6 @@ func (sdh *splitDelayHelper) Sleep(ctx context.Context) time.Duration {
 }
 
 func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) string {
-	// We have an "optimization" to avoid Raft snapshots by dropping some
-	// outgoing MsgAppResp (see the _ assignment below) which takes effect for
-	// RaftPostSplitSuppressSnapshotTicks ticks after an uninitialized replica
-	// is created. This check can err, in which case the snapshot will be
-	// delayed for that many ticks, and so we want to delay by at least as much
-	// plus a bit of padding to give a snapshot a chance to catch the follower
-	// up. If we run out of time, we'll resume the split no matter what.
-	_ = (*Replica)(nil).maybeDropMsgAppResp // guru assignment
 	maxDelaySplitToAvoidSnapshotTicks := sdh.NumAttempts()
 
 	var slept time.Duration
