@@ -715,4 +715,16 @@ x
 2
 
 statement ok
-COMMIT;
+COMMIT
+
+subtest regression_32762
+
+statement ok
+CREATE TABLE t32762(x INT, y INT, UNIQUE (x,y), CONSTRAINT y_not_null CHECK (y IS NOT NULL))
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x;
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
+
