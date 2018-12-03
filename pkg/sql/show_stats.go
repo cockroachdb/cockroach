@@ -173,7 +173,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	}, nil
 }
 
-func statColumnString(desc *TableDescriptor, colID tree.Datum) string {
+func statColumnString(desc *ImmutableTableDescriptor, colID tree.Datum) string {
 	id := sqlbase.ColumnID(*colID.(*tree.DInt))
 	colDesc, err := desc.FindColumnByID(id)
 	if err != nil {
