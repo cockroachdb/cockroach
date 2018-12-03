@@ -469,7 +469,8 @@ UPDATE t29494 SET x = 124 WHERE x = 12 RETURNING *
 ----
 124
 
-statement error column "y" does not exist
+# The HP and CBO show different errors for this case.
+statement error [column "y" does not exist | column "y" is being backfilled]
 UPDATE t29494 SET y = 123
 
 # Check the new column is not usable in assignments. We need to
@@ -482,6 +483,28 @@ UPDATE t29494 SET x = y
 
 statement ok
 COMMIT
+
+# Use delete-only mutation columns with default and computed expressions.
+statement ok
+CREATE TABLE mutation (m INT PRIMARY KEY, n INT)
+
+statement ok
+INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN; ALTER TABLE mutation add COLUMN o INT DEFAULT(10), ADD COLUMN p INT AS (o + n) STORED
+
+statement ok
+UPDATE mutation SET m=2 WHERE n=1
+
+statement ok
+COMMIT TRANSACTION
+
+query IIII colnames
+SELECT * FROM mutation
+----
+m  n  o   p
+2  1  10  11
 
 #regression test for #32477
 subtest reject_special_funcs_inset

@@ -662,7 +662,6 @@ func TestReportUsage(t *testing.T) {
 		`[false,false,false] SET application_name = $1`,
 		`[false,false,false] SET application_name = DEFAULT`,
 		`[false,false,false] SET application_name = _`,
-		`[false,false,false] UPDATE _ SET _ = _ + _`,
 		`[false,false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 		`[true,false,false] INSERT INTO _ VALUES (_), (__more2__)`,
@@ -677,6 +676,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 		`[true,true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
+		`[true,false,false] UPDATE _ SET _ = _ + _`,
 	}
 	t.Logf("expected:\n%s\ngot:\n%s", pretty.Sprint(expectedKeys), pretty.Sprint(foundKeys))
 	for i, found := range foundKeys {
