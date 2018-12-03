@@ -333,7 +333,7 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
+	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
 	return p, func() {

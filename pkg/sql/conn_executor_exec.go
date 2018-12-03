@@ -295,7 +295,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 		}
-		if _, err := ex.addPreparedStmt(ctx, name, Statement{AST: s.Statement}, typeHints); err != nil {
+		if _, err := ex.addPreparedStmt(
+			ctx, name, Statement{SQL: s.Statement.String(), AST: s.Statement}, typeHints,
+		); err != nil {
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil

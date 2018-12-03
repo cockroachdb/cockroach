@@ -123,14 +123,10 @@ type Command interface {
 // ExecStmt is the command for running a query sent through the "simple" pgwire
 // protocol.
 type ExecStmt struct {
+	SQL string
+
 	// Stmt can be nil, in which case a "empty query response" message should be
 	// produced.
-	//
-	// TODO(andrei): Many places call Stmt.String() (e.g. ExecStmt.String()),
-	// which seems inneficient. We should find a way to memo-ize this. Another
-	// option is to keep track of the query as we got it from the client, except
-	// that we might have gotten a batch of them at once, in which case only the
-	// parser can do the splitting.
 	Stmt tree.Statement
 
 	// TimeReceived is the time at which the exec message was received
@@ -146,7 +142,7 @@ type ExecStmt struct {
 func (ExecStmt) command() {}
 
 func (e ExecStmt) String() string {
-	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
+	return fmt.Sprintf("ExecStmt: %s", e.SQL)
 }
 
 var _ Command = ExecStmt{}
@@ -174,6 +170,7 @@ var _ Command = ExecPortal{}
 // PrepareStmt is the command for creating a prepared statement.
 type PrepareStmt struct {
 	Name string
+	SQL  string
 	// Stmt can be nil, in which case executing it should produce an "empty query
 	// response" message.
 	Stmt      tree.Statement
@@ -189,7 +186,7 @@ type PrepareStmt struct {
 func (PrepareStmt) command() {}
 
 func (p PrepareStmt) String() string {
-	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
+	return fmt.Sprintf("PrepareStmt: %s", p.SQL)
 }
 
 var _ Command = PrepareStmt{}

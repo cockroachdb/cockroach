@@ -1103,7 +1103,7 @@ func (ex *connExecutor) run(
 				tcmd.Stmt, NeedRowDesc, pos, nil, /* formatCodes */
 				ex.sessionData.DataConversion)
 			res = stmtRes
-			curStmt := Statement{AST: tcmd.Stmt}
+			curStmt := Statement{SQL: tcmd.SQL, AST: tcmd.Stmt}
 
 			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
@@ -1161,6 +1161,7 @@ func (ex *connExecutor) run(
 			stmtRes.SetLimit(tcmd.Limit)
 			res = stmtRes
 			curStmt := Statement{
+				SQL:           portal.Stmt.Str,
 				AST:           portal.Stmt.Statement,
 				Prepared:      portal.Stmt,
 				ExpectedTypes: portal.Stmt.Columns,

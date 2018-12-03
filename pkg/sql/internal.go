@@ -514,6 +514,7 @@ func (ie *internalExecutorImpl) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			ExecStmt{
+				SQL:          stmt,
 				Stmt:         s,
 				TimeReceived: timeReceived,
 				ParseStart:   parseStart,
@@ -526,6 +527,7 @@ func (ie *internalExecutorImpl) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
+				SQL:        stmt,
 				Stmt:       s,
 				ParseStart: parseStart,
 				ParseEnd:   parseEnd,

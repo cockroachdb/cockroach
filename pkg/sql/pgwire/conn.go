@@ -457,6 +457,7 @@ func (c *conn) handleSimpleQuery(
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
 			ctx, sql.ExecStmt{
+				SQL:          "",
 				Stmt:         nil,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
@@ -490,9 +491,19 @@ func (c *conn) handleSimpleQuery(
 			return nil
 		}
 
+		var sqlStr string
+		if len(stmts) == 1 {
+			// TODO(radu): the string could potentially contain a trailing semicolon.
+			sqlStr = query
+		} else {
+			// TODO(radu): return this information from the parser instead of using
+			// String.
+			sqlStr = stmt.String()
+		}
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
+				SQL:          sqlStr,
 				Stmt:         stmt,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
@@ -576,6 +587,7 @@ func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 	return c.stmtBuf.Push(
 		ctx,
 		sql.PrepareStmt{
+			SQL:          query,
 			Name:         name,
 			Stmt:         stmt,
 			TypeHints:    sqlTypeHints,
