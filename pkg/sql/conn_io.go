@@ -125,13 +125,10 @@ type Command interface {
 type ExecStmt struct {
 	// Stmt can be nil, in which case a "empty query response" message should be
 	// produced.
-	//
-	// TODO(andrei): Many places call Stmt.String() (e.g. ExecStmt.String()),
-	// which seems inneficient. We should find a way to memo-ize this. Another
-	// option is to keep track of the query as we got it from the client, except
-	// that we might have gotten a batch of them at once, in which case only the
-	// parser can do the splitting.
 	Stmt tree.Statement
+
+	// SQL is the SQL string that was parsed into Stmt.
+	SQL string
 
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
@@ -146,7 +143,7 @@ type ExecStmt struct {
 func (ExecStmt) command() {}
 
 func (e ExecStmt) String() string {
-	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
+	return fmt.Sprintf("ExecStmt: %s", e.SQL)
 }
 
 var _ Command = ExecStmt{}
@@ -173,10 +170,16 @@ var _ Command = ExecPortal{}
 
 // PrepareStmt is the command for creating a prepared statement.
 type PrepareStmt struct {
+	// Name of the prepared statement (optional).
 	Name string
+
 	// Stmt can be nil, in which case executing it should produce an "empty query
 	// response" message.
-	Stmt      tree.Statement
+	Stmt tree.Statement
+
+	// SQL is the string from which Stmt was parsed.
+	SQL string
+
 	TypeHints tree.PlaceholderTypes
 	// RawTypeHints is the representation of type hints exactly as specified by
 	// the client.
@@ -189,7 +192,7 @@ type PrepareStmt struct {
 func (PrepareStmt) command() {}
 
 func (p PrepareStmt) String() string {
-	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
+	return fmt.Sprintf("PrepareStmt: %s", p.SQL)
 }
 
 var _ Command = PrepareStmt{}

@@ -21,6 +21,7 @@ import (
 
 // Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
+	SQL           string
 	AST           tree.Statement
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
@@ -40,5 +41,5 @@ type Statement struct {
 }
 
 func (s Statement) String() string {
-	return s.AST.String()
+	return s.SQL
 }
