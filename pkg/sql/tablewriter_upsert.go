@@ -501,17 +501,28 @@ func (tu *tableUpserter) updateConflictingRow(
 		return nil, nil, err
 	}
 
-	// Do we need to (re-)compute computed columns?
-	if tu.anyComputed {
-		// Yes, do it. This appends the
-		// computed columns at the end of updateValues.
+	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
+
+	// Do we need to (re-)compute computed columns or CHECK expressions?
+	if tu.anyComputed || len(checkHelper.Exprs) > 0 {
+		// For computed columns, the goal for the following code appends
+		// the computed columns at the end of updateValues.
+		// For CHECK constraints, the goal of the following code
+		// is to evaluate the constraints and verify they hold.
 		//
-		// TODO(justin): We're currently wasteful here: we construct the
-		// result row *twice* because we need it once to evaluate any computed
-		// columns and again to actually perform the update. we need to find a
-		// way to reuse it. I'm not sure right now how best to factor this -
-		// suggestions welcome.
+		// However both computation require a fully formed row as input,
+		// that is, with the original values, then the UPDATE SET values merged in.
+		// The CHECK expressions want that, and also the computed values
+		// appended (because they may be used as input too).
+		//
+		// TODO(justin): We're currently wasteful here: this construction
+		// of the result row is done again in the row updater. We need to
+		// find a way to reuse it. I'm not sure right now how best to
+		// factor this - suggestions welcome.
 		// TODO(nathan/knz): Reuse a row buffer here.
+
+		// Build a row buffer input with the original data and UPDATE SET
+		// assignments merged in.
 		newValues := make([]tree.Datum, len(conflictingRowValues))
 		copy(newValues, conflictingRowValues)
 		for i, updateValue := range updateValues {
@@ -526,16 +537,23 @@ func (tu *tableUpserter) updateConflictingRow(
 		if err != nil {
 			return nil, nil, err
 		}
-	}
 
-	// check CHECK constraints
-	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
-	if len(checkHelper.Exprs) > 0 {
-		if err := checkHelper.LoadRow(tu.updateColIDtoRowIndex, updateValues, false); err != nil {
-			return nil, nil, err
-		}
-		if err := checkHelper.Check(tu.evalCtx); err != nil {
-			return nil, nil, err
+		if len(checkHelper.Exprs) > 0 {
+			// If there are CHECK expressions, we must add the computed
+			// columns to the input row.
+
+			// Merge the computed values into the newValues slice so that the checkHelper can see them.
+			for i, updateCol := range tu.ru.UpdateCols {
+				newValues[tu.ru.FetchColIDtoRowIndex[updateCol.ID]] = updateValues[i]
+			}
+
+			// Check CHECK constraints.
+			if err := checkHelper.LoadRow(tu.ru.FetchColIDtoRowIndex, newValues, false); err != nil {
+				return nil, nil, err
+			}
+			if err := checkHelper.Check(tu.evalCtx); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
