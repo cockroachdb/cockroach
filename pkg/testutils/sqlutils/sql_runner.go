@@ -15,11 +15,14 @@
 package sqlutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
@@ -56,6 +59,16 @@ func (sr *SQLRunner) ExecRowsAffected(
 	}
 	if numRows != int64(expRowsAffected) {
 		t.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
+	}
+}
+
+// ExpectErr runs the given statement and verifies that it returns an error
+// matching the given regex.
+func (sr *SQLRunner) ExpectErr(t testing.TB, errRE string, query string, args ...interface{}) {
+	t.Helper()
+	_, err := sr.DB.ExecContext(context.Background(), query, args...)
+	if !testutils.IsError(err, errRE) {
+		t.Fatalf("expected error '%s', got: %v", errRE, err)
 	}
 }
 

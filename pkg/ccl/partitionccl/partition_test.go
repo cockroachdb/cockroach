@@ -1304,9 +1304,7 @@ func TestRepartitioning(t *testing.T) {
 						t.Fatalf("%+v", err)
 					}
 				}
-				if _, err := sqlDB.DB.Exec(repartition.String()); err != nil {
-					t.Fatalf("%s: %+v", repartition.String(), err)
-				}
+				sqlDB.Exec(t, repartition.String())
 
 				// Verify that repartitioning removes zone configs for partitions that
 				// have been removed.
@@ -1377,9 +1375,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	const zoneErr = "use of replication zones on indexes or partitions requires an enterprise license"
 	expectErr := func(q string, expErr string) {
 		t.Helper()
-		if _, err := sqlDB.DB.Exec(q); !testutils.IsError(err, expErr) {
-			t.Fatalf("expected error %q, but got %+v", expErr, err)
-		}
+		sqlDB.ExpectErr(t, expErr, q)
 	}
 
 	// Partitions and zone configs cannot be modified without a valid license.
