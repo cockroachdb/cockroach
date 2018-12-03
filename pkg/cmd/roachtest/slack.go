@@ -56,29 +56,6 @@ func sortTests(tests []*test) {
 }
 
 func postSlackReport(pass, fail, skip map[*test]struct{}) {
-	var stablePass []*test
-	var stableFail []*test
-	var unstablePass []*test
-	var unstableFail []*test
-	var skipped []*test
-	for t := range pass {
-		if t.spec.Stable {
-			stablePass = append(stablePass, t)
-		} else {
-			unstablePass = append(unstablePass, t)
-		}
-	}
-	for t := range fail {
-		if t.spec.Stable {
-			stableFail = append(stableFail, t)
-		} else {
-			unstableFail = append(unstableFail, t)
-		}
-	}
-	for t := range skip {
-		skipped = append(skipped, t)
-	}
-
 	client := makeSlackClient()
 	if client == nil {
 		return
@@ -107,13 +84,12 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	default:
 		prefix = "GCE"
 	}
-	message := fmt.Sprintf("[%s] %s: %d+%d passed, %d+%d failed, %d skipped",
-		prefix, branch, len(stablePass), len(unstablePass),
-		len(stableFail), len(unstableFail), len(skipped))
+	message := fmt.Sprintf("[%s] %s: %d passed, %d failed, %d skipped",
+		prefix, branch, len(pass), len(fail), len(skip))
 
 	{
 		status := "good"
-		if len(stableFail) > 0 {
+		if len(fail) > 0 {
 			status = "warning"
 		}
 		var link string
@@ -132,26 +108,29 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	}
 
 	data := []struct {
-		tests []*test
+		tests map[*test]struct{}
 		title string
 		color string
 	}{
-		{stablePass, "Successes [stable]", "good"},
-		{stableFail, "Failures [stable]", "danger"},
-		{unstablePass, "Successes [unstable]", "good"},
-		{unstableFail, "Failures [unstable]", "warning"},
-		{skipped, "Skipped", "warning"},
+		{pass, "Successes", "good"},
+		{fail, "Failures", "danger"},
+		{skip, "Skipped", "warning"},
 	}
 	for _, d := range data {
-		sortTests(d.tests)
+		tests := make([]*test, 0, len(d.tests))
+		for t := range d.tests {
+			tests = append(tests, t)
+		}
+		sortTests(tests)
+
 		var buf bytes.Buffer
-		for _, t := range d.tests {
+		for _, t := range tests {
 			fmt.Fprintf(&buf, "%s\n", t.Name())
 		}
 		params.Attachments = append(params.Attachments,
 			slack.Attachment{
 				Color:    d.color,
-				Title:    fmt.Sprintf("%s: %d", d.title, len(d.tests)),
+				Title:    fmt.Sprintf("%s: %d", d.title, len(tests)),
 				Text:     buf.String(),
 				Fallback: message,
 			})

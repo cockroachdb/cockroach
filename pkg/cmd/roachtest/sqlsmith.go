@@ -109,7 +109,6 @@ func registerSQLsmith(r *registry) {
 	r.Add(testSpec{
 		Name:       "sqlsmith",
 		Nodes:      nodes(1),
-		Stable:     false,
 		MinVersion: "2.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSQLsmith(ctx, t, c)

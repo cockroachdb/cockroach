@@ -207,7 +207,6 @@ func registerLargeRange(r *registry) {
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Nodes:   nodes(numNodes),
 		Timeout: 5 * time.Hour,
-		Stable:  true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},

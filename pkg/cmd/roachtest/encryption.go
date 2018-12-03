@@ -92,7 +92,6 @@ func registerEncryption(r *registry) {
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			MinVersion: "v2.1.0",
 			Nodes:      nodes(n),
-			Stable:     true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runEncryption(ctx, t, c)
 			},

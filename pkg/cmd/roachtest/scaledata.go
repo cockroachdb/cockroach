@@ -49,7 +49,6 @@ func registerScaleData(r *registry) {
 				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
 				Timeout: 2 * duration,
 				Nodes:   nodes(n + 1),
-				Stable:  true, // DO NOT COPY to new tests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runSqlapp(ctx, t, c, app, flags, duration)
 				},
