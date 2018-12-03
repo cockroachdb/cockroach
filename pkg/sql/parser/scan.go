@@ -48,7 +48,8 @@ type Scanner struct {
 	// stmts contains the list of statements at the end of parsing.
 	stmts []tree.Statement
 
-	initialized bool
+	initialized   bool
+	bytesPrealloc []byte
 }
 
 // scanErr holds error state for a Scanner.
@@ -72,6 +73,17 @@ func (s *Scanner) init(str string) {
 	}
 	s.initialized = true
 	s.in = str
+	// Preallocate some buffer space for identifiers etc.
+	s.bytesPrealloc = make([]byte, len(str)/2)
+}
+
+func (s *Scanner) allocBytes(length int) []byte {
+	if len(s.bytesPrealloc) >= length {
+		res := s.bytesPrealloc[:length:length]
+		s.bytesPrealloc = s.bytesPrealloc[length:]
+		return res
+	}
+	return make([]byte, length)
 }
 
 // Tokens calls f on all tokens of the input until an EOF is encountered.
@@ -671,7 +683,8 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	} else if isASCII {
 		// We know that the identifier we've seen so far is ASCII, so we don't need
 		// to unicode normalize. Instead, just lowercase as normal.
-		b := make([]byte, s.pos-start)
+		b := s.allocBytes(s.pos - start)
+		_ = b[s.pos-start-1] // For bounds check elimination.
 		for i, c := range s.in[start:s.pos] {
 			if c >= 'A' && c <= 'Z' {
 				c += 'a' - 'A'
@@ -810,7 +823,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 
 // scanHexString scans the content inside x'....'.
 func (s *Scanner) scanHexString(lval *sqlSymType, ch int) bool {
-	var buf []byte
+	buf := s.allocBytes(4)[:0]
 	var curbyte byte
 	bytep := 0
 	const errInvalidBytesLiteral = "invalid hexadecimal bytes literal"
@@ -866,7 +879,7 @@ outer:
 
 // scanBitString scans the content inside B'....'.
 func (s *Scanner) scanBitString(lval *sqlSymType, ch int) bool {
-	var buf []byte
+	buf := s.allocBytes(4)[:0]
 outer:
 	for {
 		b := s.next()
@@ -904,7 +917,7 @@ outer:
 // string literals '...' but also e'....' and b'...'. For x'...', see
 // scanHexString().
 func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
-	var buf []byte
+	buf := s.allocBytes(4)[:0]
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
 
