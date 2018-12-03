@@ -21,15 +21,15 @@ run ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach  # For the tests that run w
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile acceptance tests"
-run build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/acceptance
+run script -t5 "$TMPDIR/acceptance-build.log" \
+	build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/acceptance
 tc_end_block "Compile acceptance tests"
 
 tc_start_block "Run acceptance tests"
 run cd pkg/acceptance
-run env TZ=America/New_York \
-	stdbuf -eL -oL \
-	./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 \
-	| tee "$TMPDIR/acceptance.log" \
+run script -t5 "$TMPDIR/acceptance.log" \
+	env TZ=America/New_York \
+	./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m \
 	| go-test-teamcity
 run cd ../..
 tc_end_block "Run acceptance tests"

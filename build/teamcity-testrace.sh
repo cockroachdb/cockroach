@@ -29,18 +29,19 @@ fi
 tc_end_block "Determine changed packages"
 
 tc_start_block "Compile C dependencies"
-run build/builder.sh make -Otarget c-deps GOFLAGS=-race
+run script -t5 artifacts/testrace-deps.log \
+	build/builder.sh \
+	make -Otarget c-deps GOFLAGS=-race
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
-run build/builder.sh env \
-    COCKROACH_LOGIC_TESTS_SKIP=true \
-    stdbuf -oL -eL \
+run script -t5 artifacts/testrace.log \
+	build/builder.sh \
+	env COCKROACH_LOGIC_TESTS_SKIP=true \
     make testrace \
     PKG="$pkgspec" \
     TESTTIMEOUT=45m \
     TESTFLAGS='-v' \
-    USE_ROCKSDB_ASSERTIONS=1 2>&1 \
-	| tee artifacts/testrace.log \
+    USE_ROCKSDB_ASSERTIONS=1 \
 	| go-test-teamcity
 tc_end_block "Run Go tests under race detector"

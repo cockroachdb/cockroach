@@ -31,10 +31,10 @@ tc_start_block "Lint"
 #
 # TODO(benesch): once GOPATH/pkg goes away because Go static analysis tools can
 # rebuild on demand, remove this. Upstream issue: golang/go#25650.
-COCKROACH_BUILDER_CCACHE= build/builder.sh \
-	stdbuf -eL -oL \
-	make lint 2>&1 \
-	| tee artifacts/lint.log \
+run script -t5 artifacts/lint.log \
+    env COCKROACH_BUILDER_CCACHE= \
+    build/builder.sh \
+	make lint
 	| go-test-teamcity
 tc_end_block "Lint"
 
@@ -42,5 +42,7 @@ tc_start_block "Test web UI"
 # Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
 # here to minimize total build time since this build has already generated the
 # UI.
-run build/builder.sh make -C pkg/ui
+run script -t5 artifacts/webui-check.log \
+	build/builder.sh \
+	make -C pkg/ui
 tc_end_block "Test web UI"
