@@ -3378,8 +3378,11 @@ func (s *Store) processRaftRequestWithReplica(
 		)
 	}
 
-	if err := r.stepRaftGroup(req); err != nil {
-		return roachpb.NewError(err)
+	drop := maybeDropMsgApp(r.AnnotateCtx(context.Background()), (*replicaMsgAppDropper)(r), req)
+	if !drop {
+		if err := r.stepRaftGroup(req); err != nil {
+			return roachpb.NewError(err)
+		}
 	}
 	return nil
 }
