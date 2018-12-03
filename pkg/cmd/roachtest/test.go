@@ -75,11 +75,6 @@ type testSpec struct {
 	// skipped.
 	MinVersion string
 	minVersion *version.Version
-	// Stable indicates whether failure of the test will result in failure of the
-	// test run. Tests should be added initially as unstable, and only converted
-	// to stable once they have passed successfully on multiple nightly (not
-	// local) runs.
-	Stable bool
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
@@ -439,21 +434,11 @@ func (r *registry) Run(filter []string, parallelism int, artifactsDir string, us
 			defer r.status.Unlock()
 			postSlackReport(r.status.pass, r.status.fail, r.status.skip)
 
-			stableFails := 0
-			for t := range r.status.fail {
-				if t.spec.Stable {
-					stableFails++
-				}
-			}
-			if stableFails > 0 {
+			if len(r.status.fail) > 0 {
 				fmt.Fprintln(r.out, "FAIL")
 				return 1
 			}
-			unstableFails := ""
-			if n := len(r.status.fail) - stableFails; n > 0 {
-				unstableFails = fmt.Sprintf(" (%d unstable FAIL)", n)
-			}
-			fmt.Fprintf(r.out, "PASS%s\n", unstableFails)
+			fmt.Fprintf(r.out, "PASS\n")
 			return 0
 
 		case <-ticker.C:
@@ -801,9 +786,6 @@ func (r *registry) runAsync(
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
 	} else {
 		var details []string
-		if !t.spec.Stable {
-			details = append(details, "unstable")
-		}
 		if t.spec.Skip != "" {
 			details = append(details, "skip")
 		}
@@ -848,10 +830,6 @@ func (r *registry) runAsync(
 			t.mu.Unlock()
 
 			dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
-			stability := ""
-			if !t.spec.Stable {
-				stability = "[unstable] "
-			}
 
 			if t.Failed() {
 				t.mu.Lock()
@@ -866,7 +844,7 @@ func (r *registry) runAsync(
 					)
 				}
 
-				fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
+				fmt.Fprintf(r.out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, output)
 				if postIssues && issues.CanPost() && t.spec.Run != nil {
 					authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
 					branch := "<unknown branch>"
@@ -882,7 +860,7 @@ func (r *registry) runAsync(
 					}
 				}
 			} else if t.spec.Skip == "" {
-				fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
+				fmt.Fprintf(r.out, "--- PASS: %s (%s)\n", t.Name(), dstr)
 				// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 				// TeamCity regards the test as successful.
 			} else {

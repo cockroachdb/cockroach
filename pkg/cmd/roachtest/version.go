@@ -230,7 +230,6 @@ func registerVersion(r *registry) {
 			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
 			MinVersion: "v2.1.0",
 			Nodes:      nodes(n + 1),
-			Stable:     true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runVersion(ctx, t, c, version)
 			},

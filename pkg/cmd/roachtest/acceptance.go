@@ -25,9 +25,8 @@ func registerAcceptance(r *registry) {
 	// local mode the acceptance tests should be configured to run within a
 	// minute or so as these tests are run on every merge to master.
 	spec := testSpec{
-		Name:   "acceptance",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  "acceptance",
+		Nodes: nodes(4),
 	}
 
 	testCases := []struct {
@@ -59,7 +58,6 @@ func registerAcceptance(r *registry) {
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Name:    tc.name,
 			Timeout: 10 * time.Minute,
-			Stable:  true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Wipe(ctx)
 				tc.fn(ctx, t, c)

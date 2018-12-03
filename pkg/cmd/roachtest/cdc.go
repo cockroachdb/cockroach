@@ -315,7 +315,6 @@ func registerCDC(r *registry) {
 		Name:       "cdc/tpcc-1000",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -332,7 +331,6 @@ func registerCDC(r *registry) {
 		Name:       "cdc/initial-scan",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -349,7 +347,6 @@ func registerCDC(r *registry) {
 		Name:       "cdc/sink-chaos",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -366,7 +363,6 @@ func registerCDC(r *registry) {
 		Name:       "cdc/crdb-chaos",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -386,8 +382,7 @@ func registerCDC(r *registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Nodes:  nodes(4, cpu(16)),
-		Stable: true,
+		Nodes: nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
@@ -411,7 +406,6 @@ func registerCDC(r *registry) {
 		Name:       "cdc/bank",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4),
-		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},

@@ -139,7 +139,6 @@ func registerRebalanceLoad(r *registry) {
 		Name:       `rebalance-leases-by-load`,
 		Nodes:      nodes(4), // the last node is just used to generate load
 		MinVersion: "2.1.0",
-		Stable:     true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
@@ -152,7 +151,6 @@ func registerRebalanceLoad(r *registry) {
 		Name:       `rebalance-replicas-by-load`,
 		Nodes:      nodes(7), // the last node is just used to generate load
 		MinVersion: "2.1.0",
-		Stable:     false, // TODO(a-robinson): Promote to stable
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32

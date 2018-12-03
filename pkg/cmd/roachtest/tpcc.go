@@ -132,7 +132,6 @@ func registerTPCC(r *registry) {
 		// releases will support on this hardware.
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
@@ -141,9 +140,8 @@ func registerTPCC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "tpcc-nowait/nodes=3/w=1",
-		Nodes:  nodes(4, cpu(16)),
-		Stable: false,
+		Name:  "tpcc-nowait/nodes=3/w=1",
+		Nodes: nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: 1,
@@ -154,9 +152,8 @@ func registerTPCC(r *registry) {
 	})
 
 	r.Add(testSpec{
-		Name:   "tpcc/w=100/nodes=3/chaos=true",
-		Nodes:  nodes(4),
-		Stable: false,
+		Name:  "tpcc/w=100/nodes=3/chaos=true",
+		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -339,9 +336,8 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 	nodes := nodes(numNodes, opts...)
 
 	r.Add(testSpec{
-		Name:   name,
-		Nodes:  nodes,
-		Stable: true, // DO NOT COPY to new tests
+		Name:  name,
+		Nodes: nodes,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
