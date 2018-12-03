@@ -341,11 +341,6 @@ func (cq *contentionQueue) add(
 			delete(cq.mu.keys, key)
 		} else if newIntentTxn != nil {
 			contended.setLastTxnMeta(newIntentTxn)
-		} else if newWIErr != nil {
-			// Note that we don't update last txn meta unless we know for
-			// sure the txn which has written the most recent intent to the
-			// contended key (i.e. newWIErr != nil).
-			contended.setLastTxnMeta(nil)
 		}
 		if newIntentTxn != nil {
 			// Shallow copy the TxnMeta. After this request returns (i.e. now), we might
