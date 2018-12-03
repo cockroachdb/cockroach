@@ -147,9 +147,18 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE)`},
 		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL)`},
 		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT)`},
-		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other)`},
-		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y))`},
-		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y))`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH SIMPLE)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON UPDATE CASCADE)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE CASCADE)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH FULL)`},
+		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON UPDATE SET NULL)`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT)`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL)`},
 		{`CREATE TABLE a (b INT8, c STRING, INDEX (b, c))`},
 		{`CREATE TABLE a (b INT8, c STRING, INDEX d (b, c))`},
 		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c))`},
@@ -1218,15 +1227,17 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
-		}
-		s := stmts.String()
-		if d.sql != s {
-			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		t.Run(d.sql, func(t *testing.T) {
+			stmts, err := parser.Parse(d.sql)
+			if err != nil {
+				t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			}
+			s := stmts.String()
+			if d.sql != s {
+				t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		})
 	}
 }
 
@@ -1836,6 +1847,18 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)`,
 			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)`,
 		},
+		{
+			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other)`,
+			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH SIMPLE)`,
+		},
+		{
+			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y))`,
+			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)`,
+		},
+		{
+			`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y))`,
+			`CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)`,
+		},
 		{`ALTER TABLE a ALTER b DROP STORED`, `ALTER TABLE a ALTER COLUMN b DROP STORED`},
 		{`ALTER TABLE a ADD b INT8`, `ALTER TABLE a ADD COLUMN b INT8`},
 		{`ALTER TABLE a ADD IF NOT EXISTS b INT8`, `ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT8`},
@@ -1870,19 +1893,21 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue))`},
 	}
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
-		if err != nil {
-			t.Errorf("%s: expected success, but found %s", d.sql, err)
-			continue
-		}
-		s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
-		if d.expected != s {
-			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
-		}
-		if _, err := parser.Parse(s); err != nil {
-			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
+		t.Run(d.sql, func(t *testing.T) {
+			stmts, err := parser.Parse(d.sql)
+			if err != nil {
+				t.Errorf("%s: expected success, but found %s", d.sql, err)
+				return
+			}
+			s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
+			if d.expected != s {
+				t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
+			}
+			if _, err := parser.Parse(s); err != nil {
+				t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
+		})
 	}
 }
 
@@ -1902,19 +1927,21 @@ func TestParseTree(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
-		if err != nil {
-			t.Errorf("%s: expected success, but found %s", d.sql, err)
-			continue
-		}
-		s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
-		if d.expected != s {
-			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
-		}
-		if _, err := parser.Parse(s); err != nil {
-			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
+		t.Run(d.sql, func(t *testing.T) {
+			stmts, err := parser.Parse(d.sql)
+			if err != nil {
+				t.Errorf("%s: expected success, but found %s", d.sql, err)
+				return
+			}
+			s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
+			if d.expected != s {
+				t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
+			}
+			if _, err := parser.Parse(s); err != nil {
+				t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
+		})
 	}
 }
 
@@ -1931,10 +1958,12 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := parser.Parse(d.sql); err != nil {
-			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		t.Run(d.sql, func(t *testing.T) {
+			if _, err := parser.Parse(d.sql); err != nil {
+				t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		})
 	}
 }
 
@@ -2335,21 +2364,23 @@ HINT: try \h EXPLAIN`,
 		},
 	}
 	for _, d := range testData {
-		_, err := parser.Parse(d.sql)
-		if err == nil {
-			t.Errorf("expected error, got nil for:\n%s", d.sql)
-			continue
-		}
-		msg := err.Error()
-		if pgerr, ok := pgerror.GetPGCause(err); ok {
-			msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
-			if pgerr.Hint != "" {
-				msg += "HINT: " + pgerr.Hint
+		t.Run(d.sql, func(t *testing.T) {
+			_, err := parser.Parse(d.sql)
+			if err == nil {
+				t.Errorf("expected error, got nil for:\n%s", d.sql)
+				return
 			}
-		}
-		if msg != d.expected {
-			t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, msg)
-		}
+			msg := err.Error()
+			if pgerr, ok := pgerror.GetPGCause(err); ok {
+				msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
+				if pgerr.Hint != "" {
+					msg += "HINT: " + pgerr.Hint
+				}
+			}
+			if msg != d.expected {
+				t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, msg)
+			}
+		})
 	}
 }
 
@@ -2644,9 +2675,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`},
 
 		{`CREATE TABLE a(b INT8 AS (123) VIRTUAL)`, 0, `virtual computed columns`},
-		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH FULL`, 20305, `match full`},
 		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`},
-		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH SIMPLE`, 20305, `match simple`},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`},
 
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`},
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`},
@@ -2752,39 +2782,41 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 	}
 	for _, d := range testData {
-		_, err := parser.Parse(d.sql)
-		if err == nil {
-			t.Errorf("%s: expected error, got nil", d.sql)
-			continue
-		}
-		pgerr, ok := pgerror.GetPGCause(err)
-		if !ok {
-			t.Errorf("%s: unknown err type: %T", d.sql, err)
-			continue
-		}
-		if !strings.HasPrefix(pgerr.Message, "unimplemented") {
-			t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
-		}
-		if pgerr.InternalCommand == "" {
-			t.Errorf("%s: expected internal command set", d.sql)
-		} else {
-			if !strings.HasPrefix(pgerr.InternalCommand, "syntax.") {
-				t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.InternalCommand)
+		t.Run(d.sql, func(t *testing.T) {
+			_, err := parser.Parse(d.sql)
+			if err == nil {
+				t.Errorf("%s: expected error, got nil", d.sql)
+				return
 			}
-			if !strings.Contains(pgerr.InternalCommand, d.expected) {
-				t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.InternalCommand)
+			pgerr, ok := pgerror.GetPGCause(err)
+			if !ok {
+				t.Errorf("%s: unknown err type: %T", d.sql, err)
+				return
 			}
-		}
-		if d.issue != 0 {
-			exp := fmt.Sprintf("syntax.#%d", d.issue)
-			if !strings.HasPrefix(pgerr.InternalCommand, exp) {
-				t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.InternalCommand)
+			if !strings.HasPrefix(pgerr.Message, "unimplemented") {
+				t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
 			}
-			exp2 := fmt.Sprintf("issues/%d", d.issue)
-			if !strings.HasSuffix(pgerr.Hint, exp2) {
-				t.Errorf("%s: expected %q at end of hint, got %q", d.sql, exp2, pgerr.Hint)
+			if pgerr.InternalCommand == "" {
+				t.Errorf("%s: expected internal command set", d.sql)
+			} else {
+				if !strings.HasPrefix(pgerr.InternalCommand, "syntax.") {
+					t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.InternalCommand)
+				}
+				if !strings.Contains(pgerr.InternalCommand, d.expected) {
+					t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.InternalCommand)
+				}
 			}
-		}
+			if d.issue != 0 {
+				exp := fmt.Sprintf("syntax.#%d", d.issue)
+				if !strings.HasPrefix(pgerr.InternalCommand, exp) {
+					t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.InternalCommand)
+				}
+				exp2 := fmt.Sprintf("issues/%d", d.issue)
+				if !strings.HasSuffix(pgerr.Hint, exp2) {
+					t.Errorf("%s: expected %q at end of hint, got %q", d.sql, exp2, pgerr.Hint)
+				}
+			}
+		})
 	}
 }
 
