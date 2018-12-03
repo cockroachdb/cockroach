@@ -36,6 +36,7 @@ import (
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
