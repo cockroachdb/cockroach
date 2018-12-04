@@ -91,10 +91,7 @@ func evalExport(
 		defer exportStore.Close()
 	}
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return result.Result{}, err
-	}
+	sst := bulk.MakeSSTWriter()
 	defer sst.Close()
 
 	var skipTombstones bool
