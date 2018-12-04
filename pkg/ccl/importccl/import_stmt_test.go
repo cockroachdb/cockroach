@@ -1608,9 +1608,7 @@ func TestImportControlJob(t *testing.T) {
 			t.Fatalf("unexpected: %v", err)
 		}
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-		if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
-			t.Fatal(err)
-		}
+		jobutils.WaitForJob(t, sqlDB, jobID)
 		sqlDB.CheckQueryResults(t,
 			`SELECT * FROM pauseimport.t ORDER BY i`,
 			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
@@ -1642,7 +1640,8 @@ func TestImportWorkerFailure(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -1661,7 +1660,7 @@ func TestImportWorkerFailure(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		_, err := sqlDB.DB.Exec(query)
+		_, err := conn.Exec(query)
 		errCh <- err
 	}()
 	select {
@@ -1683,9 +1682,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	}
 
 	// But the job should be restarted and succeed eventually.
-	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
-		t.Fatal(err)
-	}
+	jobutils.WaitForJob(t, sqlDB, jobID)
 	sqlDB.CheckQueryResults(t,
 		`SELECT * FROM t ORDER BY i`,
 		sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
@@ -1729,7 +1726,8 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Prevent hung HTTP connections in leaktest.
 	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
@@ -1753,7 +1751,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	allowResponse = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
-		_, err := sqlDB.DB.Exec(query, srv.URL)
+		_, err := conn.Exec(query, srv.URL)
 		errCh <- err
 	}()
 	// Allow many, but not all, addsstables to complete.
@@ -1797,9 +1795,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	// Make the node live again
 	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 	// The registry should now adopt the job and resume it.
-	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
-		t.Fatal(err)
-	}
+	jobutils.WaitForJob(t, sqlDB, jobID)
 	// Verify that the job lease was updated
 	rescheduledProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
 	if rescheduledProgress.ModifiedMicros <= originalLease.ModifiedMicros {
@@ -1860,7 +1856,8 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Prevent hung HTTP connections in leaktest.
 	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
@@ -1885,7 +1882,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	allowResponse = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
-		_, err := sqlDB.DB.Exec(query, srv.URL)
+		_, err := conn.Exec(query, srv.URL)
 		errCh <- err
 	}()
 	// Allow many, but not all, addsstables to complete.
@@ -1930,9 +1927,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	}
 
 	// The job should have completed normally.
-	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
-		t.Fatal(err)
-	}
+	jobutils.WaitForJob(t, sqlDB, jobID)
 }
 
 // TestImportMVCCChecksums verifies that MVCC checksums are correctly
@@ -1975,8 +1970,7 @@ func TestImportMysql(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
-	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)

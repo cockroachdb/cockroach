@@ -36,11 +36,12 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir, UseDatabase: "test"}},
 	)
-	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+	conn := tc.Conns[0]
+	db := sqlutils.MakeSQLRunner(conn)
 	db.Exec(t, "CREATE DATABASE test")
 
 	wk := bank.FromRows(rows)
-	if _, err := workload.Setup(ctx, db.DB, wk, 100, 3); err != nil {
+	if _, err := workload.Setup(ctx, conn, wk, 100, 3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +54,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	zoneConfig := config.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
 	config.TestingSetZoneConfig(last+1, zoneConfig)
-	if err := workload.Split(ctx, db.DB, wk.Tables()[0], 1 /* concurrency */); err != nil {
+	if err := workload.Split(ctx, conn, wk.Tables()[0], 1 /* concurrency */); err != nil {
 		t.Fatal(err)
 	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")

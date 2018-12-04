@@ -101,7 +101,7 @@ func TestUpsertFastPath(t *testing.T) {
 	// transaction.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	tx, err := sqlDB.DB.Begin()
+	tx, err := conn.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}

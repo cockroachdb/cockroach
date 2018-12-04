@@ -669,83 +669,81 @@ func backup(
 			return progressLogger.Loop(ctx, requestFinishedCh)
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		for i := range allSpans {
+			{
+				select {
+				case exportsSem <- struct{}{}:
+				case <-ctx.Done():
+					// Break the for loop to avoid creating more work - the backup
+					// has failed because either the context has been canceled or an
+					// error has been returned. Either way, Wait() is guaranteed to
+					// return an error now.
+					return ctx.Err()
+				}
+			}
 
-	for i := range allSpans {
-		{
-			var done bool
-			select {
-			case exportsSem <- struct{}{}:
-			case <-g.Done:
-				done = true
-			}
-			if done {
-				// Break the for loop to avoid creating more work - the backup
-				// has failed because either the context has been canceled or an
-				// error has been returned. Either way, Wait() is guaranteed to
-				// return an error now.
-				break
-			}
+			span := allSpans[i]
+			g.GoCtx(func(ctx context.Context) error {
+				defer func() { <-exportsSem }()
+				header := roachpb.Header{Timestamp: span.end}
+				req := &roachpb.ExportRequest{
+					RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
+					Storage:       exportStore.Conf(),
+					StartTime:     span.start,
+					MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
+				}
+				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+				res := rawRes.(*roachpb.ExportResponse)
+
+				mu.Lock()
+				if backupDesc.RevisionStartTime.Less(res.StartTime) {
+					backupDesc.RevisionStartTime = res.StartTime
+				}
+				for _, file := range res.Files {
+					f := BackupDescriptor_File{
+						Span:        file.Span,
+						Path:        file.Path,
+						Sha512:      file.Sha512,
+						EntryCounts: file.Exported,
+					}
+					if span.start != backupDesc.StartTime {
+						f.StartTime = span.start
+						f.EndTime = span.end
+					}
+					mu.files = append(mu.files, f)
+					mu.exported.Add(file.Exported)
+				}
+				var checkpointFiles BackupFileDescriptors
+				if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
+					// We optimistically assume the checkpoint will succeed to prevent
+					// multiple threads from attempting to checkpoint.
+					mu.lastCheckpoint = timeutil.Now()
+					checkpointFiles = append(checkpointFiles, mu.files...)
+				}
+				mu.Unlock()
+
+				requestFinishedCh <- struct{}{}
+
+				if checkpointFiles != nil {
+					checkpointMu.Lock()
+					backupDesc.Files = checkpointFiles
+					err := writeBackupDescriptor(
+						ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
+					)
+					checkpointMu.Unlock()
+					if err != nil {
+						log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
+					}
+				}
+				return nil
+			})
 		}
-
-		span := allSpans[i]
-		g.GoCtx(func(ctx context.Context) error {
-			defer func() { <-exportsSem }()
-			header := roachpb.Header{Timestamp: span.end}
-			req := &roachpb.ExportRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
-				Storage:       exportStore.Conf(),
-				StartTime:     span.start,
-				MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
-			}
-			rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-			if pErr != nil {
-				return pErr.GoError()
-			}
-			res := rawRes.(*roachpb.ExportResponse)
-
-			mu.Lock()
-			if backupDesc.RevisionStartTime.Less(res.StartTime) {
-				backupDesc.RevisionStartTime = res.StartTime
-			}
-			for _, file := range res.Files {
-				f := BackupDescriptor_File{
-					Span:        file.Span,
-					Path:        file.Path,
-					Sha512:      file.Sha512,
-					EntryCounts: file.Exported,
-				}
-				if span.start != backupDesc.StartTime {
-					f.StartTime = span.start
-					f.EndTime = span.end
-				}
-				mu.files = append(mu.files, f)
-				mu.exported.Add(file.Exported)
-			}
-			var checkpointFiles BackupFileDescriptors
-			if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
-				// We optimistically assume the checkpoint will succeed to prevent
-				// multiple threads from attempting to checkpoint.
-				mu.lastCheckpoint = timeutil.Now()
-				checkpointFiles = append(checkpointFiles, mu.files...)
-			}
-			mu.Unlock()
-
-			requestFinishedCh <- struct{}{}
-
-			if checkpointFiles != nil {
-				checkpointMu.Lock()
-				backupDesc.Files = checkpointFiles
-				err := writeBackupDescriptor(
-					ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
-				)
-				checkpointMu.Unlock()
-				if err != nil {
-					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
-				}
-			}
-			return nil
-		})
-	}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return mu.exported, errors.Wrapf(err, "exporting %d ranges", len(spans))

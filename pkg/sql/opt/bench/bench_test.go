@@ -447,7 +447,7 @@ func (h *harness) prepareUsingServer(tb testing.TB) {
 
 	if h.query.prepare {
 		var err error
-		h.prepared, err = h.sr.DB.Prepare(h.query.query)
+		h.prepared, err = h.db.Prepare(h.query.query)
 		if err != nil {
 			tb.Fatalf("%v", err)
 		}

@@ -19,7 +19,6 @@ import (
 
 func TestGenerator(t *testing.T) {
 	t.Run("NewV1", testNewV1)
-	t.Run("NewV2", testNewV2)
 	t.Run("NewV3", testNewV3)
 	t.Run("NewV4", testNewV4)
 	t.Run("NewV5", testNewV5)
@@ -155,63 +154,6 @@ func testNewV1MissingNetworkFaultyRand(t *testing.T) {
 	u, err := g.NewV1()
 	if err == nil {
 		t.Errorf("did not error on faulty reader and missing network, got %v", u)
-	}
-}
-
-func testNewV2(t *testing.T) {
-	t.Run("Basic", testNewV2Basic)
-	t.Run("DifferentAcrossCalls", testNewV2DifferentAcrossCalls)
-	t.Run("FaultyRand", testNewV2FaultyRand)
-}
-
-func testNewV2Basic(t *testing.T) {
-	domains := []byte{
-		DomainPerson,
-		DomainGroup,
-		DomainOrg,
-	}
-	for _, domain := range domains {
-		u, err := NewV2(domain)
-		if err != nil {
-			t.Errorf("NewV2(%d): %v", domain, err)
-		}
-		if got, want := u.Version(), V2; got != want {
-			t.Errorf("NewV2(%d) generated UUID with version %d, want %d", domain, got, want)
-		}
-		if got, want := u.Variant(), VariantRFC4122; got != want {
-			t.Errorf("NewV2(%d) generated UUID with variant %d, want %d", domain, got, want)
-		}
-	}
-}
-
-func testNewV2DifferentAcrossCalls(t *testing.T) {
-	u1, err := NewV2(DomainOrg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u2, err := NewV2(DomainOrg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if u1 == u2 {
-		t.Errorf("generated identical UUIDs across calls: %v", u1)
-	}
-}
-
-func testNewV2FaultyRand(t *testing.T) {
-	g := &Gen{
-		epochFunc:  time.Now,
-		hwAddrFunc: defaultHWAddrFunc,
-		rand: &faultyReader{
-			readToFail: 0, // fail immediately
-		},
-	}
-	u, err := g.NewV2(DomainPerson)
-	if err == nil {
-		t.Fatalf("got %v, want error", u)
-	}
-	if u != Nil {
-		t.Fatalf("got %v on error, want Nil", u)
 	}
 }
 
@@ -373,11 +315,6 @@ func BenchmarkGenerator(b *testing.B) {
 	b.Run("NewV1", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Must(NewV1())
-		}
-	})
-	b.Run("NewV2", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			Must(NewV2(DomainOrg))
 		}
 	})
 	b.Run("NewV3", func(b *testing.B) {
