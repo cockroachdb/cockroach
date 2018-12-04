@@ -75,6 +75,10 @@ type ColVec interface {
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
 
+	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
+	// into ColVec. It replaces the contents of this ColVec.
+	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
@@ -99,6 +103,8 @@ type Nulls interface {
 
 	// UnsetNulls sets the column to have 0 null values.
 	UnsetNulls()
+	// SetNulls sets the column to have only null values.
+	SetNulls()
 }
 
 var _ ColVec = &memColumn{}
@@ -168,6 +174,13 @@ func (m *memColumn) UnsetNulls() {
 	startIdx := 0
 	for startIdx < len(m.nulls) {
 		startIdx += copy(m.nulls[startIdx:], zeroedNulls[:])
+	}
+}
+
+func (m *memColumn) SetNulls() {
+	m.hasNulls = true
+	for i := range m.nulls {
+		m.nulls[i] = ^0
 	}
 }
 

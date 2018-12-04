@@ -157,6 +157,44 @@ func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colT
 	}
 }
 
+func (m *memColumn) CopyWithSelAndNilsInt64(
+	vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T,
+) {
+	m.UnsetNulls()
+
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		toCol := m._TemplateType()
+		fromCol := vec._TemplateType()
+
+		if vec.HasNulls() {
+			for i := uint16(0); i < nSel; i++ {
+				if nils[i] {
+					m.SetNull(i)
+				} else {
+					if vec.NullAt64(sel[i]) {
+						m.SetNull(i)
+					} else {
+						toCol[i] = fromCol[sel[i]]
+					}
+				}
+			}
+		} else {
+			for i := uint16(0); i < nSel; i++ {
+				if nils[i] {
+					m.SetNull(i)
+				} else {
+					toCol[i] = fromCol[sel[i]]
+				}
+			}
+		}
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
 func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	if m.NullAt(colIdx) {
 		return "NULL"

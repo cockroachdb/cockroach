@@ -32,6 +32,11 @@ const (
 	// hjProbing represents the state the hashJoiner is in when it is in the probe
 	// phase. Probing is done in batches against the stored hash map.
 	hjProbing
+
+	// hjEmittingUnmatched represents the state the hashJoiner is in when it is
+	// emitting unmatched rows from its build table after having consumed the
+	// probe table. This happens in the case of an outer join on the build side.
+	hjEmittingUnmatched
 )
 
 // hashJoinerSpec is the specification for a hash joiner processor. The hash
@@ -67,6 +72,9 @@ type hashJoinerSourceSpec struct {
 
 	// source specifies the input operator to the hash join.
 	source Operator
+
+	// outer specifies whether an outer join is required over the input.
+	outer bool
 }
 
 // hashJoinEqInnerOp performs a hash join on the input tables equality columns.
@@ -91,8 +99,8 @@ type hashJoinerSourceSpec struct {
 // either the left equality columns or the right equality columns make a
 // distinct key. This corresponding table would then be used as the build table.
 //
-// In the vectorized implementation of the distinct build table probe phase, the
-// following tasks are performed by the fastProbe function:
+// In the columnarized implementation of the distinct build table probe phase,
+// the following tasks are performed by the fastProbe function:
 //
 // 1. Compute the bucket number for each probe row's key tuple and store the
 //    results into the buckets array.
@@ -114,8 +122,8 @@ type hashJoinerSourceSpec struct {
 //    matching build's key tuple in the hash table. Use it to project output
 //    columns from the has table to build the resulting batch.
 //
-// In the vectorized implementation of the non-distinct build table probe phase,
-// the following tasks are performed by the probe function:
+// In the columnarized implementation of the non-distinct build table probe
+// phase, the following tasks are performed by the probe function:
 //
 // 1. Compute the bucket number for each probe row's key tuple and store the
 //    results into the buckets array.
@@ -161,6 +169,11 @@ type hashJoinEqInnerOp struct {
 
 	// runningState stores the current state hashJoiner.
 	runningState hashJoinerState
+
+	// emittingUnmatchedState is used when hjEmittingUnmatched.
+	emittingUnmatchedState struct {
+		rowIdx uint64
+	}
 }
 
 var _ Operator = &hashJoinEqInnerOp{}
@@ -198,6 +211,7 @@ func (hj *hashJoinEqInnerOp) Init() {
 		build.outCols,
 		hj.spec.buildRightSide,
 		hj.spec.buildDistinct,
+		build.outer,
 	)
 
 	hj.runningState = hjBuilding
@@ -209,26 +223,67 @@ func (hj *hashJoinEqInnerOp) Next() ColBatch {
 		hj.build()
 		return hj.Next()
 	case hjProbing:
-		return hj.prober.probe()
+		hj.prober.exec()
+
+		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
+			hj.initEmitting()
+			return hj.Next()
+		}
+
+		return hj.prober.batch
+	case hjEmittingUnmatched:
+		hj.emitUnmatched()
+		return hj.prober.batch
 	default:
 		panic("hash joiner in unhandled state")
 	}
 }
 
 func (hj *hashJoinEqInnerOp) build() {
-
 	hj.builder.exec()
 
 	if !hj.spec.buildDistinct {
 		hj.ht.same = make([]uint64, hj.ht.size+1)
-		hj.ht.visited = make([]bool, hj.ht.size+1)
+		hj.ht.allocateVisited()
+	}
 
-		// Since keyID = 0 is reserved for end of list, it can be marked as visited
-		// at the beginning.
-		hj.ht.visited[0] = true
+	if hj.builder.spec.outer {
+		hj.prober.buildRowMatched = make([]bool, hj.ht.size)
 	}
 
 	hj.runningState = hjProbing
+}
+
+func (hj *hashJoinEqInnerOp) initEmitting() {
+	hj.runningState = hjEmittingUnmatched
+
+	// Set all elements in the probe columns of the output batch to null.
+	for _, colIdx := range hj.prober.spec.outCols {
+		outCol := hj.prober.batch.ColVec(int(colIdx + hj.prober.probeColOffset))
+		outCol.SetNulls()
+	}
+}
+
+func (hj *hashJoinEqInnerOp) emitUnmatched() {
+	nResults := uint16(0)
+
+	for nResults < ColBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
+		if !hj.prober.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
+			hj.prober.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
+			nResults++
+		}
+		hj.emittingUnmatchedState.rowIdx++
+	}
+
+	for i, colIdx := range hj.prober.buildOutCols {
+		outCol := hj.prober.batch.ColVec(int(colIdx + hj.prober.buildColOffset))
+		valCol := hj.ht.vals[hj.ht.outCols[i]]
+		colType := hj.ht.valTypes[hj.ht.outCols[i]]
+
+		outCol.CopyWithSelInt64(valCol, hj.prober.buildIdx, nResults, colType)
+	}
+
+	hj.prober.batch.SetLength(nResults)
 }
 
 // hashTable is a structure used by the hash joiner to store the build table
@@ -263,8 +318,8 @@ type hashTable struct {
 	// is the first key of that value found in the next linked list. This field
 	// will be lazily populated by the prober.
 	same []uint64
-	// visited represents whether each the corresponding key has been touched by
-	// the prober.
+	// visited represents whether each of the corresponding keys have been touched
+	// by the prober.
 	visited []bool
 
 	// vals stores the union of the equality and output columns of the left
@@ -433,6 +488,15 @@ func (ht *hashTable) insertKeys(buckets []uint64) {
 	}
 }
 
+// allocateVisited allocates the visited array in the hashTable.
+func (ht *hashTable) allocateVisited() {
+	ht.visited = make([]bool, ht.size+1)
+
+	// Since keyID = 0 is reserved for end of list, it can be marked as visited
+	// at the beginning.
+	ht.visited[0] = true
+}
+
 // hashJoinBuilder is used by the hashJoiner during the build phase. It
 // pre-loads all batches from the build relation before building the hash table.
 type hashJoinBuilder struct {
@@ -504,6 +568,12 @@ type hashJoinProber struct {
 	buildIdx []uint64
 	probeIdx []uint16
 
+	buildNil        []bool
+	buildRowMatched []bool
+
+	buildColOffset uint32
+	probeColOffset uint32
+
 	// keyCols stores the equality columns on the probe table for a single batch.
 	keys []ColVec
 	// buckets is used to store the computed hash value of each key in a single
@@ -525,6 +595,9 @@ type hashJoinProber struct {
 	// buildDistinct indicates whether or not the build table equality column
 	// tuples are distinct. If they are distinct, performance can be optimized.
 	buildDistinct bool
+	// buildOuter indicates whether an outer join is specified over the build
+	// table.
+	buildOuter bool
 
 	// prevBatch, if not nil, indicates that the previous probe input batch has
 	// not been fully processed.
@@ -538,13 +611,22 @@ func makeHashJoinProber(
 	buildOutCols []uint32,
 	probeLeftSide bool,
 	buildDistinct bool,
+	buildOuter bool,
 ) *hashJoinProber {
 	// Prepare the output batch by allocating with the correct column types.
+
+	nBuildCols := uint32(len(buildColTypes))
+
 	var outColTypes []types.T
+	var buildColOffset, probeColOffset uint32
 	if probeLeftSide {
 		outColTypes = append(probe.sourceTypes, buildColTypes...)
+		buildColOffset = uint32(len(probe.sourceTypes))
+		probeColOffset = 0
 	} else {
 		outColTypes = append(buildColTypes, probe.sourceTypes...)
+		buildColOffset = 0
+		probeColOffset = nBuildCols
 	}
 
 	return &hashJoinProber{
@@ -561,20 +643,26 @@ func makeHashJoinProber(
 		buildIdx: make([]uint64, ColBatchSize),
 		probeIdx: make([]uint16, ColBatchSize),
 
+		buildNil: make([]bool, ColBatchSize),
+
 		keys:    make([]ColVec, len(probe.eqCols)),
 		buckets: make([]uint64, ColBatchSize),
 
 		spec: probe,
 
-		nBuildCols:   uint32(len(buildColTypes)),
+		nBuildCols:   nBuildCols,
 		buildOutCols: buildOutCols,
+
+		buildColOffset: buildColOffset,
+		probeColOffset: probeColOffset,
 
 		probeLeftSide: probeLeftSide,
 		buildDistinct: buildDistinct,
+		buildOuter:    buildOuter,
 	}
 }
 
-// probe is a general prober that works with non-distinct build table equality
+// exec a general prober that works with non-distinct build table equality
 // columns. It returns a ColBatch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
 // columns correspond to the respective left source columns, followed by the
@@ -584,9 +672,9 @@ func makeHashJoinProber(
 // states are undefined.
 //
 // buildDistinct is true if the build table equality columns are distinct. It
-// performs the same operation as the probe() function normally would while
+// performs the same operation as the exec() function normally would while
 // taking a shortcut to improve speed.
-func (prober *hashJoinProber) probe() ColBatch {
+func (prober *hashJoinProber) exec() {
 	prober.batch.SetLength(0)
 
 	if batch := prober.prevBatch; batch != nil {
@@ -649,8 +737,6 @@ func (prober *hashJoinProber) probe() ColBatch {
 			}
 		}
 	}
-
-	return prober.batch
 }
 
 // lookupInitial finds the corresponding hash table buckets for the equality
@@ -729,75 +815,44 @@ func (prober *hashJoinProber) check(nToCheck uint16, sel []uint16) uint16 {
 	return nDiffers
 }
 
-// collect prepares the buildIdx and probeIdx arrays where the buildIdx and
-// probeIdx at each index are joined to make an output row. The total number of
-// resulting rows is returned.
-func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []uint16) uint16 {
-	nResults := uint16(0)
-	if sel != nil {
-		for i := uint16(0); i < batchSize; i++ {
-			currentID := prober.head[i]
-			for currentID != 0 {
-				if nResults >= ColBatchSize {
-					prober.prevBatch = batch
-					return nResults
-				}
-				prober.buildIdx[nResults] = currentID - 1
-				prober.probeIdx[nResults] = sel[i]
-				currentID = prober.ht.same[currentID]
-				prober.head[i] = currentID
-				nResults++
-			}
-		}
-	} else {
-		for i := uint16(0); i < batchSize; i++ {
-			currentID := prober.head[i]
-			for currentID != 0 {
-				if nResults >= ColBatchSize {
-					prober.prevBatch = batch
-					return nResults
-				}
-				prober.buildIdx[nResults] = currentID - 1
-				prober.probeIdx[nResults] = i
-				currentID = prober.ht.same[currentID]
-				prober.head[i] = currentID
-				nResults++
-			}
-		}
-	}
-
-	return nResults
-}
-
 // congregate uses the probeIdx and buildidx pairs to stitch together the
 // resulting inner join rows and add them to the output batch with the left
 // table columns preceding the right table columns.
 func (prober *hashJoinProber) congregate(nResults uint16, batch ColBatch, batchSize uint16) {
-	var buildColOffset, probeColOffset uint32
-	if prober.probeLeftSide {
-		buildColOffset = uint32(len(prober.spec.sourceTypes))
-		probeColOffset = 0
-	} else {
-		buildColOffset = 0
-		probeColOffset = prober.nBuildCols
-	}
-
 	for i, colIdx := range prober.buildOutCols {
-		outCol := prober.batch.ColVec(int(colIdx + buildColOffset))
+		outCol := prober.batch.ColVec(int(colIdx + prober.buildColOffset))
 		valCol := prober.ht.vals[prober.ht.outCols[i]]
-
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
-		outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
+		if prober.spec.outer {
+			outCol.CopyWithSelAndNilsInt64(valCol, prober.buildIdx, nResults, prober.buildNil, colType)
+		} else {
+			outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
+		}
 	}
 
 	for _, colIdx := range prober.spec.outCols {
-		outCol := prober.batch.ColVec(int(colIdx + probeColOffset))
+		outCol := prober.batch.ColVec(int(colIdx + prober.probeColOffset))
 		valCol := batch.ColVec(int(colIdx))
-
 		colType := prober.spec.sourceTypes[colIdx]
 
 		outCol.CopyWithSelInt16(valCol, prober.probeIdx, nResults, colType)
+	}
+
+	if prober.buildOuter {
+		// In order to determine which rows to emit for the outer join on the build
+		// table in the end, we need to mark the matched build table rows.
+		if prober.spec.outer {
+			for i := uint16(0); i < nResults; i++ {
+				if !prober.buildNil[i] {
+					prober.buildRowMatched[prober.buildIdx[i]] = true
+				}
+			}
+		} else {
+			for i := uint16(0); i < nResults; i++ {
+				prober.buildRowMatched[prober.buildIdx[i]] = true
+			}
+		}
 	}
 
 	prober.batch.SetLength(nResults)
@@ -824,42 +879,11 @@ func (prober *hashJoinProber) distinctCheck(nToCheck uint16, sel []uint16) uint1
 	return nDiffers
 }
 
-// distinctCollect prepares the batch with the joined output columns where the build
-// row index for each probe row is given in the groupID slice. This function
-// requires assumes a 1-n hash join.
-func (prober *hashJoinProber) distinctCollect(
-	batch ColBatch, batchSize uint16, sel []uint16,
-) uint16 {
-	nResults := uint16(0)
-
-	if sel != nil {
-		for i := uint16(0); i < batchSize; i++ {
-			if prober.groupID[i] != 0 {
-				// Index of keys and outputs in the hash table is calculated as ID - 1.
-				prober.buildIdx[nResults] = prober.groupID[i] - 1
-				prober.probeIdx[nResults] = sel[i]
-				nResults++
-			}
-		}
-	} else {
-		for i := uint16(0); i < batchSize; i++ {
-			if prober.groupID[i] != 0 {
-				// Index of keys and outputs in the hash table is calculated as ID - 1.
-				prober.buildIdx[nResults] = prober.groupID[i] - 1
-				prober.probeIdx[nResults] = i
-				nResults++
-			}
-		}
-	}
-
-	return nResults
-}
-
-// NewEqInnerHashJoiner creates a new inner equality hash join operator
-// on the left and right input tables. leftEqCols and rightEqCols specify the
-// equality columns while leftOutCols and rightOutCols specifies the output
-// columns.
-func NewEqInnerHashJoiner(
+// NewEqHashJoinerOp creates a new equality hash join operator on the left and
+// right input tables. leftEqCols and rightEqCols specify the equality columns
+// while leftOutCols and rightOutCols specifies the output columns. leftTypes
+// and rightTypes specify the input column types of the two sources.
+func NewEqHashJoinerOp(
 	leftSource Operator,
 	rightSource Operator,
 	leftEqCols []uint32,
@@ -868,6 +892,8 @@ func NewEqInnerHashJoiner(
 	rightOutCols []uint32,
 	leftTypes []types.T,
 	rightTypes []types.T,
+	leftOuter bool,
+	rightOuter bool,
 	buildRightSide bool,
 	buildDistinct bool,
 ) (Operator, error) {
@@ -877,6 +903,7 @@ func NewEqInnerHashJoiner(
 			outCols:     leftOutCols,
 			sourceTypes: leftTypes,
 			source:      leftSource,
+			outer:       leftOuter,
 		},
 
 		right: hashJoinerSourceSpec{
@@ -884,6 +911,7 @@ func NewEqInnerHashJoiner(
 			outCols:     rightOutCols,
 			sourceTypes: rightTypes,
 			source:      rightSource,
+			outer:       rightOuter,
 		},
 
 		buildRightSide: buildRightSide,

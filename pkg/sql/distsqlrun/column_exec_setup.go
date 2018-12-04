@@ -159,7 +159,17 @@ func newColOperator(
 			return nil, errors.New("can't plan hash join with on expressions")
 		}
 
-		if core.HashJoiner.Type != sqlbase.JoinType_INNER {
+		var leftOuter, rightOuter bool
+		switch core.HashJoiner.Type {
+		case sqlbase.JoinType_INNER:
+		case sqlbase.JoinType_RIGHT_OUTER:
+			rightOuter = true
+		case sqlbase.JoinType_LEFT_OUTER:
+			leftOuter = true
+		case sqlbase.JoinType_FULL_OUTER:
+			rightOuter = true
+			leftOuter = true
+		default:
 			return nil, errors.Errorf("hash join of type %s not supported", core.HashJoiner.Type)
 		}
 
@@ -190,7 +200,7 @@ func newColOperator(
 			}
 		}
 
-		op, err = exec.NewEqInnerHashJoiner(
+		op, err = exec.NewEqHashJoinerOp(
 			inputs[0],
 			inputs[1],
 			core.HashJoiner.LeftEqColumns,
@@ -199,6 +209,8 @@ func newColOperator(
 			rightOutCols,
 			leftTypes,
 			rightTypes,
+			leftOuter,
+			rightOuter,
 			core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 		)
