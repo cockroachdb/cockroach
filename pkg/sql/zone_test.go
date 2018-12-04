@@ -72,8 +72,8 @@ func TestValidSetShowZones(t *testing.T) {
 		Config:       zoneOverride,
 	}
 
-	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "d")
-	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "d", "t")
+	dbID := sqlutils.QueryDatabaseID(t, db, "d")
+	tableID := sqlutils.QueryTableID(t, db, "d", "t")
 
 	dbRow := sqlutils.ZoneRow{
 		ID:           dbID,
@@ -236,7 +236,7 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
 
 	sqlDB.Exec(t, "DROP TABLE d.t")
-	_, err = sqlDB.DB.Exec("SHOW ZONE CONFIGURATION FOR TABLE d.t")
+	_, err = db.Exec("SHOW ZONE CONFIGURATION FOR TABLE d.t")
 	if !testutils.IsError(err, `relation "d.t" does not exist`) {
 		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
 	}

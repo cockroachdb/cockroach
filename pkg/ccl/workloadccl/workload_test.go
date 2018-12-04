@@ -65,7 +65,7 @@ func TestSetup(t *testing.T) {
 				}
 			}
 
-			if _, err := workload.Setup(ctx, sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
+			if _, err := workload.Setup(ctx, db, gen, test.batchSize, test.concurrency); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

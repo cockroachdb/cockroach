@@ -28,18 +28,31 @@ import (
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
 // convenience functions to run SQL statements and fail the test on any errors.
 type SQLRunner struct {
-	DB *gosql.DB
+	DB DBHandle
 }
 
+// DBHandle is an interface that applies to *gosql.DB, *gosql.Conn, and
+// *gosql.Tx.
+type DBHandle interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (gosql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*gosql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
+}
+
+var _ DBHandle = &gosql.DB{}
+var _ DBHandle = &gosql.Conn{}
+var _ DBHandle = &gosql.Tx{}
+
 // MakeSQLRunner returns a SQLRunner for the given database connection.
-func MakeSQLRunner(db *gosql.DB) *SQLRunner {
+// The argument can be a *gosql.DB, *gosql.Conn, or *gosql.Tx object.
+func MakeSQLRunner(db DBHandle) *SQLRunner {
 	return &SQLRunner{DB: db}
 }
 
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t testing.TB, query string, args ...interface{}) gosql.Result {
 	t.Helper()
-	r, err := sr.DB.Exec(query, args...)
+	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
 		t.Fatalf("error executing '%s': %s", query, err)
 	}
@@ -75,7 +88,7 @@ func (sr *SQLRunner) ExpectErr(t testing.TB, errRE string, query string, args ..
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (sr *SQLRunner) Query(t testing.TB, query string, args ...interface{}) *gosql.Rows {
 	t.Helper()
-	r, err := sr.DB.Query(query, args...)
+	r, err := sr.DB.QueryContext(context.Background(), query, args...)
 	if err != nil {
 		t.Fatalf("error executing '%s': %s", query, err)
 	}
@@ -99,7 +112,7 @@ func (r *Row) Scan(dest ...interface{}) {
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
 func (sr *SQLRunner) QueryRow(t testing.TB, query string, args ...interface{}) *Row {
 	t.Helper()
-	return &Row{t, sr.DB.QueryRow(query, args...)}
+	return &Row{t, sr.DB.QueryRowContext(context.Background(), query, args...)}
 }
 
 // QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills

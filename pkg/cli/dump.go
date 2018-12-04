@@ -565,6 +565,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 	g.GoCtx(func(ctx context.Context) error {
 		// Fetch SQL rows and put them onto valsCh.
 		defer close(valsCh)
+		done := ctx.Done()
 		for i := 0; ; i++ {
 			vals := valArray[i%len(valArray)]
 			if err := rows.Next(vals); err == io.EOF {
@@ -573,7 +574,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				return err
 			}
 			select {
-			case <-ctx.Done():
+			case <-done:
 				return ctx.Err()
 			case valsCh <- vals:
 			}
@@ -584,6 +585,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 		defer close(stringsCh)
 		f := tree.NewFmtCtxWithBuf(tree.FmtParsableNumerics)
 		defer f.Close()
+		done := ctx.Done()
 		for vals := range valsCh {
 			f.Reset()
 			// Values need to be correctly encoded for INSERT statements in a text file.
@@ -671,7 +673,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				d.Format(&f.FmtCtx)
 			}
 			select {
-			case <-ctx.Done():
+			case <-done:
 				return ctx.Err()
 			case stringsCh <- f.String():
 			}
