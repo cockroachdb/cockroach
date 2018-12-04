@@ -207,11 +207,8 @@ type multiTestContext struct {
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
-	transportStopper            *stop.Stopper
-	engineStoppers              []*stop.Stopper
-	timeUntilStoreDead          time.Duration
-	declinedReservationsTimeout time.Duration
-	failedReservationsTimeout   time.Duration
+	transportStopper *stop.Stopper
+	engineStoppers   []*stop.Stopper
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
@@ -245,9 +242,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.injEngines = false
-		mCopy.timeUntilStoreDead = 0
-		mCopy.failedReservationsTimeout = 0
-		mCopy.declinedReservationsTimeout = 0
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -295,17 +289,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		log.AmbientContext{Tracer: st.Tracer}, st,
 		m.nodeDialer, nil, m.transportStopper,
 	)
-
-	const basicallyForever = 24 * time.Hour
-	if m.timeUntilStoreDead == 0 {
-		m.timeUntilStoreDead = basicallyForever
-	}
-	if m.declinedReservationsTimeout == 0 {
-		m.declinedReservationsTimeout = basicallyForever
-	}
-	if m.failedReservationsTimeout == 0 {
-		m.failedReservationsTimeout = basicallyForever
-	}
 
 	for idx := 0; idx < numStores; idx++ {
 		m.addStore(idx)
@@ -642,9 +625,6 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	} else {
 		cfg = storage.TestStoreConfig(m.clocks[i])
 		m.storeConfig = &cfg
-		storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
-		storage.DeclinedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.declinedReservationsTimeout)
-		storage.FailedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.failedReservationsTimeout)
 	}
 	cfg.NodeDialer = m.nodeDialer
 	cfg.Transport = m.transport
