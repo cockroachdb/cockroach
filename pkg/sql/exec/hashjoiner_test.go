@@ -55,6 +55,68 @@ func TestHashJoinerInt64(t *testing.T) {
 		expectedTuples tuples
 	}{
 		{
+			leftTypes:  []types.T{types.Int64, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Int64},
+
+			// Test null handling in output columns.
+			leftTuples: tuples{
+				{1, nil},
+				{2, nil},
+				{3, 1},
+				{4, 2},
+			},
+			rightTuples: tuples{
+				{1, 2},
+				{2, nil},
+				{3, nil},
+				{4, 4},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{1},
+			rightOutCols: []uint32{1},
+
+			expectedTuples: tuples{
+				{nil, 2},
+				{nil, nil},
+				{1, nil},
+				{2, 4},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// Test null handling in hash join key column.
+			leftTuples: tuples{
+				{1},
+				{3},
+				{nil},
+				{2},
+			},
+			rightTuples: tuples{
+				{2},
+				{nil},
+				{3},
+				{nil},
+				{1},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			buildDistinct: false,
+
+			expectedTuples: tuples{
+				{2},
+				{3},
+				{1},
+			},
+		},
+		{
 			// Test handling of multiple column non-distinct equality keys.
 			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
 			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
@@ -542,47 +604,64 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	batch.SetLength(ColBatchSize)
 
-	for _, buildDistinct := range []bool{true, false} {
-		b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
-			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
-					// batch) * nCols (number of columns / row) * 2 (number of sources).
-					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
-					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
-						leftSource := newFiniteBatchSource(batch, nBatches)
-						rightSource := newRepeatableBatchSource(batch)
+	for _, hasNulls := range []bool{false, true} {
+		b.Run(fmt.Sprintf("nulls=%v", hasNulls), func(b *testing.B) {
 
-						spec := hashJoinerSpec{
-							left: hashJoinerSourceSpec{
-								eqCols:      []uint32{0, 2},
-								outCols:     []uint32{0, 1},
-								sourceTypes: sourceTypes,
-								source:      leftSource,
-							},
+			if hasNulls {
+				for colIdx := 0; colIdx < nCols; colIdx++ {
+					vec := batch.ColVec(colIdx)
+					vec.SetNull(0)
+				}
+			} else {
+				for colIdx := 0; colIdx < nCols; colIdx++ {
+					vec := batch.ColVec(colIdx)
+					vec.UnsetNulls()
+				}
+			}
 
-							right: hashJoinerSourceSpec{
-								eqCols:      []uint32{1, 3},
-								outCols:     []uint32{2, 3},
-								sourceTypes: sourceTypes,
-								source:      rightSource,
-							},
+			for _, buildDistinct := range []bool{true, false} {
+				b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
+					for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12, 1 << 16} {
+						b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+							// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+							// batch) * nCols (number of columns / row) * 2 (number of sources).
+							b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								leftSource := newFiniteBatchSource(batch, nBatches)
+								rightSource := newRepeatableBatchSource(batch)
 
-							buildDistinct: buildDistinct,
-						}
+								spec := hashJoinerSpec{
+									left: hashJoinerSourceSpec{
+										eqCols:      []uint32{0, 2},
+										outCols:     []uint32{0, 1},
+										sourceTypes: sourceTypes,
+										source:      leftSource,
+									},
 
-						hj := &hashJoinEqInnerOp{
-							spec: spec,
-						}
+									right: hashJoinerSourceSpec{
+										eqCols:      []uint32{1, 3},
+										outCols:     []uint32{2, 3},
+										sourceTypes: sourceTypes,
+										source:      rightSource,
+									},
 
-						hj.Init()
+									buildDistinct: buildDistinct,
+								}
 
-						for i := 0; i < nBatches; i++ {
-							// Technically, the non-distinct hash join will produce much more
-							// than nBatches of output.
-							hj.Next()
-						}
+								hj := &hashJoinEqInnerOp{
+									spec: spec,
+								}
+
+								hj.Init()
+
+								for i := 0; i < nBatches; i++ {
+									// Technically, the non-distinct hash join will produce much more
+									// than nBatches of output.
+									hj.Next()
+								}
+							}
+						})
 					}
 				})
 			}
