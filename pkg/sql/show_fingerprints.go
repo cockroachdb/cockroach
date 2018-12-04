@@ -29,7 +29,7 @@ import (
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexes   []sqlbase.IndexDescriptor
 
 	run showFingerprintsRun
