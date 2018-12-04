@@ -198,8 +198,19 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 		return tree.DNull
 	case ColumnType_ARRAY:
 		if typ.ArrayContents == nil {
-			contentsTyp := RandColumnType(rng)
+			var contentsTyp ColumnType
+		LOOP:
+			for {
+				contentsTyp = RandColumnType(rng)
+				switch contentsTyp.SemanticType {
+				// Can't have an array of an array.
+				case ColumnType_ARRAY, ColumnType_JSONB:
+				default:
+					break LOOP
+				}
+			}
 			typ.ArrayContents = &contentsTyp.SemanticType
+			typ.Locale = contentsTyp.Locale
 		}
 		eltTyp := typ.elementColumnType()
 		datumType := columnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
