@@ -374,9 +374,7 @@ func (s LeaseStore) Publish(
 		}
 
 		var tableDesc *sqlbase.MutableTableDescriptor
-		// There should be only one version of the descriptor, but it's
-		// a race now to update to the next version.
-		err = s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		publishFn := func(ctx context.Context, txn *client.Txn) error {
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
 			var err error
@@ -434,6 +432,16 @@ func (s LeaseStore) Publish(
 			// More efficient batching can be used if no event log message
 			// is required.
 			return txn.CommitInBatch(ctx, b)
+		}
+
+		// There should be only one version of the descriptor, but it's
+		// a race now to update to the next version.
+		err = s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := publishFn(ctx, txn); err != nil {
+				log.Infof(ctx, "Publish error %+v", err)
+				return err
+			}
+			return nil
 		})
 
 		switch err {
