@@ -63,7 +63,7 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 		{
 			err: rErr,
 			// "locks" is redacted because this last part of the message is actually from `strerror` (ANSI-C).
-			expMsg: "io error while lock file <redacted> no <redacted> available",
+			expMsg: "io error lock <redacted> <redacted> no <redacted> available",
 		},
 		{
 			// A real-world example.
