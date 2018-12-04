@@ -47,6 +47,18 @@ func genHashJoiner(wr io.Writer) error {
 	rehash := regexp.MustCompile(`_REHASH_BODY\((.*)\)`)
 	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" "$1"}}`)
 
+	distinctCollectRightOuter := regexp.MustCompile(`_DISTINCT_COLLECT_RIGHT_OUTER\((.*)\)`)
+	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectRightOuter" buildDict "Global" . "SelInd" "$1"}}`)
+
+	distinctCollectNoOuter := regexp.MustCompile(`_DISTINCT_COLLECT_NO_OUTER\((.*)\)`)
+	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectNoOuter" buildDict "Global" . "SelInd" "$1"}}`)
+
+	collectRightOuter := regexp.MustCompile(`_COLLECT_RIGHT_OUTER\((.*)\)`)
+	s = collectRightOuter.ReplaceAllString(s, `{{template "collectRightOuter" buildDict "Global" . "SelInd" "$1"}}`)
+
+	collectNoOuter := regexp.MustCompile(`_COLLECT_NO_OUTER\((.*)\)`)
+	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "SelInd" "$1"}}`)
+
 	checkCol := regexp.MustCompile(`_CHECK_COL_WITH_NULLS\((.*)\)`)
 	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" "$1"}}`)
 

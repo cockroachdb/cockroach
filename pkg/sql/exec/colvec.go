@@ -76,6 +76,13 @@ type ColVec interface {
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
 
+	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
+	// into ColVec. It replaces the contents of this ColVec.
+	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
+	// into ColVec. It replaces the contents of this ColVec.
+	CopyWithSelAndNilsInt16(vec ColVec, sel []uint16, nSel uint16, nils []bool, colType types.T)
+
 	PrettyValueAt(idx uint16) string
 }
 
