@@ -751,3 +751,29 @@ query TT
 SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
 ----
 succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED
+
+# VALIDATE CONSTRAINT will not hang when executed in the same txn as
+# a schema change in the same txn #32118
+subtest validate_in_schema_change_txn
+
+statement ok
+CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+
+statement ok
+CREATE TABLE orders2 (
+  id INT PRIMARY KEY,
+  product STRING DEFAULT 'sprockets',
+  INDEX (product)
+)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
+
+statement ok
+ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+
+statement ok
+COMMIT
