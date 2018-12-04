@@ -50,6 +50,9 @@ message RaftMessageRequest {
   optional uint64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // Optionally, the start key of the sending replica. This is only populated
+  // as a "hint" under certain conditions.
+  optional bytes range_start_key = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
 
   optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
   optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
