@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -52,8 +53,105 @@ func TestHashJoinerInt64(t *testing.T) {
 		buildRightSide bool
 		buildDistinct  bool
 
+		// The default joinType is sqlbase.JoinType_INNER if this value is not set.
+		joinType sqlbase.JoinType
+
 		expectedTuples tuples
 	}{
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			leftTuples: tuples{
+				{0},
+				{1},
+				{2},
+				{3},
+			},
+			rightTuples: tuples{
+				{-1},
+				{1},
+				{3},
+				{5},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:      sqlbase.JoinType_FULL_OUTER,
+			buildDistinct: true,
+
+			expectedTuples: tuples{
+				{nil, -1},
+				{1, 1},
+				{3, 3},
+				{nil, 5},
+				{0, nil},
+				{2, nil},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			leftTuples: tuples{
+				{0},
+				{1},
+				{2},
+				{3},
+				{4},
+			},
+			rightTuples: tuples{
+				{1},
+				{3},
+				{5},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:      sqlbase.JoinType_LEFT_OUTER,
+			buildDistinct: true,
+
+			expectedTuples: tuples{
+				{1, 1},
+				{3, 3},
+				{0, nil},
+				{2, nil},
+				{4, nil},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// Test right outer join.
+			leftTuples: tuples{
+				{0},
+				{1},
+			},
+			rightTuples: tuples{
+				{1},
+				{2},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:      sqlbase.JoinType_RIGHT_OUTER,
+			buildDistinct: true,
+
+			expectedTuples: tuples{
+				{1, 1},
+				{nil, 2},
+			},
+		},
 		{
 			leftTypes:  []types.T{types.Int64},
 			rightTypes: []types.T{types.Int64},
@@ -591,6 +689,7 @@ func TestHashJoinerInt64(t *testing.T) {
 							outCols:     tc.leftOutCols,
 							sourceTypes: tc.leftTypes,
 							source:      leftSource,
+							outer:       tc.joinType == sqlbase.JoinType_LEFT_OUTER || tc.joinType == sqlbase.JoinType_FULL_OUTER,
 						},
 
 						right: hashJoinerSourceSpec{
@@ -598,13 +697,14 @@ func TestHashJoinerInt64(t *testing.T) {
 							outCols:     tc.rightOutCols,
 							sourceTypes: tc.rightTypes,
 							source:      rightSource,
+							outer:       tc.joinType == sqlbase.JoinType_RIGHT_OUTER || tc.joinType == sqlbase.JoinType_FULL_OUTER,
 						},
 
 						buildRightSide: tc.buildRightSide,
 						buildDistinct:  tc.buildDistinct,
 					}
 
-					hj := &hashJoinEqInnerOp{
+					hj := &hashJoinEqOp{
 						spec: spec,
 					}
 
@@ -667,47 +767,53 @@ func BenchmarkHashJoiner(b *testing.B) {
 				}
 			}
 
-			for _, buildDistinct := range []bool{true, false} {
-				b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
-					for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12, 1 << 16} {
-						b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-							// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
-							// batch) * nCols (number of columns / row) * 2 (number of sources).
-							b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								leftSource := newFiniteBatchSource(batch, nBatches)
-								rightSource := newRepeatableBatchSource(batch)
+			for _, fullOuter := range []bool{false, true} {
+				b.Run(fmt.Sprintf("fullOuter=%v", fullOuter), func(b *testing.B) {
+					for _, buildDistinct := range []bool{true, false} {
+						b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
+							for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12} {
+								b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+									// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+									// batch) * nCols (number of columns / row) * 2 (number of sources).
+									b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+									b.ResetTimer()
+									for i := 0; i < b.N; i++ {
+										leftSource := newFiniteBatchSource(batch, nBatches)
+										rightSource := newRepeatableBatchSource(batch)
 
-								spec := hashJoinerSpec{
-									left: hashJoinerSourceSpec{
-										eqCols:      []uint32{0, 2},
-										outCols:     []uint32{0, 1},
-										sourceTypes: sourceTypes,
-										source:      leftSource,
-									},
+										spec := hashJoinerSpec{
+											left: hashJoinerSourceSpec{
+												eqCols:      []uint32{0, 2},
+												outCols:     []uint32{0, 1},
+												sourceTypes: sourceTypes,
+												source:      leftSource,
+												outer:       fullOuter,
+											},
 
-									right: hashJoinerSourceSpec{
-										eqCols:      []uint32{1, 3},
-										outCols:     []uint32{2, 3},
-										sourceTypes: sourceTypes,
-										source:      rightSource,
-									},
+											right: hashJoinerSourceSpec{
+												eqCols:      []uint32{1, 3},
+												outCols:     []uint32{2, 3},
+												sourceTypes: sourceTypes,
+												source:      rightSource,
+												outer:       fullOuter,
+											},
 
-									buildDistinct: buildDistinct,
-								}
+											buildDistinct: buildDistinct,
+										}
 
-								hj := &hashJoinEqInnerOp{
-									spec: spec,
-								}
+										hj := &hashJoinEqOp{
+											spec: spec,
+										}
 
-								hj.Init()
+										hj.Init()
 
-								for i := 0; i < nBatches; i++ {
-									// Technically, the non-distinct hash join will produce much more
-									// than nBatches of output.
-									hj.Next()
-								}
+										for i := 0; i < nBatches; i++ {
+											// Technically, the non-distinct hash join will produce much more
+											// than nBatches of output.
+											hj.Next()
+										}
+									}
+								})
 							}
 						})
 					}

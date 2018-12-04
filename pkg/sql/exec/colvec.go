@@ -75,6 +75,10 @@ type ColVec interface {
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
 
+	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
+	// into ColVec. It replaces the contents of this ColVec.
+	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
@@ -99,6 +103,8 @@ type Nulls interface {
 
 	// UnsetNulls sets the column to have 0 null values.
 	UnsetNulls()
+	// SetNulls sets the column to have only null values.
+	SetNulls()
 }
 
 var _ ColVec = &memColumn{}
@@ -106,6 +112,17 @@ var _ ColVec = &memColumn{}
 // zeroedNulls is a zeroed out slice representing a bitmap of size ColBatchSize.
 // This is copied to efficiently clear a nulls slice.
 var zeroedNulls [(ColBatchSize-1)>>6 + 1]int64
+
+// filledNulls is a slice representing a bitmap of size ColBatchSize with every
+// single bit set.
+var filledNulls [(ColBatchSize-1)>>6 + 1]int64
+
+func init() {
+	// Initializes filledNulls to the desired slice.
+	for i := range filledNulls {
+		filledNulls[i] = ^0
+	}
+}
 
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
@@ -168,6 +185,15 @@ func (m *memColumn) UnsetNulls() {
 	startIdx := 0
 	for startIdx < len(m.nulls) {
 		startIdx += copy(m.nulls[startIdx:], zeroedNulls[:])
+	}
+}
+
+func (m *memColumn) SetNulls() {
+	m.hasNulls = true
+
+	startIdx := 0
+	for startIdx < len(m.nulls) {
+		startIdx += copy(m.nulls[startIdx:], filledNulls[:])
 	}
 }
 
