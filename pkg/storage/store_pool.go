@@ -243,6 +243,8 @@ func NewStorePool(
 	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
 	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
 
+	log.Warningf(context.TODO(), "TSX %s %s %s", TimeUntilStoreDead.Get(&st.SV), DeclinedReservationsTimeout.Get(&st.SV), FailedReservationsTimeout.Get(&st.SV))
+
 	return sp
 }
 
