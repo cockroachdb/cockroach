@@ -729,6 +729,7 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
 				storeID, timeout, detail.throttledUntil)
+			panic("boom")
 		}
 	}
 }
