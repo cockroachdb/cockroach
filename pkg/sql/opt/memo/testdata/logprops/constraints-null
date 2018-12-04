@@ -134,7 +134,7 @@ select
  └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
            ├── variable: x [type=int]
-           └── cast: INT [type=int]
+           └── cast: INT8 [type=int]
                 └── function: sin [type=float]
                      └── cast: FLOAT8 [type=float]
                           └── variable: x [type=int]

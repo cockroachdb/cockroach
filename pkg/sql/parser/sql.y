@@ -6510,7 +6510,7 @@ const_typename:
   }
 | SERIAL
   {
-    $$.val = coltypes.Serial
+    $$.val = coltypes.Serial8
   }
 | SERIAL2
   {
@@ -6600,11 +6600,11 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = coltypes.Int
+    $$.val = coltypes.Int8
   }
 | INTEGER
   {
-    $$.val = coltypes.Int
+    $$.val = coltypes.Int8
   }
 | INT2
   {

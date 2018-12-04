@@ -135,9 +135,9 @@ SET
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`, ``, `{primary}`, `false`},
+		{`parentID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
 		{`name`, `STRING`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`id`, `INT`, `true`, `NULL`, ``, `{}`, `false`},
+		{`id`, `INT8`, `true`, `NULL`, ``, `{}`, `false`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -151,9 +151,9 @@ SET
 	expected = `
   column_name | data_type | is_nullable | column_default | generation_expression |  indices  | is_hidden  
 +-------------+-----------+-------------+----------------+-----------------------+-----------+-----------+
-  parentID    | INT       |    false    | NULL           |                       | {primary} |   false    
+  parentID    | INT8      |    false    | NULL           |                       | {primary} |   false    
   name        | STRING    |    false    | NULL           |                       | {primary} |   false    
-  id          | INT       |    true     | NULL           |                       | {}        |   false    
+  id          | INT8      |    true     | NULL           |                       | {}        |   false    
 (3 rows)
 `
 

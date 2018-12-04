@@ -97,7 +97,7 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES}: ColumnConversionImpossible,
 		},
 
-		{SemanticType: sqlbase.ColumnType_INT}: {
+		{SemanticType: sqlbase.ColumnType_INT, Width: 64}: {
 			{
 				SemanticType: sqlbase.ColumnType_INT,
 				VisibleType:  sqlbase.ColumnType_BIGINT,
@@ -199,7 +199,7 @@ func TestColumnConversions(t *testing.T) {
 					defer sqlDB.Exec(t, "DROP DATABASE d")
 
 					sqlDB.Exec(t, fmt.Sprintf(
-						"CREATE TABLE d.t (i int primary key, a %s)", columnType(from).SQLString()))
+						"CREATE TABLE d.t (i int8 primary key, a %s)", columnType(from).SQLString()))
 
 					// We're just going to use an ugly, two-dimensional switch
 					// structure here to establish some values that we want to

@@ -966,7 +966,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
+ │         ├── cast: INT8 [type=int]
  │         │    └── null [type=unknown]
  │         └── tuple [type=tuple{unknown, unknown}]
  │              ├── null [type=unknown]
@@ -1620,7 +1620,7 @@ project
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
- │    │         ├── cast: INT [type=int]
+ │    │         ├── cast: INT8 [type=int]
  │    │         │    └── const: 1 [type=int]
  │    │         ├── cast: FLOAT8 [type=float]
  │    │         │    └── const: 2.0 [type=float]
@@ -1651,7 +1651,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
+ │         ├── cast: INT8 [type=int]
  │         │    └── const: 2 [type=int]
  │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 3.0 [type=float]
@@ -1675,7 +1675,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
+ │         ├── cast: INT8 [type=int]
  │         │    └── const: 1 [type=int]
  │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 2.0 [type=float]
@@ -1699,7 +1699,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
+ │         ├── cast: INT8 [type=int]
  │         │    └── const: 1 [type=int]
  │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 1.0 [type=float]
@@ -1723,7 +1723,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
+ │         ├── cast: INT8 [type=int]
  │         │    └── const: 1 [type=int]
  │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 1.0 [type=float]

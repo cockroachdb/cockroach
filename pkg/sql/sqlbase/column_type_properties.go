@@ -122,7 +122,13 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		}
 
 	case *coltypes.TInt:
-		base.Width = int32(t.Width)
+		// Ensure that "naked" INT types are promoted to INT8 to preserve
+		// compatibility with previous versions.
+		if t.Width == 0 {
+			base.Width = 64
+		} else {
+			base.Width = int32(t.Width)
+		}
 
 		// For 2.1 nodes only Width is sufficient, but we also populate
 		// VisibleType for compatibility with pre-2.1 nodes.

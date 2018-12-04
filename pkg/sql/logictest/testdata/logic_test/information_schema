@@ -151,7 +151,7 @@ information_schema.tables  CREATE TABLE tables (
                            table_name STRING NOT NULL,
                            table_type STRING NOT NULL,
                            is_insertable_into STRING NOT NULL,
-                           version INT NULL
+                           version INT8 NULL
 )
 
 query TTBTTTB colnames
@@ -163,7 +163,7 @@ table_schema        STRING     false        NULL            ·                  
 table_name          STRING     false        NULL            ·                      {}       false
 table_type          STRING     false        NULL            ·                      {}       false
 is_insertable_into  STRING     false        NULL            ·                      {}       false
-version             INT        true         NULL            ·                      {}       false
+version             INT8       true         NULL            ·                      {}       false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
@@ -814,7 +814,7 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'with_defaults'
 ----
 table_name     column_name  column_default
-with_defaults  a            9:::INT
+with_defaults  a            9:::INT8
 with_defaults  b            'default':::STRING
 with_defaults  c            NULL
 with_defaults  d            NULL
@@ -868,7 +868,7 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
 table_name  column_name  data_type                 crdb_sql_type
-data_types  a            integer                   INT
+data_types  a            bigint                    INT8
 data_types  a2           smallint                  INT2
 data_types  a4           integer                   INT4
 data_types  a8           bigint                    INT8
@@ -907,7 +907,7 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'char_len'
 ----
 table_name  column_name  character_maximum_length  character_octet_length
-char_len    a            NULL                      NULL
+char_len    a            64                        NULL
 char_len    b            16                        NULL
 char_len    c            32                        NULL
 char_len    d            NULL                      NULL
@@ -1752,18 +1752,18 @@ udt_catalog                          STRING       true         NULL            �
 udt_schema                           STRING       true         NULL            ·                      {}       false
 udt_name                             STRING       true         NULL            ·                      {}       false
 data_type                            STRING       true         NULL            ·                      {}       false
-character_maximum_length             INT          true         NULL            ·                      {}       false
-character_octet_length               INT          true         NULL            ·                      {}       false
+character_maximum_length             INT8         true         NULL            ·                      {}       false
+character_octet_length               INT8         true         NULL            ·                      {}       false
 character_set_catalog                STRING       true         NULL            ·                      {}       false
 character_set_schema                 STRING       true         NULL            ·                      {}       false
 character_set_name                   STRING       true         NULL            ·                      {}       false
 collation_catalog                    STRING       true         NULL            ·                      {}       false
 collation_schema                     STRING       true         NULL            ·                      {}       false
 collation_name                       STRING       true         NULL            ·                      {}       false
-numeric_precision                    INT          true         NULL            ·                      {}       false
-numeric_precision_radix              INT          true         NULL            ·                      {}       false
-numeric_scale                        INT          true         NULL            ·                      {}       false
-datetime_precision                   INT          true         NULL            ·                      {}       false
+numeric_precision                    INT8         true         NULL            ·                      {}       false
+numeric_precision_radix              INT8         true         NULL            ·                      {}       false
+numeric_scale                        INT8         true         NULL            ·                      {}       false
+datetime_precision                   INT8         true         NULL            ·                      {}       false
 interval_type                        STRING       true         NULL            ·                      {}       false
 interval_precision                   STRING       true         NULL            ·                      {}       false
 type_udt_catalog                     STRING       true         NULL            ·                      {}       false
@@ -1771,7 +1771,7 @@ type_udt_schema                      STRING       true         NULL            �
 type_udt_name                        STRING       true         NULL            ·                      {}       false
 scope_catalog                        STRING       true         NULL            ·                      {}       false
 scope_name                           STRING       true         NULL            ·                      {}       false
-maximum_cardinality                  INT          true         NULL            ·                      {}       false
+maximum_cardinality                  INT8         true         NULL            ·                      {}       false
 dtd_identifier                       STRING       true         NULL            ·                      {}       false
 routine_body                         STRING       true         NULL            ·                      {}       false
 routine_definition                   STRING       true         NULL            ·                      {}       false
@@ -1783,7 +1783,7 @@ sql_data_access                      STRING       true         NULL            �
 is_null_call                         STRING       true         NULL            ·                      {}       false
 sql_path                             STRING       true         NULL            ·                      {}       false
 schema_level_routine                 STRING       true         NULL            ·                      {}       false
-max_dynamic_result_sets              INT          true         NULL            ·                      {}       false
+max_dynamic_result_sets              INT8         true         NULL            ·                      {}       false
 is_user_defined_cast                 STRING       true         NULL            ·                      {}       false
 is_implicitly_invocable              STRING       true         NULL            ·                      {}       false
 security_type                        STRING       true         NULL            ·                      {}       false
@@ -1797,7 +1797,7 @@ new_savepoint_level                  STRING       true         NULL            �
 is_udt_dependent                     STRING       true         NULL            ·                      {}       false
 result_cast_from_data_type           STRING       true         NULL            ·                      {}       false
 result_cast_as_locator               STRING       true         NULL            ·                      {}       false
-result_cast_char_max_length          INT          true         NULL            ·                      {}       false
+result_cast_char_max_length          INT8         true         NULL            ·                      {}       false
 result_cast_char_octet_length        STRING       true         NULL            ·                      {}       false
 result_cast_char_set_catalog         STRING       true         NULL            ·                      {}       false
 result_cast_char_set_schema          STRING       true         NULL            ·                      {}       false
@@ -1805,19 +1805,19 @@ result_cast_char_set_name            STRING       true         NULL            �
 result_cast_collation_catalog        STRING       true         NULL            ·                      {}       false
 result_cast_collation_schema         STRING       true         NULL            ·                      {}       false
 result_cast_collation_name           STRING       true         NULL            ·                      {}       false
-result_cast_numeric_precision        INT          true         NULL            ·                      {}       false
-result_cast_numeric_precision_radix  INT          true         NULL            ·                      {}       false
-result_cast_numeric_scale            INT          true         NULL            ·                      {}       false
+result_cast_numeric_precision        INT8         true         NULL            ·                      {}       false
+result_cast_numeric_precision_radix  INT8         true         NULL            ·                      {}       false
+result_cast_numeric_scale            INT8         true         NULL            ·                      {}       false
 result_cast_datetime_precision       STRING       true         NULL            ·                      {}       false
 result_cast_interval_type            STRING       true         NULL            ·                      {}       false
-result_cast_interval_precision       INT          true         NULL            ·                      {}       false
+result_cast_interval_precision       INT8         true         NULL            ·                      {}       false
 result_cast_type_udt_catalog         STRING       true         NULL            ·                      {}       false
 result_cast_type_udt_schema          STRING       true         NULL            ·                      {}       false
 result_cast_type_udt_name            STRING       true         NULL            ·                      {}       false
 result_cast_scope_catalog            STRING       true         NULL            ·                      {}       false
 result_cast_scope_schema             STRING       true         NULL            ·                      {}       false
 result_cast_scope_name               STRING       true         NULL            ·                      {}       false
-result_cast_maximum_cardinality      INT          true         NULL            ·                      {}       false
+result_cast_maximum_cardinality      INT8         true         NULL            ·                      {}       false
 result_cast_dtd_identifier           STRING       true         NULL            ·                      {}       false
 
 query TTTTTTTTTTTTTTIITTTTTTIIIITTTTTTTITTTTTTTTTTTITTTTTTTTTTTTTITTTTTTTIIITTITTTTTTIT colnames
@@ -1833,33 +1833,33 @@ column_name               data_type  is_nullable  column_default  generation_exp
 specific_catalog          STRING     true         NULL            ·                      {}       false
 specific_schema           STRING     true         NULL            ·                      {}       false
 specific_name             STRING     true         NULL            ·                      {}       false
-ordinal_position          INT        true         NULL            ·                      {}       false
+ordinal_position          INT8       true         NULL            ·                      {}       false
 parameter_mode            STRING     true         NULL            ·                      {}       false
 is_result                 STRING     true         NULL            ·                      {}       false
 as_locator                STRING     true         NULL            ·                      {}       false
 parameter_name            STRING     true         NULL            ·                      {}       false
 data_type                 STRING     true         NULL            ·                      {}       false
-character_maximum_length  INT        true         NULL            ·                      {}       false
-character_octet_length    INT        true         NULL            ·                      {}       false
+character_maximum_length  INT8       true         NULL            ·                      {}       false
+character_octet_length    INT8       true         NULL            ·                      {}       false
 character_set_catalog     STRING     true         NULL            ·                      {}       false
 character_set_schema      STRING     true         NULL            ·                      {}       false
 character_set_name        STRING     true         NULL            ·                      {}       false
 collation_catalog         STRING     true         NULL            ·                      {}       false
 collation_schema          STRING     true         NULL            ·                      {}       false
 collation_name            STRING     true         NULL            ·                      {}       false
-numeric_precision         INT        true         NULL            ·                      {}       false
-numeric_precision_radix   INT        true         NULL            ·                      {}       false
-numeric_scale             INT        true         NULL            ·                      {}       false
-datetime_precision        INT        true         NULL            ·                      {}       false
+numeric_precision         INT8       true         NULL            ·                      {}       false
+numeric_precision_radix   INT8       true         NULL            ·                      {}       false
+numeric_scale             INT8       true         NULL            ·                      {}       false
+datetime_precision        INT8       true         NULL            ·                      {}       false
 interval_type             STRING     true         NULL            ·                      {}       false
-interval_precision        INT        true         NULL            ·                      {}       false
+interval_precision        INT8       true         NULL            ·                      {}       false
 udt_catalog               STRING     true         NULL            ·                      {}       false
 udt_schema                STRING     true         NULL            ·                      {}       false
 udt_name                  STRING     true         NULL            ·                      {}       false
 scope_catalog             STRING     true         NULL            ·                      {}       false
 scope_schema              STRING     true         NULL            ·                      {}       false
 scope_name                STRING     true         NULL            ·                      {}       false
-maximum_cardinality       INT        true         NULL            ·                      {}       false
+maximum_cardinality       INT8       true         NULL            ·                      {}       false
 dtd_identifier            STRING     true         NULL            ·                      {}       false
 parameter_default         STRING     true         NULL            ·                      {}       false
 

@@ -88,7 +88,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM d
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-id           INT        false        NULL            ·                      {primary}  false
+id           INT8       false        NULL            ·                      {primary}  false
 
 statement ok
 CREATE TABLE e (
@@ -99,7 +99,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM e
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-id           INT        false        NULL            ·                      {primary}  false
+id           INT8       false        NULL            ·                      {primary}  false
 
 statement ok
 CREATE TABLE f (
@@ -113,9 +113,9 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM f
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        false        NULL            ·                      {primary}  false
-b            INT        false        NULL            ·                      {primary}  false
-c            INT        false        NULL            ·                      {primary}  false
+a            INT8       false        NULL            ·                      {primary}  false
+b            INT8       false        NULL            ·                      {primary}  false
+c            INT8       false        NULL            ·                      {primary}  false
 
 query TT
 SHOW TABLES FROM test WITH COMMENT
@@ -163,7 +163,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM test.users
 ----
 column_name  data_type     is_nullable  column_default  generation_expression  indices            is_hidden
-id           INT           false        NULL            ·                      {primary,foo,bar}  false
+id           INT8          false        NULL            ·                      {primary,foo,bar}  false
 name         VARCHAR       false        NULL            ·                      {foo,bar}          false
 title        VARCHAR       true         NULL            ·                      {}                 false
 nickname     STRING        true         NULL            ·                      {}                 false
@@ -193,7 +193,7 @@ query TT
 SHOW CREATE TABLE test.users
 ----
 test.public.users  CREATE TABLE users (
-                   id INT NOT NULL,
+                   id INT8 NOT NULL,
                    name VARCHAR NOT NULL,
                    title VARCHAR NULL,
                    nickname STRING NULL,
@@ -249,7 +249,7 @@ query TT
 SHOW CREATE TABLE test.named_constraints
 ----
 test.public.named_constraints  CREATE TABLE named_constraints (
-                               id INT NOT NULL,
+                               id INT8 NOT NULL,
                                name VARCHAR NOT NULL,
                                title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
                                nickname STRING NULL,
@@ -365,7 +365,7 @@ SHOW COLUMNS FROM alltypes
 ----
 column_name       data_type     is_nullable  column_default  generation_expression  indices    is_hidden
 cbigint           INT8          true         NULL            ·                      {}         false
-cbigserial        INT           false        unique_rowid()  ·                      {}         false
+cbigserial        INT8          false        unique_rowid()  ·                      {}         false
 cblob             BYTES         true         NULL            ·                      {}         false
 cbool             BOOL          true         NULL            ·                      {}         false
 cbit              BIT           true         NULL            ·                      {}         false
@@ -387,12 +387,12 @@ cdoubleprecision  FLOAT8        true         NULL            ·                 
 cfloat            FLOAT8        true         NULL            ·                      {}         false
 cfloat4           FLOAT4        true         NULL            ·                      {}         false
 cfloat8           FLOAT8        true         NULL            ·                      {}         false
-cint              INT           true         NULL            ·                      {}         false
+cint              INT8          true         NULL            ·                      {}         false
 cint2             INT2          true         NULL            ·                      {}         false
 cint4             INT4          true         NULL            ·                      {}         false
 cint64            INT8          true         NULL            ·                      {}         false
 cint8             INT8          true         NULL            ·                      {}         false
-cinteger          INT           true         NULL            ·                      {}         false
+cinteger          INT8          true         NULL            ·                      {}         false
 cinterval         INTERVAL      true         NULL            ·                      {}         false
 cjson             JSONB         true         NULL            ·                      {}         false
 cnumeric          DECIMAL       true         NULL            ·                      {}         false
@@ -400,9 +400,9 @@ cnumeric1         DECIMAL(1)    true         NULL            ·                 
 cnumeric21        DECIMAL(2,1)  true         NULL            ·                      {}         false
 cqchar            "char"        true         NULL            ·                      {}         false
 creal             FLOAT4        true         NULL            ·                      {}         false
-cserial           INT           false        unique_rowid()  ·                      {}         false
+cserial           INT8          false        unique_rowid()  ·                      {}         false
 csmallint         INT2          true         NULL            ·                      {}         false
-csmallserial      INT           false        unique_rowid()  ·                      {}         false
+csmallserial      INT8          false        unique_rowid()  ·                      {}         false
 cstring           STRING        true         NULL            ·                      {}         false
 cstring12         STRING(12)    true         NULL            ·                      {}         false
 ctext             STRING        true         NULL            ·                      {}         false

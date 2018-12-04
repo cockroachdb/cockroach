@@ -74,8 +74,8 @@ show create table t
 ----
 table_name  create_statement
 t           CREATE TABLE t (
-            a INT NOT NULL,
-            i INT NULL,
+            a INT8 NOT NULL,
+            i INT8 NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC),
             INDEX idx2 (i ASC),
             FAMILY "primary" (a, i)
@@ -109,7 +109,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        true         NULL            ·                      {}         false
+a            INT8       true         NULL            ·                      {}         false
 rowid        INT        false        unique_rowid()  ·                      {primary}  true
 
 statement ok
@@ -119,7 +119,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        true         NULL            ·                      {}         false
+a            INT8       true         NULL            ·                      {}         false
 rowid        INT        false        unique_rowid()  ·                      {primary}  true
 
 statement ok

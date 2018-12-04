@@ -16,7 +16,7 @@ SELECT * FROM f
 statement ok
 CREATE TABLE i (x INT)
 
-statement error value type decimal doesn't match type INT of column "x"
+statement error value type decimal doesn't match type INT8 of column "x"
 INSERT INTO i(x) VALUES (4.5)
 
 statement ok

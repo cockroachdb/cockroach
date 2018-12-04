@@ -684,7 +684,7 @@ project
            │    ├── columns: column1:1(int)
            │    └── tuple [type=tuple{int}]
            │         └── const: 1 [type=int]
-           └── cast: INT [type=int]
+           └── cast: INT8 [type=int]
                 └── null [type=unknown]
 
 build
@@ -709,7 +709,7 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -726,7 +726,7 @@ project
                 │    ├── columns: column1:1(int)
                 │    └── tuple [type=tuple{int}]
                 │         └── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -752,7 +752,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
+                     └── cast: INT8 [type=int]
                           └── null [type=unknown]
 
 # Tests with an empty IN tuple.
@@ -775,7 +775,7 @@ project
            │         └── gt [type=bool]
            │              ├── variable: column1 [type=int]
            │              └── const: 1 [type=int]
-           └── cast: INT [type=int]
+           └── cast: INT8 [type=int]
                 └── null [type=unknown]
 
 build
@@ -806,7 +806,7 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -829,7 +829,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -861,7 +861,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
+                     └── cast: INT8 [type=int]
                           └── null [type=unknown]
 
 build
@@ -884,7 +884,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -916,7 +916,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
+                     └── cast: INT8 [type=int]
                           └── null [type=unknown]
 
 build
@@ -939,7 +939,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
+                └── cast: INT8 [type=int]
                      └── null [type=unknown]
 
 build
@@ -971,7 +971,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
+                     └── cast: INT8 [type=int]
                           └── null [type=unknown]
 
 exec-ddl
@@ -1069,7 +1069,7 @@ select
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
 ----
-error (42846): invalid cast: bool -> INT[]
+error (42846): invalid cast: bool -> INT8[]
 
 build
 SELECT * FROM a WHERE x = $1

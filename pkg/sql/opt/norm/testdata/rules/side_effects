@@ -76,7 +76,7 @@ project
       │    │    └── filters
       │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    └── projections
-      │         └── i + (random() * 10.0)::INT [type=int, outer=(2), side-effects]
+      │         └── i + (random() * 10.0)::INT8 [type=int, outer=(2), side-effects]
       └── aggregations
            └── avg [type=float, outer=(3)]
                 └── variable: f [type=float]
@@ -216,7 +216,7 @@ project
            │                   │    │    └── fd: (6)-->(7)
            │                   │    └── filters
            │                   │         └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-           │                   └── (random() * 10.0)::INT [type=int]
+           │                   └── (random() * 10.0)::INT8 [type=int]
            └── const: 5 [type=int]
 
 # Don't decorrelate CASE ELSE branch if there are side effects.

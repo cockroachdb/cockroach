@@ -72,8 +72,8 @@ func TestImportData(t *testing.T) {
 		{
 			name: "duplicate unique index key",
 			create: `
-				a int primary key,
-				i int,
+				a int8 primary key,
+				i int8,
 				unique index idx_f (i)
 			`,
 			typ: "CSV",
@@ -87,7 +87,7 @@ func TestImportData(t *testing.T) {
 		{
 			name: "duplicate PK",
 			create: `
-				i int primary key
+				i int8 primary key
 			`,
 			typ: "CSV",
 			data: `1
@@ -114,7 +114,7 @@ d
 		{
 			name: "duplicate PK at sst boundary",
 			create: `
-				i int primary key,
+				i int8 primary key,
 				s string
 			`,
 			with: `WITH sstsize = '10B'`,
@@ -126,10 +126,10 @@ d
 		{
 			name: "verify no splits mid row",
 			create: `
-				i int primary key,
+				i int8 primary key,
 				s string,
-				b int,
-				c int,
+				b int8,
+				c int8,
 				index (s),
 				index (i, s),
 				family (i, b),
@@ -168,7 +168,7 @@ d
 		},
 		{
 			name:   "oversample",
-			create: `i int`,
+			create: `i int8`,
 			with:   `WITH oversample = '100'`,
 			typ:    "CSV",
 			data:   "1",
@@ -183,8 +183,8 @@ d
 			},
 		},
 		{
-			name:   "CR in int, 2 cols",
-			create: `a int, b int`,
+			name:   "CR in int8, 2 cols",
+			create: `a int8, b int8`,
 			typ:    "CSV",
 			data:   "1,2\r\n3,4\n5,6",
 			query: map[string][][]string{
@@ -192,8 +192,8 @@ d
 			},
 		},
 		{
-			name:   "CR in int, 1 col",
-			create: `a int`,
+			name:   "CR in int8, 1 col",
+			create: `a int8`,
 			typ:    "CSV",
 			data:   "1\r\n3\n5",
 			query: map[string][][]string{
@@ -213,14 +213,14 @@ d
 		// MySQL OUTFILE
 		{
 			name:   "unexpected number of columns",
-			create: `i int`,
+			create: `i int8`,
 			typ:    "MYSQLOUTFILE",
 			data:   "1\t2",
 			err:    "row 1: too many columns, expected 1",
 		},
 		{
 			name:   "unmatched field enclosure",
-			create: `i int`,
+			create: `i int8`,
 			with:   `WITH fields_enclosed_by = '"'`,
 			typ:    "MYSQLOUTFILE",
 			data:   "\"1",
@@ -228,7 +228,7 @@ d
 		},
 		{
 			name:   "unmatched literal",
-			create: `i int`,
+			create: `i int8`,
 			with:   `WITH fields_escaped_by = '\'`,
 			typ:    "MYSQLOUTFILE",
 			data:   `\`,
@@ -315,7 +315,7 @@ d
 		},
 		{
 			name:   "normal",
-			create: `i int, s string`,
+			create: `i int8, s string`,
 			typ:    "PGCOPY",
 			data:   "1\tSTR\n2\t\\N\n\\N\t\\t",
 			query: map[string][][]string{
@@ -324,7 +324,7 @@ d
 		},
 		{
 			name:   "comma delim",
-			create: `i int, s string`,
+			create: `i int8, s string`,
 			typ:    "PGCOPY",
 			with:   `WITH delimiter = ','`,
 			data:   "1,STR\n2,\\N\n\\N,\\,",
@@ -334,14 +334,14 @@ d
 		},
 		{
 			name:   "size out of range",
-			create: `i int`,
+			create: `i int8`,
 			typ:    "PGCOPY",
 			with:   `WITH max_row_size = '10GB'`,
 			err:    "max_row_size out of range",
 		},
 		{
 			name:   "line too long",
-			create: `i int`,
+			create: `i int8`,
 			typ:    "PGCOPY",
 			data:   "123456",
 			with:   `WITH max_row_size = '5B'`,
@@ -350,14 +350,14 @@ d
 		{
 			name:   "not enough values",
 			typ:    "PGCOPY",
-			create: "a INT, b INT",
+			create: "a INT8, b INT8",
 			data:   `1`,
 			err:    "expected 2 values, got 1",
 		},
 		{
 			name:   "too many values",
 			typ:    "PGCOPY",
-			create: "a INT, b INT",
+			create: "a INT8, b INT8",
 			data:   "1\t2\t3",
 			err:    "expected 2 values, got 3",
 		},
@@ -367,7 +367,7 @@ d
 			name: "mismatch cols",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE t (i int);
+				CREATE TABLE t (i int8);
 				COPY t (s) FROM stdin;
 				0
 				\.
@@ -378,7 +378,7 @@ d
 			name: "missing COPY done",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE t (i int);
+				CREATE TABLE t (i int8);
 				COPY t (i) FROM stdin;
 0
 `,
@@ -388,7 +388,7 @@ d
 			name: "semicolons and comments",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE t (i int);
+				CREATE TABLE t (i int8);
 				;;;
 				-- nothing ;
 				;
@@ -407,7 +407,7 @@ d
 		{
 			name: "line too long",
 			typ:  "PGDUMP",
-			data: "CREATE TABLE t (i INT);",
+			data: "CREATE TABLE t (i INT8);",
 			with: `WITH max_row_size = '5B'`,
 			err:  "line too long",
 		},
@@ -415,7 +415,7 @@ d
 			name: "not enough values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE t (a INT, b INT);
+CREATE TABLE t (a INT8, b INT8);
 
 COPY t (a, b) FROM stdin;
 1
@@ -427,7 +427,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE t (a INT, b INT);
+CREATE TABLE t (a INT8, b INT8);
 
 COPY t (a, b) FROM stdin;
 1	2	3
@@ -439,7 +439,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many cols",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE t (a INT, b INT);
+CREATE TABLE t (a INT8, b INT8);
 
 COPY t (a, b, c) FROM stdin;
 1	2	3
@@ -493,8 +493,8 @@ COPY t (a, b, c) FROM stdin;
 				ORDER BY descriptor_name
 				`: {{
 					`CREATE TABLE a (
-	i INT NOT NULL,
-	k INT NULL,
+	i INT8 NOT NULL,
+	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
 	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a (i),
 	INDEX a_auto_index_a_k_fkey (k ASC),
@@ -502,7 +502,7 @@ COPY t (a, b, c) FROM stdin;
 	FAMILY "primary" (i, k)
 )`}, {
 					`CREATE TABLE b (
-	j INT NOT NULL,
+	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
 	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a (i),
 	FAMILY "primary" (j)
@@ -551,7 +551,7 @@ COPY t (a, b, c) FROM stdin;
 			name: "sequence",
 			typ:  "PGDUMP",
 			data: `
-					CREATE TABLE t (a INT);
+					CREATE TABLE t (a INT8);
 					CREATE SEQUENCE public.i_seq
 						START WITH 1
 						INCREMENT BY 1
@@ -570,7 +570,7 @@ COPY t (a, b, c) FROM stdin;
 		{
 			name: "non-public schema",
 			typ:  "PGDUMP",
-			data: "create table s.t (i INT)",
+			data: "create table s.t (i INT8)",
 			err:  `non-public schemas unsupported: s`,
 		},
 		{
@@ -597,7 +597,7 @@ COPY t (a, b, c) FROM stdin;
 				$_$;
 				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
 
-				CREATE TABLE t (i INT);
+				CREATE TABLE t (i INT8);
 			`,
 			query: map[string][][]string{
 				`SHOW TABLES`: {{"t"}},
@@ -624,7 +624,7 @@ COPY t (a, b, c) FROM stdin;
 		},
 		{
 			name:   "sequences",
-			create: `i int default nextval('s')`,
+			create: `i int8 default nextval('s')`,
 			typ:    "CSV",
 			err:    `"s" not found`,
 		},
@@ -640,7 +640,7 @@ COPY t (a, b, c) FROM stdin;
 
 	// Create and drop a table to make sure a descriptor ID gets used to verify
 	// ID rewrites happen correctly. Useful when running just a single test.
-	sqlDB.Exec(t, `CREATE TABLE blah (i int)`)
+	sqlDB.Exec(t, `CREATE TABLE blah (i int8)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
 	for i, tc := range tests {
@@ -679,8 +679,8 @@ const (
 )`
 	testPgdumpCreateWeather = `CREATE TABLE weather (
 	city VARCHAR(80) NULL,
-	temp_lo INT NULL,
-	temp_hi INT NULL,
+	temp_lo INT8 NULL,
+	temp_hi INT8 NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities (city),
@@ -696,8 +696,8 @@ ALTER TABLE public.cities OWNER TO postgres;
 
 CREATE TABLE public.weather (
     city character varying(80),
-    temp_lo integer,
-    temp_hi integer,
+    temp_lo int8,
+    temp_hi int8,
     prcp real,
     date date
 );
@@ -721,12 +721,12 @@ ALTER TABLE ONLY public.weather
 
 	testPgdumpFkCircular = `
 CREATE TABLE public.a (
-    i integer NOT NULL,
-    k integer
+    i int8 NOT NULL,
+    k int8
 );
 
 CREATE TABLE public.b (
-    j integer NOT NULL
+    j int8 NOT NULL
 );
 
 COPY public.a (i, k) FROM stdin;
@@ -886,7 +886,7 @@ func TestImportCSVStmt(t *testing.T) {
 	tablePath := filepath.Join(dir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
 		CREATE TABLE t (
-			a int primary key,
+			a int8 primary key,
 			b string,
 			index (b),
 			index (a, b)
@@ -957,7 +957,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
 			nil,
 			files,
 			``,
@@ -965,7 +965,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			nil,
 			filesWithOpts,
 			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
@@ -982,7 +982,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
 			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///5'`,
@@ -1071,7 +1071,7 @@ func TestImportCSVStmt(t *testing.T) {
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"bad-opt-name",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH foo = 'bar'`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH foo = 'bar'`,
 			nil,
 			files,
 			``,
@@ -1079,7 +1079,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"bad-opt-no-arg",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform`,
 			nil,
 			files,
 			``,
@@ -1087,7 +1087,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"bad-computed-column",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2', transform = $1`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
 			``,
@@ -1170,7 +1170,7 @@ func TestImportCSVStmt(t *testing.T) {
 			} else {
 				jobPrefix += `""."".`
 			}
-			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
+			jobPrefix += `t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
@@ -1251,7 +1251,7 @@ func TestImportCSVStmt(t *testing.T) {
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("unique_rowid", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE pk")
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT, b STRING) CSV DATA (%s)`, strings.Join(files, ", ")))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT8, b STRING) CSV DATA (%s)`, strings.Join(files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
 			`SELECT count(*), sum(rowid) FROM pk.t`,
@@ -1272,7 +1272,7 @@ func TestImportCSVStmt(t *testing.T) {
 		// Specify wrong number of columns.
 		sqlDB.ExpectErr(
 			t, "expected 1 fields, got 2",
-			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s)`, files[0]),
+			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY) CSV DATA (%s)`, files[0]),
 		)
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
@@ -1282,13 +1282,13 @@ func TestImportCSVStmt(t *testing.T) {
 		)
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
 
 		// A second attempt should fail fast. A "slow fail" is the error message
 		// "restoring table desc and namespace entries: table already exists".
 		sqlDB.ExpectErr(
 			t, `relation "t" already exists`,
-			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]),
+			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]),
 		)
 	})
 
@@ -1307,11 +1307,11 @@ func TestImportCSVStmt(t *testing.T) {
 
 		const (
 			query = `IMPORT TABLE t (
-			a SERIAL,
-			b INT DEFAULT unique_rowid(),
+			a SERIAL8,
+			b INT8 DEFAULT unique_rowid(),
 			c STRING DEFAULT 's',
-			d SERIAL,
-			e INT DEFAULT unique_rowid(),
+			d SERIAL8,
+			e INT8 DEFAULT unique_rowid(),
 			f STRING DEFAULT 's',
 			PRIMARY KEY (a, b, c)
 		) CSV DATA ($1)`
@@ -1321,7 +1321,7 @@ func TestImportCSVStmt(t *testing.T) {
 		data = ",5,e,7,,"
 		t.Run(data, func(t *testing.T) {
 			sqlDB.ExpectErr(
-				t, `row 1: parse "a" as INT: could not parse ""`,
+				t, `row 1: parse "a" as INT8: could not parse ""`,
 				query, srv.URL,
 			)
 			sqlDB.ExpectErr(
@@ -1383,7 +1383,7 @@ func BenchmarkImport(b *testing.B) {
 
 	sqlDB.Exec(b,
 		fmt.Sprintf(
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s) WITH transform = $1`,
 			strings.Join(files, ","),
 		),
@@ -1412,10 +1412,10 @@ func BenchmarkConvertRecord(b *testing.B) {
 	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
 
 	stmt, err := parser.ParseOne(`CREATE TABLE lineitem (
-		l_orderkey      INTEGER NOT NULL,
-		l_partkey       INTEGER NOT NULL,
-		l_suppkey       INTEGER NOT NULL,
-		l_linenumber    INTEGER NOT NULL,
+		l_orderkey      INT8 NOT NULL,
+		l_partkey       INT8 NOT NULL,
+		l_suppkey       INT8 NOT NULL,
+		l_linenumber    INT8 NOT NULL,
 		l_quantity      DECIMAL(15,2) NOT NULL,
 		l_extendedprice DECIMAL(15,2) NOT NULL,
 		l_discount      DECIMAL(15,2) NOT NULL,
@@ -1559,7 +1559,7 @@ func TestImportControlJob(t *testing.T) {
 		}
 		csvURLs := strings.Join(urls, ", ")
 
-		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT PRIMARY KEY) CSV DATA (%s)`, csvURLs)
+		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT8 PRIMARY KEY) CSV DATA (%s)`, csvURLs)
 
 		if _, err := jobutils.RunJob(
 			t, sqlDB, &allowResponse, []string{"cancel"}, query,
@@ -1597,7 +1597,7 @@ func TestImportControlJob(t *testing.T) {
 			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
 		}
 		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
+		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT8 PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
 
 		jobID, err := jobutils.RunJob(
 			t, sqlDB, &allowResponse, []string{"PAUSE"}, query,
@@ -1654,7 +1654,7 @@ func TestImportWorkerFailure(t *testing.T) {
 		urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
 	}
 	csvURLs := strings.Join(urls, ", ")
-	query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
+	query := fmt.Sprintf(`IMPORT TABLE t (i INT8 PRIMARY KEY) CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
 
 	errCh := make(chan error)
 	go func() {
@@ -1743,7 +1743,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	const query = `IMPORT TABLE liveness.t (i INT PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
+	const query = `IMPORT TABLE liveness.t (i INT8 PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
 
 	// Start an IMPORT and wait until it's done one addsstable.
 	allowResponse = make(chan struct{})
@@ -1874,7 +1874,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	const query = `IMPORT TABLE liveness.t (i INT PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
+	const query = `IMPORT TABLE liveness.t (i INT8 PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
 
 	// Start an IMPORT and wait until it's done one addsstable.
 	allowResponse = make(chan struct{})
@@ -1949,9 +1949,9 @@ func TestImportMVCCChecksums(t *testing.T) {
 	defer srv.Close()
 
 	sqlDB.Exec(t, `IMPORT TABLE d.t (
-		a INT PRIMARY KEY,
-		b INT,
-		c INT,
+		a INT8 PRIMARY KEY,
+		b INT8,
+		c INT8,
 		INDEX (b) STORING (c)
 	) CSV DATA ($1)`, srv.URL)
 	sqlDB.Exec(t, `UPDATE d.t SET c = 2 WHERE a = 1`)
@@ -1988,7 +1988,7 @@ func TestImportMysql(t *testing.T) {
 		query    string
 		args     []interface{}
 	}{
-		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
+		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, simple},
 		{`second table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1) WITH skip_foreign_keys`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
@@ -2106,7 +2106,7 @@ func TestImportMysqlOutfile(t *testing.T) {
 		t.Run(cfg.name, func(t *testing.T) {
 			var opts []interface{}
 
-			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT PRIMARY KEY, s text, b bytea) MYSQLOUTFILE DATA ($1)`, i)
+			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) MYSQLOUTFILE DATA ($1)`, i)
 			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string
@@ -2167,7 +2167,7 @@ func TestImportPgCopy(t *testing.T) {
 		t.Run(cfg.name, func(t *testing.T) {
 			var opts []interface{}
 
-			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT PRIMARY KEY, s text, b bytea) PGCOPY DATA ($1)`, i)
+			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) PGCOPY DATA ($1)`, i)
 			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string
@@ -2246,7 +2246,7 @@ func TestImportPgDump(t *testing.T) {
 			`read data only`,
 			expectSimple,
 			`IMPORT TABLE simple (
-				i INTEGER,
+				i INT8,
 				s text,
 				b bytea,
 				CONSTRAINT simple_pkey PRIMARY KEY (i),
@@ -2269,7 +2269,7 @@ func TestImportPgDump(t *testing.T) {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE simple`, [][]string{{
 					"simple", `CREATE TABLE simple (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	s STRING NULL,
 	b BYTES NULL,
 	CONSTRAINT simple_pkey PRIMARY KEY (i ASC),
@@ -2311,7 +2311,7 @@ func TestImportPgDump(t *testing.T) {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE second`, [][]string{{
 					"second", `CREATE TABLE second (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT second_pkey PRIMARY KEY (i ASC),
 	FAMILY "primary" (i, s)
@@ -2337,8 +2337,8 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
 					"seqtable", `CREATE TABLE seqtable (
-	a INT NULL DEFAULT nextval('public.a_seq':::STRING),
-	b INT NULL,
+	a INT8 NULL DEFAULT nextval('public.a_seq':::STRING),
+	b INT8 NULL,
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})
@@ -2394,7 +2394,7 @@ func TestImportCockroachDump(t *testing.T) {
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t", [][]string{
 		{"t", `CREATE TABLE t (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	t STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	INDEX t_t_idx (t ASC),
@@ -2403,7 +2403,7 @@ func TestImportCockroachDump(t *testing.T) {
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE a", [][]string{
 		{"a", `CREATE TABLE a (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES t (i),
 	FAMILY "primary" (i)

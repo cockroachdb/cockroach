@@ -921,7 +921,7 @@ CREATE TABLE tz (
 query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a  INT          false  NULL  ·  {primary}  false
+a  INT8         false  NULL  ·  {primary}  false
 b  TIMESTAMP    true   NULL  ·  {}         false
 c  TIMESTAMPTZ  true   NULL  ·  {}         false
 d  TIMESTAMPTZ  true   NULL  ·  {}         false

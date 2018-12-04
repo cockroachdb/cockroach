@@ -29,18 +29,18 @@ NULL       /10      1         {1}       1
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkLFKBDEYhHufIkylEDCr2KQ6QYRtVjmu0xQxGY7A3mZJsqAceXe5DbJYCJYzXzIz_GdM0XOwJ2boN3QwEnOKjjnHdLHag95_QiuJMM1LudhGwsVE6DNKKCOhcbAfI_e0nulWQcKz2DCusXMKJ5u-dgUSz2EsTFpc7-7E-6LUPUWntNb9cLgRj8PTBpx4-AEwVSIuZWvPxR4J3VX5_4V75jlOmb_G_ZWsqpGgP7JdIcclOb6m6NaaJl_Wf6vhmUujXRP91FA19eo7AAD__5Kmcow=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKAzEYhO8-RZiTQsCsIkhOFUTYyyqlN80hJkMJbDdLkgWl5N2lG7B4EHqc-ZKZ4T9iip6DPTBDv6ODkZhTdMw5ppPVHvT-C1pJhGleysk2Ei4mQh9RQhkJjZ39HLml9Uy3ChKexYZxjZ1TONj0vSmQeAljYdLienMnPhal7ik6pbXuh93jjXgans_EiYdfAlMl4lLO_bnYPaG7Ki_fuGWe45T5Z95_yaoaCfo92x1yXJLjW4purWnydf23Gp65NNo10U8NVVOvfgIAAP__TJBy_A==
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijInxcAmFS85rSBCL1XWvWkPsXksgW5TXl5BWfrfpQ2yrrCixzeT-WbIAX30VLs9JdgXGDQKA8eWUoo8S_lB5d9htULoh1FmuVFoIxPsARKkI1hs3VtHG3KeeKWh4Elc6BbswGHv-GMtUHgInRDb4nJdFq-j1jdUGG2trertVXFX3x-Ntrj9MtBMCnGUY3sStyNYM6m_L3yOLMQrczpuXV6fxZf_wW8oDbFPdII_R9ZTo0B-R_mTUxy5pSeO7VKTz8cltwiekmTX5KPqszUP_B42v4bLH-FmuvgMAAD__wIYpYk=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijInxcAmFUFyqiBCL1XWvWkPsXkshW5TXl5BWfrfpQ24rrDiHt9M5pshe_TBU-V2FGFfYVArDBwaijHwLKUHpf-A1QptP4wyy7VCE5hg95BWOoLFxr13tCbniVcaCp7Etd2CHbjdOf4sBAqPbSfENrss8uxt1PqGMqOttWW1ubvK7quHg9Nkt98O6kkhjHLoj-K2BGsm9f-NL4GFeGWO5xX59Ul8fg5-TXEIfaQj_CmynmoF8ltK3xzDyA09c2iWmnQ-LblF8BQluSYdZZ-seeDPsPkznP8K19PFVwAAAP__AEKl-Q==
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLw0AUhO_-imVOigvdTfGypwgi9NJK7U1zWLOPEkiz4e0LKCX_XZpFYoWKHt_MznzDHtHFQGt_oAT3AotKo-dYU0qRT1J-sArvcEaj6fpBTnKlUUcmuCOkkZbgsPNvLW3JB-KFgUYg8U071fbcHDx_lAKNx6YVYqeuy0K9DsYsSVnjnFutdzfqfv0wG7W6-zKgsRnEqbLQ5RLVqBEHmack8XuCs6P--9znyEK8sOdLS3s7sy6Civ-AtpT62CU6A11qNmOlQWFP-e9THLimJ471hMnnZspNQqAk2bX5WHXZOg38Hra_hosf4Wq8-gwAAP__myirDw==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijAnxcAmXQTJqYIIvXRl3Zv2EJvHUug2JXkFZel_lzZgXWHFPb6ZzHxDjui8o9IeKMK8QqOS6IOvKUYfJik9KNwHjJJoun7gSa4kah8I5ghuuCUY7Ox7S1uyjsJKQcIR26ada_vQHGz4zBkST03LFIy4zjPxNii1JqGVMaYod_c34qF8XJxa3H07kNgMbESeyXyNapTwAy9jIts9wehR_n_wiw9MYaVPt-b6dmGdBWWXgLYUe99FOgGda1ZjJUFuT-n3ox9CTc_B1zMmnZs5NwuOIidXp6PokjUN_BnWf4azX-FqvPoKAAD__6Niq38=
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T

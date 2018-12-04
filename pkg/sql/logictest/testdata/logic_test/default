@@ -35,7 +35,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default     generation_expression  indices    is_hidden
-a            INT        false        42:::INT           ·                      {primary}  false
+a            INT8       false        42:::INT8          ·                      {primary}  false
 b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}         false
 c            FLOAT8     true         random()           ·                      {}         false
 
@@ -117,6 +117,6 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM v
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        false        NULL            ·                      {primary}  false
+a            INT8       false        NULL            ·                      {primary}  false
 b            TIMESTAMP  true         NULL            ·                      {}         false
-c            INT        true         NULL            ·                      {}         false
+c            INT8       true         NULL            ·                      {}         false

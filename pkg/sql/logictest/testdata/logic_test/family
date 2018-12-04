@@ -16,14 +16,14 @@ query TT
 SHOW CREATE TABLE abcd
 ----
 abcd  CREATE TABLE abcd (
-      a INT NOT NULL,
-      b INT NULL,
-      c INT NULL,
-      d INT NULL,
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NULL,
+      d INT8 NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC),
       FAMILY f1 (a, b),
       FAMILY fam_1_c_d (c, d)
-      )
+)
 
 statement ok
 CREATE INDEX d_idx ON abcd(d)
@@ -150,16 +150,16 @@ query TT
 SHOW CREATE TABLE abcd
 ----
 abcd  CREATE TABLE abcd (
-      a INT NOT NULL,
-      b INT NULL,
-      c INT NULL,
-      d INT NULL,
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NULL,
+      d INT8 NULL,
       e STRING NULL,
       f DECIMAL NULL,
-      g INT NULL,
-      h INT NULL,
-      i INT NULL,
-      j INT NULL,
+      g INT8 NULL,
+      h INT8 NULL,
+      i INT8 NULL,
+      j INT8 NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC),
       INDEX d_idx (d ASC),
       FAMILY f1 (a, b, e, f),
@@ -167,7 +167,7 @@ abcd  CREATE TABLE abcd (
       FAMILY fam_2_g (g),
       FAMILY f_h (h, i),
       FAMILY f_j (j)
-      )
+)
 
 statement ok
 ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
@@ -176,14 +176,14 @@ query TT
 SHOW CREATE TABLE abcd
 ----
 abcd  CREATE TABLE abcd (
-      a INT NOT NULL,
-      b INT NULL,
+      a INT8 NOT NULL,
+      b INT8 NULL,
       f DECIMAL NULL,
-      g INT NULL,
+      g INT8 NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC),
       FAMILY f1 (a, b, f),
       FAMILY fam_2_g (g)
-      )
+)
 
 statement ok
 CREATE TABLE f1 (a INT PRIMARY KEY, b STRING, c STRING)
@@ -192,12 +192,12 @@ query TT
 SHOW CREATE TABLE f1
 ----
 f1  CREATE TABLE f1 (
-      a INT NOT NULL,
-      b STRING NULL,
-      c STRING NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
-      FAMILY "primary" (a, b, c)
-    )
+    a INT8 NOT NULL,
+    b STRING NULL,
+    c STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    FAMILY "primary" (a, b, c)
+)
 
 statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
@@ -206,14 +206,14 @@ query TT
 SHOW CREATE TABLE assign_at_create
 ----
 assign_at_create  CREATE TABLE assign_at_create (
-                    a INT NOT NULL,
-                    b INT NULL,
-                    c INT NULL,
-                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-                    FAMILY pri (a),
-                    FAMILY foo (b),
-                    FAMILY fam_2_c (c)
-                  )
+                  a INT8 NOT NULL,
+                  b INT8 NULL,
+                  c INT8 NULL,
+                  CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                  FAMILY pri (a),
+                  FAMILY foo (b),
+                  FAMILY fam_2_c (c)
+)
 
 # Check the the diff-column-id storage
 statement ok
@@ -243,11 +243,11 @@ ALTER TABLE rename_col RENAME c TO e
 query TT
 SHOW CREATE TABLE rename_col
 ----
-rename_col CREATE TABLE rename_col (
-  a INT NOT NULL,
-  d INT NULL,
-  e STRING NULL,
-  CONSTRAINT "primary" PRIMARY KEY (a ASC),
-  FAMILY fam_0_a_b (a, d),
-  FAMILY fam_1_c (e)
+rename_col  CREATE TABLE rename_col (
+            a INT8 NOT NULL,
+            d INT8 NULL,
+            e STRING NULL,
+            CONSTRAINT "primary" PRIMARY KEY (a ASC),
+            FAMILY fam_0_a_b (a, d),
+            FAMILY fam_1_c (e)
 )

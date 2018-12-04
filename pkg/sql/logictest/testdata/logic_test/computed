@@ -10,12 +10,12 @@ CREATE TABLE with_no_column_refs (
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
-with_no_column_refs CREATE TABLE with_no_column_refs (
-                      a INT NULL,
-                      b INT NULL,
-                      c INT NULL AS (3) STORED,
-                      FAMILY "primary" (a, b, c, rowid)
-                    )
+with_no_column_refs  CREATE TABLE with_no_column_refs (
+                     a INT8 NULL,
+                     b INT8 NULL,
+                     c INT8 NULL AS (3) STORED,
+                     FAMILY "primary" (a, b, c, rowid)
+)
 
 statement ok
 CREATE TABLE extra_parens (
@@ -27,12 +27,12 @@ CREATE TABLE extra_parens (
 query TT
 SHOW CREATE TABLE extra_parens
 ----
-extra_parens CREATE TABLE extra_parens (
-                a INT NULL,
-                b INT NULL,
-                c INT NULL AS ((3)) STORED,
-                FAMILY "primary" (a, b, c, rowid)
-              )
+extra_parens  CREATE TABLE extra_parens (
+              a INT8 NULL,
+              b INT8 NULL,
+              c INT8 NULL AS ((3)) STORED,
+              FAMILY "primary" (a, b, c, rowid)
+)
 
 
 statement error cannot write directly to computed column "c"
@@ -79,22 +79,22 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    a INT NULL DEFAULT 3:::INT,
-    b INT NULL DEFAULT 7:::INT,
-    c INT NULL AS (a) STORED,
-    d INT NULL AS (a + b) STORED,
-    FAMILY "primary" (a, b, c, d, rowid)
-  )
+x  CREATE TABLE x (
+   a INT8 NULL DEFAULT 3:::INT8,
+   b INT8 NULL DEFAULT 7:::INT8,
+   c INT8 NULL AS (a) STORED,
+   d INT8 NULL AS (a + b) STORED,
+   FAMILY "primary" (a, b, c, d, rowid)
+)
 
 query TTBTTTB colnames
 SHOW COLUMNS FROM x
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        true         3:::INT         ·                      {}         false
-b            INT        true         7:::INT         ·                      {}         false
-c            INT        true         NULL            a                      {}         false
-d            INT        true         NULL            a + b                  {}         false
+a            INT8       true         3:::INT8        ·                      {}         false
+b            INT8       true         7:::INT8        ·                      {}         false
+c            INT8       true         NULL            a                      {}         false
+d            INT8       true         NULL            a + b                  {}         false
 rowid        INT        false        unique_rowid()  ·                      {primary}  true
 
 statement error cannot write directly to computed column "c"
@@ -597,11 +597,11 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    a INT NULL,
-    b INT NULL AS (a) STORED,
-    FAMILY "primary" (a, b, rowid)
-  )
+x  CREATE TABLE x (
+   a INT8 NULL,
+   b INT8 NULL AS (a) STORED,
+   FAMILY "primary" (a, b, rowid)
+)
 
 statement ok
 DROP TABLE x
@@ -619,11 +619,11 @@ ALTER TABLE x RENAME COLUMN a TO c
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    c INT NULL,
-    b INT NULL AS (c) STORED,
-    FAMILY "primary" (c, b, rowid)
-  )
+x  CREATE TABLE x (
+   c INT8 NULL,
+   b INT8 NULL AS (c) STORED,
+   FAMILY "primary" (c, b, rowid)
+)
 
 statement ok
 DROP TABLE x
@@ -658,10 +658,10 @@ query TT
 SHOW CREATE TABLE x
 ----
 x  CREATE TABLE x (
-    a INT NULL,
-    b INT NULL AS (a * 2) STORED,
-    c INT NOT NULL AS (a + 4) STORED,
-    FAMILY "primary" (a, b, rowid, c)
+   a INT8 NULL,
+   b INT8 NULL AS (a * 2) STORED,
+   c INT8 NOT NULL AS (a + 4) STORED,
+   FAMILY "primary" (a, b, rowid, c)
 )
 
 statement ok
@@ -742,5 +742,5 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type INT of column "a"
+query error value type decimal doesn't match type INT8 of column "a"
 INSERT INTO x VALUES(1.4)

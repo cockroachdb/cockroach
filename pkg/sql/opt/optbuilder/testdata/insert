@@ -664,7 +664,7 @@ project
            │    │    ├── scan xyz
            │    │    │    └── columns: xyz.x:7(string!null) y:8(int) z:9(float)
            │    │    └── projections
-           │    │         └── cast: INT [type=int]
+           │    │         └── cast: INT8 [type=int]
            │    │              └── variable: xyz.x [type=string]
            │    └── projections
            │         ├── const: 10 [type=int]
