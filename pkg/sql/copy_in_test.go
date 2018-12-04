@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -416,7 +417,12 @@ func TestCopyTransaction(t *testing.T) {
 	}
 
 	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
+		if testutils.IsError(err,
+			"TransactionAbortedError(ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY)") {
+			t.Skip("sometimes skipped on 2.1. #32778")
+		} else {
+			t.Fatal(err)
+		}
 	}
 
 	var i int
