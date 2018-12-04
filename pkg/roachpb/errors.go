@@ -647,7 +647,7 @@ func (e *MixedSuccessError) Error() string {
 }
 
 func (e *MixedSuccessError) message(_ *Error) string {
-	return "the batch experienced mixed success and failure"
+	return fmt.Sprintf("the batch experienced mixed success and failure: %s", e.Wrapped)
 }
 
 var _ ErrorDetailInterface = &MixedSuccessError{}

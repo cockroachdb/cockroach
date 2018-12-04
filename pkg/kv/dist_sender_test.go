@@ -2357,6 +2357,11 @@ func TestErrorIndexAlignment(t *testing.T) {
 		{0, 0, false},
 		{1, 1, true},
 		{2, 3, true},
+		// Repeat above test so we can wrap the error in another MixedSuccessError
+		// and test that its index will be unmodified as a result. Also this
+		// error doesn't get wrapped again in another MixedSuccessError, thereby
+		// it can be unwrapped correctly to reveal the index for the error.
+		{2, 0, true},
 	}
 
 	descDB := mockRangeDescriptorDBForDescs(
@@ -2383,6 +2388,11 @@ func TestErrorIndexAlignment(t *testing.T) {
 						// we return an error for the first
 						// request of the nthPartialBatch.
 						Index: &roachpb.ErrPosition{Index: 0},
+					}
+
+					if i == len(testCases)-1 {
+						// Wrap the error in a MixedSuccessError.
+						reply.Error = roachpb.NewError(&roachpb.MixedSuccessError{reply.Error})
 					}
 				}
 				nthRequest++
@@ -2427,6 +2437,8 @@ func TestErrorIndexAlignment(t *testing.T) {
 				pErr = aPS.Wrapped
 			}
 
+			// A MixedSuccessError that gets unwrapped to reveal another
+			// MixedSuccessError will have a nil Index.
 			if pErr.Index == nil {
 				t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
 			}

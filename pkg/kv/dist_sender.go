@@ -854,7 +854,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
 			if hadSuccessWriting {
-				pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
+				// divideAndSendBatchToRanges can call sendPartialBatch, which in
+				// turn can call divideAndSendBatchToRanges recursively. Therefore,
+				// pErr can already be a MixedSuccessError returned from the
+				// recursive call; do not wrap it in another MixedSuccessError.
+				if _, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); !ok {
+					pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
+				}
 			}
 		} else if couldHaveSkippedResponses {
 			fillSkippedResponses(ba, br, seekKey, resumeReason)
