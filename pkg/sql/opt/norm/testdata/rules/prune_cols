@@ -1336,7 +1336,7 @@ group-by
  │    ├── scan a
  │    │    └── columns: i:2(int) s:4(string)
  │    └── projections
- │         └── i + s::INT [type=int, outer=(2,4)]
+ │         └── i + s::INT8 [type=int, outer=(2,4)]
  └── aggregations
       └── avg [type=decimal, outer=(5)]
            └── variable: column5 [type=int]

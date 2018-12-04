@@ -9,8 +9,8 @@ dump t f --dump-mode=both
 ----
 ----
 CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
@@ -22,8 +22,8 @@ INSERT INTO f (x, y) VALUES
 dump t f --dump-mode=schema
 ----
 CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 

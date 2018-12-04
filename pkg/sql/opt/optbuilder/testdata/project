@@ -217,7 +217,7 @@ error (42846): invalid cast: tuple{int, float} -> TIMESTAMP
 build
 SELECT CAST(x AS int[]) FROM b
 ----
-error (42846): invalid cast: int -> INT[]
+error (42846): invalid cast: int -> INT8[]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)

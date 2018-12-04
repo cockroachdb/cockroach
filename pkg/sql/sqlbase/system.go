@@ -63,15 +63,15 @@ func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  "parentID" INT,
+  "parentID" INT8,
   name       STRING,
-  id         INT,
+  id         INT8,
   PRIMARY KEY ("parentID", name)
 );`
 
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT PRIMARY KEY,
+  id         INT8 PRIMARY KEY,
   descriptor BYTES
 );`
 
@@ -85,7 +85,7 @@ CREATE TABLE system.users (
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT PRIMARY KEY,
+  id     INT8 PRIMARY KEY,
   config BYTES
 );`
 
@@ -103,9 +103,9 @@ CREATE TABLE system.settings (
 const (
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  "descID"   INT,
-  version    INT,
-  "nodeID"   INT,
+  "descID"   INT8,
+  version    INT8,
+  "nodeID"   INT8,
   expiration TIMESTAMP,
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
@@ -114,8 +114,8 @@ CREATE TABLE system.lease (
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
   "eventType"   STRING     NOT NULL,
-  "targetID"    INT        NOT NULL,
-  "reportingID" INT        NOT NULL,
+  "targetID"    INT8       NOT NULL,
+  "reportingID" INT8       NOT NULL,
   info          STRING,
   "uniqueID"    BYTES      DEFAULT uuid_v4(),
   PRIMARY KEY (timestamp, "uniqueID")
@@ -126,12 +126,12 @@ CREATE TABLE system.eventlog (
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
   timestamp      TIMESTAMP  NOT NULL,
-  "rangeID"      INT        NOT NULL,
-  "storeID"      INT        NOT NULL,
+  "rangeID"      INT8       NOT NULL,
+  "storeID"      INT8       NOT NULL,
   "eventType"    STRING     NOT NULL,
-  "otherRangeID" INT,
+  "otherRangeID" INT8,
   info           STRING,
-  "uniqueID"     INT        DEFAULT unique_rowid(),
+  "uniqueID"     INT8       DEFAULT unique_rowid(),
   PRIMARY KEY (timestamp, "uniqueID")
 );`
 
@@ -144,7 +144,7 @@ CREATE TABLE system.ui (
 
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
-	id                INT       DEFAULT unique_rowid() PRIMARY KEY,
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             INT        NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
+	id             INT8       NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
@@ -179,14 +179,14 @@ CREATE TABLE system.web_sessions (
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
-	"tableID"       INT        NOT NULL,
-	"statisticID"   INT        NOT NULL DEFAULT unique_rowid(),
+	"tableID"       INT8       NOT NULL,
+	"statisticID"   INT8       NOT NULL DEFAULT unique_rowid(),
 	name            STRING,
-	"columnIDs"     INT[]      NOT NULL,
+	"columnIDs"     INT8[]     NOT NULL,
 	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
-	"rowCount"      INT        NOT NULL,
-	"distinctCount" INT        NOT NULL,
-	"nullCount"     INT        NOT NULL,
+	"rowCount"      INT8       NOT NULL,
+	"distinctCount" INT8       NOT NULL,
+	"nullCount"     INT8       NOT NULL,
 	histogram       BYTES,
 	PRIMARY KEY ("tableID", "statisticID"),
 	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
@@ -269,11 +269,15 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
+	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{SemanticType: ColumnType_ARRAY, ArrayContents: &colTypeInt.SemanticType,
+	colTypeIntArray  = ColumnType{
+		SemanticType:    ColumnType_ARRAY,
+		ArrayContents:   &colTypeInt.SemanticType,
+		VisibleType:     colTypeInt.VisibleType,
+		Width:           colTypeInt.Width,
 		ArrayDimensions: []int32{-1}}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1 = []ColumnID{1}

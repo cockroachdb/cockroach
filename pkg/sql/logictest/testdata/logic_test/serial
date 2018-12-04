@@ -14,9 +14,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE serial (
-        a INT NOT NULL DEFAULT unique_rowid(),
-        b INT NULL DEFAULT 7:::INT,
-        c INT NOT NULL DEFAULT unique_rowid(),
+        a INT8 NOT NULL DEFAULT unique_rowid(),
+        b INT8 NULL DEFAULT 7:::INT8,
+        c INT8 NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
@@ -49,9 +49,9 @@ query TT
 SHOW CREATE TABLE smallbig
 ----
 smallbig  CREATE TABLE smallbig (
-          a INT NOT NULL DEFAULT unique_rowid(),
-          b INT NOT NULL DEFAULT unique_rowid(),
-          c INT NULL,
+          a INT8 NOT NULL DEFAULT unique_rowid(),
+          b INT8 NOT NULL DEFAULT unique_rowid(),
+          c INT8 NULL,
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -67,10 +67,10 @@ query TT
 SHOW CREATE TABLE serials
 ----
 serials  CREATE TABLE serials (
-         a INT NOT NULL DEFAULT unique_rowid(),
-         b INT NOT NULL DEFAULT unique_rowid(),
-         c INT NOT NULL DEFAULT unique_rowid(),
-         d INT NULL,
+         a INT8 NOT NULL DEFAULT unique_rowid(),
+         b INT8 NOT NULL DEFAULT unique_rowid(),
+         c INT8 NOT NULL DEFAULT unique_rowid(),
+         d INT8 NULL,
          FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -107,9 +107,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE serial (
-        a INT NOT NULL DEFAULT nextval('serial_a_seq':::STRING),
-        b INT NULL DEFAULT 7:::INT,
-        c INT NOT NULL DEFAULT nextval('serial_c_seq2':::STRING),
+        a INT8 NOT NULL DEFAULT nextval('serial_a_seq':::STRING),
+        b INT8 NULL DEFAULT 7:::INT8,
+        c INT8 NOT NULL DEFAULT nextval('serial_c_seq2':::STRING),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
@@ -147,9 +147,9 @@ query TT
 SHOW CREATE TABLE smallbig
 ----
 smallbig  CREATE TABLE smallbig (
-          a INT NOT NULL DEFAULT nextval('smallbig_a_seq':::STRING),
-          b INT NOT NULL DEFAULT nextval('smallbig_b_seq':::STRING),
-          c INT NULL,
+          a INT8 NOT NULL DEFAULT nextval('smallbig_a_seq':::STRING),
+          b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq':::STRING),
+          c INT8 NULL,
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -165,10 +165,10 @@ query TT
 SHOW CREATE TABLE serials
 ----
 serials  CREATE TABLE serials (
-         a INT NOT NULL DEFAULT nextval('serials_a_seq':::STRING),
-         b INT NOT NULL DEFAULT nextval('serials_b_seq':::STRING),
-         c INT NOT NULL DEFAULT nextval('serials_c_seq':::STRING),
-         d INT NULL,
+         a INT8 NOT NULL DEFAULT nextval('serials_a_seq':::STRING),
+         b INT8 NOT NULL DEFAULT nextval('serials_b_seq':::STRING),
+         c INT8 NOT NULL DEFAULT nextval('serials_c_seq':::STRING),
+         d INT8 NULL,
          FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -201,9 +201,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE serial (
-        a INT NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
-        b INT NULL DEFAULT 7:::INT,
-        c INT NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
+        a INT8 NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
+        b INT8 NULL DEFAULT 7:::INT8,
+        c INT8 NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
@@ -243,7 +243,7 @@ SHOW CREATE TABLE smallbig
 smallbig  CREATE TABLE smallbig (
           a INT2 NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
           b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
-          c INT NULL,
+          c INT8 NULL,
           FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -262,7 +262,7 @@ serials  CREATE TABLE serials (
          a INT2 NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
          b INT4 NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
          c INT8 NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
-         d INT NULL,
+         d INT8 NULL,
          FAMILY "primary" (a, b, c, d, rowid)
 )
 

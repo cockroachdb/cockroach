@@ -263,7 +263,7 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	if _, err := db.Exec(
-		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
+		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT8 CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT PRIMARY KEY, b INT, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
+		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
 			err, "unimplemented: use CREATE INDEX to make interleaved indexes",
 		) {
 			t.Fatal(err)
@@ -654,7 +654,7 @@ func TestReportUsage(t *testing.T) {
 		`[false,false,false] ALTER DATABASE _ CONFIGURE ZONE = _`,
 		`[false,false,false] ALTER TABLE _ CONFIGURE ZONE = _`,
 		`[false,false,false] CREATE DATABASE _`,
-		`[false,false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
+		`[false,false,false] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
 		`[false,false,false] SET CLUSTER SETTING "cluster.organization" = _`,
 		`[false,false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[false,false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
@@ -662,7 +662,7 @@ func TestReportUsage(t *testing.T) {
 		`[false,false,false] SET application_name = DEFAULT`,
 		`[false,false,false] SET application_name = _`,
 		`[false,false,false] UPDATE _ SET _ = _ + _`,
-		`[false,false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
+		`[false,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 		`[true,false,false] INSERT INTO _ VALUES (_), (__more2__)`,
 		`[true,false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
@@ -704,8 +704,8 @@ func TestReportUsage(t *testing.T) {
 			`ALTER DATABASE _ CONFIGURE ZONE = _`,
 			`ALTER TABLE _ CONFIGURE ZONE = _`,
 			`CREATE DATABASE _`,
-			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
-			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
+			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
+			`CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 			`INSERT INTO _ VALUES (_), (__more2__)`,
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,

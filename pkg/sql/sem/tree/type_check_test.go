@@ -42,48 +42,49 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL + '1h'::interval`, `NULL`},
 		{`NULL || 'hello'`, `NULL`},
 		{`NULL || 'hello'::bytes`, `NULL`},
-		{`NULL::int`, `NULL::INT`},
+		{`NULL::int4`, `NULL::INT4`},
+		{`NULL::int8`, `NULL::INT8`},
 		{`INTERVAL '1s'`, `'00:00:01':::INTERVAL`},
 		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL::DECIMAL::DECIMAL`},
 		{`NULL = 1`, `NULL`},
 		{`1 = NULL`, `NULL`},
 		{`true AND NULL`, `true AND NULL`},
 		{`NULL OR false`, `NULL OR false`},
-		{`1 IN (1, 2, 3)`, `1:::INT IN (1:::INT, 2:::INT, 3:::INT)`},
-		{`IF(true, 2, 3)`, `IF(true, 2:::INT, 3:::INT)`},
-		{`IF(false, 2, 3)`, `IF(false, 2:::INT, 3:::INT)`},
-		{`IF(NULL, 2, 3)`, `IF(NULL, 2:::INT, 3:::INT)`},
+		{`1 IN (1, 2, 3)`, `1:::INT8 IN (1:::INT8, 2:::INT8, 3:::INT8)`},
+		{`IF(true, 2, 3)`, `IF(true, 2:::INT8, 3:::INT8)`},
+		{`IF(false, 2, 3)`, `IF(false, 2:::INT8, 3:::INT8)`},
+		{`IF(NULL, 2, 3)`, `IF(NULL, 2:::INT8, 3:::INT8)`},
 		{`IF(NULL, 2, 3.0)`, `IF(NULL, 2:::DECIMAL, 3.0:::DECIMAL)`},
-		{`IF(true, (1, 2), (1, 3))`, `IF(true, (1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
+		{`IF(true, (1, 2), (1, 3))`, `IF(true, (1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
 		{`IFERROR(1, 1.2, '')`, `IFERROR(1:::DECIMAL, 1.2:::DECIMAL, '':::STRING)`},
-		{`IFERROR(NULL, 3, '')`, `IFERROR(NULL, 3:::INT, '':::STRING)`},
-		{`ISERROR(123)`, `ISERROR(123:::INT)`},
+		{`IFERROR(NULL, 3, '')`, `IFERROR(NULL, 3:::INT8, '':::STRING)`},
+		{`ISERROR(123)`, `ISERROR(123:::INT8)`},
 		{`ISERROR(NULL)`, `ISERROR(NULL)`},
-		{`IFNULL(1, 2)`, `IFNULL(1:::INT, 2:::INT)`},
+		{`IFNULL(1, 2)`, `IFNULL(1:::INT8, 2:::INT8)`},
 		{`IFNULL(1, 2.0)`, `IFNULL(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`IFNULL(NULL, 2)`, `IFNULL(NULL, 2:::INT)`},
-		{`IFNULL(2, NULL)`, `IFNULL(2:::INT, NULL)`},
-		{`IFNULL((1, 2), (1, 3))`, `IFNULL((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
-		{`NULLIF(1, 2)`, `NULLIF(1:::INT, 2:::INT)`},
+		{`IFNULL(NULL, 2)`, `IFNULL(NULL, 2:::INT8)`},
+		{`IFNULL(2, NULL)`, `IFNULL(2:::INT8, NULL)`},
+		{`IFNULL((1, 2), (1, 3))`, `IFNULL((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
+		{`NULLIF(1, 2)`, `NULLIF(1:::INT8, 2:::INT8)`},
 		{`NULLIF(1, 2.0)`, `NULLIF(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`NULLIF(NULL, 2)`, `NULLIF(NULL, 2:::INT)`},
-		{`NULLIF(2, NULL)`, `NULLIF(2:::INT, NULL)`},
-		{`NULLIF((1, 2), (1, 3))`, `NULLIF((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
-		{`COALESCE(1, 2, 3, 4, 5)`, `COALESCE(1:::INT, 2:::INT, 3:::INT, 4:::INT, 5:::INT)`},
+		{`NULLIF(NULL, 2)`, `NULLIF(NULL, 2:::INT8)`},
+		{`NULLIF(2, NULL)`, `NULLIF(2:::INT8, NULL)`},
+		{`NULLIF((1, 2), (1, 3))`, `NULLIF((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
+		{`COALESCE(1, 2, 3, 4, 5)`, `COALESCE(1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8)`},
 		{`COALESCE(1, 2.0)`, `COALESCE(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`COALESCE(NULL, 2)`, `COALESCE(NULL, 2:::INT)`},
-		{`COALESCE(2, NULL)`, `COALESCE(2:::INT, NULL)`},
-		{`COALESCE((1, 2), (1, 3))`, `COALESCE((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
+		{`COALESCE(NULL, 2)`, `COALESCE(NULL, 2:::INT8)`},
+		{`COALESCE(2, NULL)`, `COALESCE(2:::INT8, NULL)`},
+		{`COALESCE((1, 2), (1, 3))`, `COALESCE((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
 		{`true IS NULL`, `true IS NULL`},
 		{`true IS NOT NULL`, `true IS NOT NULL`},
 		{`true IS TRUE`, `true IS true`},
 		{`true IS NOT TRUE`, `true IS NOT true`},
 		{`true IS FALSE`, `true IS false`},
 		{`true IS NOT FALSE`, `true IS NOT false`},
-		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT WHEN 1:::INT THEN (1:::INT, 2:::INT) ELSE (1:::INT, 3:::INT) END`},
-		{`1 BETWEEN 2 AND 3`, `1:::INT BETWEEN 2:::INT AND 3:::INT`},
-		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8::FLOAT8`},
-		{`count(3)`, `count(3:::INT)`},
+		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT8 WHEN 1:::INT8 THEN (1:::INT8, 2:::INT8) ELSE (1:::INT8, 3:::INT8) END`},
+		{`1 BETWEEN 2 AND 3`, `1:::INT8 BETWEEN 2:::INT8 AND 3:::INT8`},
+		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT8 BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8::FLOAT8`},
+		{`count(3)`, `count(3:::INT8)`},
 		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::STRING, 'b':::STRING, 'c':::STRING]`},
 		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
@@ -100,61 +101,61 @@ func TestTypeCheck(t *testing.T) {
 		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
 		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
 
-		{`1 + 2`, `3:::INT`},
+		{`1 + 2`, `3:::INT8`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
 		{`1:::float + 2`, `1.0:::FLOAT8 + 2.0:::FLOAT8`},
-		{`INTERVAL '1.5s' * 2`, `'00:00:01.5':::INTERVAL * 2:::INT`},
-		{`2 * INTERVAL '1.5s'`, `2:::INT * '00:00:01.5':::INTERVAL`},
+		{`INTERVAL '1.5s' * 2`, `'00:00:01.5':::INTERVAL * 2:::INT8`},
+		{`2 * INTERVAL '1.5s'`, `2:::INT8 * '00:00:01.5':::INTERVAL`},
 
-		{`1 + $1`, `1:::INT + $1:::INT`},
+		{`1 + $1`, `1:::INT8 + $1:::INT8`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
-		{`$1:::INT`, `$1:::INT`},
+		{`$1:::INT8`, `$1:::INT8`},
 
 		// Tuples with labels
-		{`(ROW (1) AS a)`, `((1:::INT,) AS a)`},
-		{`(ROW(1:::INT) AS a)`, `((1:::INT,) AS a)`},
-		{`((1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`((1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW (1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW (1) AS a)`, `((1:::INT8,) AS a)`},
+		{`(ROW(1:::INT8) AS a)`, `((1:::INT8,) AS a)`},
+		{`((1,2) AS a,b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`((1:::INT8, 2:::INT8) AS a, b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`(ROW (1,2) AS a,b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`(ROW(1:::INT8, 2:::INT8) AS a, b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
 		{
 			`((1,2,3) AS "One","Two","Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
 		},
 		{
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
 		},
 		{
 			`(ROW (1,2,3) AS "One",Two,"Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 		},
 		{
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`(ROW(1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 		},
 		// And tuples without labels still work as advertized
-		{`(ROW (1))`, `(1:::INT,)`},
-		{`ROW(1:::INT)`, `(1:::INT,)`},
-		{`((1,2))`, `(1:::INT, 2:::INT)`},
-		{`(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
-		{`(ROW (1,2))`, `(1:::INT, 2:::INT)`},
-		{`ROW(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
+		{`(ROW (1))`, `(1:::INT8,)`},
+		{`ROW(1:::INT8)`, `(1:::INT8,)`},
+		{`((1,2))`, `(1:::INT8, 2:::INT8)`},
+		{`(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
+		{`(ROW (1,2))`, `(1:::INT8, 2:::INT8)`},
+		{`ROW(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
 
-		{`((ROW (1) AS a)).a`, `1:::INT`},
+		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
-		{`((('1', 2) AS a, b)).b`, `2:::INT`},
+		{`((('1', 2) AS a, b)).b`, `2:::INT8`},
 		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
 		{
 			`(information_schema._pg_expandarray(ARRAY[1,3])).x`,
-			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).x`,
+			`(information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8])).x`,
 		},
 		{
-			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).*`,
-			`information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])`,
+			`(information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8])).*`,
+			`information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8])`,
 		},
-		{`((ROW (1) AS a)).*`, `((1:::INT,) AS a)`},
-		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
+		{`((ROW (1) AS a)).*`, `((1:::INT8,) AS a)`},
+		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT8) AS a, b)`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
@@ -226,7 +227,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`COALESCE(1, 2, 3, 4, 'a')`, `incompatible COALESCE expressions: could not parse "a" as type int`},
 		{`ARRAY[]`, `cannot determine type of empty array`},
 		{`ANNOTATE_TYPE('a', int)`, `could not parse "a" as type int`},
-		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
+		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int8), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT8) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 		{`B'1001'::decimal`, `invalid cast: varbit -> DECIMAL`},
 		{`101.3::bit`, `invalid cast: decimal -> BIT`},
@@ -260,12 +261,14 @@ func TestTypeCheckError(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
-			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+				t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+			}
+		})
 	}
 }

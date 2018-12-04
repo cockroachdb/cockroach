@@ -14,7 +14,7 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT pk_name PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 );

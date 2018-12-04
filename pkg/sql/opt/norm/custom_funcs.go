@@ -1351,10 +1351,10 @@ func isMonotonicConversion(from, to coltypes.T) bool {
 			to == coltypes.Date
 	}
 
-	if from == coltypes.Int ||
+	if from == coltypes.Int8 ||
 		from == coltypes.Float8 ||
 		from == coltypes.Decimal {
-		return to == coltypes.Int ||
+		return to == coltypes.Int8 ||
 			to == coltypes.Float8 ||
 			to == coltypes.Decimal
 	}
