@@ -18,6 +18,7 @@ import (
 	"context"
 	"math/rand"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -350,7 +350,8 @@ func TestSendAndReceive(t *testing.T) {
 	if !transports[storeNodes[fromStoreID]].SendAsync(expReq) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
-	if req := <-channels[toStoreID].ch; !proto.Equal(req, expReq) {
+	// NB: proto.Equal will panic here since it doesn't know about `gogoproto.casttype`.
+	if req := <-channels[toStoreID].ch; !reflect.DeepEqual(req, expReq) {
 		t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 	}
 
