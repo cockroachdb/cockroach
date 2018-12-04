@@ -865,6 +865,12 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(&node.Table)
+	node.FormatBody(ctx)
+}
+
+// FormatBody formats the "body" of the create table definition - everything
+// but the CREATE TABLE tableName part.
+func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
 			ctx.WriteString(" (")

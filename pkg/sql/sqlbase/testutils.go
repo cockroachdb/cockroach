@@ -86,7 +86,22 @@ func GetImmutableTableDescriptor(
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
-	if nullOk && rng.Intn(10) == 0 {
+	nullDenominator := 10
+	if !nullOk {
+		nullDenominator = 0
+	}
+	return RandDatumWithNullChance(rng, typ, nullDenominator)
+}
+
+// RandDatumWithNullChance generates a random Datum of the given type.
+// nullChance is the chance of returning null, expressed as a fraction
+// denominator. For example, a nullChance of 5 means that there's a 1/5 chance
+// that DNull will be returned. A nullChance of 0 means that DNull will not
+// be returned.
+// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be
+// DNull, regardless of the null flag.
+func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tree.Datum {
+	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
 	switch typ.SemanticType {
@@ -178,13 +193,23 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 		}
 		return tree.NewDName(string(p))
 	case ColumnType_OID:
-		// int64(rng.Uint64()) to get negative numbers, too
-		return tree.NewDOid(tree.DInt(int64(rng.Uint64())))
+		return tree.NewDOid(tree.DInt(rng.Uint32()))
 	case ColumnType_NULL:
 		return tree.DNull
 	case ColumnType_ARRAY:
-		// TODO(justin)
-		return tree.DNull
+		if typ.ArrayContents == nil {
+			contentsTyp := RandColumnType(rng)
+			typ.ArrayContents = &contentsTyp.SemanticType
+		}
+		eltTyp := typ.elementColumnType()
+		datumType := columnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
+		arr := tree.NewDArray(datumType)
+		for i := 0; i < rng.Intn(10); i++ {
+			if err := arr.Append(RandDatumWithNullChance(rng, *eltTyp, 0)); err != nil {
+				panic(err)
+			}
+		}
+		return arr
 	case ColumnType_INT2VECTOR:
 		return tree.DNull
 	case ColumnType_OIDVECTOR:
@@ -195,7 +220,9 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 }
 
 var (
-	columnSemanticTypes    []ColumnType_SemanticType
+	columnSemanticTypes []ColumnType_SemanticType
+	// arrayElemSemanticTypes contains all of the semantic types that are valid
+	// to store within an array.
 	arrayElemSemanticTypes []ColumnType_SemanticType
 	collationLocales       = [...]string{"da", "de", "en"}
 )
@@ -203,9 +230,17 @@ var (
 func init() {
 	for k := range ColumnType_SemanticType_name {
 		columnSemanticTypes = append(columnSemanticTypes, ColumnType_SemanticType(k))
-		if ColumnType_SemanticType(k) != ColumnType_ARRAY {
-			arrayElemSemanticTypes = append(arrayElemSemanticTypes, ColumnType_SemanticType(k))
+	}
+	for _, t := range types.AnyNonArray {
+		encTyp, err := datumTypeToArrayElementEncodingType(t)
+		if err != nil || encTyp == 0 {
+			continue
 		}
+		semTyp, err := datumTypeToColumnSemanticType(t)
+		if err != nil {
+			continue
+		}
+		arrayElemSemanticTypes = append(arrayElemSemanticTypes, semTyp)
 	}
 }
 
@@ -398,28 +433,27 @@ func TestingDatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType
 }
 
 // RandCreateTable creates a random CreateTable definition.
-func RandCreateTable(tableIdx int) *tree.CreateTable {
-	rand := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
-	columnDefs := make([]*tree.ColumnTableDef, randutil.RandIntInRange(rand, 1, 20))
+	columnDefs := make([]*tree.ColumnTableDef, randutil.RandIntInRange(rng, 1, 20))
 	// defs contains the list of Columns and other attributes (indexes, column
 	// families, etc) we'll add to our table.
 	defs := make(tree.TableDefs, len(columnDefs))
 
 	for i := range columnDefs {
-		columnDef := randColumnTableDef(rand, i)
+		columnDef := randColumnTableDef(rng, i)
 		columnDefs[i] = columnDef
 		defs[i] = columnDef
 	}
 
 	// Shuffle our column definitions in preparation for random partitioning into
 	// column families.
-	rand.Shuffle(len(columnDefs), func(i, j int) {
+	rng.Shuffle(len(columnDefs), func(i, j int) {
 		columnDefs[i], columnDefs[j] = columnDefs[j], columnDefs[i]
 	})
 
 	// Partition into column families.
-	numColFams := randNumColFams(rand, len(columnDefs))
+	numColFams := randNumColFams(rng, len(columnDefs))
 
 	// Create a slice of indexes into the columnDefs slice. We'll use this to make
 	// the random partitioning by picking some indexes at random to use as
@@ -428,7 +462,7 @@ func RandCreateTable(tableIdx int) *tree.CreateTable {
 	for i := range indexes {
 		indexes[i] = i + 1
 	}
-	rand.Shuffle(len(indexes), func(i, j int) {
+	rng.Shuffle(len(indexes), func(i, j int) {
 		indexes[i], indexes[j] = indexes[j], indexes[i]
 	})
 
@@ -472,8 +506,8 @@ func RandCreateTable(tableIdx int) *tree.CreateTable {
 	}
 
 	// Make a random primary key with high likelihood.
-	if rand.Intn(8) != 0 {
-		indexDef := randIndexTableDefFromCols(rand, colFamZero)
+	if rng.Intn(8) != 0 {
+		indexDef := randIndexTableDefFromCols(rng, colFamZero)
 		if len(indexDef.Columns) > 0 {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				PrimaryKey:    true,
@@ -488,13 +522,13 @@ func RandCreateTable(tableIdx int) *tree.CreateTable {
 	}
 
 	// Make indexes.
-	nIdxs := rand.Intn(10)
+	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef := randIndexTableDefFromCols(rand, columnDefs)
+		indexDef := randIndexTableDefFromCols(rng, columnDefs)
 		if len(indexDef.Columns) == 0 {
 			continue
 		}
-		unique := rand.Intn(2) == 0
+		unique := rng.Intn(2) == 0
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
@@ -548,7 +582,7 @@ func randIndexTableDefFromCols(
 		}
 		indexElemList = append(indexElemList, tree.IndexElem{
 			Column:    cols[i].Name,
-			Direction: tree.Direction(rand.Intn(int(tree.Descending) + 1)),
+			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
 		})
 	}
 	return tree.IndexTableDef{Columns: indexElemList}

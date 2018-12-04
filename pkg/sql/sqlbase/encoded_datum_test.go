@@ -300,7 +300,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			}
 			buf, err = ed[i].Encode(&types[i], &alloc, enc[i], buf)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("Failed to encode type %v: %s", types[i], err)
 			}
 		}
 		// Decode the buffer.

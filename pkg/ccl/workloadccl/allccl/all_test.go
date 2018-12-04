@@ -87,3 +87,24 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestConsistentSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Test that the table schemas are consistent when the workload is created
+	// multiple times with the same seed.
+
+	for _, meta := range workload.Registered() {
+		t.Run(meta.Name, func(t *testing.T) {
+			tables1 := meta.New().Tables()
+			tables2 := meta.New().Tables()
+			for i := range tables1 {
+				name := tables1[i].Name
+				schema1 := tables1[i].Schema
+				schema2 := tables2[i].Schema
+				if schema1 != schema2 {
+					t.Errorf("schema mismatch for table %s: %s, %s", name, schema1, schema2)
+				}
+			}
+		})
+	}
+}
