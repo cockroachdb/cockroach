@@ -1252,6 +1252,22 @@
   revision = "b0b1615b78e5ee59739545bb38426383b2cda4c9"
 
 [[projects]]
+  branch = "master"
+  digest = "1:1e0cbc6c62ef603c006cd33747c7fbbcf255c37e978cc794524f5fd7c839fe20"
+  name = "github.com/petermattis/pebble"
+  packages = [
+    "cache",
+    "db",
+    "internal/crc",
+    "internal/humanize",
+    "internal/rangedel",
+    "sstable",
+    "vfs",
+  ]
+  pruneopts = "UT"
+  revision = "30c91d87d1194c2daa3967ab28189809f0b8f1e5"
+
+[[projects]]
   digest = "1:e39a5ee8fcbec487f8fc68863ef95f2b025e0739b0e4aa55558a2b4cf8f0ecf0"
   name = "github.com/pierrec/lz4"
   packages = [
@@ -1911,6 +1927,8 @@
     "github.com/opentracing/opentracing-go/log",
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
+    "github.com/petermattis/pebble/db",
+    "github.com/petermattis/pebble/sstable",
     "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
     "github.com/prometheus/client_golang/prometheus",
