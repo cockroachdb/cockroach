@@ -152,8 +152,6 @@ type CFetcher struct {
 		nextKV *roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
-		// how many needed cols we've found so far in the value
-		valueColsFound int
 
 		remainingValueColsByIdx util.FastIntSet
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New

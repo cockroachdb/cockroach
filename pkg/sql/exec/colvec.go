@@ -90,54 +90,60 @@ type Nulls interface {
 	// SetNull sets the ith value of the column to null.
 	SetNull(i uint16)
 
+	NullAt64(i uint64) bool
+	SetNull64(i uint64)
+
 	// UnsetNulls sets the column to have 0 null values.
 	UnsetNulls()
 }
 
 var _ ColVec = &memColumn{}
 
-var emptyNulls [ColBatchSize / 8 / 8]int64
-
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
 	col column
 
-	nulls [ColBatchSize / 8 / 8]int64
+	nulls []int64
+	// hasNulls represents whether or not the memColumn has any null values set.
+	hasNulls bool
 }
 
 // newMemColumn returns a new memColumn, initialized with a length.
 func newMemColumn(t types.T, n int) *memColumn {
+	var nulls []int64
+	if n > 0 {
+		nulls = make([]int64, (n-1)>>6+1)
+	} else {
+		nulls = make([]int64, 0)
+	}
+
 	switch t {
 	case types.Bool:
-		return &memColumn{col: make([]bool, n)}
+		return &memColumn{col: make([]bool, n), nulls: nulls}
 	case types.Bytes:
-		return &memColumn{col: make([][]byte, n)}
+		return &memColumn{col: make([][]byte, n), nulls: nulls}
 	case types.Int8:
-		return &memColumn{col: make([]int8, n)}
+		return &memColumn{col: make([]int8, n), nulls: nulls}
 	case types.Int16:
-		return &memColumn{col: make([]int16, n)}
+		return &memColumn{col: make([]int16, n), nulls: nulls}
 	case types.Int32:
-		return &memColumn{col: make([]int32, n)}
+		return &memColumn{col: make([]int32, n), nulls: nulls}
 	case types.Int64:
-		return &memColumn{col: make([]int64, n)}
+		return &memColumn{col: make([]int64, n), nulls: nulls}
 	case types.Float32:
-		return &memColumn{col: make([]float32, n)}
+		return &memColumn{col: make([]float32, n), nulls: nulls}
 	case types.Float64:
-		return &memColumn{col: make([]float64, n)}
+		return &memColumn{col: make([]float64, n), nulls: nulls}
 	case types.Decimal:
-		return &memColumn{col: make([]apd.Decimal, n)}
+		return &memColumn{col: make([]apd.Decimal, n), nulls: nulls}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
 }
 
 func (m *memColumn) HasNulls() bool {
-	sum := int64(0)
-	for i := range m.nulls {
-		sum += m.nulls[i]
-	}
-	return sum != 0
+	return m.hasNulls
 }
 
 func (m *memColumn) NullAt(i uint16) bool {
@@ -146,12 +152,27 @@ func (m *memColumn) NullAt(i uint16) bool {
 }
 
 func (m *memColumn) SetNull(i uint16) {
+	m.hasNulls = true
 	intIdx := i >> 6
 	m.nulls[intIdx] |= 1 << (i % 64)
 }
 
 func (m *memColumn) UnsetNulls() {
-	copy(m.nulls[:], emptyNulls[:])
+	m.hasNulls = false
+	for i := range m.nulls {
+		m.nulls[i] = 0
+	}
+}
+
+func (m *memColumn) NullAt64(i uint64) bool {
+	intIdx := i >> 6
+	return ((m.nulls[intIdx] >> (i % 64)) & 1) == 1
+}
+
+func (m *memColumn) SetNull64(i uint64) {
+	m.hasNulls = true
+	intIdx := i >> 6
+	m.nulls[intIdx] |= 1 << (i % 64)
 }
 
 func (m *memColumn) Bool() []bool {
