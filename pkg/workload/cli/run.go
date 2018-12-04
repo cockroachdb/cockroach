@@ -95,6 +95,12 @@ func init() {
 		})
 		for _, meta := range workload.Registered() {
 			gen := meta.New()
+			if _, ok := gen.(workload.Opser); !ok {
+				// If Opser is not implemented, this would just fail at runtime,
+				// so omit it.
+				continue
+			}
+
 			var genFlags *pflag.FlagSet
 			if f, ok := gen.(workload.Flagser); ok {
 				genFlags = f.Flags().FlagSet
