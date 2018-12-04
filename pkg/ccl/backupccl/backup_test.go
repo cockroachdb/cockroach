@@ -303,11 +303,8 @@ func backupAndRestore(
 		if expected := int64(numAccounts * 1); exported.rows != expected {
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
-		if _, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1`, dest); !testutils.IsError(err,
-			"already contains a BACKUP file",
-		) {
-			t.Fatalf("expected to refuse to overwrite, got %v", err)
-		}
+
+		sqlDB.ExpectErr(t, "already contains a BACKUP file", `BACKUP DATABASE data TO $1`, dest)
 	}
 
 	// Start a new cluster to restore into.
@@ -423,10 +420,10 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	// Verify we can't shoot ourselves in the foot by accidentally restoring
 	// directly over the existing system tables.
-	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE %s FROM '%s'`, tableSpec, localFoo))
-	if !testutils.IsError(err, `relation ".+" already exists`) {
-		t.Fatalf("expected 'relation already exists' error, but got %s", err)
-	}
+	sqlDB.ExpectErr(
+		t, `relation ".+" already exists`,
+		fmt.Sprintf(`RESTORE %s FROM '%s'`, tableSpec, localFoo),
+	)
 }
 
 func TestBackupRestoreSystemJobs(t *testing.T) {
@@ -1015,11 +1012,10 @@ func TestRestoreFailCleanup(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, localFoo); !testutils.IsError(
-		err, "sst: no such file",
-	) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	sqlDB.ExpectErr(
+		t, "sst: no such file",
+		`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, localFoo,
+	)
 	// Verify the failed RESTORE added some DROP tables.
 	sqlDB.CheckQueryResults(t,
 		`SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'`,
@@ -1103,31 +1099,26 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without parent", func(t *testing.T) {
-		if _, err := sqlDB.DB.Exec(`BACKUP data.i0 TO $1`, localFoo); !testutils.IsError(err, "without interleave parent") {
-			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
-		}
+		sqlDB.ExpectErr(t, "without interleave parent", `BACKUP data.i0 TO $1`, localFoo)
 
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-		if _, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.i0 FROM $1`, localFoo); !testutils.IsError(err, "without interleave parent") {
-			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
-		}
+		sqlDBRestore.ExpectErr(
+			t, "without interleave parent",
+			`RESTORE TABLE data.i0 FROM $1`, localFoo,
+		)
 	})
 
 	t.Run("interleaved table without child", func(t *testing.T) {
-		if _, err := sqlDB.DB.Exec(`BACKUP data.bank TO $1`, localFoo); !testutils.IsError(err, "without interleave child") {
-			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
-		}
+		sqlDB.ExpectErr(t, "without interleave child", `BACKUP data.bank TO $1`, localFoo)
 
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-		if _, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.bank FROM $1`, localFoo); !testutils.IsError(err, "without interleave child") {
-			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
-		}
+		sqlDBRestore.ExpectErr(t, "without interleave child", `RESTORE TABLE data.bank FROM $1`, localFoo)
 	})
 }
 
@@ -1223,33 +1214,28 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.receipts`, origReceipts)
 
 		// FK validation on customers from receipts is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* referenced in table \"receipts\"",
 			`UPDATE store.customers SET email = concat(id::string, 'nope')`,
-		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation on customers from orders is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* referenced in table \"orders\"",
 			`UPDATE store.customers SET id = id * 1000`,
-		); !testutils.IsError(err, "foreign key violation.* referenced in table \"orders\"") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation of customer id is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* in customers@primary",
 			`INSERT INTO store.orders VALUES (999, NULL, 999)`,
-		); !testutils.IsError(err, "foreign key violation.* in customers@primary") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation of self-FK is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation: value .999. not found in receipts@primary",
 			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
-		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
-			t.Fatal(err)
-		}
-
+		)
 	})
 
 	t.Run("restore customers to new cluster", func(t *testing.T) {
@@ -1261,11 +1247,10 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation on customers from orders is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* referenced in table \"orders\"",
 			`UPDATE store.customers SET id = id*100`,
-		); !testutils.IsError(err, "foreign key violation.* referenced in table \"orders\"") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation on customers from receipts is gone.
 		db.Exec(t, `UPDATE store.customers SET email = id::string`)
@@ -1278,13 +1263,10 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, createStore)
 
 		// FK validation of self-FK is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "cannot restore table \"orders\" without referenced table .* \\(or \"skip_missing_foreign_keys\" option\\)",
 			`RESTORE store.orders FROM $1`, localFoo,
-		); !testutils.IsError(
-			err, "cannot restore table \"orders\" without referenced table .* \\(or \"skip_missing_foreign_keys\" option\\)",
-		) {
-			t.Fatal(err)
-		}
+		)
 
 		db.Exec(t, `RESTORE store.orders FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -1306,11 +1288,10 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `INSERT INTO store.receipts VALUES (1, NULL, '987', 999)`)
 
 		// FK validation of self-FK is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation: value .999. not found in receipts@primary",
 			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
-		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
-			t.Fatal(err)
-		}
+		)
 	})
 
 	t.Run("restore receipts and customers to new cluster", func(t *testing.T) {
@@ -1325,25 +1306,22 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `INSERT INTO store.receipts VALUES (1, NULL, '0', 999)`)
 
 		// FK validation of customer email is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* in customers@customers_email_key",
 			`INSERT INTO store.receipts VALUES (1, NULL, '999', 999)`,
-		); !testutils.IsError(err, "foreign key violation.* in customers@customers_email_key") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation on customers from receipts is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation.* referenced in table \"receipts\"",
 			`DELETE FROM store.customers`,
-		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
-			t.Fatal(err)
-		}
+		)
 
 		// FK validation of self-FK is preserved.
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, "foreign key violation: value .999. not found in receipts@primary",
 			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
-		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
-			t.Fatal(err)
-		}
+		)
 	})
 
 	t.Run("restore simple view", func(t *testing.T) {
@@ -1351,11 +1329,10 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 		db.Exec(t, createStore)
-		if _, err := db.DB.Exec(`RESTORE store.early_customers FROM $1`, localFoo); !testutils.IsError(err,
-			`cannot restore "early_customers" without restoring referenced table`,
-		) {
-			t.Fatal(err)
-		}
+		db.ExpectErr(
+			t, `cannot restore "early_customers" without restoring referenced table`,
+			`RESTORE store.early_customers FROM $1`, localFoo,
+		)
 		db.Exec(t, `RESTORE store.early_customers, store.customers, store.orders FROM $1`, localFoo)
 		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
 
@@ -1363,11 +1340,10 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `DROP TABLE store.orders`)
 
 		// customers is aware of the view that depends on it.
-		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
-			`cannot drop relation "customers" because view "early_customers" depends on it`,
-		) {
-			t.Fatal(err)
-		}
+		db.ExpectErr(
+			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
+			`DROP TABLE store.customers`,
+		)
 
 		// We want to be able to drop columns not used by the view,
 		// however the detection thereof is currently broken - #17269.
@@ -1384,20 +1360,18 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, `cannot restore "ordercounts" without restoring referenced table`,
 			`RESTORE DATABASE storestats FROM $1`, localFoo,
-		); !testutils.IsError(err, `cannot restore "ordercounts" without restoring referenced table`) {
-			t.Fatal(err)
-		}
+		)
 
 		db.Exec(t, createStore)
 		db.Exec(t, createStoreStats)
 
-		if _, err := db.DB.Exec(
+		db.ExpectErr(
+			t, `cannot restore "ordercounts" without restoring referenced table`,
 			`RESTORE storestats.ordercounts, store.customers FROM $1`, localFoo,
-		); !testutils.IsError(err, `cannot restore "ordercounts" without restoring referenced table`) {
-			t.Fatal(err)
-		}
+		)
 
 		db.Exec(t, `RESTORE store.customers, storestats.ordercounts, store.orders FROM $1`, localFoo)
 
@@ -1405,22 +1379,20 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `ALTER TABLE store.orders DROP CONSTRAINT fk_customerid_ref_customers`)
 
 		// customers is aware of the view that depends on it.
-		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
-			`cannot drop relation "customers" because view "storestats.public.ordercounts" depends on it`,
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.DB.Exec(`ALTER TABLE store.customers DROP COLUMN email`); !testutils.IsError(
-			err, `cannot drop column "email" because view "storestats.public.ordercounts" depends on it`) {
-			t.Fatal(err)
-		}
+		db.ExpectErr(
+			t, `cannot drop relation "customers" because view "storestats.public.ordercounts" depends on it`,
+			`DROP TABLE store.customers`,
+		)
+		db.ExpectErr(
+			t, `cannot drop column "email" because view "storestats.public.ordercounts" depends on it`,
+			`ALTER TABLE store.customers DROP COLUMN email`,
+		)
 
 		// orders is aware of the view that depends on it.
-		if _, err := db.DB.Exec(`DROP TABLE store.orders`); !testutils.IsError(err,
-			`cannot drop relation "orders" because view "storestats.public.ordercounts" depends on it`,
-		) {
-			t.Fatal(err)
-		}
+		db.ExpectErr(
+			t, `cannot drop relation "orders" because view "storestats.public.ordercounts" depends on it`,
+			`DROP TABLE store.orders`,
+		)
 
 		db.CheckQueryResults(t, `SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
 
@@ -1430,15 +1402,14 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `ALTER TABLE otherstore.orders DROP CONSTRAINT fk_customerid_ref_customers`)
 		db.Exec(t, `DROP TABLE otherstore.receipts`)
 
-		if _, err := db.DB.Exec(`DROP TABLE otherstore.customers`); !testutils.IsError(err,
-			`cannot drop relation "customers" because view "early_customers" depends on it`,
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.DB.Exec(`ALTER TABLE otherstore.customers DROP COLUMN email`); !testutils.IsError(
-			err, `cannot drop column "email" because view "early_customers" depends on it`) {
-			t.Fatal(err)
-		}
+		db.ExpectErr(
+			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
+			`DROP TABLE otherstore.customers`,
+		)
+
+		db.ExpectErr(t, `cannot drop column "email" because view "early_customers" depends on it`,
+			`ALTER TABLE otherstore.customers DROP COLUMN email`,
+		)
 		db.Exec(t, `DROP DATABASE store CASCADE`)
 		db.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
 
@@ -1536,13 +1507,11 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		// single cluster, so we also need to ensure the previous backup was indeed
 		// generated by the same cluster.
 
-		expected := fmt.Sprintf("belongs to cluster %s", tc.Servers[0].ClusterID())
-		if _, err := sqlDBRestore.DB.Exec(
+		sqlDBRestore.ExpectErr(
+			t, fmt.Sprintf("belongs to cluster %s", tc.Servers[0].ClusterID()),
 			`BACKUP TABLE data.bank TO $1 INCREMENTAL FROM $2`,
 			"nodelocal:///some-other-table", "nodelocal:///0",
-		); !testutils.IsError(err, expected) {
-			t.Fatal(err)
-		}
+		)
 
 		for i := len(backupDirs); i > 0; i-- {
 			sqlDBRestore.Exec(t, `DROP TABLE IF EXISTS data.bank`)
@@ -1720,11 +1689,11 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
 
 	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
-		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank WHERE id % 4 = 1`)
+		_, err := tx.Exec(`DELETE FROM data.bank WHERE id % 4 = 1`)
 		if err != nil {
 			return err
 		}
-		return sqlDB.DB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&equalTs)
+		return tx.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&equalTs)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1775,11 +1744,11 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (1, 'alice'), (7, 'bob'), (3, 'eve')`)
 
 	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
-		_, err := sqlDB.DB.Exec(`UPDATE data.bank SET balance = 2`)
+		_, err := tx.Exec(`UPDATE data.bank SET balance = 2`)
 		if err != nil {
 			return err
 		}
-		return sqlDB.DB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[2])
+		return tx.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[2])
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1927,35 +1896,31 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE err`)
 
 		// fullBackup covers up to ts[2], inc to ts[5], inc2 to > ts[8].
-		if _, err := sqlDB.DB.Exec(
+		sqlDB.ExpectErr(
+			t, "incompatible RESTORE timestamp",
 			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[3]),
 			fullBackup,
-		); !testutils.IsError(err, "incompatible RESTORE timestamp") {
-			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
-		}
+		)
 
 		for _, i := range ts {
-			if _, err := sqlDB.DB.Exec(
+			sqlDB.ExpectErr(
+				t, "incompatible RESTORE timestamp",
 				fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
 				latestBackup,
-			); !testutils.IsError(err, "incompatible RESTORE timestamp") {
-				t.Errorf("%q: expected 'incompatible RESTORE timestamp' error got %+v", i, err)
-			}
+			)
 
-			if _, err := sqlDB.DB.Exec(
+			sqlDB.ExpectErr(
+				t, "incompatible RESTORE timestamp",
 				fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
 				latestBackup, incLatestBackup, inc2LatestBackup,
-			); !testutils.IsError(err, "incompatible RESTORE timestamp") {
-				t.Errorf("%q: expected 'incompatible RESTORE timestamp' error got %+v", i, err)
-			}
+			)
 		}
 
-		if _, err := sqlDB.DB.Exec(
+		sqlDB.ExpectErr(
+			t, "incompatible RESTORE timestamp",
 			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, after),
 			latestBackup,
-		); !testutils.IsError(err, "incompatible RESTORE timestamp") {
-			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
-		}
+		)
 	})
 }
 
@@ -1985,18 +1950,14 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	lateFullTableBackup := filepath.Join(dir, "tbl-after-gc")
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, lateFullTableBackup)
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
-	if _, err := sqlDB.DB.Exec(
+	sqlDB.ExpectErr(
+		t, `BACKUP for requested time only has revision history from`,
 		fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, preGC),
 		lateFullTableBackup,
-	); !testutils.IsError(err, `BACKUP for requested time only has revision history from`) {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.DB.Exec(
-		fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, postGC),
-		lateFullTableBackup,
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
+	sqlDB.Exec(
+		t, fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, postGC), lateFullTableBackup,
+	)
 }
 
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
@@ -2022,11 +1983,10 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	var rowCount int
 	const q = `SELECT count(*) FROM data.bank AS OF SYSTEM TIME '%s'`
 	// Before the RESTORE, the table doesn't exist, so an AS OF query should fail.
-	if err := sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount); !testutils.IsError(
-		err, `relation "data.bank" does not exist`,
-	) {
-		t.Fatalf("expected 'foo' error got: %+v", err)
-	}
+	sqlDB.ExpectErr(
+		t, `relation "data.bank" does not exist`,
+		fmt.Sprintf(q, beforeTs),
+	)
 	// After the RESTORE, an AS OF query should work.
 	sqlDB.QueryRow(t, fmt.Sprintf(q, afterTs)).Scan(&rowCount)
 	if expected := numAccounts; rowCount != expected {
@@ -2074,10 +2034,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
-	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1`, localFoo)
-	if !testutils.IsError(err, "checksum mismatch") {
-		t.Fatalf("expected 'checksum mismatch' error got: %+v", err)
-	}
+	sqlDB.ExpectErr(t, "checksum mismatch", `RESTORE data.* FROM $1`, localFoo)
 }
 
 func TestTimestampMismatch(t *testing.T) {
@@ -2106,64 +2063,57 @@ func TestTimestampMismatch(t *testing.T) {
 
 	t.Run("Backup", func(t *testing.T) {
 		// Missing the initial full backup.
-		_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
-			localFoo, incrementalT1FromFull)
-		if !testutils.IsError(err, "backups listed out of order") {
-			t.Errorf("expected 'backups listed out of order' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "backups listed out of order",
+			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
+			localFoo, incrementalT1FromFull,
+		)
 
 		// Missing an intermediate incremental backup.
-		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, fullBackup, incrementalT2FromT1)
-		if !testutils.IsError(err, "backups listed out of order") {
-			t.Errorf("expected 'backups listed out of order' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "backups listed out of order",
+			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
+			localFoo, fullBackup, incrementalT2FromT1,
+		)
 
 		// Backups specified out of order.
-		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, incrementalT1FromFull, fullBackup)
-		if !testutils.IsError(err, "out of order") {
-			t.Errorf("expected 'out of order' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "out of order",
+			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
+			localFoo, incrementalT1FromFull, fullBackup,
+		)
 
 		// Missing data for one table in the most recent backup.
-		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "previous backup does not contain table") {
-			t.Errorf("expected 'previous backup does not contain table' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "previous backup does not contain table",
+			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
+			localFoo, fullBackup, incrementalT3FromT1OneTable,
+		)
 	})
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `DROP TABLE data.t2`)
 	t.Run("Restore", func(t *testing.T) {
 		// Missing the initial full backup.
-		_, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1`,
-			incrementalT1FromFull)
-		if !testutils.IsError(err, "no backup covers time") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(t, "no backup covers time", `RESTORE data.* FROM $1`, incrementalT1FromFull)
 
 		// Missing an intermediate incremental backup.
-		_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1, $2`,
-			fullBackup, incrementalT2FromT1)
-		if !testutils.IsError(err, "no backup covers time") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "no backup covers time",
+			`RESTORE data.* FROM $1, $2`, fullBackup, incrementalT2FromT1,
+		)
 
 		// Backups specified out of order.
-		_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1, $2`,
-			incrementalT1FromFull, fullBackup)
-		if !testutils.IsError(err, "out of order") {
-			t.Errorf("expected 'out of order' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "out of order",
+			`RESTORE data.* FROM $1, $2`, incrementalT1FromFull, fullBackup,
+		)
 
 		// Missing data for one table in the most recent backup.
-		_, err = sqlDB.DB.Exec(`RESTORE data.bank, data.t2 FROM $1, $2`,
-			fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "table \"data.t2\" does not exist") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
-		}
+		sqlDB.ExpectErr(
+			t, "table \"data.t2\" does not exist",
+			`RESTORE data.bank, data.t2 FROM $1, $2`, fullBackup, incrementalT3FromT1OneTable,
+		)
 	})
 }
 
@@ -2248,10 +2198,7 @@ func TestRestoreInto(t *testing.T) {
 
 	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = 'data 2'`, localFoo)
 
-	_, err := sqlDB.DB.Exec(restoreStmt)
-	if !testutils.IsError(err, "a database named \"data 2\" needs to exist") {
-		t.Fatal(err)
-	}
+	sqlDB.ExpectErr(t, "a database named \"data 2\" needs to exist", restoreStmt)
 
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 	sqlDB.Exec(t, restoreStmt)
@@ -2297,11 +2244,10 @@ func TestBackupRestorePermissions(t *testing.T) {
 		sqlDB.Exec(t, backupStmt)
 		// Root doesn't have CREATE on `system` DB, so that should fail. Still need
 		// a valid `dir` though, since descriptors are always loaded first.
-		if _, err := sqlDB.DB.Exec(
+		sqlDB.ExpectErr(
+			t, "user root does not have CREATE privilege",
 			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, localFoo,
-		); !testutils.IsError(err, "user root does not have CREATE privilege") {
-			t.Fatal(err)
-		}
+		)
 	})
 }
 
@@ -2340,35 +2286,30 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 
 		sqlDB.Exec(t, `create database d5`)
 
-		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foo); !testutils.IsError(
-			err, "cannot RESTORE DATABASE from a backup of individual tables",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, "cannot RESTORE DATABASE from a backup of individual tables",
+			`RESTORE database d4 FROM $1`, d4foo,
+		)
 
-		if _, err := sqlDB.DB.Exec(`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foo); !testutils.IsError(
-			err, "cannot RESTORE <database>.* from a backup of individual tables",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, "cannot RESTORE <database>.* from a backup of individual tables",
+			`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foo,
+		)
 
-		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foobar); !testutils.IsError(
-			err, "cannot RESTORE DATABASE from a backup of individual tables",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, "cannot RESTORE DATABASE from a backup of individual tables",
+			`RESTORE database d4 FROM $1`, d4foobar,
+		)
 
-		if _, err := sqlDB.DB.Exec(`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foobar); !testutils.IsError(
-			err, "cannot RESTORE <database>.* from a backup of individual tables",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, "cannot RESTORE <database>.* from a backup of individual tables",
+			`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foobar,
+		)
 
-		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foo); !testutils.IsError(
-			err, "cannot RESTORE DATABASE from a backup of individual tables",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, "cannot RESTORE DATABASE from a backup of individual tables",
+			`RESTORE database d4 FROM $1`, d4foo,
+		)
 
 		sqlDB.Exec(t, `RESTORE database d4 FROM $1`, d4star)
 
@@ -2378,9 +2319,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data, d2, d3 FROM $1`, localFoo); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(t, `RESTORE DATABASE data, d2, d3 FROM $1`, localFoo)
 	})
 
 	t.Run("db-exists", func(t *testing.T) {
@@ -2388,15 +2327,8 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`CREATE DATABASE data`); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1`, localFoo); !testutils.IsError(
-			err, "already exists",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(t, `CREATE DATABASE data`)
+		sqlDB.ExpectErr(t, "already exists", `RESTORE DATABASE data FROM $1`, localFoo)
 	})
 
 	t.Run("tables", func(t *testing.T) {
@@ -2404,13 +2336,8 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`CREATE DATABASE data`); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1`, localFoo); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(t, `CREATE DATABASE data`)
+		sqlDB.Exec(t, `RESTORE data.* FROM $1`, localFoo)
 	})
 
 	t.Run("tables-needs-db", func(t *testing.T) {
@@ -2418,11 +2345,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`RESTORE data.*, d4.* FROM $1`, localFoo); !testutils.IsError(
-			err, "needs to exist",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(t, "needs to exist", `RESTORE data.*, d4.* FROM $1`, localFoo)
 	})
 
 	t.Run("into_db", func(t *testing.T) {
@@ -2430,11 +2353,10 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, localFoo); !testutils.IsError(
-			err, "cannot use \"into_db\"",
-		) {
-			t.Fatal(err)
-		}
+		sqlDB.ExpectErr(
+			t, `cannot use "into_db"`,
+			`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, localFoo,
+		)
 	})
 }
 
@@ -2457,9 +2379,7 @@ func TestBackupAzureAccountName(t *testing.T) {
 	}
 
 	// Verify newlines in the account name cause an error.
-	if _, err := sqlDB.DB.Exec(`backup database d to $1`, url.String()); !testutils.IsError(err, "azure: account name is not valid") {
-		t.Fatalf("unexpected error %v", err)
-	}
+	sqlDB.ExpectErr(t, "azure: account name is not valid", `backup database d to $1`, url.String())
 }
 
 // If an operator issues a bad query or if a deploy contains a bug that corrupts
@@ -2616,11 +2536,10 @@ func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 	sqlDB.Exec(t, `UPDATE data.t SET s = 'after'`)
 
 	sqlDB.Exec(t, `CREATE TABLE data2.t2 (i int)`)
-	if _, err := sqlDB.DB.Exec("BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full); !testutils.IsError(
-		err, "previous backup does not contain table",
-	) {
-		t.Fatal(err)
-	}
+	sqlDB.ExpectErr(
+		t, "previous backup does not contain table",
+		"BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full,
+	)
 }
 
 func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
@@ -2664,11 +2583,7 @@ func TestBackupRestoreIncrementalDropTable(t *testing.T) {
 
 	// Restoring to backup after DROP does not restore t.
 	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1, $2`, full, inc)
-	if _, err := sqlDB.DB.Exec(`SELECT 1 FROM data.t LIMIT 0`); !testutils.IsError(
-		err, "relation \"data.t\" does not exist",
-	) {
-		t.Fatal(err)
-	}
+	sqlDB.ExpectErr(t, "relation \"data.t\" does not exist", `SELECT 1 FROM data.t LIMIT 0`)
 }
 
 func TestFileIOLimits(t *testing.T) {
@@ -2681,20 +2596,18 @@ func TestFileIOLimits(t *testing.T) {
 	elsewhere := "nodelocal:///../../blah"
 
 	sqlDB.Exec(t, `BACKUP data.bank TO $1`, localFoo)
-	if _, err := sqlDB.DB.Exec(`BACKUP data.bank TO $1`, elsewhere); !testutils.IsError(
-		err, "local file access to paths outside of external-io-dir is not allowed",
-	) {
-		t.Fatal(err)
-	}
+	sqlDB.ExpectErr(
+		t, "local file access to paths outside of external-io-dir is not allowed",
+		`BACKUP data.bank TO $1`, elsewhere,
+	)
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 
 	sqlDB.Exec(t, `RESTORE data.bank FROM $1`, localFoo)
-	if _, err := sqlDB.DB.Exec(`RESTORE data.bank FROM $1`, elsewhere); !testutils.IsError(
-		err, "local file access to paths outside of external-io-dir is not allowed",
-	) {
-		t.Fatal(err)
-	}
+	sqlDB.ExpectErr(
+		t, "local file access to paths outside of external-io-dir is not allowed",
+		`RESTORE data.bank FROM $1`, elsewhere,
+	)
 }
 
 func TestBackupRestoreNotInTxn(t *testing.T) {
@@ -2780,9 +2693,10 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
 
 		// Verify that sequence <=> table dependencies are still in place.
-		if _, err := newDB.DB.Exec(`DROP SEQUENCE t_id_seq`); !testutils.IsError(err, "pq: cannot drop sequence t_id_seq because other objects depend on it") {
-			t.Fatal(err)
-		}
+		newDB.ExpectErr(
+			t, "pq: cannot drop sequence t_id_seq because other objects depend on it",
+			`DROP SEQUENCE t_id_seq`,
+		)
 	})
 
 	t.Run("restore just the table to a new cluster", func(t *testing.T) {
@@ -2793,11 +2707,10 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `CREATE DATABASE data`)
 		newDB.Exec(t, `USE data`)
 
-		if _, err := newDB.DB.Exec(
+		newDB.ExpectErr(
+			t, "pq: cannot restore table \"t\" without referenced sequence 54 \\(or \"skip_missing_sequences\" option\\)",
 			`RESTORE TABLE t FROM $1`, localFoo,
-		); !testutils.IsError(err, "pq: cannot restore table \"t\" without referenced sequence 54 \\(or \"skip_missing_sequences\" option\\)") {
-			t.Fatal(err)
-		}
+		)
 
 		newDB.Exec(t, `RESTORE TABLE t FROM $1 WITH OPTIONS ('skip_missing_sequences')`, localFoo)
 
@@ -2810,11 +2723,10 @@ func TestBackupRestoreSequence(t *testing.T) {
 
 		// Test that insertion without specifying the id column doesn't work, since
 		// the DEFAULT expression has been removed.
-		if _, err := newDB.DB.Exec(
+		newDB.ExpectErr(
+			t, `pq: missing \"id\" primary key column`,
 			`INSERT INTO t (v) VALUES ('bloop')`,
-		); !testutils.IsError(err, `pq: missing \"id\" primary key column`) {
-			t.Fatal(err)
-		}
+		)
 
 		// Test that inserting with a value specified works.
 		newDB.Exec(t, `INSERT INTO t (id, v) VALUES (4, 'bloop')`)
