@@ -42,6 +42,15 @@ func (m *memColumn) Append(
 		default:
 			panic(fmt.Sprintf("unhandled type %d", colType))
 	}
+
+	if fromLength > 0 {
+		m.nulls = append(m.nulls, make([]int64, (fromLength-1)>>6+1)...)
+		for i := uint16(0); i < fromLength; i++ {
+			if vec.NullAt(i) {
+				m.SetNull64(toLength + uint64(i))
+			}
+		}
+	}
 }
 
 func (m *memColumn) AppendWithSel(
@@ -61,6 +70,15 @@ func (m *memColumn) AppendWithSel(
 	{{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+
+	if batchSize > 0 {
+		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
+		for i := uint16(0); i < batchSize; i++ {
+			if vec.NullAt(sel[i]) {
+				m.SetNull64(toLength + uint64(i))
+			}
+		}
 	}
 }
 
@@ -85,7 +103,11 @@ func (m *memColumn) CopyWithSelInt64(
 		toCol := m.{{.ExecType}}()
 		fromCol := vec.{{.ExecType}}()
 		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
+			if vec.NullAt64(sel[i]) {
+				m.SetNull(i)
+			} else {
+				toCol[i] = fromCol[sel[i]]
+			}
 		}
 	{{end}}
 	default:
@@ -100,7 +122,11 @@ func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colT
 		toCol := m.{{.ExecType}}()
 		fromCol := vec.{{.ExecType}}()
 		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
+			if vec.NullAt(sel[i]) {
+				m.SetNull(i)
+			} else {
+				toCol[i] = fromCol[sel[i]]
+			}
 		}
 	{{end}}
 	default:

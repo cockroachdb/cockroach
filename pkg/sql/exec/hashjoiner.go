@@ -598,7 +598,7 @@ func (prober *hashJoinProber) probe() ColBatch {
 		sel := batch.Selection()
 
 		nResults := prober.collect(batch, batchSize, sel)
-		prober.congregate(nResults, batch, batchSize, sel)
+		prober.congregate(nResults, batch, batchSize)
 	} else {
 		for {
 			batch := prober.spec.source.Next()
@@ -642,7 +642,7 @@ func (prober *hashJoinProber) probe() ColBatch {
 				nResults = prober.collect(batch, batchSize, sel)
 			}
 
-			prober.congregate(nResults, batch, batchSize, sel)
+			prober.congregate(nResults, batch, batchSize)
 
 			if prober.batch.Length() > 0 {
 				break
@@ -772,9 +772,7 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 // congregate uses the probeIdx and buildidx pairs to stitch together the
 // resulting inner join rows and add them to the output batch with the left
 // table columns preceding the right table columns.
-func (prober *hashJoinProber) congregate(
-	nResults uint16, batch ColBatch, batchSize uint16, sel []uint16,
-) {
+func (prober *hashJoinProber) congregate(nResults uint16, batch ColBatch, batchSize uint16) {
 	var buildColOffset, probeColOffset uint32
 	if prober.probeLeftSide {
 		buildColOffset = uint32(len(prober.spec.sourceTypes))
@@ -787,14 +785,20 @@ func (prober *hashJoinProber) congregate(
 	for i, colIdx := range prober.buildOutCols {
 		outCol := prober.batch.ColVec(int(colIdx + buildColOffset))
 		valCol := prober.ht.vals[prober.ht.outCols[i]]
+
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
+
+		outCol.UnsetNulls()
 		outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
 	}
 
 	for _, colIdx := range prober.spec.outCols {
 		outCol := prober.batch.ColVec(int(colIdx + probeColOffset))
 		valCol := batch.ColVec(int(colIdx))
+
 		colType := prober.spec.sourceTypes[colIdx]
+
+		outCol.UnsetNulls()
 		outCol.CopyWithSelInt16(valCol, prober.probeIdx, nResults, colType)
 	}
 

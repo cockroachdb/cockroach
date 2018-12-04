@@ -55,6 +55,68 @@ func TestHashJoinerInt64(t *testing.T) {
 		expectedTuples tuples
 	}{
 		{
+			leftTypes:  []types.T{types.Int64, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Int64},
+
+			// Test null handling in output columns.
+			leftTuples: tuples{
+				{1, nil},
+				{2, nil},
+				{3, 1},
+				{4, 2},
+			},
+			rightTuples: tuples{
+				{1, 2},
+				{2, nil},
+				{3, nil},
+				{4, 4},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{1},
+			rightOutCols: []uint32{1},
+
+			expectedTuples: tuples{
+				{nil, 2},
+				{nil, nil},
+				{1, nil},
+				{2, 4},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// Test null handling in hash join key column.
+			leftTuples: tuples{
+				{1},
+				{3},
+				{nil},
+				{2},
+			},
+			rightTuples: tuples{
+				{2},
+				{nil},
+				{3},
+				{nil},
+				{1},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			buildDistinct: false,
+
+			expectedTuples: tuples{
+				{2},
+				{3},
+				{1},
+			},
+		},
+		{
 			// Test handling of multiple column non-distinct equality keys.
 			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
 			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
