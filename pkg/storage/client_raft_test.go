@@ -2860,20 +2860,30 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
-	defer mtc.Stop()
+
+	storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
+	// Disable declined and failed reservations. Their default values are on
+	// the order of seconds whereas we'll only advance the manual clock used
+	// in this test very slowly, leading to timeouts otherwise.
+	storage.DeclinedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
+	storage.FailedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
 
 	zone := config.DefaultSystemZoneConfig()
 	mtc.Start(t, int(*zone.NumReplicas+1))
+	defer mtc.Stop()
 
 	var nonDeadStores []*storage.Store
+	var deadStore *storage.Store
 	for i, s := range mtc.stores {
 		if i == 1 {
-			// Skip the dead store.
+			deadStore = s
+
 			continue
 		}
 		nonDeadStores = append(nonDeadStores, s)
 	}
+
+	var dead int32 // atomically
 
 	// Create a goroutine to gossip store capacity info periodically.
 	go func() {
@@ -2885,9 +2895,18 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			select {
 			case <-ticker.C:
 				mtc.manualClock.Increment(int64(tickerDur))
-
+				storeIsDead := atomic.LoadInt32(&dead) == 1
 				// Keep gossiping the stores, excepting the dead store.
-				for _, s := range nonDeadStores {
+				n := len(nonDeadStores)
+				if !storeIsDead {
+					// Until the deadStore dies, don't gossip one of the other
+					// stores to force some replicas on deadStore.
+					n--
+					if err := deadStore.GossipStore(context.Background(), false /* useCached */); err != nil {
+						panic(err)
+					}
+				}
+				for _, s := range nonDeadStores[:n] {
 					if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
 						panic(err)
 					}
@@ -2903,19 +2922,28 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		}
 	}()
 
-	// Wait for up-replication.
+	// Wait for up-replication, including at least one replica on s2 (deadStore).
 	testutils.SucceedsSoon(t, func() error {
 		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) == int(*zone.NumReplicas) {
-			return nil
+		var found bool
+		for _, replica := range replicas {
+			if replica.StoreID == deadStore.StoreID() {
+				found = true
+			}
 		}
-		return errors.Errorf("expected %d replicas; have %+v", *zone.NumReplicas, replicas)
+		if len(replicas) != int(*zone.NumReplicas) {
+			return errors.Errorf("expected %d replicas; have %+v", *zone.NumReplicas, replicas)
+		}
+		if !found {
+			return errors.Errorf("no replica found on s%d", deadStore.StoreID())
+		}
+		return nil
 	})
 
 	// Stop a store which will be rebalanced away from. We can't use the very first
 	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
 	// one after that.
-	deadStoreID := mtc.stores[1].StoreID() // 2
+	atomic.StoreInt32(&dead, 1)
 	mtc.stopStore(1)
 	// The mtc asks us to restart this store before stopping the mtc.
 	defer mtc.restartStoreWithoutHeartbeat(1)
@@ -2926,7 +2954,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
 		}
 		for _, r := range replicas {
-			if r.StoreID == deadStoreID {
+			if r.StoreID == deadStore.StoreID() /* 2 */ {
 				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
 			}
 		}
