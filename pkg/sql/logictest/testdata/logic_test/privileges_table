@@ -116,8 +116,8 @@ user testuser
 query TTBTTTB
 SHOW COLUMNS FROM t
 ----
-k  INT  false  NULL  ·  {primary}  false
-v  INT  true   NULL  ·  {}         false
+k  INT8  false  NULL  ·  {primary}  false
+v  INT8  true   NULL  ·  {}         false
 
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar

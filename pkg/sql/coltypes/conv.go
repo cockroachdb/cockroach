@@ -73,7 +73,7 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 	case types.BitArray:
 		return VarBit, nil
 	case types.Int:
-		return Int, nil
+		return Int8, nil
 	case types.Float:
 		return Float8, nil
 	case types.Decimal:

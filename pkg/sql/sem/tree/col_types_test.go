@@ -34,7 +34,6 @@ func TestParseColumnType(t *testing.T) {
 		{"BIT(2)", &coltypes.TBitArray{Width: 2}},
 		{"VARBIT(2)", &coltypes.TBitArray{Width: 2, Variable: true}},
 		{"BOOL", &coltypes.TBool{}},
-		{"INT", &coltypes.TInt{}},
 		{"INT2", &coltypes.TInt{Width: 16}},
 		{"INT4", &coltypes.TInt{Width: 32}},
 		{"INT8", &coltypes.TInt{Width: 64}},
@@ -73,6 +72,45 @@ func TestParseColumnType(t *testing.T) {
 		}
 		if sql != stmt.String() {
 			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
+		}
+		createTable, ok := stmt.(*tree.CreateTable)
+		if !ok {
+			t.Errorf("%d: expected tree.CreateTable, but got %T", i, stmt)
+			continue
+		}
+		columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
+		if !ok2 {
+			t.Errorf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
+			continue
+		}
+		if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
+			t.Errorf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
+			continue
+		}
+	}
+}
+
+func TestParseColumnTypeAliases(t *testing.T) {
+	testData := []struct {
+		str          string
+		expectedStr  string
+		expectedType coltypes.T
+	}{
+		// FLOAT has always been FLOAT8
+		{"FLOAT", "CREATE TABLE a (b FLOAT8)", &coltypes.TFloat{Short: false}},
+		// A "naked" INT is 64 bits, for historical compatibility.
+		{"INT", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
+		{"INTEGER", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
+	}
+	for i, d := range testData {
+		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
+		stmt, err := parser.ParseOne(sql)
+		if err != nil {
+			t.Errorf("%d: %s", i, err)
+			continue
+		}
+		if d.expectedStr != stmt.String() {
+			t.Errorf("%d: expected %s, but got %s", i, d.expectedStr, stmt)
 		}
 		createTable, ok := stmt.(*tree.CreateTable)
 		if !ok {

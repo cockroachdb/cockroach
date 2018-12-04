@@ -1107,7 +1107,7 @@ semi-join
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(10)
  │    └── filters
- │         └── phone.id = $1::INT [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │         └── phone.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  └── filters
       └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
@@ -1150,7 +1150,7 @@ semi-join
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(10)
  │    └── filters
- │         └── phone.id = $1::INT [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │         └── phone.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  └── filters
       └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 

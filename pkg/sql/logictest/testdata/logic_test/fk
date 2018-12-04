@@ -238,8 +238,8 @@ SHOW CREATE TABLE delivery
 ----
 delivery  CREATE TABLE delivery (
           ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
-          "order" INT NULL,
-          shipment INT NULL,
+          "order" INT8 NULL,
+          shipment INT8 NULL,
           item STRING NULL,
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
           INDEX delivery_item_idx (item ASC),
@@ -591,12 +591,12 @@ query TT
 SHOW CREATE TABLE refpairs
 ----
 refpairs  CREATE TABLE refpairs (
-    a INT NULL,
-    b STRING NULL,
-    c INT NULL,
-    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
-    INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
-    FAMILY "primary" (a, b, c, rowid)
+          a INT8 NULL,
+          b STRING NULL,
+          c INT8 NULL,
+          CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
+          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
+          FAMILY "primary" (a, b, c, rowid)
 )
 
 statement error pgcode 23503 foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
@@ -792,13 +792,13 @@ query TT
 SHOW CREATE TABLE refers
 ----
 refers  CREATE TABLE refers (
-    a INT NULL,
-    b INT NULL,
-    INDEX another_idx (b ASC),
-    CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
-    INDEX refers_auto_index_fk_a_ref_referee (a ASC),
-    INDEX foo (a ASC),
-    FAMILY "primary" (a, b, rowid)
+        a INT8 NULL,
+        b INT8 NULL,
+        INDEX another_idx (b ASC),
+        CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
+        INDEX refers_auto_index_fk_a_ref_referee (a ASC),
+        INDEX foo (a ASC),
+        FAMILY "primary" (a, b, rowid)
 )
 
 statement ok
@@ -875,10 +875,10 @@ query TT
 SHOW CREATE TABLE pkref_b
 ----
 pkref_b  CREATE TABLE pkref_b (
-        b INT NOT NULL,
-        CONSTRAINT "primary" PRIMARY KEY (b ASC),
-        CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a) ON DELETE RESTRICT,
-        FAMILY "primary" (b)
+         b INT8 NOT NULL,
+         CONSTRAINT "primary" PRIMARY KEY (b ASC),
+         CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a) ON DELETE RESTRICT,
+         FAMILY "primary" (b)
 )
 
 subtest 20042

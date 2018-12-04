@@ -71,10 +71,10 @@ EXPLAIN (TYPES) SELECT $1
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT $1::INT
 ----
-tree           field     description               columns      ordering
-render         ·         ·                         ("int" int)  "int"=CONST
- │             render 0  (($1)[string]::INT)[int]  ·            ·
- └── emptyrow  ·         ·                         ()           ·
+tree           field     description                columns     ordering
+render         ·         ·                          (int8 int)  int8=CONST
+ │             render 0  (($1)[string]::INT8)[int]  ·           ·
+ └── emptyrow  ·         ·                          ()          ·
 
 
 # Ensure that all relevant statement types can be explained

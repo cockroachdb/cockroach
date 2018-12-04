@@ -194,7 +194,7 @@ project
       ├── a.arr::DECIMAL[] [type=decimal[], outer=(6)]
       ├── a.s::JSONB [type=jsonb, outer=(4)]
       ├── a.s::VARCHAR(2) [type=string, outer=(4)]
-      ├── a.i::INT2::INT8 [type=int, outer=(2)]
+      ├── a.i::INT2 [type=int, outer=(2)]
       ├── a.s::CHAR::VARCHAR [type=string, outer=(4)]
       ├── ARRAY[1,2]::OIDVECTOR [type=oid[]]
       └── ARRAY[1,2]::INT2VECTOR [type=int[]]
@@ -211,7 +211,7 @@ SELECT
     null::int2vector
 ----
 values
- ├── columns: int:1(int) timestamptz:2(timestamptz) char:3(string) oidvector:4(oid[]) int2vector:5(int[])
+ ├── columns: int8:1(int) timestamptz:2(timestamptz) char:3(string) oidvector:4(oid[]) int2vector:5(int[])
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
@@ -1064,7 +1064,7 @@ select
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── filters
-      └── k = ANY '{1,2,3}'::INT[] [type=bool, outer=(1)]
+      └── k = ANY '{1,2,3}'::INT8[] [type=bool, outer=(1)]
 
 # --------------------------------------------------
 # FoldCollate

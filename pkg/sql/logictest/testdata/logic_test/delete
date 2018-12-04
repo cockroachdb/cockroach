@@ -197,7 +197,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NOT NULL,
+   x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
    FAMILY "primary" (x)
 )

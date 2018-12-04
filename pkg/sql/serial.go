@@ -72,10 +72,7 @@ func (p *planner) processSerialInColumnDef(
 		// If unique_rowid() or virtual sequences are requested, we have
 		// no choice but to use the full-width integer type, no matter
 		// which serial size was requested, otherwise the values will not fit.
-		//
-		// TODO(knz): change this to coltypes.Int8 when #28690 moves
-		// forward.
-		newSpec.Type = coltypes.Int
+		newSpec.Type = coltypes.Int8
 
 	case sessiondata.SerialUsesSQLSequences:
 		// With real sequences we can use exactly the requested type.
@@ -164,7 +161,7 @@ func SimplifySerialInColumnDefWithRowID(
 
 	// We're not constructing a sequence for this SERIAL column.
 	// Use the "old school" CockroachDB default.
-	d.Type = coltypes.Int
+	d.Type = coltypes.Int8
 	d.DefaultExpr.Expr = uniqueRowIDExpr
 
 	return nil

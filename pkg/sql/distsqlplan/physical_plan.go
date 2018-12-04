@@ -902,7 +902,17 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 // another for the purpose of UNION. This excludes its VisibleType
 // type alias, which doesn't effect the merging of values.
 func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	// Convert a "naked" INT type to INT8
+	if c.SemanticType == sqlbase.ColumnType_INT && c.Width == 0 {
+		copy := *c
+		copy.Width = 64
+		c = &copy
+	}
+
 	rhs := *other
+	if rhs.SemanticType == sqlbase.ColumnType_INT && rhs.Width == 0 {
+		rhs.Width = 64
+	}
 	rhs.VisibleType = c.VisibleType
 	return c.Equal(rhs)
 }

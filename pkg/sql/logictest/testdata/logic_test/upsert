@@ -632,7 +632,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NULL,
+   x INT8 NULL,
    FAMILY "primary" (x, rowid)
 )
 
@@ -727,4 +727,3 @@ INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.
 
 statement ok
 INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
-

@@ -32,8 +32,6 @@ var (
 	// VarBit is an immutable T instance.
 	VarBit = &TBitArray{Width: 0, Variable: true}
 
-	// Int is an immutable T instance.
-	Int = &TInt{}
 	// Int2 is an immutable T instance.
 	Int2 = &TInt{Width: 16}
 	// Int4 is an immutable T instance.
@@ -41,8 +39,6 @@ var (
 	// Int8 is an immutable T instance.
 	Int8 = &TInt{Width: 64}
 
-	// Serial is an immutable T instance.
-	Serial = &TSerial{TInt: Int}
 	// Serial2 is an immutable T instance.
 	Serial2 = &TSerial{TInt: Int2}
 	// Serial4 is an immutable T instance.
@@ -88,7 +84,7 @@ var (
 	Bytes = &TBytes{}
 
 	// Int2vector is an immutable T instance.
-	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int}
+	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int8}
 
 	// UUID is an immutable T instance.
 	UUID = &TUUID{}

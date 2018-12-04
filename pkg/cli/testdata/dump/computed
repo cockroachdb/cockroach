@@ -13,8 +13,8 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	a INT NOT NULL,
-	b INT NULL AS (a + 1) STORED,
+	a INT8 NOT NULL,
+	b INT8 NULL AS (a + 1) STORED,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 );

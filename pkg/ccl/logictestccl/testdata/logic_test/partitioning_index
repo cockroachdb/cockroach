@@ -13,8 +13,8 @@ query TT
 SHOW CREATE TABLE ok1
 ----
 ok1  CREATE TABLE ok1 (
-     a INT NOT NULL,
-     b INT NULL,
+     a INT8 NOT NULL,
+     b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
      INDEX ok1_b_idx (b ASC) PARTITION BY LIST (b) (
        PARTITION p1 VALUES IN ((1)),
@@ -40,8 +40,8 @@ query TT
 SHOW CREATE TABLE ok2
 ----
 ok2  CREATE TABLE ok2 (
-     a INT NOT NULL,
-     b INT NULL,
+     a INT8 NOT NULL,
+     b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
      UNIQUE INDEX ok2_b_key (b ASC) PARTITION BY LIST (b) (
        PARTITION p1 VALUES IN ((1))
@@ -61,8 +61,8 @@ query TT
 SHOW CREATE TABLE ok3
 ----
 ok3  CREATE TABLE ok3 (
-     a INT NOT NULL,
-     b INT NULL,
+     a INT8 NOT NULL,
+     b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
      UNIQUE INDEX ok3_b_key (b ASC) PARTITION BY LIST (b) (
        PARTITION p1 VALUES IN ((1))
@@ -102,8 +102,8 @@ query TT
 SHOW CREATE TABLE indexes
 ----
 indexes  CREATE TABLE indexes (
-         a INT NOT NULL,
-         b INT NULL,
+         a INT8 NOT NULL,
+         b INT8 NULL,
          CONSTRAINT "primary" PRIMARY KEY (a ASC),
          INDEX i1 (b ASC) PARTITION BY LIST (b) (
            PARTITION p1 VALUES IN ((1))
