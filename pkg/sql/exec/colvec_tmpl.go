@@ -46,6 +46,18 @@ func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLen
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
+
+	if fromLength > 0 {
+		m.nulls = append(m.nulls, make([]int64, (fromLength-1)>>6+1)...)
+
+		if vec.HasNulls() {
+			for i := uint16(0); i < fromLength; i++ {
+				if vec.NullAt(i) {
+					m.SetNull64(toLength + uint64(i))
+				}
+			}
+		}
+	}
 }
 
 func (m *memColumn) AppendWithSel(
@@ -66,6 +78,15 @@ func (m *memColumn) AppendWithSel(
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
+
+	if batchSize > 0 {
+		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
+		for i := uint16(0); i < batchSize; i++ {
+			if vec.NullAt(sel[i]) {
+				m.SetNull64(toLength + uint64(i))
+			}
+		}
+	}
 }
 
 func (m *memColumn) Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T) {
@@ -80,6 +101,8 @@ func (m *memColumn) Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
 }
 
 func (m *memColumn) CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T) {
+	m.UnsetNulls()
+
 	// todo (changangela): handle the case when nSel > ColBatchSize
 	switch colType {
 	// {{range .}}
@@ -87,8 +110,18 @@ func (m *memColumn) CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colT
 		toCol := m._TemplateType()
 		fromCol := vec._TemplateType()
 
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
+		if vec.HasNulls() {
+			for i := uint16(0); i < nSel; i++ {
+				if vec.NullAt64(sel[i]) {
+					m.SetNull(i)
+				} else {
+					toCol[i] = fromCol[sel[i]]
+				}
+			}
+		} else {
+			for i := uint16(0); i < nSel; i++ {
+				toCol[i] = fromCol[sel[i]]
+			}
 		}
 		// {{end}}
 	default:
@@ -97,14 +130,26 @@ func (m *memColumn) CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colT
 }
 
 func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T) {
+	m.UnsetNulls()
+
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
 		toCol := m._TemplateType()
 		fromCol := vec._TemplateType()
 
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
+		if vec.HasNulls() {
+			for i := uint16(0); i < nSel; i++ {
+				if vec.NullAt(sel[i]) {
+					m.SetNull(i)
+				} else {
+					toCol[i] = fromCol[sel[i]]
+				}
+			}
+		} else {
+			for i := uint16(0); i < nSel; i++ {
+				toCol[i] = fromCol[sel[i]]
+			}
 		}
 		// {{end}}
 	default:

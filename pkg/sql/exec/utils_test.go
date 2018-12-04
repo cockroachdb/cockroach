@@ -118,11 +118,20 @@ func (s *opTestInput) Init() {
 	if len(s.tuples) == 0 {
 		panic("empty tuple source")
 	}
-	tup := s.tuples[0]
-	typs := make([]types.T, len(tup))
-	for i := range tup {
-		typs[i] = types.FromGoType(tup[i])
+
+	typs := make([]types.T, len(s.tuples[0]))
+	for i := range typs {
+		// Default type for test cases is Int64 in case the entire column is null
+		// and the type is indeterminate.
+		typs[i] = types.Int64
+		for _, tup := range s.tuples {
+			if tup[i] != nil {
+				typs[i] = types.FromGoType(tup[i])
+				break
+			}
+		}
 	}
+
 	s.typs = typs
 	s.batch = NewMemBatch(append(typs, s.extraCols...))
 
@@ -165,13 +174,18 @@ func (s *opTestInput) Next() ColBatch {
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
+		vec.UnsetNulls()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
 			outputIdx := s.selection[j]
-			col.Index(int(outputIdx)).Set(
-				reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+			if tups[j][i] == nil {
+				vec.SetNull(outputIdx)
+			} else {
+				col.Index(int(outputIdx)).Set(
+					reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+			}
 		}
 	}
 
@@ -220,8 +234,12 @@ func (r *opTestOutput) next() tuple {
 	}
 	for outIdx, colIdx := range r.cols {
 		vec := r.batch.ColVec(colIdx)
-		col := reflect.ValueOf(vec.Col())
-		out.Index(outIdx).Set(col.Index(int(curIdx)))
+		if vec.NullAt(curIdx) {
+			ret[outIdx] = nil
+		} else {
+			col := reflect.ValueOf(vec.Col())
+			out.Index(outIdx).Set(col.Index(int(curIdx)))
+		}
 	}
 	r.curIdx++
 	return ret
@@ -251,8 +269,14 @@ func assertTupleEquals(expected tuple, actual tuple) error {
 		return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
 	}
 	for i := 0; i < len(actual); i++ {
-		if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
-			return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+		if expected[i] == nil || actual[i] == nil {
+			if expected[i] != nil || actual[i] != nil {
+				return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+			}
+		} else {
+			if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
+				return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+			}
 		}
 	}
 	return nil
