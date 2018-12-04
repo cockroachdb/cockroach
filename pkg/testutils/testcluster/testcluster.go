@@ -553,6 +553,11 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
+				if n := s.AvailableNodeCount(); n != len(tc.Servers) {
+					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
+					notReplicated = true
+					return nil
+				}
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					// This can sometimes fail since ComputeMetrics calls
 					// updateReplicationGauges which needs the system config gossiped.
