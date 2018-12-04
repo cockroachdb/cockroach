@@ -307,9 +307,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		m.failedReservationsTimeout = basicallyForever
 	}
 
-	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
-	storage.DeclinedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.declinedReservationsTimeout)
-	storage.FailedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.failedReservationsTimeout)
 	for idx := 0; idx < numStores; idx++ {
 		m.addStore(idx)
 	}
@@ -645,6 +642,9 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	} else {
 		cfg = storage.TestStoreConfig(m.clocks[i])
 		m.storeConfig = &cfg
+		storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
+		storage.DeclinedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.declinedReservationsTimeout)
+		storage.FailedReservationsTimeout.Override(&m.storeConfig.Settings.SV, m.failedReservationsTimeout)
 	}
 	cfg.NodeDialer = m.nodeDialer
 	cfg.Transport = m.transport

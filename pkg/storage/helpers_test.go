@@ -269,7 +269,7 @@ func (s *Store) AssertInvariants() {
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
-	TimeUntilStoreDead.Override(&cfg.Settings.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(&cfg.Settings.SV, 24*time.Hour)
 	return NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,

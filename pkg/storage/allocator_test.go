@@ -52,10 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
-// prevents the store pool from marking stores as dead.
-const TestTimeUntilStoreDeadOff = 24 * time.Hour
-
 const firstRange = roachpb.RangeID(1)
 
 var firstRangeInfo = testRangeInfo([]roachpb.ReplicaDescriptor{}, firstRange)
@@ -324,7 +320,7 @@ func createTestAllocator(
 	deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper, g, manual, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, deterministic, storagepb.NodeLivenessStatus_LIVE)
+		24*time.Hour, deterministic, storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	})
@@ -1268,7 +1264,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, storePool, nl := createTestStorePool(
-		TestTimeUntilStoreDeadOff, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
+		24*time.Hour, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	})
@@ -1660,7 +1656,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, storePool, nl := createTestStorePool(
-		TestTimeUntilStoreDeadOff, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
+		24*time.Hour, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	})
@@ -3650,7 +3646,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
+		24*time.Hour, true /* deterministic */, storagepb.NodeLivenessStatus_LIVE)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 10x the store ID.
@@ -5415,7 +5411,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 
-	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(&st.SV, 24*time.Hour)
 
 	mockNodeLiveness := newMockNodeLiveness(storagepb.NodeLivenessStatus_LIVE)
 	sp := NewStorePool(
@@ -5551,7 +5547,7 @@ func Example_rebalancing() {
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 
-	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(&st.SV, 24*time.Hour)
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
 	sp := NewStorePool(

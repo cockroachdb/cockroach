@@ -41,14 +41,18 @@ const (
 	TestTimeUntilStoreDead = 5 * time.Millisecond
 )
 
-// DeclinedReservationsTimeout needs to be non-zero to prevent useless retries
-// in the replicateQueue.process() retry loop.
+// DeclinedReservationsTimeout specifies a duration during which the local
+// replicate queue will not consider stores which have rejected a reservation a
+// viable target.
 var DeclinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.declined_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
 	1*time.Second,
 )
 
+// FailedReservationsTimeout specifies a duration during which the local
+// replicate queue will not consider stores which have failed a reservation a
+// viable target.
 var FailedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
