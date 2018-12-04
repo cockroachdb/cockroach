@@ -810,8 +810,8 @@ func splitAndScatter(
 			}
 
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case importSpanChunksCh <- importSpanChunk:
 			}
 		}
@@ -854,8 +854,8 @@ func splitAndScatter(
 					}
 
 					select {
-					case <-g.Done:
-						return g.Err()
+					case <-ctx.Done():
+						return ctx.Err()
 					case readyForImportCh <- importSpan:
 					}
 				}

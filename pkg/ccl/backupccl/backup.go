@@ -671,10 +671,20 @@ func backup(
 	}
 
 	for i := range allSpans {
-		select {
-		case exportsSem <- struct{}{}:
-		case <-g.Done:
-			return mu.exported, g.Err()
+		{
+			var done bool
+			select {
+			case exportsSem <- struct{}{}:
+			case <-g.Done:
+				done = true
+			}
+			if done {
+				// Break the for loop to avoid creating more work - the backup
+				// has failed because either the context has been canceled or an
+				// error has been returned. Either way, Wait() is guaranteed to
+				// return an error now.
+				break
+			}
 		}
 
 		span := allSpans[i]
