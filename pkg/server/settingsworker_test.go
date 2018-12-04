@@ -236,11 +236,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
-	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
-		err, `could not parse "a-str" as type int`,
-	) {
-		t.Fatal(err)
-	}
+	db.ExpectErr(t, `could not parse "a-str" as type int`, fmt.Sprintf(setQ, intKey, "'a-str'"))
 
 	db.Exec(t, fmt.Sprintf(setQ, enumKey, "2"))
 	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
@@ -258,17 +254,12 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
-	if _, err := db.DB.Exec(fmt.Sprintf(setQ, enumKey, "'unknown'")); !testutils.IsError(err,
-		`invalid string value 'unknown' for enum setting`,
-	) {
-		t.Fatal(err)
-	}
+	db.ExpectErr(
+		t, `invalid string value 'unknown' for enum setting`,
+		fmt.Sprintf(setQ, enumKey, "'unknown'"),
+	)
 
-	if _, err := db.DB.Exec(fmt.Sprintf(setQ, enumKey, "7")); !testutils.IsError(err,
-		`invalid integer value '7' for enum setting`,
-	) {
-		t.Fatal(err)
-	}
+	db.ExpectErr(t, `invalid integer value '7' for enum setting`, fmt.Sprintf(setQ, enumKey, "7"))
 
 	db.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User("testuser"))
