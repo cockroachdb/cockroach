@@ -19,7 +19,34 @@ This package extends and modifies the errgroup API slightly to
 make context variables more explicit. WithContext no longer returns
 a context. Instead, the GoCtx method explicitly passes one to the
 invoked func. The goal is to make misuse of context vars with errgroups
-more difficult.
+more difficult. Example usage:
+
+	ctx := context.Background()
+	g := ctxgroup.WithContext(ctx)
+	ch := make(chan bool)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(ch)
+		for _, val := range []bool{true, false} {
+			select {
+			case ch <- val:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		for val := range ch {
+			if err := api.Call(ctx, val); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	api.Call(ctx, "done")
 
 Problems with errgroup
 
@@ -92,64 +119,7 @@ that doesn't shadow the original ctx:
 Now the final api.Call is correct. But the other api.Call is incorrect
 and the ctx.Done receive is incorrect because they are using the wrong
 context and thus won't correctly exit early if the errgroup needs to
-exit early. Contrast with using this package:
-
-	ctx := context.Background()
-	g := ctxgroup.WithContext(ctx)
-	ch := make(chan bool)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(ch)
-		for _, val := range []bool{true, false} {
-			select {
-			case ch <- val:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		return nil
-	})
-	g.GoCtx(func(ctx context.Context) error {
-		for val := range ch {
-			if err := api.Call(ctx, val); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	api.Call(ctx, "done")
-
-Here it is always correct to use ctx as the context variable. The
-above example can be further improved in its Done call to:
-
-	ctx := context.Background()
-	g := ctxgroup.WithContext(ctx)
-	ch := make(chan bool)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(ch)
-		for _, val := range []bool{true, false} {
-			select {
-			case ch <- val:
-			case <-g.Done
-				return g.Err()
-			}
-		}
-		return nil
-	})
-	g.GoCtx(func(ctx context.Context) error {
-		for val := range ch {
-			if err := api.Call(ctx, val); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	api.Call(ctx, "done")
+exit early.
 
 */
 package ctxgroup
@@ -162,12 +132,6 @@ import (
 
 // Group wraps errgroup.
 type Group struct {
-	// Done is the context cancellation channel (i.e. ctx.Done()) for a context
-	// which is canceled when the Group is canceled (i.e. either the incoming
-	// context is canceled, or a method passed to Go returns with an error, or
-	// Wait returns).
-	Done <-chan struct{}
-
 	wrapped *errgroup.Group
 	ctx     context.Context
 }
@@ -190,8 +154,6 @@ func (g Group) Wait() error {
 func WithContext(ctx context.Context) Group {
 	grp, ctx := errgroup.WithContext(ctx)
 	return Group{
-		Done: ctx.Done(),
-
 		wrapped: grp,
 		ctx:     ctx,
 	}

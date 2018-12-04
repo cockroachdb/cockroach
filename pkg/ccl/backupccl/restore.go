@@ -1110,68 +1110,70 @@ func restore(
 		defer tracing.FinishSpan(progressSpan)
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
+	g.GoCtx(func(ctx context.Context) error {
+		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
+		for readyForImportSpan := range readyForImportCh {
+			newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+			if err != nil {
+				return err
+			}
+			idx := readyForImportSpan.progressIdx
 
-	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-	for readyForImportSpan := range readyForImportCh {
-		newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
-		if err != nil {
-			return mu.res, nil, nil, err
-		}
-		idx := readyForImportSpan.progressIdx
-
-		importRequest := &roachpb.ImportRequest{
-			// Import is a point request because we don't want DistSender to split
-			// it. Assume (but don't require) the entire post-rewrite span is on the
-			// same range.
-			RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
-			DataSpan:      readyForImportSpan.Span,
-			Files:         readyForImportSpan.files,
-			EndTime:       endTime,
-			Rekeys:        rekeys,
-		}
-
-		log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
-
-		select {
-		case importsSem <- struct{}{}:
-		case <-g.Done:
-			return mu.res, nil, nil, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
-		}
-
-		g.GoCtx(func(ctx context.Context) error {
-			ctx, importSpan := tracing.ChildSpan(ctx, "import")
-			log.Event(ctx, "acquired semaphore")
-			defer tracing.FinishSpan(importSpan)
-			defer func() { <-importsSem }()
-
-			importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
-			if pErr != nil {
-				return pErr.GoError()
+			importRequest := &roachpb.ImportRequest{
+				// Import is a point request because we don't want DistSender to split
+				// it. Assume (but don't require) the entire post-rewrite span is on the
+				// same range.
+				RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
+				DataSpan:      readyForImportSpan.Span,
+				Files:         readyForImportSpan.files,
+				EndTime:       endTime,
+				Rekeys:        rekeys,
 			}
 
-			mu.Lock()
-			mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+			log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
 
-			// Assert that we're actually marking the correct span done. See #23977.
-			if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+			select {
+			case importsSem <- struct{}{}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			g.GoCtx(func(ctx context.Context) error {
+				ctx, importSpan := tracing.ChildSpan(ctx, "import")
+				log.Event(ctx, "acquired semaphore")
+				defer tracing.FinishSpan(importSpan)
+				defer func() { <-importsSem }()
+
+				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+
+				mu.Lock()
+				mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+
+				// Assert that we're actually marking the correct span done. See #23977.
+				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+					mu.Unlock()
+					return errors.Errorf(
+						"request %d for span %v (to %v) does not match import span for same idx: %v",
+						idx, importRequest.DataSpan, newSpan, importSpans[idx],
+					)
+				}
+				mu.requestsCompleted[idx] = true
+				for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+					mu.highWaterMark = j
+				}
 				mu.Unlock()
-				return errors.Errorf(
-					"request %d for span %v (to %v) does not match import span for same idx: %v",
-					idx, importRequest.DataSpan, newSpan, importSpans[idx],
-				)
-			}
-			mu.requestsCompleted[idx] = true
-			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.highWaterMark = j
-			}
-			mu.Unlock()
 
-			requestFinishedCh <- struct{}{}
-			return nil
-		})
-	}
+				requestFinishedCh <- struct{}{}
+				return nil
+			})
+		}
+		log.Event(restoreCtx, "wait for outstanding imports to finish")
+		return nil
+	})
 
-	log.Event(restoreCtx, "wait for outstanding imports to finish")
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
