@@ -207,9 +207,8 @@ type multiTestContext struct {
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
-	transportStopper   *stop.Stopper
-	engineStoppers     []*stop.Stopper
-	timeUntilStoreDead time.Duration
+	transportStopper *stop.Stopper
+	engineStoppers   []*stop.Stopper
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
@@ -243,7 +242,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.injEngines = false
-		mCopy.timeUntilStoreDead = 0
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -678,11 +676,12 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
 }
 
-func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
-	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
+func (m *multiTestContext) populateStorePool(
+	idx int, cfg storage.StoreConfig, nodeLiveness *storage.NodeLiveness,
+) {
 	m.storePools[idx] = storage.NewStorePool(
-		m.storeConfig.AmbientCtx,
-		m.storeConfig.Settings,
+		cfg.AmbientCtx,
+		cfg.Settings,
 		m.gossips[idx],
 		m.clocks[idx],
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
@@ -741,9 +740,6 @@ func (m *multiTestContext) addStore(idx int) {
 		m.transportStopper,
 		metric.NewRegistry(),
 	)
-	if m.timeUntilStoreDead == 0 {
-		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
-	}
 
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
@@ -754,7 +750,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
-	m.populateStorePool(idx, m.nodeLivenesses[idx])
+	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
 	cfg.StorePool = m.storePools[idx]
@@ -913,7 +909,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
 		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
-	m.populateStorePool(i, m.nodeLivenesses[i])
+	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]

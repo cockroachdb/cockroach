@@ -755,7 +755,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg.GossipStores(uniqueStore, t)
 
 	{
-		expected := sp.clock.Now().GoTime().Add(declinedReservationsTimeout.Get(&sp.st.SV))
+		expected := sp.clock.Now().GoTime().Add(DeclinedReservationsTimeout.Get(&sp.st.SV))
 		sp.throttle(throttleDeclined, 1)
 
 		sp.detailsMu.Lock()
@@ -768,7 +768,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 
 	{
-		expected := sp.clock.Now().GoTime().Add(failedReservationsTimeout.Get(&sp.st.SV))
+		expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
 		sp.throttle(throttleFailed, 1)
 
 		sp.detailsMu.Lock()
