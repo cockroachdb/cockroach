@@ -2861,12 +2861,12 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 
-	// storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
+	storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
 	// Disable declined and failed reservations. Their default values are on
 	// the order of seconds whereas we'll only advance the manual clock used
 	// in this test very slowly, leading to timeouts otherwise.
-	// storage.DeclinedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
-	// storage.FailedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
+	storage.DeclinedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
+	storage.FailedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
 
 	zone := config.DefaultSystemZoneConfig()
 	mtc.Start(t, int(*zone.NumReplicas+1))
@@ -2875,7 +2875,11 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	var nonDeadStores []*storage.Store
 	for i, s := range mtc.stores {
 		if i == 1 {
-			// Skip the dead store.
+			// Skip the dead store, but gossip it once so that it can receive
+			// replicas before it's "dead".
+			if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
+				t.Fatal(err)
+			}
 			continue
 		}
 		nonDeadStores = append(nonDeadStores, s)
@@ -2932,6 +2936,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
 		}
 		for _, r := range replicas {
+			log.Infof(context.TODO(), "got replicas %v", replicas)
 			if r.StoreID == deadStoreID {
 				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
 			}

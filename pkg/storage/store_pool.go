@@ -719,7 +719,7 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	case throttleDeclined:
 		timeout := DeclinedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
-		if log.V(0) {
+		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot declined, s%d will be throttled for %s until %s",
 				storeID, timeout, detail.throttledUntil)
@@ -727,11 +727,10 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	case throttleFailed:
 		timeout := FailedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
-		if log.V(0) {
+		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
 				storeID, timeout, detail.throttledUntil)
-			panic("boom")
 		}
 	}
 }
