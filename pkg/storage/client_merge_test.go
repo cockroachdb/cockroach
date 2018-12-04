@@ -2274,7 +2274,16 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		var lhsRepl2 *storage.Replica
 		testutils.SucceedsSoon(t, func() error {
 			lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
-			return err
+			if err != nil {
+				return err
+			}
+			if !lhsRepl2.IsInitialized() {
+				// Make sure the replica is initialized before unreplicating.
+				// Uninitialized replicas that have a replicaID are hard to
+				// GC (not implemented at the time of writing).
+				return errors.Errorf("%s not initialized", lhsRepl2)
+			}
+			return nil
 		})
 		mtc.unreplicateRange(lhsDesc.RangeID, 2)
 

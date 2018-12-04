@@ -513,10 +513,25 @@ func (s *Store) canApplySnapshotLocked(
 			if !existingIsPreemptive {
 				// This is similar to the case of a preemptive snapshot hitting
 				// a fully initialized replica (i.e. not a preemptive snapshot)
-				// at the end of the last branch (which we don't allow), but
-				// since an uninitialized range doesn't have key bounds, we have
-				// to error out directly.
-				return nil, errors.Errorf("unable to apply preemptive snapshot on Replica with replicaID %s", existingRepl)
+				// at the end of the last branch (which we don't allow), so we
+				// want to reject the snapshot. There is a tricky problem to
+				// to solve here, though: existingRepl doesn't know anything
+				// about its key bounds, and so to check whether it is actually
+				// gc'able would require a full scan of the meta2 entries (and
+				// we would also need to teach the queues how to deal with un-
+				// initialized replicas).
+				//
+				// So we let the snapshot through. This is safe (or at least we
+				// assume so) because we carry out all snapshot decisions
+				// through Raft (though it still is an odd path that we would
+				// be wise to avoid if it weren't so difficult).
+				//
+				// A consequence of letting this snapshot through is opening this
+				// replica up to the possiblity of erroneous replicaGC. This is
+				// because it will retain the replicaID of the current replica,
+				// which is going to be initialized after the snapshot (and thus
+				// gc'able).
+				return nil, nil
 			}
 		}
 	}
