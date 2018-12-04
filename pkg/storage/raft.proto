@@ -69,6 +69,10 @@ message RaftMessageRequest {
   // heartbeats or heartbeat_resps.
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  // Optionally, the start key of the sending replica. This is only populated
+  // as a "hint" under certain conditions.
+  optional bytes start_key = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
 }
 
 message RaftMessageRequestBatch {
