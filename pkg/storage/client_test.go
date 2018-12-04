@@ -696,10 +696,12 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
 }
 
-func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
+func (m *multiTestContext) populateStorePool(
+	idx int, cfg storage.StoreConfig, nodeLiveness *storage.NodeLiveness,
+) {
 	m.storePools[idx] = storage.NewStorePool(
-		m.storeConfig.AmbientCtx,
-		m.storeConfig.Settings,
+		cfg.AmbientCtx,
+		cfg.Settings,
 		m.gossips[idx],
 		m.clocks[idx],
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
@@ -768,7 +770,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
-	m.populateStorePool(idx, m.nodeLivenesses[idx])
+	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
 	cfg.StorePool = m.storePools[idx]
@@ -927,7 +929,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
 		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
-	m.populateStorePool(i, m.nodeLivenesses[i])
+	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
