@@ -2367,7 +2367,7 @@ func TestWorkload(t *testing.T) {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
 
-	out, err := c.RunWithCapture("workload run --help")
+	out, err := c.RunWithCapture("workload init --help")
 	if err != nil {
 		t.Fatal(err)
 	}
