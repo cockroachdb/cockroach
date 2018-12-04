@@ -2864,8 +2864,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	// Disable declined and failed reservations. Their default values are on
 	// the order of seconds whereas we'll only advance the manual clock used
 	// in this test very slowly, leading to timeouts otherwise.
-	mtc.declinedReservationsTimeout = time.Nanosecond
-	mtc.failedReservationsTimeout = time.Nanosecond
+	// mtc.declinedReservationsTimeout = time.Nanosecond
+	// mtc.failedReservationsTimeout = time.Nanosecond
 
 	zone := config.DefaultSystemZoneConfig()
 	mtc.Start(t, int(*zone.NumReplicas+1))
