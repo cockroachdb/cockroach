@@ -49,12 +49,25 @@ func genHashJoiner(wr io.Writer) error {
 	checkCol := regexp.MustCompile(`(?s)_CHECK_COL_WITH_NULLS\(.*?,.*?,.*?,.*?,.*?,.*?,\s*(.*?)\)`)
 	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" $1}}`)
 
+	distinctCollectRightOuter := regexp.MustCompile(`(?s)_DISTINCT_COLLECT_RIGHT_OUTER\(\s*(.*?),\s*(.*?),\s*(.*?)\)`)
+	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectRightOuter" buildDict "Global" . "SelInd" $3}}`)
+
+	distinctCollectNoOuter := regexp.MustCompile(`(?s)_DISTINCT_COLLECT_NO_OUTER\(\s*(.*?),\s*(.*?),\s*(.*?),\s*(.*?)\)`)
+	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectNoOuter" buildDict "Global" . "SelInd" $4}}`)
+
+	collectRightOuter := regexp.MustCompile(`(?s)_COLLECT_RIGHT_OUTER\(\s*(.*?),\s*(.*?),\s*(.*?),\s*(.*?),\s*(.*?)\)`)
+	s = collectRightOuter.ReplaceAllString(s, `{{template "collectRightOuter" buildDict "Global" . "SelInd" $5}}`)
+
+	collectNoOuter := regexp.MustCompile(`(?s)_COLLECT_NO_OUTER\(\s*(.*?),\s*(.*?),\s*(.*?),\s*(.*?),\s*(.*?)\)`)
+	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "SelInd" $5}}`)
+
 	checkColMain := regexp.MustCompile(`_CHECK_COL_MAIN\((.*\))`)
 	s = checkColMain.ReplaceAllString(s, `{{template "checkColMain" .}}`)
 
 	checkColBody := regexp.MustCompile(`_CHECK_COL_BODY\((.*),(.*),(.*)\)`)
 	s = checkColBody.ReplaceAllString(s, `{{template "checkColBody" buildDict "Global" .Global "SelInd" .SelInd "ProbeHasNulls" $2 "BuildHasNulls" $3}}`)
 
+	print(s)
 	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 
 	if err != nil {
