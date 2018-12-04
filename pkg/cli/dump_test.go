@@ -376,7 +376,7 @@ func TestDumpAsOf(t *testing.T) {
 
 	const create = `
 	CREATE DATABASE d;
-	CREATE TABLE d.t (i int);
+	CREATE TABLE d.t (i int8);
 	INSERT INTO d.t VALUES (1);
 	SELECT now();
 `
@@ -397,7 +397,7 @@ func TestDumpAsOf(t *testing.T) {
 
 	const want1 = `dump d t
 CREATE TABLE t (
-	i INT NULL,
+	i INT8 NULL,
 	FAMILY "primary" (i, rowid)
 );
 
@@ -409,7 +409,7 @@ INSERT INTO t (i) VALUES
 	}
 
 	c.RunWithArgs([]string{"sql", "-e", `
-		ALTER TABLE d.t ADD COLUMN j int DEFAULT 2;
+		ALTER TABLE d.t ADD COLUMN j int8 DEFAULT 2;
 		INSERT INTO d.t VALUES (3, 4);
 	`})
 
@@ -419,8 +419,8 @@ INSERT INTO t (i) VALUES
 	}
 	const want2 = `dump d t
 CREATE TABLE t (
-	i INT NULL,
-	j INT NULL DEFAULT 2:::INT,
+	i INT8 NULL,
+	j INT8 NULL DEFAULT 2:::INT8,
 	FAMILY "primary" (i, rowid, j)
 );
 

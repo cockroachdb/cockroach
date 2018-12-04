@@ -260,8 +260,8 @@ project
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
       ├── arr || arr [type=int[]]
-      ├── arr || NULL::INT[] [type=int[]]
-      └── NULL::INT[] || arr [type=int[]]
+      ├── arr || NULL::INT8[] [type=int[]]
+      └── NULL::INT8[] || arr [type=int[]]
 
 # Array Element Concat
 build
@@ -274,8 +274,8 @@ project
  └── projections
       ├── x || arr [type=int[]]
       ├── arr || x [type=int[]]
-      ├── x || NULL::INT[] [type=int[]]
-      └── NULL::INT[] || x [type=int[]]
+      ├── x || NULL::INT8[] [type=int[]]
+      └── NULL::INT8[] || x [type=int[]]
 
 # Function with fixed return type.
 build
@@ -337,7 +337,7 @@ scalar-group-by
  │    │    └── columns: x:1(string!null) z:2(decimal!null)
  │    └── projections
  │         ├── z = 0 [type=bool]
- │         ├── x::INT [type=int]
+ │         ├── x::INT8 [type=int]
  │         └── x::JSONB [type=jsonb]
  └── aggregations
       ├── array-agg [type=decimal[]]
@@ -394,7 +394,7 @@ project
  │    │    │    │    ├── scan b
  │    │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
  │    │    │    │    └── projections
- │    │    │    │         └── z::INT [type=int]
+ │    │    │    │         └── z::INT8 [type=int]
  │    │    │    └── filters
  │    │    │         └── y = column7 [type=bool]
  │    │    └── aggregations

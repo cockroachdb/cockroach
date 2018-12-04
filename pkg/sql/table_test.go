@@ -60,7 +60,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"INT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 		{
@@ -160,12 +160,12 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"INT NOT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			false,
 		},
 		{
 			"INT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 	}

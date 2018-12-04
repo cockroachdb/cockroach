@@ -509,9 +509,9 @@ func TestAdminAPITableDetails(t *testing.T) {
 			setupQueries := []string{
 				fmt.Sprintf("CREATE DATABASE %s", escDBName),
 				fmt.Sprintf(`CREATE TABLE %s.%s (
-							nulls_allowed INT,
-							nulls_not_allowed INT NOT NULL DEFAULT 1000,
-							default2 INT DEFAULT 2,
+							nulls_allowed INT8,
+							nulls_not_allowed INT8 NOT NULL DEFAULT 1000,
+							default2 INT8 DEFAULT 2,
 							string_default STRING DEFAULT 'default_string'
 						)`, escDBName, escTblName),
 				fmt.Sprintf("CREATE USER readonly"),
@@ -536,9 +536,9 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify columns.
 			expColumns := []serverpb.TableDetailsResponse_Column{
-				{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
-				{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000:::INT"},
-				{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2:::INT"},
+				{Name: "nulls_allowed", Type: "INT8", Nullable: true, DefaultValue: ""},
+				{Name: "nulls_not_allowed", Type: "INT8", Nullable: false, DefaultValue: "1000:::INT8"},
+				{Name: "default2", Type: "INT8", Nullable: true, DefaultValue: "2:::INT8"},
 				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string':::STRING"},
 				{Name: "rowid", Type: "INT", Nullable: false, DefaultValue: "unique_rowid()", Hidden: true},
 			}

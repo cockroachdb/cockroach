@@ -4,7 +4,7 @@
 -
 CREATE TABLE product_information (
 	product_id
-		INT
+		INT8
 		NOT NULL
 		PRIMARY KEY,
 	product_name
@@ -25,15 +25,15 @@ CREATE TABLE product_information (
 				)
 		),
 	weight_class
-		INT,
+		INT8,
 	warranty_period
-		INT
+		INT8
 		CONSTRAINT valid_warranty
 			CHECK (
 				warranty_period BETWEEN 0 AND 24
 			),
 	supplier_id
-		INT,
+		INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -65,7 +65,7 @@ CREATE TABLE product_information (
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
-		INT
+		INT8
 		REFERENCES customers_2 (
 			id
 		)
@@ -77,7 +77,7 @@ CREATE TABLE product_information (
 ---------------
 CREATE TABLE product_information (
 	product_id
-		INT
+		INT8
 		NOT NULL
 		PRIMARY KEY,
 	product_name
@@ -98,15 +98,15 @@ CREATE TABLE product_information (
 				)
 		),
 	weight_class
-		INT,
+		INT8,
 	warranty_period
-		INT
+		INT8
 		CONSTRAINT valid_warranty
 			CHECK (
 				warranty_period BETWEEN 0 AND 24
 			),
 	supplier_id
-		INT,
+		INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -137,78 +137,7 @@ CREATE TABLE product_information (
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
-		INT
-		REFERENCES customers_2 (
-			id
-		)
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc)
-)
-
-18:
-------------------
-CREATE TABLE product_information (
-	product_id INT
-	           NOT NULL
-	           PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class
-		INT,
-	warranty_period
-		INT
-		CONSTRAINT valid_warranty
-			CHECK (
-				warranty_period BETWEEN 0 AND 24
-			),
-	supplier_id
-		INT,
-	product_status
-		STRING(20),
-	list_price
-		DECIMAL(8,2),
-	min_price
-		DECIMAL(8,2),
-	catalog_url
-		STRING(50)
-		UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id
-		INT
+		INT8
 		REFERENCES customers_2 (
 			id
 		)
@@ -219,7 +148,7 @@ CREATE TABLE product_information (
 19:
 -------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -240,15 +169,15 @@ CREATE TABLE product_information (
 				)
 		),
 	weight_class
-		INT,
+		INT8,
 	warranty_period
-		INT
+		INT8
 		CONSTRAINT valid_warranty
 			CHECK (
 				warranty_period BETWEEN 0 AND 24
 			),
 	supplier_id
-		INT,
+		INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -277,18 +206,19 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
-	            REFERENCES customers_2 (
-					id
-	            )
-					ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id
+		INT8
+		REFERENCES customers_2 (
+			id
+		)
+			ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
 20:
 --------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -309,14 +239,15 @@ CREATE TABLE product_information (
 				)
 		),
 	weight_class
-		INT,
+		INT8,
 	warranty_period
-		INT
+		INT8
 		CONSTRAINT valid_warranty
 			CHECK (
 				warranty_period BETWEEN 0 AND 24
 			),
-	supplier_id INT,
+	supplier_id
+		INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -344,7 +275,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -355,7 +286,7 @@ CREATE TABLE product_information (
 21:
 ---------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -375,14 +306,15 @@ CREATE TABLE product_information (
 					'C'
 				)
 		),
-	weight_class INT,
+	weight_class
+		INT8,
 	warranty_period
-		INT
+		INT8
 		CONSTRAINT valid_warranty
 			CHECK (
 				warranty_period BETWEEN 0 AND 24
 			),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -410,7 +342,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -418,10 +350,10 @@ CREATE TABLE product_information (
 	INVERTED INDEX details (misc)
 )
 
-23:
------------------------
+22:
+----------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -441,13 +373,14 @@ CREATE TABLE product_information (
 					'C'
 				)
 		),
-	weight_class INT,
-	warranty_period INT
-	                CONSTRAINT valid_warranty
-						CHECK (
-							warranty_period BETWEEN 0 AND 24
-						),
-	supplier_id INT,
+	weight_class INT8,
+	warranty_period
+		INT8
+		CONSTRAINT valid_warranty
+			CHECK (
+				warranty_period BETWEEN 0 AND 24
+			),
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -475,7 +408,72 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
+	            REFERENCES customers_2 (
+					id
+	            )
+					ON DELETE CASCADE ON UPDATE CASCADE,
+	INVERTED INDEX details (misc)
+)
+
+24:
+------------------------
+CREATE TABLE product_information (
+	product_id INT8
+	           NOT NULL
+	           PRIMARY KEY,
+	product_name
+		STRING(50)
+		NOT NULL
+		UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1)
+		NOT NULL
+		CHECK (
+			category_id
+			IN (
+					'A',
+					'B',
+					'C'
+				)
+		),
+	weight_class INT8,
+	warranty_period INT8
+	                CONSTRAINT valid_warranty
+						CHECK (
+							warranty_period BETWEEN 0 AND 24
+						),
+	supplier_id INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50)
+		UNIQUE,
+	date_added DATE
+	           DEFAULT current_date(),
+	misc JSONB,
+	full_name STRING
+	          AS (
+				concat(
+					first_name,
+					' ',
+					last_name
+				)
+	          ) STORED,
+	CONSTRAINT price_check
+		CHECK (
+			list_price
+			>= min_price
+		),
+	INDEX date_added_idx (date_added),
+	INDEX supp_id_prod_status_idx (supplier_id, product_status),
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -486,7 +484,7 @@ CREATE TABLE product_information (
 25:
 -------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -505,13 +503,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -539,7 +537,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -550,7 +548,7 @@ CREATE TABLE product_information (
 26:
 --------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name
@@ -569,13 +567,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -602,7 +600,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -613,7 +611,7 @@ CREATE TABLE product_information (
 27:
 ---------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -631,13 +629,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price
@@ -663,7 +661,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -674,7 +672,7 @@ CREATE TABLE product_information (
 28:
 ----------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -692,13 +690,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status
 		STRING(20),
 	list_price DECIMAL(8,2),
@@ -723,7 +721,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -734,7 +732,7 @@ CREATE TABLE product_information (
 30:
 ------------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -752,13 +750,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -782,7 +780,7 @@ CREATE TABLE product_information (
 		),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -793,7 +791,7 @@ CREATE TABLE product_information (
 34:
 ----------------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -811,13 +809,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -839,7 +837,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -850,7 +848,7 @@ CREATE TABLE product_information (
 37:
 -------------------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -867,13 +865,13 @@ CREATE TABLE product_information (
 							'C'
 						)
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -895,7 +893,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -906,7 +904,7 @@ CREATE TABLE product_information (
 38:
 --------------------------------------
 CREATE TABLE product_information (
-	product_id INT
+	product_id INT8
 	           NOT NULL
 	           PRIMARY KEY,
 	product_name STRING(50)
@@ -919,13 +917,13 @@ CREATE TABLE product_information (
 					category_id
 					IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -947,7 +945,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            )
@@ -958,7 +956,9 @@ CREATE TABLE product_information (
 40:
 ----------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8
+	           NOT NULL
+	           PRIMARY KEY,
 	product_name STRING(50)
 	             NOT NULL
 	             UNIQUE,
@@ -969,13 +969,13 @@ CREATE TABLE product_information (
 					category_id
 					IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -997,17 +997,17 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
-43:
--------------------------------------------
+41:
+-----------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50)
 	             NOT NULL
 	             UNIQUE,
@@ -1018,13 +1018,62 @@ CREATE TABLE product_information (
 					category_id
 					IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
+	product_status STRING(20),
+	list_price DECIMAL(8,2),
+	min_price DECIMAL(8,2),
+	catalog_url STRING(50) UNIQUE,
+	date_added DATE
+	           DEFAULT current_date(),
+	misc JSONB,
+	full_name STRING
+	          AS (
+				concat(
+					first_name,
+					' ',
+					last_name
+				)
+	          ) STORED,
+	CONSTRAINT price_check CHECK (
+							list_price
+							>= min_price
+	                       ),
+	INDEX date_added_idx (date_added),
+	INDEX supp_id_prod_status_idx (supplier_id, product_status),
+	customer_id INT8
+	            REFERENCES customers_2 (
+					id
+	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	INVERTED INDEX details (misc)
+)
+
+43:
+-------------------------------------------
+CREATE TABLE product_information (
+	product_id INT8 NOT NULL PRIMARY KEY,
+	product_name STRING(50)
+	             NOT NULL
+	             UNIQUE,
+	product_description STRING(2000),
+	category_id STRING(1)
+	            NOT NULL
+	            CHECK (
+					category_id
+					IN ('A', 'B', 'C')
+	            ),
+	weight_class INT8,
+	warranty_period INT8
+	                CONSTRAINT valid_warranty
+						CHECK (
+							warranty_period BETWEEN 0 AND 24
+						),
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1045,7 +1094,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1055,7 +1104,7 @@ CREATE TABLE product_information (
 44:
 --------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
@@ -1064,13 +1113,13 @@ CREATE TABLE product_information (
 					category_id
 					IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1091,7 +1140,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1101,7 +1150,7 @@ CREATE TABLE product_information (
 50:
 --------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
@@ -1109,13 +1158,13 @@ CREATE TABLE product_information (
 	            CHECK (
 					category_id IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1132,7 +1181,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1142,7 +1191,7 @@ CREATE TABLE product_information (
 51:
 ---------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
@@ -1150,13 +1199,13 @@ CREATE TABLE product_information (
 	            CHECK (
 					category_id IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty
 						CHECK (
 							warranty_period BETWEEN 0 AND 24
 						),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1172,7 +1221,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1182,7 +1231,7 @@ CREATE TABLE product_information (
 53:
 -----------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
@@ -1190,12 +1239,12 @@ CREATE TABLE product_information (
 	            CHECK (
 					category_id IN ('A', 'B', 'C')
 	            ),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1211,7 +1260,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1221,18 +1270,18 @@ CREATE TABLE product_information (
 55:
 -------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
 	            NOT NULL
 	            CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1248,7 +1297,7 @@ CREATE TABLE product_information (
 	                       ),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1258,18 +1307,18 @@ CREATE TABLE product_information (
 59:
 -----------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
 	            NOT NULL
 	            CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1283,7 +1332,7 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1293,18 +1342,18 @@ CREATE TABLE product_information (
 61:
 -------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
 	            NOT NULL
 	            CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1316,7 +1365,7 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1326,18 +1375,18 @@ CREATE TABLE product_information (
 68:
 --------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1)
 	            NOT NULL
 	            CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1348,7 +1397,7 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1358,16 +1407,16 @@ CREATE TABLE product_information (
 74:
 --------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1378,7 +1427,7 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (
 					id
 	            ) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1388,16 +1437,16 @@ CREATE TABLE product_information (
 80:
 --------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1408,24 +1457,24 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT
+	customer_id INT8
 	            REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
-84:
-------------------------------------------------------------------------------------
+85:
+-------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (
 												warranty_period BETWEEN 0 AND 24
 	                                          ),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1436,21 +1485,21 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
 87:
 ---------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT
+	weight_class INT8,
+	warranty_period INT8
 	                CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT,
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1461,20 +1510,20 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
-91:
--------------------------------------------------------------------------------------------
+92:
+--------------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT NOT NULL PRIMARY KEY,
+	product_id INT8 NOT NULL PRIMARY KEY,
 	product_name STRING(50) NOT NULL UNIQUE,
 	product_description STRING(2000),
 	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT,
-	warranty_period INT CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT,
+	weight_class INT8,
+	warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
+	supplier_id INT8,
 	product_status STRING(20),
 	list_price DECIMAL(8,2),
 	min_price DECIMAL(8,2),
@@ -1485,12 +1534,12 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
-827:
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE product_information (product_id INT NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT, warranty_period INT CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, CONSTRAINT price_check CHECK (list_price >= min_price), INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc))
+832:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE product_information (product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, CONSTRAINT price_check CHECK (list_price >= min_price), INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc))
 
 
