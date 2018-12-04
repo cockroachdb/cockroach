@@ -25,7 +25,7 @@ type UUID [Size]byte
 const (
 	_  byte = iota
 	V1      // Version 1 (date-time and MAC address)
-	V2      // Version 2 (date-time and MAC address, DCE security version)
+	_       // Version 2 (date-time and MAC address, DCE security version)
 	V3      // Version 3 (namespace name-based)
 	V4      // Version 4 (random)
 	V5      // Version 5 (namespace name-based)
@@ -37,13 +37,6 @@ const (
 	VariantRFC4122
 	VariantMicrosoft
 	VariantFuture
-)
-
-// UUID DCE domains.
-const (
-	DomainPerson = iota
-	DomainGroup
-	DomainOrg
 )
 
 // Timestamp is the count of 100-nanosecond intervals since 00:00:00.00,
