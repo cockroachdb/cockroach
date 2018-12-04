@@ -832,16 +832,6 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	firstServer := tc.Server(0).(*server.TestServer)
 
-	// Ensure that dead nodes are quickly recognized as dead by gossip.
-	// We set the cluster setting after we've done propagating statuses
-	// above so that the new setting value does not race with gossip
-	// initialization.
-	// Note: morally we'd probably need to use SQL here to set
-	// the cluster setting. However that restricts the allowable values
-	// to 1m15s, which is much too long for a test.
-	storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-		storage.TestTimeUntilStoreDead)
-
 	liveNodeID := firstServer.NodeID()
 
 	deadNodeID := tc.Server(1).NodeID()
@@ -886,6 +876,16 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 			t.Parallel()
 
 			testutils.SucceedsSoon(t, func() error {
+				// Ensure that dead nodes are quickly recognized as dead by
+				// gossip. Overriding cluster settings is generally a really bad
+				// idea as they are also populated via Gossip and so our update
+				// is possibly going to be wiped out. But going through SQL
+				// doesn't allow durations below 1m15s, which is much too long
+				// for a test.
+				// We do this in every SucceedsSoon attempt, so we'll be good.
+				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
+					storage.TestTimeUntilStoreDead)
+
 				log.Infof(ctx, "checking expected status for node %d", nodeID)
 				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
 				if st, ok := nodeStatuses[nodeID]; !ok {
