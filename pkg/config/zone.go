@@ -510,6 +510,45 @@ func (z *ZoneConfig) InheritFromParent(parent ZoneConfig) {
 	}
 }
 
+// CopyFromZone copies over the specified fields from the other zone.
+func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
+	for _, fieldName := range fieldList {
+		if fieldName == "num_replicas" {
+			z.NumReplicas = nil
+			if other.NumReplicas != nil {
+				z.NumReplicas = proto.Int32(*other.NumReplicas)
+			}
+		}
+		if fieldName == "range_min_bytes" {
+			z.RangeMinBytes = nil
+			if other.RangeMinBytes != nil {
+				z.RangeMinBytes = proto.Int64(*other.RangeMinBytes)
+			}
+		}
+		if fieldName == "range_max_bytes" {
+			z.RangeMaxBytes = nil
+			if other.RangeMaxBytes != nil {
+				z.RangeMaxBytes = proto.Int64(*other.RangeMaxBytes)
+			}
+		}
+		if fieldName == "gc.ttlseconds" {
+			z.GC = nil
+			if other.GC != nil {
+				tempGC := *other.GC
+				z.GC = &tempGC
+			}
+		}
+		if fieldName == "constraints" {
+			z.Constraints = other.Constraints
+			z.InheritedConstraints = other.InheritedConstraints
+		}
+		if fieldName == "lease_preferences" {
+			z.LeasePreferences = other.LeasePreferences
+			z.InheritedLeasePreferences = other.InheritedLeasePreferences
+		}
+	}
+}
+
 // StoreMatchesConstraint returns whether a store matches the given constraint.
 func StoreMatchesConstraint(store roachpb.StoreDescriptor, constraint Constraint) bool {
 	hasConstraint := storeHasConstraint(store, constraint)
