@@ -1100,6 +1100,10 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER INDEX t@i CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = yay`},
+		{`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`},
+		{`ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = COPY FROM PARENT`},
+		{`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT, baz = COPY FROM PARENT`},
+		{`ALTER INDEX i CONFIGURE ZONE USING foo = bar, other = COPY FROM PARENT, baz = yay`},
 
 		{`ALTER RANGE default CONFIGURE ZONE DISCARD`},
 		{`ALTER RANGE meta CONFIGURE ZONE DISCARD`},
@@ -1683,6 +1687,8 @@ func TestParse2(t *testing.T) {
 			`ALTER INDEX t@i CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER INDEX i CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = yay`},
+		{`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`,
+			`ALTER INDEX i CONFIGURE ZONE USING "foo" = COPY FROM PARENT`},
 
 		// Alternative forms for table patterns.
 

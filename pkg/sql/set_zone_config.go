@@ -36,10 +36,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+type optionValue struct {
+	inheritValue  bool
+	explicitValue tree.TypedExpr
+}
+
 type setZoneConfigNode struct {
 	zoneSpecifier tree.ZoneSpecifier
 	yamlConfig    tree.TypedExpr
-	options       map[tree.Name]tree.TypedExpr
+	options       map[tree.Name]optionValue
 	setDefault    bool
 
 	run setZoneConfigRun
@@ -117,13 +122,13 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		}
 	}
 
-	var options map[tree.Name]tree.TypedExpr
+	var options map[tree.Name]optionValue
 	if n.Options != nil {
 		// We have a CONFIGURE ZONE USING ... assignment.
 		// Here we are constrained by the supported ZoneConfig fields,
 		// as described by supportedZoneConfigOptions above.
 
-		options = make(map[tree.Name]tree.TypedExpr)
+		options = make(map[tree.Name]optionValue)
 		for _, opt := range n.Options {
 			if _, alreadyExists := options[opt.Key]; alreadyExists {
 				return nil, fmt.Errorf("duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
@@ -132,12 +137,16 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			if !ok {
 				return nil, fmt.Errorf("unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
+			if opt.Value == nil {
+				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
+				continue
+			}
 			valExpr, err := p.analyzeExpr(
 				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
 			if err != nil {
 				return nil, err
 			}
-			options[opt.Key] = valExpr
+			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
 		}
 	}
 
@@ -180,6 +189,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		yamlConfig = strings.TrimSpace(yamlConfig)
 	}
 	var optionStr strings.Builder
+	var copyFromParentList []tree.Name
 	if n.options != nil {
 		// Set from var = value attributes.
 		//
@@ -188,8 +198,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the event log remains deterministic.
 		for i := range zoneOptionKeys {
 			name := (*tree.Name)(&zoneOptionKeys[i])
-			expr, ok := n.options[*name]
+			val, ok := n.options[*name]
 			if !ok {
+				continue
+			}
+			// We don't add the setters for the fields that will copy values
+			// from the parents. These fields will be set by taking what
+			// value would apply to the zone and setting that value explicitly.
+			// Instead we add the fields to a list that we use at a later time
+			// to copy values over.
+			inheritVal, expr := val.inheritValue, val.explicitValue
+			if inheritVal {
+				copyFromParentList = append(copyFromParentList, *name)
 				continue
 			}
 			datum, err := expr.Eval(params.EvalContext())
@@ -205,6 +225,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				optionStr.WriteString(", ")
 			}
 			fmt.Fprintf(&optionStr, "%s = %s", string(*name), datum)
+
 		}
 	}
 
@@ -289,6 +310,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	} else if err != nil {
 		return err
 	}
+
+	// Copy the fields set by the INHERIT field command.
+	partialZone.CopyFromZone(*completeZone, copyFromParentList)
 
 	if deleteZone {
 		if index != nil {
@@ -436,6 +460,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	zoneToWrite := partialZone
 	if !execConfig.Settings.Version.IsMinSupported(cluster.VersionCascadingZoneConfigs) {
 		zoneToWrite = completeZone
+	}
+
+	// Finally check for the extra protection partial zone configs would
+	// require from changes made to parent zones. The extra protections are:
+	//
+	// RangeMinBytes and RangeMaxBytes must be set together
+	// LeasePreferences cannot be set unless Constraints are explicitly set
+	// Per-replica constraints cannot be set unless num_replicas is explicitly set
+	if err := zoneToWrite.ValidateTandemFields(); err != nil {
+		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			fmt.Sprintf("could not validate zone config: %s", err)).SetHintf(
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
