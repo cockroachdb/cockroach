@@ -49,6 +49,11 @@ var cases = []testCase{
 		flags: []string{"--from", "181130 22:15:07.525317"},
 	},
 	{
+		name:  "1.filter-message",
+		args:  []string{"testdata/merge_logs/1/*/*"},
+		flags: []string{"--filter", "gossip"},
+	},
+	{
 		name: "2.multiple-files-from-node",
 		args: []string{"testdata/merge_logs/2/*/*"},
 	},
