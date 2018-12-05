@@ -77,8 +77,9 @@ type overload struct {
 
 	// TODO(solon): These would not be necessary if we changed the zero values of
 	// ComparisonOperator and BinaryOperator to be invalid.
-	IsCmpOp bool
-	IsBinOp bool
+	IsCmpOp  bool
+	IsBinOp  bool
+	IsHashOp bool
 }
 
 type assignFunc func(op overload, target, l, r string) string
@@ -94,6 +95,10 @@ var binaryOpToOverloads map[tree.BinaryOperator][]*overload
 // that implement it.
 var comparisonOpToOverloads map[tree.ComparisonOperator][]*overload
 
+// hashOverloads is a list of all of the overloads that implement the hash
+// operation.
+var hashOverloads []*overload
+
 // Assign produces a Go source string that assigns the "target" variable to the
 // result of applying the overload to the two inputs, l and r.
 //
@@ -107,6 +112,16 @@ func (o overload) Assign(target, l, r string) string {
 	}
 	// Default assign form assumes an infix operator.
 	return fmt.Sprintf("%s = %s %s %s", target, l, o.OpStr, r)
+}
+
+func (o overload) UnaryAssign(target, v string) string {
+	if o.AssignFunc != nil {
+		if ret := o.AssignFunc(o, target, v, ""); ret != "" {
+			return ret
+		}
+	}
+	// Default assign form assumes a function operator.
+	return fmt.Sprintf("%s = %s(%s)", target, o.OpStr, v)
 }
 
 func init() {
@@ -164,6 +179,18 @@ func init() {
 			comparisonOpOverloads = append(comparisonOpOverloads, ov)
 			comparisonOpToOverloads[op] = append(comparisonOpToOverloads[op], ov)
 		}
+
+		ov := &overload{
+			IsHashOp: true,
+			LTyp:     t,
+			OpStr:    "uint64",
+		}
+		if customizer != nil {
+			if b, ok := customizer.(hashTypeCustomizer); ok {
+				ov.AssignFunc = b.getHashAssignFunc()
+			}
+		}
+		hashOverloads = append(hashOverloads, ov)
 	}
 }
 
@@ -195,6 +222,12 @@ type cmpOpTypeCustomizer interface {
 	getCmpOpAssignFunc() assignFunc
 }
 
+// hashTypeCustomizer is a type customizer that changes how the templater
+// produces hash output for a particular type.
+type hashTypeCustomizer interface {
+	getHashAssignFunc() assignFunc
+}
+
 // boolCustomizer is necessary since bools don't support < <= > >= in Go.
 type boolCustomizer struct{}
 
@@ -207,6 +240,11 @@ type bytesCustomizer struct{}
 // variable-set semantics.
 type decimalCustomizer struct{}
 
+// float32Customizer and float64Customizer are necessary since float32 and
+// float64 require additional logic for hashing.
+type float32Customizer struct{}
+type float64Customizer struct{}
+
 func (boolCustomizer) getCmpOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		switch op.CmpOp {
@@ -215,6 +253,17 @@ func (boolCustomizer) getCmpOpAssignFunc() assignFunc {
 		}
 		return fmt.Sprintf("%s = tree.CompareBools(%s, %s) %s 0",
 			target, l, r, op.OpStr)
+	}
+}
+
+func (boolCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf(`
+			if %[2]s {
+				 %[1]s = 1
+			}
+			%[1]s = 0
+		`, target, v)
 	}
 }
 
@@ -228,6 +277,18 @@ func (bytesCustomizer) getCmpOpAssignFunc() assignFunc {
 		}
 		return fmt.Sprintf("%s = bytes.Compare(%s, %s) %s 0",
 			target, l, r, op.OpStr)
+	}
+}
+
+func (bytesCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf(`
+			_temp := 1
+			for b := range %s {
+				_temp = _temp*31 + b
+			}
+			%s = uint64(hash)
+		`, v, target)
 	}
 }
 
@@ -245,11 +306,37 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
+func (decimalCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf(`
+			d, err := %[2]s.Float64()
+			if err != nil {
+				panic(fmt.Sprintf("%%v", err))
+			}
+			%[1]s = math.Float64bits(d)
+		`, target, v)
+	}
+}
+
+func (float32Customizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf("%s = uint64(math.Float32bits(%s))", target, v)
+	}
+}
+
+func (float64Customizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf("%s = math.Float64bits(%s)", target, v)
+	}
+}
+
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[types.T]typeCustomizer)
 	registerTypeCustomizer(types.Bool, boolCustomizer{})
 	registerTypeCustomizer(types.Bytes, bytesCustomizer{})
 	registerTypeCustomizer(types.Decimal, decimalCustomizer{})
+	registerTypeCustomizer(types.Float32, float32Customizer{})
+	registerTypeCustomizer(types.Float64, float64Customizer{})
 }
 
 // Avoid unused warning for Assign, which is only used in templates.

@@ -110,6 +110,7 @@ func (a *sum_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
 		a.done = true
 		return
 	}
+
 	col, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
 	if sel != nil {
 		sel = sel[:inputLen]

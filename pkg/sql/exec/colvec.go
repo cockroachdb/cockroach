@@ -104,7 +104,8 @@ var _ ColVec = &memColumn{}
 type memColumn struct {
 	col column
 
-	nulls []int64
+	nulls    []int64
+	hasNulls bool
 }
 
 // newMemColumn returns a new memColumn, initialized with a length.
@@ -141,11 +142,7 @@ func newMemColumn(t types.T, n int) *memColumn {
 }
 
 func (m *memColumn) HasNulls() bool {
-	sum := int64(0)
-	for i := range m.nulls {
-		sum += m.nulls[i]
-	}
-	return sum != 0
+	return m.hasNulls
 }
 
 func (m *memColumn) NullAt(i uint16) bool {
@@ -154,11 +151,13 @@ func (m *memColumn) NullAt(i uint16) bool {
 }
 
 func (m *memColumn) SetNull(i uint16) {
+	m.hasNulls = true
 	intIdx := i >> 6
 	m.nulls[intIdx] |= 1 << (i % 64)
 }
 
 func (m *memColumn) UnsetNulls() {
+	m.hasNulls = false
 	for i := range m.nulls {
 		m.nulls[i] = 0
 	}
@@ -173,6 +172,7 @@ func (m *memColumn) NullAt64(i uint64) bool {
 }
 
 func (m *memColumn) SetNull64(i uint64) {
+	m.hasNulls = true
 	intIdx := i >> 6
 	m.nulls[intIdx] |= 1 << (i % 64)
 }

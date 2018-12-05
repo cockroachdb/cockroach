@@ -788,7 +788,6 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch ColBatch, batchS
 
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
-		outCol.UnsetNulls()
 		outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
 	}
 
@@ -798,7 +797,6 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch ColBatch, batchS
 
 		colType := prober.spec.sourceTypes[colIdx]
 
-		outCol.UnsetNulls()
 		outCol.CopyWithSelInt16(valCol, prober.probeIdx, nResults, colType)
 	}
 
