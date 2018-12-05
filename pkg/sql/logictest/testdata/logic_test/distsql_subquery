@@ -20,12 +20,12 @@ ALTER TABLE ab SPLIT AT VALUES (2)
 statement ok
 ALTER TABLE ab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2)
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE ab
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ab]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /2       1         {1}       1
-/2         NULL     2         {2}       2
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         NULL     {2}       2
 
 query T
 SELECT ARRAY(SELECT a FROM ab ORDER BY b)

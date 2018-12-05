@@ -36,28 +36,28 @@ ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 
 # statistics.
 
 # Verify data placement.
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE kv
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE kv]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /1       1         {1}       1
-/1         /2       2         {1}       1
-/2         /3       3         {2}       2
-/3         /4       4         {3}       3
-/4         /5       5         {4}       4
-/5         NULL     6         {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
 
 # Verify data placement.
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE kw
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE kw]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /1       6         {5}       5
-/1         /2       7         {1}       1
-/2         /3       8         {2}       2
-/3         /4       9         {3}       3
-/4         /5       10        {4}       4
-/5         NULL     11        {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       /1       {5}       5
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
 
 # This query verifies stat collection for the tableReader, mergeJoiner, and
 # aggregator.
