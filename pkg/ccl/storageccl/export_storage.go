@@ -782,7 +782,7 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	sz := r.Size()
+	sz := r.Attrs.Size
 	_ = r.Close()
 	return sz, nil
 }

@@ -2785,21 +2785,38 @@ func TestUnimplementedSyntax(t *testing.T) {
 }
 
 func BenchmarkParse(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		st, err := parser.Parse(`
-			BEGIN;
-			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
-			SELECT abalance FROM pgbench_accounts WHERE aid = 5;
-			INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (1, 2, 5, 77, CURRENT_TIMESTAMP);
-			END`)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if len(st) != 5 {
-			b.Fatal("parsed wrong number of statements: ", len(st))
-		}
-		if _, ok := st[1].(*tree.Update); !ok {
-			b.Fatalf("unexpected statement type: %T", st[1])
-		}
+	testCases := []struct {
+		name, query string
+	}{
+		{
+			"simple",
+			`SELECT a FROM t WHERE a = 1`,
+		},
+		{
+			"string",
+			`SELECT a FROM t WHERE a = 'some-string' AND b = 'some-other-string'`,
+		},
+		{
+			"tpcc-delivery",
+			`SELECT no_o_id FROM new_order WHERE no_w_id = $1 AND no_d_id = $2 ORDER BY no_o_id ASC LIMIT 1`,
+		},
+		{
+			"account",
+			`BEGIN;
+			 UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
+			 SELECT abalance FROM pgbench_accounts WHERE aid = 5;
+			 INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (1, 2, 5, 77, CURRENT_TIMESTAMP);
+			 END`,
+		},
+	}
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := parser.Parse(tc.query)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

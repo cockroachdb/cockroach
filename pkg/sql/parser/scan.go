@@ -48,7 +48,8 @@ type Scanner struct {
 	// stmts contains the list of statements at the end of parsing.
 	stmts []tree.Statement
 
-	initialized bool
+	initialized   bool
+	bytesPrealloc []byte
 }
 
 // scanErr holds error state for a Scanner.
@@ -72,6 +73,41 @@ func (s *Scanner) init(str string) {
 	}
 	s.initialized = true
 	s.in = str
+	// Preallocate some buffer space for identifiers etc.
+	s.bytesPrealloc = make([]byte, len(str))
+}
+
+func (s *Scanner) allocBytes(length int) []byte {
+	if len(s.bytesPrealloc) >= length {
+		res := s.bytesPrealloc[:length:length]
+		s.bytesPrealloc = s.bytesPrealloc[length:]
+		return res
+	}
+	return make([]byte, length)
+}
+
+// buffer returns an empty []byte buffer that can be appended to. Any unused
+// portion can be returned later using returnBuffer.
+func (s *Scanner) buffer() []byte {
+	buf := s.bytesPrealloc[:0]
+	s.bytesPrealloc = nil
+	return buf
+}
+
+// returnBuffer returns the unused portion of buf to the scanner, to be used for
+// future allocBytes() or buffer() calls. The caller must not use buf again.
+func (s *Scanner) returnBuffer(buf []byte) {
+	if len(buf) < cap(buf) {
+		s.bytesPrealloc = buf[len(buf):]
+	}
+}
+
+// finishString casts the given buffer to a string and returns the unused
+// portion of the buffer. The caller must not use buf again.
+func (s *Scanner) finishString(buf []byte) string {
+	str := *(*string)(unsafe.Pointer(&buf))
+	s.returnBuffer(buf)
+	return str
 }
 
 // Tokens calls f on all tokens of the input until an EOF is encountered.
@@ -671,7 +707,8 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	} else if isASCII {
 		// We know that the identifier we've seen so far is ASCII, so we don't need
 		// to unicode normalize. Instead, just lowercase as normal.
-		b := make([]byte, s.pos-start)
+		b := s.allocBytes(s.pos - start)
+		_ = b[s.pos-start-1] // For bounds check elimination.
 		for i, c := range s.in[start:s.pos] {
 			if c >= 'A' && c <= 'Z' {
 				c += 'a' - 'A'
@@ -810,7 +847,8 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 
 // scanHexString scans the content inside x'....'.
 func (s *Scanner) scanHexString(lval *sqlSymType, ch int) bool {
-	var buf []byte
+	buf := s.buffer()
+
 	var curbyte byte
 	bytep := 0
 	const errInvalidBytesLiteral = "invalid hexadecimal bytes literal"
@@ -860,13 +898,13 @@ outer:
 	}
 
 	lval.id = BCONST
-	lval.str = *(*string)(unsafe.Pointer(&buf))
+	lval.str = s.finishString(buf)
 	return true
 }
 
 // scanBitString scans the content inside B'....'.
 func (s *Scanner) scanBitString(lval *sqlSymType, ch int) bool {
-	var buf []byte
+	buf := s.buffer()
 outer:
 	for {
 		b := s.next()
@@ -896,7 +934,7 @@ outer:
 	}
 
 	lval.id = BITCONST
-	lval.str = *(*string)(unsafe.Pointer(&buf))
+	lval.str = s.finishString(buf)
 	return true
 }
 
@@ -904,7 +942,7 @@ outer:
 // string literals '...' but also e'....' and b'...'. For x'...', see
 // scanHexString().
 func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
-	var buf []byte
+	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
 
@@ -995,6 +1033,6 @@ outer:
 		return false
 	}
 
-	lval.str = *(*string)(unsafe.Pointer(&buf))
+	lval.str = s.finishString(buf)
 	return true
 }
