@@ -18,14 +18,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"os/signal"
 	"sync/atomic"
 	"time"
 )
@@ -180,42 +178,8 @@ func Run(diskOpts DiskOptions) error {
 		return errors.Errorf("Please specify a valid subtest.")
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	var cancel func()
-	ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
-
 	for i := range workers {
 		workers[i] = workerCreator(ctx, &diskOpts, reg)
-	}
-
-	for i := range workers {
-		g.Go(func() error {
-			return workers[i].run(ctx)
-		})
-	}
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	errs := make(chan error, 1)
-	done := make(chan os.Signal, 3)
-	signal.Notify(done, os.Interrupt)
-
-	go func() {
-		if err := g.Wait(); err != nil {
-			errs <- err
-		} else {
-			done <- sysutil.Signal(0)
-		}
-	}()
-
-	if diskOpts.Duration > 0 {
-		go func() {
-			time.Sleep(diskOpts.Duration)
-			done <- sysutil.Signal(0)
-		}()
 	}
 
 	start := timeutil.Now()
@@ -223,9 +187,16 @@ func Run(diskOpts DiskOptions) error {
 	var lastOps uint64
 	var lastBytes uint64
 
-	for i := 0; ; i++ {
-		select {
-		case <-ticker.C:
+	return runTest(ctx, test{
+		init: func(g *errgroup.Group) {
+			for i := range workers {
+				g.Go(func() error {
+					return workers[i].run(ctx)
+				})
+			}
+		},
+
+		tick: func(totalElapsed time.Duration, i int) {
 			now := timeutil.Now()
 			elapsed := now.Sub(lastNow)
 			ops := atomic.LoadUint64(&numOps)
@@ -249,9 +220,9 @@ func Run(diskOpts DiskOptions) error {
 			lastNow = now
 			lastOps = ops
 			lastBytes = bytes
+		},
 
-		case <-done:
-			cancel()
+		done: func(elapsed time.Duration) {
 			startElapsed := timeutil.Since(start)
 			const totalHeader = "\n_elapsed____ops(total)__mb(total)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader + `__total`)
@@ -267,9 +238,6 @@ func Run(diskOpts DiskOptions) error {
 					time.Duration(h.ValueAtQuantile(99)).Seconds()*1000,
 					time.Duration(h.ValueAtQuantile(100)).Seconds()*1000)
 			})
-			return nil
-		case err := <-errs:
-			return err
-		}
-	}
+		},
+	}, diskOpts.Duration)
 }
