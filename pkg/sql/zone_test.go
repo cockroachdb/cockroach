@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestValidSetShowZones(t *testing.T) {
@@ -241,6 +242,55 @@ func TestValidSetShowZones(t *testing.T) {
 		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
 	}
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialSystemRow, partialJobsRow)
+}
+
+func TestZoneInheritField(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.RemoveAllZoneConfigs(t, sqlDB)
+	sqlDB.Exec(t, `CREATE DATABASE d; USE d; CREATE TABLE t ();`)
+
+	defaultRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       config.DefaultZoneConfig(),
+	}
+
+	newReplicationFactor := 10
+	tableID := sqlutils.QueryTableID(t, db, "d", "t")
+	newDefCfg := config.DefaultZoneConfig()
+	newDefCfg.NumReplicas = proto.Int32(int32(newReplicationFactor))
+
+	newDefaultRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       newDefCfg,
+	}
+
+	newTableRow := sqlutils.ZoneRow{
+		ID:           tableID,
+		CLISpecifier: "d.t",
+		Config:       config.DefaultZoneConfig(), // Old value for Num Replicas.
+	}
+
+	// Doesn't have any values of its own.
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", defaultRow)
+
+	// Solidify the num replicas value.
+	sqlDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING num_replicas = COPY FROM PARENT`)
+
+	// Change the default replication factor.
+	sqlDB.Exec(t, fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING num_replicas = %d",
+		newReplicationFactor))
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", newDefaultRow)
+
+	// Verify the table didn't take on the new value for the replication factor.
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", newTableRow)
 }
 
 func TestInvalidSetShowZones(t *testing.T) {
