@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:257d8e2c9287f4f019bcf07b17160db066cebe2e1d4549a9d825e3083de36c8e"
+  digest = "1:08636edd4ac1b095a9689b7a07763aa70e035068e0ff0e9dbfe2b6299b98e498"
   name = "cloud.google.com/go"
   packages = [
     "compute/metadata",
@@ -14,16 +14,16 @@
     "storage",
   ]
   pruneopts = "UT"
-  revision = "0fd7230b2a7505833d5f69b75cbd6c9582401479"
-  version = "v0.23.0"
+  revision = "0ebda48a7f143b1cce9eb37a8c1106ac762a3430"
+  version = "v0.34.0"
 
 [[projects]]
   digest = "1:d2ccb697dc13c8fbffafa37baae97594d5592ae8f7e113471084137315536e2b"
   name = "github.com/Azure/azure-pipeline-go"
   packages = ["pipeline"]
   pruneopts = "UT"
-  revision = "7571e8eb0876932ab505918ff7ed5107773e5ee2"
-  version = "0.1.7"
+  revision = "b8e3409182fd52e74f7d7bdfbff5833591b3b655"
+  version = "v0.1.8"
 
 [[projects]]
   digest = "1:c4a5edf3b0f38e709a78dcc945997678a364c2b5adfd48842a3dd349c352f833"
@@ -166,7 +166,7 @@
   revision = "1fca145dffbcaa8fe914309b1ec0cfc67500fe61"
 
 [[projects]]
-  digest = "1:4d91bd9129e1a5858a038c1dc7e55a6f8ac93f0afa34c0cd6a1554c679e66b23"
+  digest = "1:c74cd495c1c67728e8c997748ae2eac7891faf68805669efa6b37a7b65ac179d"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -179,14 +179,22 @@
     "aws/credentials/ec2rolecreds",
     "aws/credentials/endpointcreds",
     "aws/credentials/stscreds",
+    "aws/csm",
     "aws/defaults",
     "aws/ec2metadata",
     "aws/endpoints",
     "aws/request",
     "aws/session",
     "aws/signer/v4",
+    "internal/ini",
+    "internal/s3err",
+    "internal/sdkio",
+    "internal/sdkrand",
+    "internal/sdkuri",
     "internal/shareddefaults",
     "private/protocol",
+    "private/protocol/eventstream",
+    "private/protocol/eventstream/eventstreamapi",
     "private/protocol/query",
     "private/protocol/query/queryutil",
     "private/protocol/rest",
@@ -198,8 +206,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "ee1f179877b2daf2aaabf71fa900773bf8842253"
-  version = "v1.12.19"
+  revision = "ddc06f9fad886ea5daa5f828f3ca094084f8c2a7"
+  version = "v1.15.90"
 
 [[projects]]
   branch = "master"
@@ -523,14 +531,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "78e682abcae4f96ac7ddbe39912967a5f7cbbaa6"
-
-[[projects]]
-  digest = "1:c925a43fa601959e0bb6a550400e668ac098eee04ed183255d06f6bd47925b5d"
-  name = "github.com/go-ini/ini"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "f280b3ba517bf5fc98922624f21fb0e7a92adaec"
-  version = "v1.30.3"
 
 [[projects]]
   digest = "1:31a18dae27a29aa074515e43a443abfd2ba6deb6d69309d8d7ce789c45f34659"
