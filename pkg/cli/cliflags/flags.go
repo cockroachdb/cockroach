@@ -846,4 +846,27 @@ Number of workers for benchmarking.`,
 		Description: `
 Amount of time to run workers.`,
 	}
+
+	BenchServer = FlagInfo{
+		Name: "server",
+		Description: `
+Run as server for network benchmark.`,
+	}
+
+	BenchPort = FlagInfo{
+		Name: "port",
+		Description: `
+Port for network benchmark.`,
+	}
+
+	BenchAddresses = FlagInfo{
+		Name: "addresses",
+		Description: `
+Addresses for network benchmark.`,
+	}
+	BenchLatency = FlagInfo{
+		Name: "latency",
+		Description: `
+Latency or throughput mode.`,
+	}
 )
