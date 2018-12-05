@@ -274,6 +274,9 @@ const (
 	// normalized). As a special case, if there is only one column selected, the
 	// result is a tuple of the selected values (instead of a tuple of 1-tuples).
 	SubqueryAnyRows
+	// SubqueryAllRows - the subquery is an argument to ARRAY. The result is a
+	// tuple of rows.
+	SubqueryAllRows
 )
 
 // ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.

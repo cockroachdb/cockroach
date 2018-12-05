@@ -976,6 +976,7 @@ func (g *newRuleGen) genConstructList(list *lang.ListExpr) {
 			g.w.unnest("},\n")
 		} else {
 			g.genNestedExpr(item)
+			g.w.write(",\n")
 		}
 	}
 	g.w.unnest("}")

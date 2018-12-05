@@ -1109,3 +1109,255 @@ project
  │    └── columns: a.s:4(string)
  └── projections
       └── a.s COLLATE en_u_ks_level1 [type=collatedstring{en_u_ks_level1}, outer=(4)]
+
+# --------------------------------------------------
+# NormalizeArrayFlattenToAgg
+# --------------------------------------------------
+
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k) FROM a AS b
+----
+project
+ ├── columns: array:14(int[])
+ ├── group-by
+ │    ├── columns: a.k:1(int!null) a.k:7(int) array_agg:15(int[])
+ │    ├── grouping columns: a.k:1(int!null)
+ │    ├── key: (7)
+ │    ├── fd: (1)==(7), (7)==(1), (7)-->(15), (1)-->(7,15)
+ │    ├── inner-join
+ │    │    ├── columns: a.k:1(int!null) a.k:7(int!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (1)==(7), (7)==(1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1(int!null)
+ │    │    │    └── key: (1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:7(int!null)
+ │    │    │    └── key: (7)
+ │    │    └── filters
+ │    │         └── a.k = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    └── aggregations
+ │         ├── array-agg [type=int[], outer=(7)]
+ │         │    └── variable: a.k [type=int]
+ │         └── any-not-null-agg [type=int, outer=(7)]
+ │              └── variable: a.k [type=int]
+ └── projections
+      └── COALESCE(CASE WHEN a.k IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(7,15)]
+
+# Ensure ordering is maintained.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a WHERE a.i = b.i ORDER BY a.k) FROM a AS b
+----
+project
+ ├── columns: array:14(int[])
+ ├── group-by
+ │    ├── columns: a.k:7(int) rownum:15(int!null) array_agg:16(int[])
+ │    ├── grouping columns: rownum:15(int!null)
+ │    ├── internal-ordering: +7 opt(8)
+ │    ├── key: (15)
+ │    ├── fd: (15)-->(7,16)
+ │    ├── sort
+ │    │    ├── columns: a.i:2(int) a.k:7(int) a.i:8(int) rownum:15(int!null)
+ │    │    ├── key: (7,15)
+ │    │    ├── fd: (15)-->(2), (7)-->(8)
+ │    │    ├── ordering: +7 opt(8) [provided: +7]
+ │    │    └── left-join
+ │    │         ├── columns: a.i:2(int) a.k:7(int) a.i:8(int) rownum:15(int!null)
+ │    │         ├── key: (7,15)
+ │    │         ├── fd: (15)-->(2), (7)-->(8)
+ │    │         ├── row-number
+ │    │         │    ├── columns: a.i:2(int) rownum:15(int!null)
+ │    │         │    ├── key: (15)
+ │    │         │    ├── fd: (15)-->(2)
+ │    │         │    └── scan a
+ │    │         │         └── columns: a.i:2(int)
+ │    │         ├── scan a
+ │    │         │    ├── columns: a.k:7(int!null) a.i:8(int)
+ │    │         │    ├── key: (7)
+ │    │         │    └── fd: (7)-->(8)
+ │    │         └── filters
+ │    │              └── a.i = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    └── aggregations
+ │         ├── array-agg [type=int[], outer=(7)]
+ │         │    └── variable: a.k [type=int]
+ │         └── any-not-null-agg [type=int, outer=(7)]
+ │              └── variable: a.k [type=int]
+ └── projections
+      └── COALESCE(CASE WHEN a.k IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(7,16)]
+
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
+----
+project
+ ├── columns: array:9(int[])
+ ├── side-effects
+ ├── group-by
+ │    ├── columns: k:1(int!null) canary:10(bool) array_agg:11(int[])
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: -7
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(10,11)
+ │    ├── sort
+ │    │    ├── columns: k:1(int!null) generate_series:7(int) canary:10(bool)
+ │    │    ├── side-effects
+ │    │    ├── ordering: -7
+ │    │    └── left-join-apply
+ │    │         ├── columns: k:1(int!null) generate_series:7(int) canary:10(bool)
+ │    │         ├── side-effects
+ │    │         ├── scan a
+ │    │         │    ├── columns: k:1(int!null)
+ │    │         │    └── key: (1)
+ │    │         ├── project
+ │    │         │    ├── columns: canary:10(bool!null) generate_series:7(int)
+ │    │         │    ├── outer: (1)
+ │    │         │    ├── side-effects
+ │    │         │    ├── fd: ()-->(10)
+ │    │         │    ├── project-set
+ │    │         │    │    ├── columns: generate_series:7(int)
+ │    │         │    │    ├── outer: (1)
+ │    │         │    │    ├── side-effects
+ │    │         │    │    ├── values
+ │    │         │    │    │    ├── cardinality: [1 - 1]
+ │    │         │    │    │    ├── key: ()
+ │    │         │    │    │    └── tuple [type=tuple]
+ │    │         │    │    └── zip
+ │    │         │    │         └── function: generate_series [type=int, outer=(1), side-effects]
+ │    │         │    │              ├── const: 1 [type=int]
+ │    │         │    │              └── variable: k [type=int]
+ │    │         │    └── projections
+ │    │         │         └── true [type=bool]
+ │    │         └── filters (true)
+ │    └── aggregations
+ │         ├── array-agg [type=int[], outer=(7)]
+ │         │    └── variable: generate_series [type=int]
+ │         └── any-not-null-agg [type=bool, outer=(10)]
+ │              └── variable: canary [type=bool]
+ └── projections
+      └── COALESCE(CASE WHEN canary IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(10,11)]
+
+# Uncorrelated ArrayFlatten inside a correlated ArrayFlatten.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT ARRAY(SELECT k FROM a)[1] FROM a as b WHERE b.k = c.k) FROM a AS c
+----
+project
+ ├── columns: array:21(int[])
+ ├── group-by
+ │    ├── columns: a.k:1(int!null) canary:22(bool) array_agg:23(int[])
+ │    ├── grouping columns: a.k:1(int!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(22), (1)-->(22,23)
+ │    ├── inner-join
+ │    │    ├── columns: a.k:1(int!null) a.k:7(int!null) array:19(int) canary:22(bool!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: ()-->(19,22), (1)==(7), (7)==(1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1(int!null)
+ │    │    │    └── key: (1)
+ │    │    ├── project
+ │    │    │    ├── columns: canary:22(bool!null) array:19(int) a.k:7(int!null)
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: ()-->(19,22)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: a.k:7(int!null)
+ │    │    │    │    └── key: (7)
+ │    │    │    └── projections
+ │    │    │         ├── true [type=bool]
+ │    │    │         └── indirection [type=int]
+ │    │    │              ├── array-flatten [type=int[]]
+ │    │    │              │    └── scan a
+ │    │    │              │         ├── columns: k:13(int!null)
+ │    │    │              │         └── key: (13)
+ │    │    │              └── const: 1 [type=int]
+ │    │    └── filters
+ │    │         └── a.k = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    └── aggregations
+ │         ├── array-agg [type=int[], outer=(19)]
+ │         │    └── variable: array [type=int]
+ │         └── any-not-null-agg [type=bool, outer=(22)]
+ │              └── variable: canary [type=bool]
+ └── projections
+      └── COALESCE(CASE WHEN canary IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(22,23)]
+
+# Correlated ArrayFlatten inside another correlated ArrayFlatten.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k)[1] FROM a as b WHERE b.k = c.k) FROM a AS c
+----
+project
+ ├── columns: array:23(int[])
+ ├── group-by
+ │    ├── columns: a.k:1(int!null) canary:24(bool) array_agg:25(int[])
+ │    ├── grouping columns: a.k:1(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(24,25)
+ │    ├── left-join-apply
+ │    │    ├── columns: a.k:1(int!null) array:20(int) canary:24(bool)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(20,24)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1(int!null)
+ │    │    │    └── key: (1)
+ │    │    ├── project
+ │    │    │    ├── columns: canary:24(bool!null) array:20(int)
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(20,24)
+ │    │    │    ├── group-by
+ │    │    │    │    ├── columns: a.k:13(int) array_agg:21(int[])
+ │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(13,21)
+ │    │    │    │    ├── inner-join
+ │    │    │    │    │    ├── columns: a.k:7(int!null) a.k:13(int!null)
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(7,13)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: a.k:7(int!null)
+ │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(7)
+ │    │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    │    ├── columns: a.k:7(int!null)
+ │    │    │    │    │    │    │    └── key: (7)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── a.k = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    ├── columns: a.k:13(int!null)
+ │    │    │    │    │    │    └── key: (13)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── a.k = a.k [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── array-agg [type=int[], outer=(13)]
+ │    │    │    │         │    └── variable: a.k [type=int]
+ │    │    │    │         └── any-not-null-agg [type=int, outer=(13)]
+ │    │    │    │              └── variable: a.k [type=int]
+ │    │    │    └── projections
+ │    │    │         ├── true [type=bool]
+ │    │    │         └── COALESCE(CASE WHEN a.k IS NOT NULL THEN array_agg END, ARRAY[])[1] [type=int, outer=(13,21)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── array-agg [type=int[], outer=(20)]
+ │         │    └── variable: array [type=int]
+ │         └── any-not-null-agg [type=bool, outer=(24)]
+ │              └── variable: canary [type=bool]
+ └── projections
+      └── COALESCE(CASE WHEN canary IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(24,25)]
+
+# Shouldn't trigger if there's no correlation.
+norm expect-not=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a) FROM a
+----
+project
+ ├── columns: array:13(int[])
+ ├── fd: ()-->(13)
+ ├── scan a
+ └── projections
+      └── array-flatten [type=int[]]
+           └── scan a
+                ├── columns: k:7(int!null)
+                └── key: (7)
