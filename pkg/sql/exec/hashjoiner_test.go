@@ -45,16 +45,133 @@ func TestHashJoinerInt64(t *testing.T) {
 		leftTuples  tuples
 		rightTuples tuples
 
-		leftEqCols  []int
-		rightEqCols []int
+		leftEqCols  []uint32
+		rightEqCols []uint32
 
-		leftOutCols  []int
-		rightOutCols []int
+		leftOutCols  []uint32
+		rightOutCols []uint32
 
 		buildRightSide bool
+		buildDistinct  bool
 
 		expectedTuples tuples
 	}{
+		{
+			// Test handling of multiple column non-distinct equality keys.
+			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
+
+			leftTuples: tuples{
+				{0, 0, 1},
+				{0, 0, 2},
+				{1, 0, 3},
+				{1, 1, 4},
+				{1, 1, 5},
+				{0, 0, 6},
+			},
+			rightTuples: tuples{
+				{1, 0, 7},
+				{0, 0, 8},
+				{0, 0, 9},
+				{0, 1, 10},
+			},
+
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			leftOutCols:  []uint32{2},
+			rightOutCols: []uint32{2},
+
+			expectedTuples: tuples{
+				{3, 7},
+				{6, 8},
+				{1, 8},
+				{2, 8},
+				{6, 9},
+				{1, 9},
+				{2, 9},
+			},
+		},
+		{
+			// Test handling of duplicate equality keys that map to same buckets.
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			leftTuples: tuples{
+				{0},
+				{hashTableBucketSize},
+				{hashTableBucketSize},
+				{hashTableBucketSize},
+				{0},
+				{hashTableBucketSize * 2},
+				{1},
+				{1},
+				{hashTableBucketSize + 1},
+			},
+			rightTuples: tuples{
+				{hashTableBucketSize},
+				{hashTableBucketSize * 2},
+				{hashTableBucketSize * 3},
+				{0},
+				{1},
+				{hashTableBucketSize + 1},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			buildDistinct: false,
+
+			expectedTuples: tuples{
+				{hashTableBucketSize, hashTableBucketSize},
+				{hashTableBucketSize, hashTableBucketSize},
+				{hashTableBucketSize, hashTableBucketSize},
+				{hashTableBucketSize * 2, hashTableBucketSize * 2},
+				{0, 0},
+				{0, 0},
+				{1, 1},
+				{1, 1},
+				{hashTableBucketSize + 1, hashTableBucketSize + 1},
+			},
+		},
+		{
+			// Test handling of duplicate equality keys.
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			leftTuples: tuples{
+				{0},
+				{0},
+				{1},
+				{1},
+				{1},
+				{2},
+			},
+			rightTuples: tuples{
+				{1},
+				{0},
+				{2},
+				{2},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			buildDistinct: false,
+
+			expectedTuples: tuples{
+				{1},
+				{1},
+				{1},
+				{0},
+				{0},
+				{2},
+				{2},
+			},
+		},
 		{
 			// Test handling of various output column types.
 			leftTypes:  []types.T{types.Bool, types.Int64, types.Bytes, types.Int64},
@@ -74,10 +191,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{5, 5.5, int32(16)},
 			},
 
-			leftEqCols:   []int{1},
-			rightEqCols:  []int{0},
-			leftOutCols:  []int{1, 2},
-			rightOutCols: []int{0, 2},
+			leftEqCols:   []uint32{1},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{1, 2},
+			rightOutCols: []uint32{0, 2},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{2, "foo", 2, int32(2)},
@@ -103,10 +222,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{hashTableBucketSize * 3},
 			},
 
-			leftEqCols:   []int{0},
-			rightEqCols:  []int{0},
-			leftOutCols:  []int{0},
-			rightOutCols: []int{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{0},
@@ -134,10 +255,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{2},
 			},
 
-			leftEqCols:   []int{0},
-			rightEqCols:  []int{0},
-			leftOutCols:  []int{0},
-			rightOutCols: []int{0},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{1, 1},
@@ -168,10 +291,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{2, 400, 1},
 			},
 
-			leftEqCols:   []int{0, 1},
-			rightEqCols:  []int{0, 2},
-			leftOutCols:  []int{0, 1, 2},
-			rightOutCols: []int{1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 2},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{1},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{0, 2, 30, 100},
@@ -200,10 +325,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{0, hashTableBucketSize * 2},
 			},
 
-			leftEqCols:   []int{1, 2},
-			rightEqCols:  []int{0, 1},
-			leftOutCols:  []int{0, 1, 2},
-			rightOutCols: []int{},
+			leftEqCols:   []uint32{1, 2},
+			rightEqCols:  []uint32{0, 1},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{20, 0, hashTableBucketSize},
@@ -233,10 +360,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{10000, 1000, 100, 10, false, "random"},
 			},
 
-			leftEqCols:   []int{0, 1, 2, 3, 4, 5},
-			rightEqCols:  []int{5, 4, 3, 2, 1, 0},
-			leftOutCols:  []int{6},
-			rightOutCols: []int{},
+			leftEqCols:   []uint32{0, 1, 2, 3, 4, 5},
+			rightEqCols:  []uint32{5, 4, 3, 2, 1, 0},
+			leftOutCols:  []uint32{6},
+			rightOutCols: []uint32{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{"ccc"},
@@ -262,10 +391,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{float64(33.333), float32(1.1)},
 			},
 
-			leftEqCols:   []int{0, 1},
-			rightEqCols:  []int{1, 0},
-			leftOutCols:  []int{0, 1},
-			rightOutCols: []int{},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{1, 0},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{float32(2.22), float64(44.4444)},
@@ -289,12 +420,13 @@ func TestHashJoinerInt64(t *testing.T) {
 				{1, 2, 3, 4},
 			},
 
-			leftEqCols:   []int{2, 0},
-			rightEqCols:  []int{1, 2},
-			leftOutCols:  []int{0, 1, 2, 3},
-			rightOutCols: []int{0, 1, 2, 3},
+			leftEqCols:   []uint32{2, 0},
+			rightEqCols:  []uint32{1, 2},
+			leftOutCols:  []uint32{0, 1, 2, 3},
+			rightOutCols: []uint32{0, 1, 2, 3},
 
 			buildRightSide: true,
+			buildDistinct:  true,
 
 			expectedTuples: tuples{
 				{3, 3, 2, 2, 1, 2, 3, 4},
@@ -318,10 +450,12 @@ func TestHashJoinerInt64(t *testing.T) {
 				{decs[0]},
 			},
 
-			leftEqCols:   []int{0},
-			rightEqCols:  []int{0},
-			leftOutCols:  []int{},
-			rightOutCols: []int{0},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{},
+			rightOutCols: []uint32{0},
+
+			buildDistinct: true,
 
 			expectedTuples: tuples{
 				{decs[2]},
@@ -332,48 +466,62 @@ func TestHashJoinerInt64(t *testing.T) {
 
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
-		runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
-			leftSource, rightSource := sources[0], sources[1]
 
-			spec := hashJoinerSpec{
-				left: hashJoinerSourceSpec{
-					eqCols:      tc.leftEqCols,
-					outCols:     tc.leftOutCols,
-					sourceTypes: tc.leftTypes,
-					source:      leftSource,
-				},
+		buildFlags := []bool{false}
+		if tc.buildDistinct {
+			buildFlags = append(buildFlags, true)
+		}
 
-				right: hashJoinerSourceSpec{
-					eqCols:      tc.rightEqCols,
-					outCols:     tc.rightOutCols,
-					sourceTypes: tc.rightTypes,
-					source:      rightSource,
-				},
+		for _, buildDistinct := range buildFlags {
+			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
+				runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+					leftSource, rightSource := sources[0], sources[1]
 
-				buildRightSide: tc.buildRightSide,
-			}
+					spec := hashJoinerSpec{
+						left: hashJoinerSourceSpec{
+							eqCols:      tc.leftEqCols,
+							outCols:     tc.leftOutCols,
+							sourceTypes: tc.leftTypes,
+							source:      leftSource,
+						},
 
-			hj := &hashJoinEqInnerDistinctOp{
-				spec: spec,
-			}
+						right: hashJoinerSourceSpec{
+							eqCols:      tc.rightEqCols,
+							outCols:     tc.rightOutCols,
+							sourceTypes: tc.rightTypes,
+							source:      rightSource,
+						},
 
-			nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-			nLeftOutCols := len(tc.leftOutCols)
-			nLeftCols := len(tc.leftTypes)
+						buildRightSide: tc.buildRightSide,
+						buildDistinct:  tc.buildDistinct,
+					}
 
-			cols := make([]int, nOutCols)
-			copy(cols, tc.leftOutCols)
+					hj := &hashJoinEqInnerOp{
+						spec: spec,
+					}
 
-			for i, colIdx := range tc.rightOutCols {
-				cols[i+nLeftOutCols] = colIdx + nLeftCols
-			}
+					nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
+					nLeftOutCols := uint32(len(tc.leftOutCols))
+					nLeftCols := uint32(len(tc.leftTypes))
 
-			out := newOpTestOutput(hj, cols, tc.expectedTuples)
+					cols := make([]int, nOutCols)
 
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
-		})
+					for i, colIdx := range tc.leftOutCols {
+						cols[i] = int(colIdx)
+					}
+					for i, colIdx := range tc.rightOutCols {
+						cols[uint32(i)+nLeftOutCols] = int(colIdx + nLeftCols)
+					}
+
+					out := newOpTestOutput(hj, cols, tc.expectedTuples)
+
+					if err := out.Verify(); err != nil {
+						t.Fatal(err)
+					}
+				})
+			})
+
+		}
 	}
 }
 
@@ -396,41 +544,49 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	batch.SetLength(ColBatchSize)
 
-	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(batch, nBatches)
-				rightSource := newRepeatableBatchSource(batch)
+	for _, buildDistinct := range []bool{true, false} {
+		b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
+			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+					// batch) * nCols (number of columns / row) * 2 (number of sources).
+					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						leftSource := newFiniteBatchSource(batch, nBatches)
+						rightSource := newRepeatableBatchSource(batch)
 
-				spec := hashJoinerSpec{
-					left: hashJoinerSourceSpec{
-						eqCols:      []int{0, 2},
-						outCols:     []int{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-					},
+						spec := hashJoinerSpec{
+							left: hashJoinerSourceSpec{
+								eqCols:      []uint32{0, 2},
+								outCols:     []uint32{0, 1},
+								sourceTypes: sourceTypes,
+								source:      leftSource,
+							},
 
-					right: hashJoinerSourceSpec{
-						eqCols:      []int{1, 3},
-						outCols:     []int{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-					},
-				}
+							right: hashJoinerSourceSpec{
+								eqCols:      []uint32{1, 3},
+								outCols:     []uint32{2, 3},
+								sourceTypes: sourceTypes,
+								source:      rightSource,
+							},
 
-				hj := &hashJoinEqInnerDistinctOp{
-					spec: spec,
-				}
+							buildDistinct: buildDistinct,
+						}
 
-				hj.Init()
+						hj := &hashJoinEqInnerOp{
+							spec: spec,
+						}
 
-				for i := 0; i < nBatches; i++ {
-					hj.Next()
-				}
+						hj.Init()
+
+						for i := 0; i < nBatches; i++ {
+							// Technically, the non-distinct hash join will produce much more
+							// than nBatches of output.
+							hj.Next()
+						}
+					}
+				})
 			}
 		})
 	}
