@@ -349,13 +349,14 @@ var entryRE = regexp.MustCompile(
 // buffer. Each entry is preceded by a single big-ending uint32
 // describing the next entry's length.
 type EntryDecoder struct {
+	re                 *regexp.Regexp
 	scanner            *bufio.Scanner
 	truncatedLastEntry bool
 }
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
 func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in)}
+	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE.Copy()}
 	d.scanner.Split(d.split)
 	return d
 }
@@ -370,7 +371,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return io.EOF
 		}
 		b := d.scanner.Bytes()
-		m := entryRE.FindSubmatch(b)
+		m := d.re.FindSubmatch(b)
 		if m == nil {
 			continue
 		}
@@ -403,7 +404,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 		return 0, nil, nil
 	}
 	if d.truncatedLastEntry {
-		i := entryRE.FindIndex(data)
+		i := d.re.FindIndex(data)
 		if i == nil {
 			// If there's no entry that starts in this chunk, advance past it, since
 			// we've truncated the entry it was originally part of.
@@ -421,7 +422,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	}
 	// From this point on, we assume we're currently positioned at a log entry.
 	// We want to find the next one so we start our search at data[1].
-	i := entryRE.FindIndex(data[1:])
+	i := d.re.FindIndex(data[1:])
 	if i == nil {
 		if atEOF {
 			return len(data), data, nil
