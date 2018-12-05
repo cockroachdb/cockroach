@@ -239,8 +239,8 @@ type RaftCommand struct {
 	// commands (proposed by a single node, the one with proposer_lease) executing
 	// in a different order than the one in which the corresponding KV requests
 	// were evaluated and the commands were proposed. This is important because
-	// the CommandQueue does not fully serialize commands - mostly when it comes
-	// to updates to the internal state of the range (this should be re-evaluated
+	// latching does not fully serialize commands - mostly when it comes to
+	// updates to the internal state of the range (this should be re-evaluated
 	// once proposer-evaluated KV is completed - see #10413).
 	// Similar to the Raft applied index, it is strictly increasing, but may have
 	// gaps. A command will only apply successfully if its max_lease_index has not

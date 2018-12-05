@@ -56,7 +56,7 @@ func declareKeysEndTransaction(
 	declareKeysWriteTransaction(desc, header, req, spans)
 	et := req.(*roachpb.EndTransactionRequest)
 	// The spans may extend beyond this Range, but it's ok for the
-	// purpose of the command queue. The parts in our Range will
+	// purpose of acquiring latches. The parts in our Range will
 	// be resolved eagerly.
 	for _, span := range et.IntentSpans {
 		spans.Add(spanset.SpanReadWrite, span)
