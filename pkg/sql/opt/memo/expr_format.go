@@ -159,6 +159,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
+	case *ZigzagJoinExpr:
+		fmt.Fprintf(f.Buffer, "%v (zigzag", opt.InnerJoinOp)
+		FormatPrivate(f, e.Private(), required)
+		f.Buffer.WriteByte(')')
+
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr, *InsertExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
@@ -254,6 +259,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal)
 		}
 		tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
+
+	case *ZigzagJoinExpr:
+		tp.Childf("eq columns: %v = %v", t.LeftEqCols, t.RightEqCols)
 
 	case *MergeJoinExpr:
 		tp.Childf("left ordering: %s", t.LeftEq)
@@ -630,6 +638,18 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
+		}
+
+	case *ZigzagJoinPrivate:
+		leftTab := f.Memo.metadata.Table(t.LeftTable)
+		rightTab := f.Memo.metadata.Table(t.RightTable)
+		fmt.Fprintf(f.Buffer, " %s", leftTab.Name().TableName)
+		if t.LeftIndex != opt.PrimaryIndex {
+			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).IdxName())
+		}
+		fmt.Fprintf(f.Buffer, " %s", rightTab.Name().TableName)
+		if t.RightIndex != opt.PrimaryIndex {
+			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).IdxName())
 		}
 
 	case *MergeJoinPrivate:

@@ -224,7 +224,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *zigzagJoinNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "type", joinTypeStr(n.joinType))
+			v.observer.attr(name, "type", joinTypeStr(sqlbase.InnerJoin))
+			if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
+				v.expr(name, "pred", -1, n.onCond)
+			}
 			for _, side := range n.sides {
 				v.visitConcrete(side.scan)
 				if side.fixedVals != nil {
@@ -236,9 +239,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 					v.observer.attr(name, "fixedvals", description)
 				}
 			}
-		}
-		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
-			v.expr(name, "pred", -1, n.onCond)
 		}
 
 	case *joinNode:

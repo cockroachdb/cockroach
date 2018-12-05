@@ -1984,11 +1984,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		numStreamCols += len(side.scan.desc.Columns)
 	}
 
+	// The zigzag join node only represents inner joins, so hardcode Type to
+	// InnerJoin.
 	zigzagJoinerSpec := distsqlrun.ZigzagJoinerSpec{
 		Tables:    tables,
 		IndexIds:  indexIds,
 		EqColumns: cols,
-		Type:      n.joinType,
+		Type:      sqlbase.InnerJoin,
 	}
 	zigzagJoinerSpec.FixedValues = make([]*distsqlrun.ValuesCoreSpec, len(n.sides))
 
@@ -2012,8 +2014,8 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	post := distsqlrun.PostProcessSpec{Projection: true}
 	numOutCols := len(n.columns)
 
-	post.OutputColumns = make([]uint32, numStreamCols)
-	types := make([]sqlbase.ColumnType, numStreamCols)
+	post.OutputColumns = make([]uint32, numOutCols)
+	types := make([]sqlbase.ColumnType, numOutCols)
 	planToStreamColMap := makePlanToStreamColMap(numOutCols)
 	colOffset := 0
 	i := 0
@@ -2021,20 +2023,17 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// Populate post.OutputColumns (the implicit projection), result types,
 	// and the planToStreamColMap for index columns from all sides.
 	for _, side := range n.sides {
-		err := side.scan.index.RunOverAllColumns(func(colID sqlbase.ColumnID) error {
-			ord := tableOrdinal(side.scan.desc, colID, side.scan.colCfg.visibility)
+		// Note that the side's scanNode only contains the columns from that
+		// index that are also in n.columns. This is because we generated
+		// colCfg.wantedColumns for only the necessary columns in
+		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
+		for colIdx := range side.scan.cols {
+			ord := tableOrdinal(side.scan.desc, side.scan.cols[colIdx].ID, side.scan.colCfg.visibility)
+			post.OutputColumns[i] = uint32(colOffset + ord)
+			types[i] = side.scan.cols[colIdx].Type
+			planToStreamColMap[i] = i
 
-			post.OutputColumns[colOffset+ord] = uint32(colOffset + ord)
-			col := side.scan.desc.Columns[ord]
-			types[colOffset+ord] = col.Type
-			planToStreamColMap[i] = colOffset + ord
 			i++
-
-			return nil
-		})
-
-		if err != nil {
-			return PhysicalPlan{}, err
 		}
 
 		colOffset += len(side.scan.desc.Columns)
@@ -2062,8 +2061,12 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	if n.onCond != nil {
 		// Note that the ON condition refers to the *internal* columns of the
 		// processor (before the OutputColumns projection).
+		indexVarMap := makePlanToStreamColMap(len(n.columns))
+		for i := range n.columns {
+			indexVarMap[i] = int(post.OutputColumns[i])
+		}
 		zigzagJoinerSpec.OnExpr, err = distsqlplan.MakeExpression(
-			n.onCond, planCtx, planToStreamColMap,
+			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return PhysicalPlan{}, err

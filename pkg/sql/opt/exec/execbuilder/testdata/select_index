@@ -784,7 +784,7 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-ts 1
+ts  1
 ts2 1
 ts3 1
 

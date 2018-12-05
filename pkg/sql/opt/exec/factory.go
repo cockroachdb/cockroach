@@ -188,13 +188,14 @@ type Factory interface {
 	// {left,right}EqCols). The lengths of leftEqCols and rightEqCols
 	// must match.
 	ConstructZigzagJoin(
-		joinType sqlbase.JoinType,
 		leftTable opt.Table,
 		leftIndex opt.Index,
 		rightTable opt.Table,
 		rightIndex opt.Index,
 		leftEqCols []ColumnOrdinal,
 		rightEqCols []ColumnOrdinal,
+		leftCols ColumnOrdinalSet,
+		rightCols ColumnOrdinalSet,
 		onCond tree.TypedExpr,
 		fixedVals []Node,
 		reqOrdering OutputOrdering,
