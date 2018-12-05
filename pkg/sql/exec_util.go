@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1603,10 +1602,6 @@ func (m *sessionDataMutator) SetExtraFloatDigits(val int) {
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
 	m.data.Database = dbName
-}
-
-func (m *sessionDataMutator) SetDefaultIsolationLevel(iso enginepb.IsolationType) {
-	m.data.DefaultIsolationLevel = iso
 }
 
 func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {

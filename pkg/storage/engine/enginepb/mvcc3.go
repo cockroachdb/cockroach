@@ -14,11 +14,7 @@
 
 package enginepb
 
-import (
-	"fmt"
-
-	proto "github.com/gogo/protobuf/proto"
-)
+import "fmt"
 
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
@@ -38,18 +34,6 @@ func (ms *MVCCPersistentStats) ToStats() MVCCStats {
 // ToPersistentStats converts the receiver to an MVCCPersistentStats.
 func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
 	return MVCCPersistentStats(*ms)
-}
-
-var isolationTypeLowerCase = map[int32]string{
-	0: "serializable",
-	1: "snapshot",
-}
-
-// ToLowerCaseString returns the lower case version of String().
-// Asking for lowercase is common enough (pg_setting / SHOW in SQL)
-// that we don't want to call strings.ToLower(x.String()) all the time.
-func (x IsolationType) ToLowerCaseString() string {
-	return proto.EnumName(isolationTypeLowerCase, int32(x))
 }
 
 // MustSetValue is like SetValue, except it resets the enum and panics if the

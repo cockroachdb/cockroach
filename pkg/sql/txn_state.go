@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,9 +79,6 @@ type txnState struct {
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 
-	// The transaction's isolation level.
-	isolation enginepb.IsolationType
-
 	// The transaction's priority.
 	priority roachpb.UserPriority
 
@@ -133,7 +129,6 @@ const (
 // 	 used for everything that happens within this SQL transaction.
 // txnType: The type of the starting txn.
 // sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
-// isolation: The transaction's isolation level.
 // priority: The transaction's priority.
 // readOnly: The read-only character of the new txn.
 // txn: If not nil, this txn will be used instead of creating a new txn. If so,
@@ -143,7 +138,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
 	sqlTimestamp time.Time,
-	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txn *client.Txn,
@@ -211,12 +205,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 	ts.mu.Unlock()
 
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		panic(err)
-	}
-	if err := ts.setIsolationLevel(isolation); err != nil {
-		panic(err)
-	}
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
@@ -282,14 +270,6 @@ func (ts *txnState) finishExternalTxn() {
 	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.txn = nil
-}
-
-func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		return err
-	}
-	ts.isolation = isolation
-	return nil
 }
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {

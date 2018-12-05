@@ -200,9 +200,7 @@ enum TransactionRetryReason {
   RETRY_REASON_UNKNOWN = 0;
   // A concurrent writer finished first, causing restart.
   RETRY_WRITE_TOO_OLD = 1;
-  // A transaction containing a delete range command had its timestamp
-  // moved forward.
-  RETRY_DELETE_RANGE = 2;
+  reserved 2;
   // A SERIALIZABLE transaction had its timestamp moved forward.
   RETRY_SERIALIZABLE = 3;
   // A possible replay caused by duplicate begin txn or out-of-order

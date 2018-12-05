@@ -255,16 +255,6 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
-bool IsolationType_IsValid(int value) {
-  switch (value) {
-    case 0:
-    case 1:
-      return true;
-    default:
-      return false;
-  }
-}
-
 
 // ===================================================================
 
@@ -280,7 +270,6 @@ void TxnMeta::clear_timestamp() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TxnMeta::kIdFieldNumber;
-const int TxnMeta::kIsolationFieldNumber;
 const int TxnMeta::kKeyFieldNumber;
 const int TxnMeta::kEpochFieldNumber;
 const int TxnMeta::kTimestampFieldNumber;
@@ -313,9 +302,9 @@ TxnMeta::TxnMeta(const TxnMeta& from)
   } else {
     timestamp_ = NULL;
   }
-  ::memcpy(&isolation_, &from.isolation_,
+  ::memcpy(&epoch_, &from.epoch_,
     static_cast<size_t>(reinterpret_cast<char*>(&deprecated_batch_index_) -
-    reinterpret_cast<char*>(&isolation_)) + sizeof(deprecated_batch_index_));
+    reinterpret_cast<char*>(&epoch_)) + sizeof(deprecated_batch_index_));
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.TxnMeta)
 }
 
@@ -359,9 +348,9 @@ void TxnMeta::Clear() {
     delete timestamp_;
   }
   timestamp_ = NULL;
-  ::memset(&isolation_, 0, static_cast<size_t>(
+  ::memset(&epoch_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&deprecated_batch_index_) -
-      reinterpret_cast<char*>(&isolation_)) + sizeof(deprecated_batch_index_));
+      reinterpret_cast<char*>(&epoch_)) + sizeof(deprecated_batch_index_));
   _internal_metadata_.Clear();
 }
 
@@ -386,21 +375,6 @@ bool TxnMeta::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_id()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // .cockroach.storage.engine.enginepb.IsolationType isolation = 2;
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
-          int value;
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
-                 input, &value)));
-          set_isolation(static_cast< ::cockroach::storage::engine::enginepb::IsolationType >(value));
         } else {
           goto handle_unusual;
         }
@@ -517,12 +491,6 @@ void TxnMeta::SerializeWithCachedSizes(
       1, this->id(), output);
   }
 
-  // .cockroach.storage.engine.enginepb.IsolationType isolation = 2;
-  if (this->isolation() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      2, this->isolation(), output);
-  }
-
   // bytes key = 3;
   if (this->key().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
@@ -584,12 +552,6 @@ size_t TxnMeta::ByteSizeLong() const {
         *timestamp_);
   }
 
-  // .cockroach.storage.engine.enginepb.IsolationType isolation = 2;
-  if (this->isolation() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::EnumSize(this->isolation());
-  }
-
   // uint32 epoch = 4;
   if (this->epoch() != 0) {
     total_size += 1 +
@@ -646,9 +608,6 @@ void TxnMeta::MergeFrom(const TxnMeta& from) {
   if (from.has_timestamp()) {
     mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
   }
-  if (from.isolation() != 0) {
-    set_isolation(from.isolation());
-  }
   if (from.epoch() != 0) {
     set_epoch(from.epoch());
   }
@@ -685,7 +644,6 @@ void TxnMeta::InternalSwap(TxnMeta* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(timestamp_, other->timestamp_);
-  swap(isolation_, other->isolation_);
   swap(epoch_, other->epoch_);
   swap(priority_, other->priority_);
   swap(sequence_, other->sequence_);

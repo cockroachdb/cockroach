@@ -6198,10 +6198,10 @@ func (r *Replica) evaluateWriteBatch(
 		strippedBa.Txn = nil
 		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
-		// If there were no refreshable spans earlier in a serializable
-		// txn (e.g. earlier gets or scans), then the batch can be retried
+		// If there were no refreshable spans earlier in the txn
+		// (e.g. earlier gets or scans), then the batch can be retried
 		// locally in the event of write too old errors.
-		retryLocally := ba.Txn.IsSerializable() && etArg.NoRefreshSpans
+		retryLocally := etArg.NoRefreshSpans
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		rec := NewReplicaEvalContext(r, spans)
@@ -6373,13 +6373,6 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 		return false
 	}
 	if retry, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
-		return false
-	}
-	if ba.Txn.Isolation == enginepb.SNAPSHOT && ba.Txn.OrigTimestamp != ba.Txn.Timestamp {
-		// Snapshot transactions that have been pushed are never eligible for
-		// the 1PC path. Instead, they must go through the slow path when their
-		// timestamp has been pushed. See comments on Transaction.orig_timestamp
-		// for the reasons why this is necessary to prevent lost update anomalies.
 		return false
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
@@ -6625,35 +6618,32 @@ func evaluateBatch(
 					}
 				}
 				// Set the flag to return a WriteTooOldError with the max timestamp
-				// encountered evaluating the entire batch on cput and inc requests,
-				// with serializable isolation. Because both of these requests must
-				// have their keys refreshed on commit with Transaction.WriteTooOld
-				// is true, and that refresh will fail, we'd be otherwise guaranteed
-				// to do a client-side retry. Returning an error allows a
-				// txn-coord-side retry.
-				if ba.Txn.IsSerializable() {
-					switch args.(type) {
-					case *roachpb.ConditionalPutRequest:
-						// Conditional puts are an exception. Here, it makes less sense to
-						// continue because it's likely that the cput will fail on retry (a
-						// newer value is less likely to match the expected value). It's
-						// better to return the WriteTooOldError directly, allowing the txn
-						// coord sender to retry if it can refresh all other spans encountered
-						// already during the transaction, and then, if the cput results in a
-						// condition failed error, report that back to the client instead of a
-						// retryable error.
-						returnWriteTooOldErr = true
-					case *roachpb.IncrementRequest:
-						// Increments are an exception for similar reasons. If we wait until
-						// commit, we'll need a client-side retry, so we return immediately
-						// to see if we can do a txn coord sender retry instead.
-						returnWriteTooOldErr = true
-					case *roachpb.InitPutRequest:
-						// Init puts are also an exception. There's no reason to believe they
-						// will succeed on a retry, so better to short circuit and return the
-						// write too old error.
-						returnWriteTooOldErr = true
-					}
+				// encountered evaluating the entire batch on cput and inc requests.
+				// Because both of these requests must have their keys refreshed on
+				// commit with Transaction.WriteTooOld is true, and that refresh will
+				// fail, we'd be otherwise guaranteed to do a client-side retry.
+				// Returning an error allows a txn-coord-side retry.
+				switch args.(type) {
+				case *roachpb.ConditionalPutRequest:
+					// Conditional puts are an exception. Here, it makes less sense to
+					// continue because it's likely that the cput will fail on retry (a
+					// newer value is less likely to match the expected value). It's
+					// better to return the WriteTooOldError directly, allowing the txn
+					// coord sender to retry if it can refresh all other spans encountered
+					// already during the transaction, and then, if the cput results in a
+					// condition failed error, report that back to the client instead of a
+					// retryable error.
+					returnWriteTooOldErr = true
+				case *roachpb.IncrementRequest:
+					// Increments are an exception for similar reasons. If we wait until
+					// commit, we'll need a client-side retry, so we return immediately
+					// to see if we can do a txn coord sender retry instead.
+					returnWriteTooOldErr = true
+				case *roachpb.InitPutRequest:
+					// Init puts are also an exception. There's no reason to believe they
+					// will succeed on a retry, so better to short circuit and return the
+					// write too old error.
+					returnWriteTooOldErr = true
 				}
 				if ba.Txn != nil {
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
@@ -6697,12 +6687,12 @@ func evaluateBatch(
 	if ba.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = ba.Txn
-		// If a serializable transaction committed, forward the response
+		// If the transaction committed, forward the response
 		// timestamp to the commit timestamp in case we were able to
 		// optimize and commit at a higher timestamp without higher-level
 		// retry (i.e. there were no refresh spans and the commit timestamp
 		// wasn't leaked).
-		if ba.Txn.IsSerializable() && ba.Txn.Status == roachpb.COMMITTED {
+		if ba.Txn.Status == roachpb.COMMITTED {
 			br.Timestamp.Forward(ba.Txn.Timestamp)
 		}
 	}

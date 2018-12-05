@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -62,7 +61,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 func beginTransaction(
 	t *testing.T, store *Store, pri roachpb.UserPriority, key roachpb.Key, putKey bool,
 ) *roachpb.Transaction {
-	txn := newTransaction("test", key, pri, enginepb.SERIALIZABLE, store.Clock())
+	txn := newTransaction("test", key, pri, store.Clock())
 
 	var ba roachpb.BatchRequest
 	bt, header := beginTxnArgs(key, txn)
@@ -99,9 +98,9 @@ func TestContendedIntent(t *testing.T) {
 	span := roachpb.Span{Key: key}
 	origTxn := beginTransaction(t, store, 1, key, true /* putKey */)
 
-	roTxn1 := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.Clock())
-	roTxn2 := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.Clock())
-	roTxn3 := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.Clock())
+	roTxn1 := newTransaction("test", key, 1, store.Clock())
+	roTxn2 := newTransaction("test", key, 1, store.Clock())
+	roTxn3 := newTransaction("test", key, 1, store.Clock())
 	rwTxn1 := beginTransaction(t, store, 1, roachpb.Key("b"), true /* putKey */)
 	rwTxn2 := beginTransaction(t, store, 1, roachpb.Key("c"), true /* putKey */)
 

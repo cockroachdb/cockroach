@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -178,7 +177,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 
 	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
 
-	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 999)
+	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999)
 
 	const resolveCommitCount = int64(200)
 	const resolveAbortCount = int64(800)

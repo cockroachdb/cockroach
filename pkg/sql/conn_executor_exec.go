@@ -547,7 +547,6 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
 	// table descriptor intents can be laid down here after the invariant
 	// has been checked.
-	isolation := txn.Isolation()
 	userPriority := txn.UserPriority()
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
@@ -572,9 +571,6 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
 	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
-	if err := ex.state.mu.txn.SetIsolation(isolation); err != nil {
-		return err
-	}
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
@@ -1041,10 +1037,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		ex.incrementStmtCounter(stmt)
-		iso, err := ex.isolationToProto(s.Modes.Isolation)
-		if err != nil {
-			return ex.makeErrEvent(err, s)
-		}
 		pri, err := priorityToProto(s.Modes.UserPriority)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -1052,7 +1044,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
-				iso, pri, ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode),
+				pri, ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode),
 				ex.server.cfg.Clock.PhysicalTime(),
 				ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
@@ -1065,7 +1057,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		}
 		return eventTxnStart{ImplicitTxn: fsm.True},
 			makeEventTxnStartPayload(
-				ex.sessionData.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
 				mode,
 				ex.server.cfg.Clock.PhysicalTime(),
@@ -1160,9 +1151,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 			rwMode = tree.ReadOnly
 		}
 		payload := makeEventTxnStartPayload(
-			ex.state.isolation, ex.state.priority,
-			rwMode, ex.state.sqlTimestamp,
-			ex.transitionCtx)
+			ex.state.priority, rwMode, ex.state.sqlTimestamp, ex.transitionCtx)
 		return ev, payload
 	default:
 		ev := eventNonRetriableErr{IsCommit: fsm.False}

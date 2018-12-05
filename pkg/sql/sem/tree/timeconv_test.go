@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -66,7 +65,6 @@ func TestClusterTimestampConversion(t *testing.T) {
 					"test",
 					nil, // baseKey
 					roachpb.NormalUserPriority,
-					enginepb.SERIALIZABLE,
 					ts,
 					0, /* maxOffsetNs */
 				),
