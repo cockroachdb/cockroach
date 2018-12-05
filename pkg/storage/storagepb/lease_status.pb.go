@@ -27,7 +27,7 @@
 		RaftCommand
 		ReplicaState
 		RangeInfo
-		CommandQueuesSnapshot
+		LatchManagerInfo
 */
 package storagepb
 

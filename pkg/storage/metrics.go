@@ -66,57 +66,6 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// Replica CommandQueue metrics. Max size metrics track the maximum value
-	// seen for all replicas during a single replica scan.
-	metaMaxCommandQueueSize = metric.Metadata{
-		Name:        "replicas.commandqueue.maxsize",
-		Help:        "Largest number of commands in any CommandQueue",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMaxCommandQueueWriteCount = metric.Metadata{
-		Name:        "replicas.commandqueue.maxwritecount",
-		Help:        "Largest number of read-write commands in any CommandQueue",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMaxCommandQueueReadCount = metric.Metadata{
-		Name:        "replicas.commandqueue.maxreadcount",
-		Help:        "Largest number of read-only commands in any CommandQueue",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMaxCommandQueueTreeSize = metric.Metadata{
-		Name:        "replicas.commandqueue.maxtreesize",
-		Help:        "Largest number of intervals in any CommandQueue's interval tree",
-		Measurement: "Intervals",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMaxCommandQueueOverlaps = metric.Metadata{
-		Name:        "replicas.commandqueue.maxoverlaps",
-		Help:        "Largest number of overlapping commands seen when adding to any CommandQueue",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaCombinedCommandQueueSize = metric.Metadata{
-		Name:        "replicas.commandqueue.combinedqueuesize",
-		Help:        "Number of commands in all CommandQueues combined",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaCombinedCommandWriteCount = metric.Metadata{
-		Name:        "replicas.commandqueue.combinedwritecount",
-		Help:        "Number of read-write commands in all CommandQueues combined",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaCombinedCommandReadCount = metric.Metadata{
-		Name:        "replicas.commandqueue.combinedreadcount",
-		Help:        "Number of read-only commands in all CommandQueues combined",
-		Measurement: "Commands",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	// Range metrics.
 	metaRangeCount = metric.Metadata{
 		Name:        "ranges",
@@ -923,9 +872,9 @@ var (
 	}
 
 	// Slow request metrics.
-	metaSlowCommandQueueRequests = metric.Metadata{
-		Name:        "requests.slow.commandqueue",
-		Help:        "Number of requests that have been stuck for a long time in the command queue",
+	metaLatchRequests = metric.Metadata{
+		Name:        "requests.slow.latch",
+		Help:        "Number of requests that have been stuck for a long time acquiring latches",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -982,16 +931,6 @@ type StoreMetrics struct {
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
-
-	// Replica CommandQueue metrics.
-	MaxCommandQueueSize       *metric.Gauge
-	MaxCommandQueueWriteCount *metric.Gauge
-	MaxCommandQueueReadCount  *metric.Gauge
-	MaxCommandQueueTreeSize   *metric.Gauge
-	MaxCommandQueueOverlaps   *metric.Gauge
-	CombinedCommandQueueSize  *metric.Gauge
-	CombinedCommandWriteCount *metric.Gauge
-	CombinedCommandReadCount  *metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -1160,9 +1099,9 @@ type StoreMetrics struct {
 	IntentResolverAsyncThrottled *metric.Counter
 
 	// Slow request counts.
-	SlowCommandQueueRequests *metric.Gauge
-	SlowLeaseRequests        *metric.Gauge
-	SlowRaftRequests         *metric.Gauge
+	SlowLatchRequests *metric.Gauge
+	SlowLeaseRequests *metric.Gauge
+	SlowRaftRequests  *metric.Gauge
 
 	// Backpressure counts.
 	BackpressuredOnSplitRequests *metric.Gauge
@@ -1192,16 +1131,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
-
-		// Replica CommandQueue metrics.
-		MaxCommandQueueSize:       metric.NewGauge(metaMaxCommandQueueSize),
-		MaxCommandQueueWriteCount: metric.NewGauge(metaMaxCommandQueueWriteCount),
-		MaxCommandQueueReadCount:  metric.NewGauge(metaMaxCommandQueueReadCount),
-		MaxCommandQueueTreeSize:   metric.NewGauge(metaMaxCommandQueueTreeSize),
-		MaxCommandQueueOverlaps:   metric.NewGauge(metaMaxCommandQueueOverlaps),
-		CombinedCommandQueueSize:  metric.NewGauge(metaCombinedCommandQueueSize),
-		CombinedCommandWriteCount: metric.NewGauge(metaCombinedCommandWriteCount),
-		CombinedCommandReadCount:  metric.NewGauge(metaCombinedCommandReadCount),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
@@ -1363,9 +1292,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
 
 		// Wedge request counters.
-		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),
-		SlowLeaseRequests:        metric.NewGauge(metaSlowLeaseRequests),
-		SlowRaftRequests:         metric.NewGauge(metaSlowRaftRequests),
+		SlowLatchRequests: metric.NewGauge(metaLatchRequests),
+		SlowLeaseRequests: metric.NewGauge(metaSlowLeaseRequests),
+		SlowRaftRequests:  metric.NewGauge(metaSlowRaftRequests),
 
 		// Backpressure counters.
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
