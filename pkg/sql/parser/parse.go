@@ -35,7 +35,7 @@ import (
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    Scanner
+	scanner    scanner
 	parserImpl sqlParserImpl
 }
 
@@ -57,7 +57,7 @@ func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList
 			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 		}
 		if p.scanner.lastError.hint != "" {
-			// If lastError.hint is not set, e.g. from (*Scanner).Unimplemented(),
+			// If lastError.hint is not set, e.g. from (*scanner).Unimplemented(),
 			// we're OK with the default hint. Otherwise, override it.
 			err.Hint = p.scanner.lastError.hint
 		}

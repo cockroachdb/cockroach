@@ -18,10 +18,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -124,52 +122,4 @@ select '''
 	// +---+
 	//   1
 	// (1 row)
-}
-
-func TestIsEndOfStatement(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tests := []struct {
-		in      string
-		isEnd   bool
-		isEmpty bool
-	}{
-		{
-			in:    ";",
-			isEnd: true,
-		},
-		{
-			in:    "; /* comment */",
-			isEnd: true,
-		},
-		{
-			in: "; SELECT",
-		},
-		{
-			in: "SELECT",
-		},
-		{
-			in:    "SET; SELECT 1;",
-			isEnd: true,
-		},
-		{
-			in:    "SELECT ''''; SET;",
-			isEnd: true,
-		},
-		{
-			in:      "  -- hello",
-			isEmpty: true,
-		},
-	}
-
-	for _, test := range tests {
-		isEmpty, lastTok := checkTokens(test.in)
-		if isEmpty != test.isEmpty {
-			t.Errorf("%q: isEmpty expected %v, got %v", test.in, test.isEmpty, isEmpty)
-		}
-		isEnd := isEndOfStatement(lastTok)
-		if isEnd != test.isEnd {
-			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
-		}
-	}
 }

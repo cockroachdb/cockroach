@@ -41,17 +41,17 @@ const MaxUint = ^uint(0)
 const MaxInt = int(MaxUint >> 1)
 
 func unimplemented(sqllex sqlLexer, feature string) int {
-    sqllex.(*Scanner).Unimplemented(feature)
+    sqllex.(*scanner).Unimplemented(feature)
     return 1
 }
 
 func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
-    sqllex.(*Scanner).UnimplementedWithIssue(issue)
+    sqllex.(*scanner).UnimplementedWithIssue(issue)
     return 1
 }
 
 func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int {
-    sqllex.(*Scanner).UnimplementedWithIssueDetail(issue, detail)
+    sqllex.(*scanner).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
 %}
@@ -1028,7 +1028,7 @@ func newNameFromStr(s string) *tree.Name {
 stmt_block:
   stmt_list
   {
-    sqllex.(*Scanner).stmts = $1.stmts()
+    sqllex.(*scanner).stmts = $1.stmts()
   }
 
 stmt_list:
