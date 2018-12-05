@@ -55,6 +55,54 @@ func TestHashJoinerInt64(t *testing.T) {
 		expectedTuples tuples
 	}{
 		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// Test null handling only on probe column.
+			leftTuples: tuples{
+				{0},
+			},
+			rightTuples: tuples{
+				{nil},
+				{0},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			expectedTuples: tuples{
+				{0},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// Test null handling only on build column.
+			leftTuples: tuples{
+				{nil},
+				{nil},
+				{1},
+				{0},
+			},
+			rightTuples: tuples{
+				{1},
+				{0},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			expectedTuples: tuples{
+				{1},
+				{0},
+			},
+		},
+		{
 			leftTypes:  []types.T{types.Int64, types.Int64},
 			rightTypes: []types.T{types.Int64, types.Int64},
 
