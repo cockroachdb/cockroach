@@ -206,6 +206,9 @@ type queueConfig struct {
 	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica.
 	needsLease bool
+	// needsNotDormant controls whether the Raft group will be initialized (if
+	// not already initialized) when deciding whether to process this replica.
+	needsNotDormant bool
 	// needsSystemConfig controls whether this queue requires a valid copy of the
 	// system config to operate on a replica. Not all queues require it, and it's
 	// unsafe for certain queues to wait on it. For example, a raft snapshot may
@@ -429,6 +432,10 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 
 	if !repl.IsInitialized() {
 		return
+	}
+
+	if bq.needsNotDormant {
+		repl.maybeInitializeRaftGroup(ctx)
 	}
 
 	if cfg != nil && bq.requiresSplit(cfg, repl) {

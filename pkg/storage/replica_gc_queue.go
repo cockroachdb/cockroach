@@ -98,6 +98,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 		queueConfig{
 			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
+			needsNotDormant:          true,
 			needsSystemConfig:        false,
 			acceptsUnsplitRanges:     true,
 			processDestroyedReplicas: true,
