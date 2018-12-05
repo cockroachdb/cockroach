@@ -208,6 +208,9 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -290,13 +293,16 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	// TODO(dan): t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
@@ -313,7 +319,6 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 		}
 		sort.Slice(resolved, func(i, j int) bool { return resolved[i].Less(resolved[j]) })
 		first, last := resolved[0], resolved[len(resolved)-1]
-		fmt.Println(resolved)
 
 		if d := last.GoTime().Sub(first.GoTime()); d < freq {
 			t.Errorf(`expected %s between resolved timestamps, but got %s`, freq, d)
@@ -322,7 +327,7 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	// TODO(dan): t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
@@ -573,6 +578,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run(`add column with default`, func(t *testing.T) {
@@ -697,7 +705,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	// TODO(dan): t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestChangefeedInterleaved(t *testing.T) {
@@ -898,6 +906,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
@@ -1013,7 +1024,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	// TODO(dan): t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestChangefeedRetryableSinkError(t *testing.T) {
@@ -1121,6 +1132,9 @@ func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// HACK: remove this once #32495 is fixed.
+		maybeWaitForEpochLeases(t, f.Server())
+
 		// Set a very simple channel-based, wait-and-resume function as the
 		// BeforeEmitRow hook.
 		var shouldWait int32
