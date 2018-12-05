@@ -58,8 +58,7 @@ func splitSQLSemicolon(data []byte, atEOF bool) (advance int, token []byte, err 
 		return 0, nil, nil
 	}
 
-	sc := parser.MakeScanner(string(data))
-	if pos := sc.Until(';'); pos > 0 {
+	if pos, ok := parser.SplitFirstStatement(string(data)); ok {
 		return pos, data[:pos], nil
 	}
 	// If we're at EOF, we have a final, non-terminated line. Return it.

@@ -36,8 +36,8 @@ const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 const identQuote = '"'
 
-// Scanner lexes SQL statements.
-type Scanner struct {
+// scanner lexes SQL statements.
+type scanner struct {
 	in        string
 	pos       int
 	tokBuf    sqlSymType
@@ -52,7 +52,7 @@ type Scanner struct {
 	bytesPrealloc []byte
 }
 
-// scanErr holds error state for a Scanner.
+// scanErr holds error state for a scanner.
 type scanErr struct {
 	msg                  string
 	hint                 string
@@ -60,14 +60,13 @@ type scanErr struct {
 	unimplementedFeature string
 }
 
-// MakeScanner makes a Scanner from str.
-func MakeScanner(str string) Scanner {
-	var s Scanner
+func makeScanner(str string) scanner {
+	var s scanner
 	s.init(str)
 	return s
 }
 
-func (s *Scanner) init(str string) {
+func (s *scanner) init(str string) {
 	if s.initialized {
 		panic("scanner already initialized; a scanner cannot be reused.")
 	}
@@ -77,7 +76,7 @@ func (s *Scanner) init(str string) {
 	s.bytesPrealloc = make([]byte, len(str))
 }
 
-func (s *Scanner) allocBytes(length int) []byte {
+func (s *scanner) allocBytes(length int) []byte {
 	if len(s.bytesPrealloc) >= length {
 		res := s.bytesPrealloc[:length:length]
 		s.bytesPrealloc = s.bytesPrealloc[length:]
@@ -88,7 +87,7 @@ func (s *Scanner) allocBytes(length int) []byte {
 
 // buffer returns an empty []byte buffer that can be appended to. Any unused
 // portion can be returned later using returnBuffer.
-func (s *Scanner) buffer() []byte {
+func (s *scanner) buffer() []byte {
 	buf := s.bytesPrealloc[:0]
 	s.bytesPrealloc = nil
 	return buf
@@ -96,7 +95,7 @@ func (s *Scanner) buffer() []byte {
 
 // returnBuffer returns the unused portion of buf to the scanner, to be used for
 // future allocBytes() or buffer() calls. The caller must not use buf again.
-func (s *Scanner) returnBuffer(buf []byte) {
+func (s *scanner) returnBuffer(buf []byte) {
 	if len(buf) < cap(buf) {
 		s.bytesPrealloc = buf[len(buf):]
 	}
@@ -104,39 +103,14 @@ func (s *Scanner) returnBuffer(buf []byte) {
 
 // finishString casts the given buffer to a string and returns the unused
 // portion of the buffer. The caller must not use buf again.
-func (s *Scanner) finishString(buf []byte) string {
+func (s *scanner) finishString(buf []byte) string {
 	str := *(*string)(unsafe.Pointer(&buf))
 	s.returnBuffer(buf)
 	return str
 }
 
-// Tokens calls f on all tokens of the input until an EOF is encountered.
-func (s *Scanner) Tokens(f func(token int)) {
-	for {
-		t := s.Lex(&s.tokBuf)
-		if t == 0 {
-			return
-		}
-		f(t)
-	}
-}
-
-// Until returns the position of token or 0 if it is not found.
-func (s *Scanner) Until(token int) int {
-	var t int
-	for {
-		t = s.Lex(&s.tokBuf)
-		switch t {
-		case 0:
-			return 0
-		case token:
-			return s.pos
-		}
-	}
-}
-
 // Lex lexes a token from input.
-func (s *Scanner) Lex(lval *sqlSymType) int {
+func (s *scanner) Lex(lval *sqlSymType) int {
 	// The core lexing takes place in scan(). Here we do a small bit of post
 	// processing of the lexical tokens so that the grammar only requires
 	// one-token lookahead despite SQL requiring multi-token lookahead in some
@@ -160,7 +134,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	s.nextTok = &s.tokBuf
 	s.scan(s.nextTok)
 
-	// If you update these cases, update lookaheadKeywords below.
+	// If you update these cases, update lex.lookaheadKeywords.
 	switch lval.id {
 	case AS:
 		switch s.nextTok.id {
@@ -184,33 +158,33 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	return lval.id
 }
 
-func (s *Scanner) initLastErr() {
+func (s *scanner) initLastErr() {
 	if s.lastError == nil {
 		s.lastError = new(scanErr)
 	}
 }
 
 // Unimplemented wraps Error, setting lastUnimplementedError.
-func (s *Scanner) Unimplemented(feature string) {
+func (s *scanner) Unimplemented(feature string) {
 	s.Error("unimplemented")
 	s.lastError.unimplementedFeature = feature
 }
 
 // UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
-func (s *Scanner) UnimplementedWithIssue(issue int) {
+func (s *scanner) UnimplementedWithIssue(issue int) {
 	s.Error("unimplemented")
 	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
 	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
-func (s *Scanner) UnimplementedWithIssueDetail(issue int, detail string) {
+func (s *scanner) UnimplementedWithIssueDetail(issue int, detail string) {
 	s.Error("unimplemented")
 	s.lastError.unimplementedFeature = fmt.Sprintf("#%d.%s", issue, detail)
 	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
-func (s *Scanner) Error(e string) {
+func (s *scanner) Error(e string) {
 	s.initLastErr()
 	if s.lastTok.id == ERROR {
 		// This is a tokenizer (lexical) error: just emit the invalid
@@ -242,14 +216,14 @@ func (s *Scanner) Error(e string) {
 	s.lastError.hint = ""
 }
 
-// SetHelp marks the "last error" field in the Scanner to become a
+// SetHelp marks the "last error" field in the scanner to become a
 // help text. This method is invoked in the error action of the
 // parser, so the help text is only produced if the last token
 // encountered was HELPTOKEN -- other cases are just syntax errors,
 // and in that case we do not want the help text to overwrite the
 // lastError field, which was set earlier to contain details about the
 // syntax error.
-func (s *Scanner) SetHelp(msg HelpMessage) {
+func (s *scanner) SetHelp(msg HelpMessage) {
 	if s.lastTok.id == HELPTOKEN {
 		s.populateHelpMsg(msg.String())
 	} else {
@@ -262,14 +236,14 @@ func (s *Scanner) SetHelp(msg HelpMessage) {
 	}
 }
 
-func (s *Scanner) populateHelpMsg(msg string) {
+func (s *scanner) populateHelpMsg(msg string) {
 	s.initLastErr()
 	s.lastError.unimplementedFeature = ""
 	s.lastError.msg = "help token in input"
 	s.lastError.hint = msg
 }
 
-func (s *Scanner) scan(lval *sqlSymType) {
+func (s *scanner) scan(lval *sqlSymType) {
 	lval.id = 0
 	lval.pos = s.pos
 	lval.str = "EOF"
@@ -566,14 +540,14 @@ func (s *Scanner) scan(lval *sqlSymType) {
 	// lval for above.
 }
 
-func (s *Scanner) peek() int {
+func (s *scanner) peek() int {
 	if s.pos >= len(s.in) {
 		return eof
 	}
 	return int(s.in[s.pos])
 }
 
-func (s *Scanner) peekN(n int) int {
+func (s *scanner) peekN(n int) int {
 	pos := s.pos + n
 	if pos >= len(s.in) {
 		return eof
@@ -581,7 +555,7 @@ func (s *Scanner) peekN(n int) int {
 	return int(s.in[pos])
 }
 
-func (s *Scanner) next() int {
+func (s *scanner) next() int {
 	ch := s.peek()
 	if ch != eof {
 		s.pos++
@@ -589,7 +563,7 @@ func (s *Scanner) next() int {
 	return ch
 }
 
-func (s *Scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
+func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
 	newline = false
 	for {
 		ch := s.peek()
@@ -614,7 +588,7 @@ func (s *Scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline,
 	return newline, true
 }
 
-func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
+func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	start := s.pos
 	ch := s.peek()
 
@@ -671,7 +645,7 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) scanIdent(lval *sqlSymType) {
+func (s *scanner) scanIdent(lval *sqlSymType) {
 	s.pos--
 	start := s.pos
 	isASCII := true
@@ -727,7 +701,7 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	}
 }
 
-func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
+func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -825,7 +799,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 	}
 }
 
-func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
+func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
 	for lex.IsDigit(s.peek()) {
 		s.pos++
@@ -846,7 +820,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 }
 
 // scanHexString scans the content inside x'....'.
-func (s *Scanner) scanHexString(lval *sqlSymType, ch int) bool {
+func (s *scanner) scanHexString(lval *sqlSymType, ch int) bool {
 	buf := s.buffer()
 
 	var curbyte byte
@@ -903,7 +877,7 @@ outer:
 }
 
 // scanBitString scans the content inside B'....'.
-func (s *Scanner) scanBitString(lval *sqlSymType, ch int) bool {
+func (s *scanner) scanBitString(lval *sqlSymType, ch int) bool {
 	buf := s.buffer()
 outer:
 	for {
@@ -941,7 +915,7 @@ outer:
 // scanString scans the content inside '...'. This is used for simple
 // string literals '...' but also e'....' and b'...'. For x'...', see
 // scanHexString().
-func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
+func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
 	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
@@ -1035,4 +1009,44 @@ outer:
 
 	lval.str = s.finishString(buf)
 	return true
+}
+
+// SplitFirstStatement returns the length of the prefix of the string up to and
+// including the first semicolon that separates statements. If there is no
+// semicolon, returns ok=false.
+func SplitFirstStatement(sql string) (pos int, ok bool) {
+	s := makeScanner(sql)
+	var lval sqlSymType
+	for {
+		s.scan(&lval)
+		switch lval.id {
+		case 0, ERROR:
+			return 0, false
+		case ';':
+			return s.pos, true
+		}
+	}
+}
+
+// LastLexicalToken returns the last lexical token. If the string has no lexical
+// tokens, returns 0 and ok=false.
+func LastLexicalToken(sql string) (lastTok int, ok bool) {
+	s := makeScanner(sql)
+	var lval sqlSymType
+	for {
+		last := lval.id
+		s.scan(&lval)
+		if lval.id == ERROR {
+			return ERROR, true
+		}
+		if lval.id == 0 {
+			return last, last != 0
+		}
+	}
+}
+
+// EndsInSemicolon returns true if the last lexical token is a semicolon.
+func EndsInSemicolon(sql string) bool {
+	lastTok, ok := LastLexicalToken(sql)
+	return ok && lastTok == ';'
 }
