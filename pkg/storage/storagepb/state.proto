@@ -102,22 +102,9 @@ message RangeInfo {
   reserved 9;
 }
 
-// CommandQueueSnapshot is a snapshot of the command queue graph for rendering
-// on an admin UI debug page. While the actual CommandQueue uses interval trees
-// for fast mutation and lookups, all the UI needs is a simple map of commands.
-message CommandQueuesSnapshot {
-  message Command {
-    int64 id = 1;
-    string key = 2;
-    string end_key = 3;
-    bool readonly = 4;
-    util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
-    repeated int64 prereqs = 6;
-  }
-
-  // Timestamp in nanoseconds when this snapshot was taken.
-  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  // localScope and globalScope are maps from command ids to commands.
-  map<int64, Command> localScope = 2 [(gogoproto.nullable) = false];
-  map<int64, Command> globalScope = 3 [(gogoproto.nullable) = false];
+// LatchManagerInfo is used for reporting status information about a spanlatch
+// manager out through the status server.
+message LatchManagerInfo {
+  int64 read_count = 1;
+  int64 write_count = 2;
 }

@@ -35,9 +35,9 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Slow Command Queue Entries" sources={storeSources}>
-      <Axis label="queue entries">
-        <Metric name="cr.store.requests.slow.commandqueue" title="Slow Command Queue Entries" downsampleMax />
+    <LineGraph title="Slow Latch Acquisitions" sources={storeSources}>
+      <Axis label="latch acquisitions">
+        <Metric name="cr.store.requests.slow.latch" title="Slow Latch Acquisitions" downsampleMax />
       </Axis>
     </LineGraph>,
   ];

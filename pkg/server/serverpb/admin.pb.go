@@ -75,7 +75,6 @@
 		RangeProblems
 		RangeStatistics
 		PrettySpan
-		CommandQueueMetrics
 		RangeInfo
 		RangesRequest
 		RangesResponse
@@ -118,8 +117,6 @@
 		ProblemRangesResponse
 		RangeRequest
 		RangeResponse
-		CommandQueueRequest
-		CommandQueueResponse
 		DiagnosticsRequest
 		StoresRequest
 		StoreDetails

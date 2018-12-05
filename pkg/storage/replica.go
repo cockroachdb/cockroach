@@ -23,7 +23,6 @@ import (
 	"os"
 	"reflect"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -335,19 +335,11 @@ type Replica struct {
 	// Contains the lease history when enabled.
 	leaseHistory *leaseHistory
 
-	cmdQMu struct {
-		// Protects all fields in the cmdQMu struct.
-		//
-		// Locking notes: Replica.mu < Replica.cmdQMu
-		syncutil.Mutex
-		// Enforces at most one command is running per key(s) within each span
-		// scope. The globally-scoped component tracks user writes (i.e. all
-		// keys for which keys.Addr is the identity), the locally-scoped component
-		// the rest (e.g. RangeDescriptor, transaction record, Lease, ...).
-		// Commands with different accesses but the same scope are stored in the
-		// same component.
-		queues [spanset.NumSpanScope]*CommandQueue
-	}
+	// Enforces at most one command is running per key(s) within each span
+	// scope. The globally-scoped component tracks user writes (i.e. all
+	// keys for which keys.Addr is the identity), the locally-scoped component
+	// the rest (e.g. RangeDescriptor, transaction record, Lease, ...).
+	latchMgr spanlatch.Manager
 
 	mu struct {
 		// Protects all fields in the mu struct.
@@ -401,8 +393,8 @@ type Replica struct {
 		// This is used to protect against several hazards:
 		// - leases held (or even proposed) before a restart cannot be used after a
 		// restart. This is because:
-		// 		a) the command queue is wiped during the restart; there might be
-		// 		writes in flight that are not reflected in the new command queue. So,
+		// 		a) the spanlatch manager is wiped during the restart; there might be
+		// 		writes in flight that do not have the latches they held reflected. So,
 		// 		we need to synchronize all new reads with those old in-flight writes.
 		// 		Forcing acquisition of a new lease essentially flushes all the
 		// 		previous raft commands.
@@ -756,11 +748,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.cmdQMu.Lock()
-	r.cmdQMu.queues[spanset.SpanGlobal] = NewCommandQueue(true /* optimizeOverlap */)
-	r.cmdQMu.queues[spanset.SpanLocal] = NewCommandQueue(false /* optimizeOverlap */)
-	r.cmdQMu.Unlock()
-
+	r.latchMgr.Init(r.store.metrics.SlowLatchRequests)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
@@ -769,7 +757,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.mu.internalRaftGroup = nil
 
 	var err error
-
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
@@ -1503,15 +1490,14 @@ func (r *Replica) redirectOnOrAcquireLease(
 						// commands may be proposed from followers, but not successfully so). For
 						// all proposals, processRaftCommand checks that their ProposalLease is
 						// compatible with the active lease for the log position. For commands
-						// proposed on the lease holder, the command queue then serializes
+						// proposed on the lease holder, the spanlatch manager then serializes
 						// everything. But lease requests get created on followers based on their
-						// local state and thus without being sequenced through the command queue.
-						// Thus a recently removed follower (unaware of its own removal) could
-						// submit a proposal for the lease (correctly using as a ProposerLease the
-						// last active lease), and would receive it given the up-to-date
-						// ProposerLease. Hence, an extra check is in order: processRaftCommand
-						// makes sure that lease requests for a replica not in the descriptor are
-						// bounced.
+						// local state and thus without being sequenced through latching. Thus
+						// a recently removed follower (unaware of its own removal) could submit
+						// a proposal for the lease (correctly using as a ProposerLease the last
+						// active lease), and would receive it given the up-to-date ProposerLease.
+						// Hence, an extra check is in order: processRaftCommand makes sure that
+						// lease requests for a replica not in the descriptor are bounced.
 						//
 						// However, this is possible if the `cockroach debug
 						// unsafe-remove-dead-replicas` command has been used, so
@@ -2201,26 +2187,15 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 	return nil
 }
 
-// batchCmdSet holds a *cmd for each permutation of SpanAccess and spanScope. The
-// batch is divided into separate *cmds for access type (read-only or read/write)
-// and key scope (local or global; used to facilitate use by the separate local
-// and global command queues).
-type batchCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope]*cmd
-
-// prereqCmdSet holds the set of all *cmds that a batch command can depend on.
-// The prereq set is divided into seprate slices of *cmd for access type
-// (read-only or read/write) and key scope (local or global).
-type prereqCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope][]*cmd
-
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
 	repl *Replica
-	cmds batchCmdSet
+	lg   *spanlatch.Guard
 	ba   roachpb.BatchRequest
 }
 
-// done removes pending commands from the command queue and updates
+// done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	// Update the timestamp cache if the command is not being
@@ -2231,10 +2206,11 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
-	if fn := ec.repl.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
-		fn(&ec.ba, storagebase.CommandQueueFinishExecuting)
+	// Release the latches acquired by the request back to the spanlatch
+	// manager. Must be done AFTER the timestamp cache is updated.
+	if ec.lg != nil {
+		ec.repl.latchMgr.Release(ec.lg)
 	}
-	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
 // updateTimestampCache updates the timestamp cache in order to set a low water
@@ -2338,12 +2314,10 @@ func (r *Replica) updateTimestampCache(
 	}
 }
 
-func collectSpans(
-	desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest,
-) (*spanset.SpanSet, error) {
+func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
 	spans := &spanset.SpanSet{}
-	// TODO(bdarnell): need to make this less global when the local
-	// command queue is used more heavily. For example, a split will
+	// TODO(bdarnell): need to make this less global when local
+	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
 	// Currently local spans are the exception, so preallocate for the
 	// common case in which all are global. We rarely mix read and
@@ -2358,17 +2332,22 @@ func collectSpans(
 		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
 	}
 
+	desc := r.Desc()
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, ba.Header, inner, spans)
+			cmd.DeclareKeys(*desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
+	// Commands may create a large number of duplicate spans. De-duplicate
+	// them to reduce the number of spans we pass to the spanlatch manager.
+	spans.SortAndDedup()
+
 	// If any command gave us spans that are invalid, bail out early
-	// (before passing them to the command queue, which may panic).
+	// (before passing them to the spanlatch manager, which may panic).
 	if err := spans.Validate(); err != nil {
 		return nil, err
 	}
@@ -2379,8 +2358,8 @@ func collectSpans(
 // includes merges in their critical phase or overlapping, already-executing
 // commands.
 //
-// More specifically, after waiting for in-flight merges, beginCmds adds the
-// request to the command queue based on keys affected by the batched commands.
+// More specifically, after waiting for in-flight merges, beginCmds acquires
+// latches for the request based on keys affected by the batched commands.
 // This gates subsequent commands with overlapping keys or key ranges. It
 // returns a cleanup function to be called when the commands are done and can be
 // removed from the queue, and whose returned error is to be used in place of
@@ -2388,129 +2367,39 @@ func collectSpans(
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*endCmds, error) {
-	var newCmds batchCmdSet
-	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
-	// Don't use the command queue for inconsistent reads.
+	// Only acquire latches for consistent operations.
+	var lg *spanlatch.Guard
 	if ba.ReadConsistency == roachpb.CONSISTENT {
-
-		// Check for context cancellation before inserting into the
-		// command queue (and check again afterward). Once we're in the
-		// command queue we'll need to transfer our prerequisites to all
-		// dependent commands if we want to cancel, so it's good to bail
-		// out early if we can.
+		// Check for context cancellation before acquiring latches.
 		if err := ctx.Err(); err != nil {
-			log.VEventf(ctx, 2, "%s before command queue: %s", err, ba.Summary())
-			return nil, errors.Wrap(err, "aborted before command queue")
+			log.VEventf(ctx, 2, "%s before acquiring latches: %s", err, ba.Summary())
+			return nil, errors.Wrap(err, "aborted before acquiring latches")
 		}
 
-		// Get the requested timestamp for a given scope. This is used for
-		// non-interference of earlier reads with later writes, but only for
-		// the global command queue. Reads and writes to local keys are specified
-		// as having a zero timestamp which will cause them to always interfere.
-		// This is done to avoid confusion with local keys declared as part of
-		// proposer evaluated KV.
-		scopeTS := func(scope spanset.SpanScope) hlc.Timestamp {
-			switch scope {
-			case spanset.SpanGlobal:
-				// ba.Timestamp is always set appropriately, regardless of
-				// whether the batch is transactional or not.
-				return ba.Timestamp
-			case spanset.SpanLocal:
-				return hlc.Timestamp{}
+		var beforeLatch time.Time
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			beforeLatch = timeutil.Now()
+		}
+
+		// Acquire latches for all the request's declared spans to ensure
+		// protected access and to avoid interacting requests from operating at
+		// the same time. The latches will be held for the duration of request.
+		var err error
+		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		if !beforeLatch.IsZero() {
+			dur := timeutil.Since(beforeLatch)
+			log.VEventf(ctx, 2, "waited %s to acquire latches", dur)
+		}
+
+		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
+			if pErr := filter(*ba); pErr != nil {
+				r.latchMgr.Release(lg)
+				return nil, pErr.GoError()
 			}
-			panic(fmt.Sprintf("unexpected scope %d", scope))
-		}
-
-		r.cmdQMu.Lock()
-		var prereqs prereqCmdSet
-		var prereqCount int
-		// Collect all the channels to wait on before adding this batch to the
-		// command queue.
-		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
-			// With clockless reads, everything is treated as writing.
-			readOnly := i == spanset.SpanReadOnly && !clocklessReads
-			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				prereqs[i][j] = r.cmdQMu.queues[j].getPrereqs(readOnly, scopeTS(j), spans.GetSpans(i, j))
-				prereqCount += len(prereqs[i][j])
-			}
-		}
-		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
-			readOnly := i == spanset.SpanReadOnly && !clocklessReads // ditto above
-			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				cmd := r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
-				if cmd != nil {
-					cmd.SetDebugInfo(ba)
-					newCmds[i][j] = cmd
-				}
-			}
-		}
-		r.cmdQMu.Unlock()
-
-		var beforeWait time.Time
-		var prereqSummary string
-		if prereqCount > 0 && log.ExpensiveLogEnabled(ctx, 2) {
-			beforeWait = timeutil.Now()
-			prereqSummary = prereqDebugSummary(prereqs)
-			log.VEventf(ctx, 2, "waiting for %d overlapping requests: %s", prereqCount, prereqSummary)
-		}
-		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
-			fn(ba, storagebase.CommandQueueWaitForPrereqs)
-		}
-
-		ctxDone := ctx.Done()
-		for _, accessCmds := range newCmds {
-			for _, newCmd := range accessCmds {
-				// If newCmd is nil it means that the BatchRequest contains no spans for this
-				// SpanAccess/spanScope permutation.
-				if newCmd == nil {
-					continue
-				}
-				// Loop until the command has no more pending prerequisites. Resolving canceled
-				// prerequisites can add new transitive dependencies to a command, so newCmd.prereqs
-				// should not be accessed directly (see ResolvePendingPrereq).
-				for {
-					pre := newCmd.PendingPrereq()
-					if pre == nil {
-						break
-					}
-					select {
-					case <-pre.pending:
-						// The prerequisite command has finished so remove it from our prereq list.
-						// If the prereq still has pending dependencies, migrate them.
-						newCmd.ResolvePendingPrereq()
-					case <-ctxDone:
-						err := ctx.Err()
-						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
-
-						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
-							fn(ba, storagebase.CommandQueueCancellation)
-						}
-
-						// Remove the command from the command queue immediately. New commands that
-						// would have established a dependency on this command will never see it,
-						// which is fine. Current dependents that already have a dependency on this
-						// command will transfer transitive dependencies when they try to block on
-						// this command, because our prereqs slice is not empty. This migration of
-						// dependencies will happen for each dependent in ResolvePendingPrereq,
-						// which will notice that our prereqs slice was not empty when we stopped
-						// pending and will adopt our prerequisites in turn.
-						r.removeCmdsFromCommandQueue(newCmds)
-						return nil, errors.Wrap(err, "aborted while in command queue")
-					case <-r.store.stopper.ShouldQuiesce():
-						// While shutting down, commands may have been added to the
-						// command queue that will never finish.
-						return nil, &roachpb.NodeUnavailableError{}
-					}
-				}
-			}
-		}
-
-		if prereqSummary != "" {
-			dur := timeutil.Since(beforeWait)
-			log.VEventf(ctx, 2, "waited %s for overlapping requests: %s", dur, prereqSummary)
-		}
-		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
-			fn(ba, storagebase.CommandQueueBeginExecuting)
 		}
 
 		if r.getMergeCompleteCh() != nil && !ba.IsSingleSubsumeRequest() {
@@ -2518,8 +2407,8 @@ func (r *Replica) beginCmds(
 			// cannot proceed until the merge completes, signaled by the closing of
 			// the channel.
 			//
-			// It is very important that this check occur after the command queue has
-			// allowed us to proceed. Only after we exit the command queue are we
+			// It is very important that this check occur after we have acquired latches
+			// from the spanlatch manager. Only after we release these latches are we
 			// guaranteed that we're not racing with a Subsume command. (Subsume
 			// commands declare a conflict with all other commands.)
 			//
@@ -2552,12 +2441,12 @@ func (r *Replica) beginCmds(
 			// We can't wait for the merge to complete here, though. The replica might
 			// need to respond to a Subsume request in order for the merge to
 			// complete, and blocking here would force that Subsume request to sit in
-			// the command queue forever, deadlocking the merge. Instead, we remove
-			// the commands from the command queue and return a MergeInProgressError.
+			// hold its latches forever, deadlocking the merge. Instead, we release
+			// the latches we acquired above and return a MergeInProgressError.
 			// The store will catch that error and resubmit the request after
 			// mergeCompleteCh closes. See #27442 for the full context.
 			log.Event(ctx, "waiting on in-progress merge")
-			r.removeCmdsFromCommandQueue(newCmds)
+			r.latchMgr.Release(lg)
 			return nil, &roachpb.MergeInProgressError{}
 		}
 	} else {
@@ -2599,70 +2488,10 @@ func (r *Replica) beginCmds(
 
 	ec := &endCmds{
 		repl: r,
-		cmds: newCmds,
+		lg:   lg,
 		ba:   *ba,
 	}
 	return ec, nil
-}
-
-// prereqDebugSummary constructs a debug summary of a command's prerequisite.
-func prereqDebugSummary(prereqs prereqCmdSet) string {
-	var b strings.Builder
-	for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
-		for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-			cmds := prereqs[i][j]
-			if len(cmds) == 0 {
-				continue
-			}
-
-			if b.Len() > 0 {
-				b.WriteString(" ")
-			}
-			fmt.Fprintf(&b, "{%s/%s: ", i, j)
-			const max = 4
-			var count int
-			for _, cmd := range cmds {
-				if count > 0 {
-					b.WriteString(", ")
-					if count > max {
-						b.WriteString("...")
-						break
-					}
-				}
-				b.WriteString("[")
-				cmd.debugInfo.WriteSummary(&b)
-				b.WriteString("]")
-				count++
-			}
-			b.WriteString("}")
-		}
-	}
-	if b.Len() == 0 {
-		return "no prereqs"
-	}
-	return b.String()
-}
-
-// removeCmdsFromCommandQueue removes a batch's set of commands for the
-// replica's command queue.
-func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
-	r.cmdQMu.Lock()
-	for _, accessCmds := range cmds {
-		for scope, cmd := range accessCmds {
-			if cmd.PrereqLen() > 0 {
-				// The command was canceled while it still had prerequisites to
-				// wait on. To avoid transferring already resolved prerequisites
-				// to our dependencies, we perform one last optimistic scan over
-				// our prerequisites and resolve any that are no longer pending
-				// and were not canceled themselves. This helps bound the
-				// quadratic blowup of prerequisites during cascading
-				// cancellations.
-				cmd.OptimisticallyResolvePrereqs()
-			}
-			r.cmdQMu.queues[scope].remove(cmd)
-		}
-	}
-	r.cmdQMu.Unlock()
 }
 
 // applyTimestampCache moves the batch timestamp forward depending on
@@ -2783,7 +2612,7 @@ func (r *Replica) applyTimestampCache(
 }
 
 // executeAdminBatch executes the command directly. There is no interaction
-// with the command queue or the timestamp cache, as admin commands
+// with the spanlatch manager or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the lease holder replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
@@ -3112,7 +2941,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
-// clear via the command queue.
+// clear via the latches.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
@@ -3155,14 +2984,14 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
-	spans, err := collectSpans(*r.Desc(), &ba)
+	spans, err := r.collectSpans(&ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	log.Event(ctx, "command queue")
+	// Acquire latches to prevent overlapping commands from executing
+	// until this command completes.
+	log.Event(ctx, "acquire latches")
 	endCmds, err := r.beginCmds(ctx, &ba, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -3172,7 +3001,7 @@ func (r *Replica) executeReadOnlyBatch(
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
-	// Guarantee we remove the commands from the command queue. It is
+	// Guarantee we release the latches that we just acquired. It is
 	// important that this is inside the readOnlyCmdMu lock so that the
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
@@ -3299,10 +3128,9 @@ func (r *Replica) executeWriteBatch(
 //
 // Concretely,
 //
-// - The keys affected by the command are added to the command queue (i.e.
+// - Latches for the keys affected by the command are acquired (i.e.
 //   tracked as in-flight mutations).
-// - Wait until the command queue promises that no overlapping mutations are
-//   in flight.
+// - In doing so, we wait until no overlapping mutations are in flight.
 // - The timestamp cache is checked to determine if the command's affected keys
 //   were accessed with a timestamp exceeding that of the command; if so, the
 //   command's timestamp is incremented accordingly.
@@ -3313,8 +3141,8 @@ func (r *Replica) executeWriteBatch(
 //   a lease index is assigned to it, and it is submitted to Raft, returning
 //   a channel.
 // - The result of the Raft proposal is read from the channel and the command
-//   registered with the timestamp cache, removed from the command queue, and
-//   its result (which could be an error) returned to the client.
+//   registered with the timestamp cache, its latches are released, and
+//   its result (which could be an error) is returned to the client.
 //
 // TODO(tschottdorf): take special care with "special" commands and their
 // reorderings. For example, a batch of writes and a split could be in flight
@@ -3333,19 +3161,18 @@ func (r *Replica) tryExecuteWriteBatch(
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
-	spans, err := collectSpans(*r.Desc(), &ba)
+	spans, err := r.collectSpans(&ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
 	var endCmds *endCmds
 	if !ba.IsLeaseRequest() {
-		// Add the write to the command queue to gate subsequent overlapping
-		// commands until this command completes. Note that this must be
-		// done before getting the max timestamp for the key(s), as
-		// timestamp cache is only updated after preceding commands have
-		// been run to successful completion.
-		log.Event(ctx, "command queue")
+		// Acquire latches to prevent overlapping commands from executing until
+		// this command completes. Note that this must be done before getting
+		// the max timestamp for the key(s), as timestamp cache is only updated
+		// after preceding commands have been run to successful completion.
+		log.Event(ctx, "acquire latches")
 		var err error
 		endCmds, err = r.beginCmds(ctx, &ba, spans)
 		if err != nil {
@@ -3353,7 +3180,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		}
 	}
 
-	// Guarantee we remove the commands from the command queue. This is
+	// Guarantee we release the latches that we just acquired. This is
 	// wrapped to delay pErr evaluation to its value when returning.
 	defer func() {
 		if endCmds != nil {
@@ -3764,10 +3591,10 @@ func (r *Replica) propose(
 		return nil, nil, 0, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
 	}
 
-	// Only need to check that the request is in bounds at proposal time,
-	// not at application time, because the command queue will synchronize
-	// all requests (notably EndTransaction with SplitTrigger) that may
-	// cause this condition to change.
+	// Only need to check that the request is in bounds at proposal time, not at
+	// application time, because the spanlatch manager will synchronize all
+	// requests (notably EndTransaction with SplitTrigger) that may cause this
+	// condition to change.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
@@ -5546,18 +5373,19 @@ func (r *Replica) processRaftCommand(
 		// Verify that the batch timestamp is after the GC threshold. This is
 		// necessary because not all commands declare read access on the GC
 		// threshold key, even though they implicitly depend on it. This means
-		// that access to this state will not be serialized by the command queue,
+		// that access to this state will not be serialized by latching,
 		// so we must perform this check upstream and downstream of raft.
 		// See #14833.
 		//
 		// We provide an empty key span because we already know that the Raft
 		// command is allowed to apply within its key range. This is guaranteed
 		// by checks upstream of Raft, which perform the same validation, and by
-		// the CommandQueue, which assures that any modifications to the range's
+		// span latches, which assure that any modifications to the range's
 		// boundaries will be serialized with this command. Finally, the
 		// leaseAppliedIndex check in checkForcedErrLocked ensures that replays
-		// outside of the CommandQueue's control which break this serialization
-		// ordering will already by caught and an error will be thrown.
+		// outside of the spanlatch manager's control which break this
+		// serialization ordering will already by caught and an error will be
+		// thrown.
 		forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
 	}
 
@@ -6026,9 +5854,9 @@ func (r *Replica) applyRaftCommand(
 	// remaining writes are the raft applied index and the updated MVCC stats.
 	writer := batch.Distinct()
 
-	// Special-cased MVCC stats handling to exploit commutativity of stats
-	// delta upgrades. Thanks to commutativity, the command queue does not
-	// have to serialize on the stats key.
+	// Special-cased MVCC stats handling to exploit commutativity of stats delta
+	// upgrades. Thanks to commutativity, the spanlatch manager does not have to
+	// serialize on the stats key.
 	deltaStats := rResult.Delta.ToStats()
 
 	if !usingAppliedStateKey && rResult.State != nil && rResult.State.UsingAppliedStateKey {
@@ -6891,7 +6719,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
-	// Call evaluateBatch instead of Send to avoid command queue reentrance.
+	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
 	br, result, pErr :=
 		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
@@ -6964,7 +6792,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
-	// Call evaluateBatch instead of Send to avoid command queue reentrance.
+	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
 	br, result, pErr := evaluateBatch(
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
@@ -7164,13 +6992,13 @@ type ReplicaMetrics struct {
 
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	RangeCounter      bool
-	Unavailable       bool
-	Underreplicated   bool
-	BehindCount       int64
-	CmdQMetricsLocal  CommandQueueMetrics
-	CmdQMetricsGlobal CommandQueueMetrics
-	RaftLogTooLarge   bool
+	RangeCounter    bool
+	Unavailable     bool
+	Underreplicated bool
+	BehindCount     int64
+	LatchInfoLocal  storagepb.LatchManagerInfo
+	LatchInfoGlobal storagepb.LatchManagerInfo
+	RaftLogTooLarge bool
 }
 
 // Metrics returns the current metrics for the replica.
@@ -7184,15 +7012,13 @@ func (r *Replica) Metrics(
 	desc := r.mu.state.Desc
 	zone := r.mu.zone
 	raftLogSize := r.mu.raftLogSize
-	r.cmdQMu.Lock()
-	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
-	cmdQMetricsGlobal := r.cmdQMu.queues[spanset.SpanGlobal].metrics()
-	r.cmdQMu.Unlock()
 	r.mu.RUnlock()
 
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
+
+	latchInfoGlobal, latchInfoLocal := r.latchMgr.Info()
 
 	return calcReplicaMetrics(
 		ctx,
@@ -7207,8 +7033,8 @@ func (r *Replica) Metrics(
 		r.store.StoreID(),
 		quiescent,
 		ticking,
-		cmdQMetricsLocal,
-		cmdQMetricsGlobal,
+		latchInfoLocal,
+		latchInfoGlobal,
 		raftLogSize,
 	)
 }
@@ -7235,8 +7061,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	cmdQMetricsLocal CommandQueueMetrics,
-	cmdQMetricsGlobal CommandQueueMetrics,
+	latchInfoLocal storagepb.LatchManagerInfo,
+	latchInfoGlobal storagepb.LatchManagerInfo,
 	raftLogSize int64,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
@@ -7262,8 +7088,8 @@ func calcReplicaMetrics(
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
 	}
 
-	m.CmdQMetricsLocal = cmdQMetricsLocal
-	m.CmdQMetricsGlobal = cmdQMetricsGlobal
+	m.LatchInfoLocal = latchInfoLocal
+	m.LatchInfoGlobal = latchInfoGlobal
 
 	const raftLogTooLargeMultiple = 4
 	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple * raftCfg.RaftLogTruncationThreshold)
@@ -7372,20 +7198,6 @@ func EnableLeaseHistory(maxEntries int) func() {
 	leaseHistoryMaxEntries = maxEntries
 	return func() {
 		leaseHistoryMaxEntries = originalValue
-	}
-}
-
-// GetCommandQueueSnapshot returns a snapshot of the command queue state for
-// this replica.
-func (r *Replica) GetCommandQueueSnapshot() storagepb.CommandQueuesSnapshot {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	r.cmdQMu.Lock()
-	defer r.cmdQMu.Unlock()
-	return storagepb.CommandQueuesSnapshot{
-		Timestamp:   r.store.Clock().Now(),
-		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
-		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),
 	}
 }
 

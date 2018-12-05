@@ -49,7 +49,6 @@ import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
 import Certificates from "src/views/reports/containers/certificates";
-import CommandQueue from "src/views/reports/containers/commandQueue";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
 import EnqueueRange from "src/views/reports/containers/enqueueRange";
@@ -169,7 +168,6 @@ ReactDOM.render(
           <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
-          <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
           <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
         </Route>
 
