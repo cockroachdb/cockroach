@@ -6600,11 +6600,11 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = coltypes.Int8
+    $$.val = sqllex.(*scanner).nakedIntType
   }
 | INTEGER
   {
-    $$.val = coltypes.Int8
+    $$.val = sqllex.(*scanner).nakedIntType
   }
 | INT2
   {

@@ -41,11 +41,14 @@ type Parser struct {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
-	return p.parseWithDepth(1, sql)
+	return p.parseWithDepth(1, sql, coltypes.Int8)
 }
 
-func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList, err error) {
+func (p *Parser) parseWithDepth(
+	depth int, sql string, nakedIntType *coltypes.TInt,
+) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
+	p.scanner.nakedIntType = nakedIntType
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		var err *pgerror.Error
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
@@ -84,18 +87,26 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (tree.StatementList, error) {
-	return parseWithDepth(1, sql)
+	return parseWithDepth(1, sql, coltypes.Int8)
 }
 
-func parseWithDepth(depth int, sql string) (tree.StatementList, error) {
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, error) {
+	return parseWithDepth(1, sql, nakedIntType)
+}
+
+func parseWithDepth(
+	depth int, sql string, nakedIntType *coltypes.TInt,
+) (tree.StatementList, error) {
 	var p Parser
-	return p.parseWithDepth(depth+1, sql)
+	return p.parseWithDepth(depth+1, sql, nakedIntType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
 // single statement, and returns that Statement.
 func ParseOne(sql string) (tree.Statement, error) {
-	stmts, err := parseWithDepth(1, sql)
+	stmts, err := parseWithDepth(1, sql, coltypes.Int8)
 	if err != nil {
 		return nil, err
 	}

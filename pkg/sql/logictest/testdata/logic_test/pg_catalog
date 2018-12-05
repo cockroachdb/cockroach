@@ -1335,6 +1335,7 @@ client_encoding                    UTF8          NULL      NULL        NULL     
 client_min_messages                notice        NULL      NULL        NULL        string
 database                           test          NULL      NULL        NULL        string
 datestyle                          ISO, MDY      NULL      NULL        NULL        string
+default_int_size                   8             NULL      NULL        NULL        string
 default_transaction_isolation      serializable  NULL      NULL        NULL        string
 default_transaction_read_only      off           NULL      NULL        NULL        string
 distsql                            2.0-off       NULL      NULL        NULL        string
@@ -1379,6 +1380,7 @@ client_encoding                    UTF8          NULL  user     NULL      UTF8  
 client_min_messages                notice        NULL  user     NULL      notice        notice
 database                           test          NULL  user     NULL      ·             test
 datestyle                          ISO, MDY      NULL  user     NULL      ISO, MDY      ISO, MDY
+default_int_size                   8             NULL  user     NULL      8             8
 default_transaction_isolation      serializable  NULL  user     NULL      default       default
 default_transaction_read_only      off           NULL  user     NULL      off           off
 distsql                            2.0-off       NULL  user     NULL      2.0-off       2.0-off
@@ -1419,6 +1421,7 @@ client_min_messages                NULL    NULL     NULL     NULL        NULL
 crdb_version                       NULL    NULL     NULL     NULL        NULL
 database                           NULL    NULL     NULL     NULL        NULL
 datestyle                          NULL    NULL     NULL     NULL        NULL
+default_int_size                   NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation      NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only      NULL    NULL     NULL     NULL        NULL
 distsql                            NULL    NULL     NULL     NULL        NULL
