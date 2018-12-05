@@ -377,7 +377,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
-	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, s.Clock().Now(), 0)
 	txn := client.NewTxnWithProto(ctx, db, s.NodeID(), client.RootTxn, txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())

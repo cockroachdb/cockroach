@@ -18,15 +18,6 @@ package cockroach.storage.engine.enginepb;
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
-// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
-// either).
-enum IsolationType {
-  option (gogoproto.goproto_enum_prefix) = false;
-
-  SERIALIZABLE = 0;
-  SNAPSHOT = 1;
-}
-
 // TxnMeta is the metadata of a Transaction record.
 message TxnMeta {
   option (gogoproto.equal) = true;
@@ -37,7 +28,7 @@ message TxnMeta {
   bytes id = 1 [(gogoproto.customname) = "ID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.nullable) = false];
-  IsolationType isolation = 2;
+  reserved 2;
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and
   // determines which range in the cluster will hold the transaction
@@ -85,7 +76,7 @@ message MVCCStatsDelta {
   option (gogoproto.equal) = true;
 
   // TODO(nvanbenschoten): now that we've split MVCCPersistentStats
-  // from this MVCCStatsDelta type, we can turn contains_estimates 
+  // from this MVCCStatsDelta type, we can turn contains_estimates
   // into a three-valued type ('UNCHANGED', 'NO', and 'YES').
   bool contains_estimates = 14;
   sfixed64 last_update_nanos = 1;

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -127,20 +126,15 @@ func TestClientRetryNonTxn(t *testing.T) {
 
 	testCases := []struct {
 		args        roachpb.Request
-		isolation   enginepb.IsolationType
 		canPush     bool
 		expAttempts int
 	}{
 		// Write/write conflicts.
-		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, true, 2},
-		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, true, 2},
-		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, false, 1},
-		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, false, 1},
+		{&roachpb.PutRequest{}, true, 2},
+		{&roachpb.PutRequest{}, false, 1},
 		// Read/write conflicts.
-		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
+		{&roachpb.GetRequest{}, true, 1},
+		{&roachpb.GetRequest{}, false, 1},
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
@@ -158,12 +152,6 @@ func TestClientRetryNonTxn(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if test.isolation == enginepb.SNAPSHOT {
-				if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-					return err
-				}
-			}
-
 			count++
 			// Lay down the intent.
 			if err := txn.Put(ctx, key, "txn-value"); err != nil {
@@ -256,18 +244,15 @@ func TestClientRunTransaction(t *testing.T) {
 		value := []byte("value")
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
-		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-				return err
-			}
-
 			// Put transactional value.
 			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
-			// Attempt to read outside of txn.
-			if gr, err := db.Get(ctx, key); err != nil {
+			// Attempt to read in another txn.
+			conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+			conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Value != nil {
 				return errors.Errorf("expected nil value; got %+v", gr.Value)
@@ -320,12 +305,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 			keys[j] = []byte(fmt.Sprintf("%s/key-%t/%s", testUser, commit, string(s)))
 		}
 
-		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-				return err
-			}
-
 			// We can't use errgroup here because we need to return any TxnAborted
 			// errors if we see them.
 			var wg sync.WaitGroup
@@ -339,9 +319,11 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 						concErrs[i] = err
 						return
 					}
-					// Attempt to read outside of txn. We need to guarantee that the
+					// Attempt to read in another txn. We need to guarantee that the
 					// BeginTxnRequest has finished or we risk aborting the transaction.
-					if gr, err := db.Get(ctx, key); err != nil {
+					conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+					conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+					if gr, err := conflictTxn.Get(ctx, key); err != nil {
 						concErrs[i] = err
 						return
 					} else if gr.Value != nil {

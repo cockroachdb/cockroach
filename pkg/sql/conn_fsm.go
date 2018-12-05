@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	// We dot-import fsm to use common names such as fsm.True/False. State machine
 	// implementations using that library are weird beasts intimately inter-twined
 	// with that package; therefor this file should stay as small as possible.
@@ -125,7 +124,6 @@ type eventTxnStart struct {
 type eventTxnStartPayload struct {
 	tranCtx transitionCtx
 
-	iso enginepb.IsolationType
 	pri roachpb.UserPriority
 	// txnSQLTimestamp is the timestamp that statements executed in the
 	// transaction that is started by this event will report for now(),
@@ -135,14 +133,12 @@ type eventTxnStartPayload struct {
 }
 
 func makeEventTxnStartPayload(
-	iso enginepb.IsolationType,
 	pri roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txnSQLTimestamp time.Time,
 	tranCtx transitionCtx,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
-		iso:             iso,
 		pri:             pri,
 		readOnly:        readOnly,
 		txnSQLTimestamp: txnSQLTimestamp,
@@ -446,7 +442,7 @@ var TxnStateTransitions = Compile(Pattern{
 				ts.resetForNewSQLTxn(
 					ts.connCtx,
 					explicitTxn,
-					payload.txnSQLTimestamp, payload.iso, payload.pri, payload.readOnly,
+					payload.txnSQLTimestamp, payload.pri, payload.readOnly,
 					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
@@ -544,7 +540,6 @@ func (ts *txnState) noTxnToOpen(
 		connCtx,
 		txnTyp,
 		payload.txnSQLTimestamp,
-		payload.iso,
 		payload.pri,
 		payload.readOnly,
 		nil, /* txn */

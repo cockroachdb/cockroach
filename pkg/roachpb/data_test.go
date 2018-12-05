@@ -386,7 +386,7 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	// Advance the txn timestamp.
 	txn.Timestamp.Add(10, 2)
 	txn.BumpEpoch()
@@ -407,7 +407,7 @@ func TestTransactionInclusiveTimeBounds(t *testing.T) {
 		}
 	}
 	origNow := makeTS(1, 1)
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	verify(txn, origNow, origNow)
 	txn.Timestamp.Forward(makeTS(1, 2))
 	verify(txn, origNow, makeTS(1, 2))
@@ -475,7 +475,6 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation: enginepb.SNAPSHOT,
 		Key:       Key("foo"),
 		ID:        uuid.MakeV4(),
 		Epoch:     2,
@@ -492,7 +491,6 @@ var nonZeroTxn = Transaction{
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:                  true,
 	WriteTooOld:              true,
-	RetryOnPush:              true,
 	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
@@ -514,7 +512,6 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
-	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {

@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 )
@@ -311,7 +310,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	{
 		txn := MakeTransaction(
 			"test", nil /* baseKey */, NormalUserPriority,
-			enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
+			hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
 		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{

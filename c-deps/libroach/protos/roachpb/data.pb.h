@@ -1620,12 +1620,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   bool write_too_old() const;
   void set_write_too_old(bool value);
 
-  // bool retry_on_push = 13;
-  void clear_retry_on_push();
-  static const int kRetryOnPushFieldNumber = 13;
-  bool retry_on_push() const;
-  void set_retry_on_push(bool value);
-
   // bool orig_timestamp_was_observed = 16;
   void clear_orig_timestamp_was_observed();
   static const int kOrigTimestampWasObservedFieldNumber = 16;
@@ -1648,7 +1642,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   int status_;
   bool writing_;
   bool write_too_old_;
-  bool retry_on_push_;
   bool orig_timestamp_was_observed_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -3883,20 +3876,6 @@ inline void Transaction::set_write_too_old(bool value) {
   
   write_too_old_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
-}
-
-// bool retry_on_push = 13;
-inline void Transaction::clear_retry_on_push() {
-  retry_on_push_ = false;
-}
-inline bool Transaction::retry_on_push() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.retry_on_push)
-  return retry_on_push_;
-}
-inline void Transaction::set_retry_on_push(bool value) {
-  
-  retry_on_push_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.retry_on_push)
 }
 
 inline int Transaction::intents_size() const {

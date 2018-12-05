@@ -735,12 +735,7 @@ const (
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string,
-	baseKey Key,
-	userPriority UserPriority,
-	isolation enginepb.IsolationType,
-	now hlc.Timestamp,
-	maxOffsetNs int64,
+	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	var maxTS hlc.Timestamp
@@ -757,7 +752,6 @@ func MakeTransaction(
 		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
 			ID:        u,
-			Isolation: isolation,
 			Timestamp: now,
 			Priority:  MakePriority(userPriority),
 			Sequence:  0, // 1-indexed, incremented before each Request
@@ -931,7 +925,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
-	t.RetryOnPush = false
 	t.Sequence = 0
 	// Reset Writing. Since we're using a new epoch, we don't care about the abort
 	// cache.
@@ -982,14 +975,12 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// If the epoch or refreshed timestamp move forward, overwrite
-	// WriteTooOld and RetryOnPush, otherwise the flags are cumulative.
+	// WriteTooOld, otherwise the flags are cumulative.
 	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
 		t.WriteTooOld = o.WriteTooOld
-		t.RetryOnPush = o.RetryOnPush
 		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
 	} else {
 		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-		t.RetryOnPush = t.RetryOnPush || o.RetryOnPush
 		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
 	}
 
@@ -1037,12 +1028,6 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
-// IsSerializable returns whether this transaction uses serializable
-// isolation.
-func (t *Transaction) IsSerializable() bool {
-	return t != nil && t.Isolation == enginepb.SERIALIZABLE
-}
-
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	var buf bytes.Buffer
@@ -1051,10 +1036,10 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d "+
-		"ts=%s orig=%s max=%s wto=%t rop=%t seq=%d",
-		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush, t.Sequence)
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
+		"ts=%s orig=%s max=%s wto=%t seq=%d",
+		t.Short(), Key(t.Key), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1143,7 +1128,6 @@ func PrepareTransactionForRetry(
 			// We have errTxnPri, but this wants a UserPriority. So we're going to
 			// overwrite the priority below.
 			NormalUserPriority,
-			txn.Isolation,
 			newTxnTimestamp,
 			clock.MaxOffset().Nanoseconds(),
 		)
@@ -1181,7 +1165,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if !txn.IsSerializable() || txn.OrigTimestampWasObserved {
+	if txn == nil || txn.OrigTimestampWasObserved {
 		return false, nil
 	}
 	timestamp := txn.Timestamp
