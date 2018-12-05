@@ -435,7 +435,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 //   To be valid, a lease which contains a valid ProposedTS must have
 //   a proposed timestamp greater than the minimum proposed timestamp,
 //   which prevents a restarted process from serving commands, since
-//   the command queue has been wiped through the restart.
+//   the spanlatch manager has been wiped through the restart.
 //
 // - The lease is considered in stasis if the timestamp is within the
 //   maximum clock offset window of the lease expiration.

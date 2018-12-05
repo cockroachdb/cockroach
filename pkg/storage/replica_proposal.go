@@ -69,8 +69,8 @@ type ProposalData struct {
 	// reproposals its MaxLeaseIndex field is mutated.
 	command *storagepb.RaftCommand
 
-	// endCmds.finish is called after command execution to update the timestamp cache &
-	// command queue.
+	// endCmds.finish is called after command execution to update the
+	// timestamp cache & release latches.
 	endCmds *endCmds
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
@@ -121,7 +121,7 @@ func (proposal *ProposalData) finishApplication(pr proposalResult) {
 // returnProposalResult signals proposal.doneCh with the proposal result if it
 // has not already been signaled. The method can be called even before the
 // proposal has finished replication and command application, and does not
-// release the command from the command queue.
+// release the request's latches.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr

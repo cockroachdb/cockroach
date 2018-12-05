@@ -838,8 +838,8 @@ CREATE INDEX track_created_at ON bench.track_choices (track_id, created_at);
 }
 
 // Benchmark inserting distinct rows in batches where the min and max rows in
-// separate batches overlap. This stresses the command queue implementation and
-// verifies that we're allowing parallel execution of commands where possible.
+// separate batches overlap. This stresses the spanlatch manager implementation
+// and verifies that we're allowing parallel execution of commands where possible.
 func runBenchmarkInsertDistinct(b *testing.B, db *gosql.DB, numUsers int) {
 	defer func() {
 		if _, err := db.Exec(`DROP TABLE IF EXISTS bench.insert_distinct`); err != nil {
