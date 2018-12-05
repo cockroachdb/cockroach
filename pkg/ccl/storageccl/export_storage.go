@@ -51,6 +51,8 @@ const (
 	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
 	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
 	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
+	// S3TempTokenParam is the query parameter for session_token in an S3 URI.
+	S3TempTokenParam = "AWS_SESSION_TOKEN"
 	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
 	S3EndpointParam = "AWS_ENDPOINT"
 	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
@@ -106,6 +108,7 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Prefix:    uri.Path,
 			AccessKey: uri.Query().Get(S3AccessKeyParam),
 			Secret:    uri.Query().Get(S3SecretParam),
+			TempToken: uri.Query().Get(S3TempTokenParam),
 			Endpoint:  uri.Query().Get(S3EndpointParam),
 			Region:    uri.Query().Get(S3RegionParam),
 		}
