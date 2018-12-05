@@ -118,6 +118,10 @@ type MutableTableDescriptor struct {
 // should be const.
 type ImmutableTableDescriptor struct {
 	TableDescriptor
+
+	// WritableColumns is a list of columns that can be written to. This includes
+	// public columns and columns in DELETE_AND_WRITE_ONLY state.
+	WritableColumns []ColumnDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -180,7 +184,20 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	return &ImmutableTableDescriptor{TableDescriptor: tbl}
+	writableColumns := tbl.Columns
+	if len(tbl.Mutations) > 0 {
+		writableColumns = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
+		writableColumns = append(writableColumns, tbl.Columns...)
+		for _, m := range tbl.Mutations {
+			if c := m.GetColumn(); c != nil && m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				writableColumns = append(writableColumns, *c)
+			}
+		}
+	}
+	return &ImmutableTableDescriptor{
+		TableDescriptor: tbl,
+		WritableColumns: writableColumns,
+	}
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
