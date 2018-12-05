@@ -82,17 +82,17 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}
-	case types.TTuple:
-		ctyp.SemanticType = ColumnType_TUPLE
-		ctyp.TupleContents = make([]ColumnType, len(t.Types))
-		for i, tc := range t.Types {
-			var err error
-			ctyp.TupleContents[i], err = DatumTypeToColumnType(tc)
-			if err != nil {
+		if t.Typ.FamilyEqual(types.FamTuple) {
+			tup := t.Typ.(types.TTuple)
+			if err := populateTupleFields(&ctyp, tup); err != nil {
 				return ColumnType{}, err
 			}
 		}
-		ctyp.TupleLabels = t.Labels
+	case types.TTuple:
+		ctyp.SemanticType = ColumnType_TUPLE
+		if err := populateTupleFields(&ctyp, t); err != nil {
+			return ColumnType{}, err
+		}
 		return ctyp, nil
 	default:
 		semanticType, err := datumTypeToColumnSemanticType(ptyp)
@@ -102,6 +102,19 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 		ctyp.SemanticType = semanticType
 	}
 	return ctyp, nil
+}
+
+func populateTupleFields(c *ColumnType, tup types.TTuple) error {
+	c.TupleContents = make([]ColumnType, len(tup.Types))
+	for i, tc := range tup.Types {
+		var err error
+		c.TupleContents[i], err = DatumTypeToColumnType(tc)
+		if err != nil {
+			return err
+		}
+	}
+	c.TupleLabels = tup.Labels
+	return nil
 }
 
 // PopulateTypeAttrs set other attributes of the ColumnType from a
@@ -591,7 +604,14 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 	case ColumnType_JSONB:
 		return types.JSON
 	case ColumnType_TUPLE:
-		return types.FamTuple
+		datums := types.TTuple{
+			Types:  make([]types.T, len(c.TupleContents)),
+			Labels: c.TupleLabels,
+		}
+		for i := range c.TupleContents {
+			datums.Types[i] = c.TupleContents[i].ToDatumType()
+		}
+		return datums
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -618,16 +638,9 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
-		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
-	case ColumnType_TUPLE:
-		datums := types.TTuple{
-			Types:  make([]types.T, len(c.TupleContents)),
-			Labels: c.TupleLabels,
+		return types.TArray{
+			Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents),
 		}
-		for i := range c.TupleContents {
-			datums.Types[i] = c.TupleContents[i].ToDatumType()
-		}
-		return datums
 	default:
 		return columnSemanticTypeToDatumType(c, c.SemanticType)
 	}
