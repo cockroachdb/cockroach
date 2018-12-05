@@ -16,13 +16,18 @@
 package cli
 
 import (
+	"bufio"
+	"bytes"
 	"container/heap"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"sync"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,11 +42,141 @@ type logStream interface {
 	error() error
 }
 
-// mergedStream is a heap of log streams.
+const msgBufSize = 1024
+
+var bufPool = sync.Pool{
+	New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, msgBufSize)) },
+}
+
+func getBuf() *bytes.Buffer { return bufPool.Get().(*bytes.Buffer) }
+func putBuf(buf *bytes.Buffer) {
+	if buf.Cap() == msgBufSize {
+		buf.Reset()
+		bufPool.Put(buf)
+	}
+}
+
+// writeLogStream pops messages off of s and writes them to out prepending
+// prefix per message and filtering messages which match filter.
+func writeLogStream(
+	s logStream, out io.Writer, filter *regexp.Regexp, prefix *template.Template,
+) error {
+	const chanSize = 1024
+	const maxWriteBufSize = 1 << 20 // 1 MB
+
+	type entryInfo struct {
+		log.Entry
+		*log.FileInfo
+	}
+	entryChan := make(chan *entryInfo, chanSize)  // read -> process
+	msgChan := make(chan *bytes.Buffer, chanSize) // process -> bufferWrites
+	writeChan := make(chan *bytes.Buffer)         // bufferWrites -> write
+	g, ctx := errgroup.WithContext(context.Background())
+	read := func() error {
+		defer close(entryChan)
+		for e, ok := s.peek(); ok; e, ok = s.peek() {
+			select {
+			case entryChan <- &entryInfo{Entry: e, FileInfo: s.fileInfo()}:
+			case <-ctx.Done():
+				return nil
+			}
+			s.pop()
+		}
+		return s.error()
+	}
+	render := func(ei *entryInfo) (buf *bytes.Buffer, err error) {
+		buf = getBuf()
+		if err = prefix.Execute(buf, ei); err != nil {
+			putBuf(buf)
+			return nil, err
+		}
+		if err := ei.Format(buf); err != nil {
+			putBuf(buf)
+			return nil, err
+		}
+		if filter != nil && !filter.Match(buf.Bytes()) {
+			putBuf(buf)
+			return nil, nil
+		}
+		return buf, nil
+	}
+	process := func() error {
+		defer close(msgChan)
+		for {
+			select {
+			case ei, open := <-entryChan:
+				if !open {
+					return nil
+				}
+				buf, err := render(ei)
+				if err != nil {
+					return err
+				}
+				if buf == nil {
+					continue
+				}
+				select {
+				case msgChan <- buf:
+				case <-ctx.Done():
+					return nil
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}
+	bufferWrites := func() error {
+		defer close(writeChan)
+		writing, pending := &bytes.Buffer{}, &bytes.Buffer{}
+		for {
+			send, recv := writeChan, msgChan
+			if pending.Len() == 0 {
+				send = nil
+				if recv == nil {
+					return nil
+				}
+			} else if pending.Len() > maxWriteBufSize {
+				recv = nil
+			}
+			select {
+			case msg, open := <-recv:
+				if !open {
+					msgChan = nil
+				} else if _, err := io.Copy(pending, msg); err != nil {
+					return err
+				}
+			case send <- pending:
+				writing.Reset()
+				pending, writing = writing, pending
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}
+	write := func() error {
+		for buf := range writeChan {
+			if _, err := out.Write(buf.Bytes()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	g.Go(read)
+	g.Go(process)
+	g.Go(bufferWrites)
+	g.Go(write)
+	return g.Wait()
+}
+
+// mergedStream is a merged heap of log streams.
 type mergedStream []logStream
 
+// newMergedStreamFromPatterns creates a new logStream by first glob
+// expanding pattern, then filtering for matching files which conform to the
+// log filename pattern and match the program. The returned stream will only
+// return log entries in [from, to].
 func newMergedStreamFromPatterns(
-	patterns []string, program *regexp.Regexp, from, to time.Time,
+	ctx context.Context, patterns []string, program *regexp.Regexp, from, to time.Time,
 ) (logStream, error) {
 	paths, err := expandPatterns(patterns)
 	if err != nil {
@@ -51,10 +186,12 @@ func newMergedStreamFromPatterns(
 	if err != nil {
 		return nil, err
 	}
-	return newMergedStream(files, from, to)
+	return newMergedStream(ctx, files, from, to)
 }
 
-func newMergedStream(files []fileInfo, from, to time.Time) (*mergedStream, error) {
+func newMergedStream(
+	ctx context.Context, files []fileInfo, from, to time.Time,
+) (*mergedStream, error) {
 	// TODO(ajwerner): think about clock movement and PID
 	const maxConcurrentFiles = 256 // Should far less than the FD limit.
 	sem := make(chan struct{}, maxConcurrentFiles)
@@ -64,7 +201,7 @@ func newMergedStream(files []fileInfo, from, to time.Time) (*mergedStream, error
 		return func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			s, err := newLogFileStream(files[i], from, to)
+			s, err := newFileLogStream(files[i], from, to)
 			if s != nil {
 				res[i] = s
 			}
@@ -84,6 +221,10 @@ func newMergedStream(files []fileInfo, from, to time.Time) (*mergedStream, error
 		}
 	}
 	res = filtered
+	bsg, ctx := errgroup.WithContext(ctx)
+	for i, s := range res {
+		res[i] = newBufferedLogStream(ctx, bsg, s)
+	}
 	heap.Init(&res)
 	return &res, nil
 }
@@ -204,9 +345,9 @@ type fileInfo struct {
 }
 
 func findLogFiles(paths []string, program *regexp.Regexp, to time.Time) ([]fileInfo, error) {
+	to = to.Truncate(time.Second) // Log files only have second resolution.
 	fileChan := make(chan fileInfo, len(paths))
 	var g errgroup.Group
-	to = to.Truncate(time.Second) // Log files only have second resolution.
 	for i := range paths {
 		p := paths[i]
 		g.Go(func() error {
@@ -232,8 +373,75 @@ func findLogFiles(paths []string, program *regexp.Regexp, to time.Time) ([]fileI
 	return files, nil
 }
 
-// logFileStream represents a logStream from a single file.
-type logFileStream struct {
+// newBufferedLogStream creates a new logStream which will create a goroutine to
+// pop off of s and buffer in memory up to readChanSize entries.
+// The channel and goroutine are created lazily upon the first read after the
+// first call to pop. The initial peek does not consume resources.
+func newBufferedLogStream(ctx context.Context, g *errgroup.Group, s logStream) logStream {
+	bs := &bufferedLogStream{ctx: ctx, logStream: s, g: g}
+	// Fill the initial entry value to prevent initial peek from running the
+	// goroutine.
+	bs.e, bs.ok = s.peek()
+	bs.read = true
+	s.pop()
+	return bs
+}
+
+type bufferedLogStream struct {
+	logStream
+	runOnce sync.Once
+	e       log.Entry
+	read    bool
+	ok      bool
+	c       chan log.Entry
+	ctx     context.Context
+	g       *errgroup.Group
+}
+
+func (bs *bufferedLogStream) run() {
+	const readChanSize = 64
+	bs.c = make(chan log.Entry, readChanSize)
+	bs.g.Go(func() error {
+		defer close(bs.c)
+		for {
+			e, ok := bs.logStream.pop()
+			if !ok {
+				if err := bs.error(); err != io.EOF {
+					return err
+				}
+				return nil
+			}
+			select {
+			case bs.c <- e:
+			case <-bs.ctx.Done():
+				return nil
+			}
+		}
+	})
+}
+
+func (bs *bufferedLogStream) peek() (log.Entry, bool) {
+	if bs.ok && !bs.read {
+		if bs.c == nil { // Indicates that run has not been called.
+			bs.runOnce.Do(bs.run)
+		}
+		bs.e, bs.ok = <-bs.c
+		bs.read = true
+	}
+	if !bs.ok {
+		return log.Entry{}, false
+	}
+	return bs.e, true
+}
+
+func (bs *bufferedLogStream) pop() (log.Entry, bool) {
+	e, ok := bs.peek()
+	bs.read = false
+	return e, ok
+}
+
+// fileLogStream represents a logStream from a single file.
+type fileLogStream struct {
 	from, to time.Time
 	prevTime int64
 	fi       fileInfo
@@ -245,14 +453,15 @@ type logFileStream struct {
 	err error
 }
 
-// newLogFileStream constructs a *logFileStream and then peeks at the file to
+// newFileLogStream constructs a *fileLogStream and then peeks at the file to
 // ensure that it contains a valid entry after from. If the file contains only
 // data which precedes from, (nil, nil) is returned. If an io error is
 // encountered during the initial peek, that error is returned. The underlying
-// file is always closed before returning from this constructor.
-func newLogFileStream(fi fileInfo, from, to time.Time) (logStream, error) {
+// file is always closed before returning from this constructor so the initial
+// peek does not consume resources.
+func newFileLogStream(fi fileInfo, from, to time.Time) (logStream, error) {
 	// we want to create the struct, do a peek, then close the file
-	s := &logFileStream{
+	s := &fileLogStream{
 		fi:   fi,
 		from: from,
 		to:   to,
@@ -267,27 +476,32 @@ func newLogFileStream(fi fileInfo, from, to time.Time) (logStream, error) {
 	return s, nil
 }
 
-func (s *logFileStream) close() {
+func (s *fileLogStream) close() {
 	s.f.Close()
 	s.f = nil
 	s.d = nil
 }
 
-func (s *logFileStream) open() bool {
+func (s *fileLogStream) open() bool {
+	const readBufSize = 1 << 16 // 64kB
 	if s.f, s.err = os.Open(s.fi.path); s.err != nil {
 		return false
 	}
 	if s.err = seekToFirstAfterFrom(s.f, s.from); s.err != nil {
 		return false
 	}
-	s.d = log.NewEntryDecoder(s.f)
+	s.d = log.NewEntryDecoder(bufio.NewReaderSize(s.f, readBufSize))
 	return true
 }
 
-func (s *logFileStream) peek() (log.Entry, bool) {
+func (s *fileLogStream) peek() (log.Entry, bool) {
 	for !s.read && s.err == nil {
-		if s.d == nil && !s.open() {
-			return log.Entry{}, false
+		justOpened := false
+		if s.d == nil {
+			if !s.open() {
+				return log.Entry{}, false
+			}
+			justOpened = true
 		}
 		var e log.Entry
 		if s.err = s.d.Decode(&e); s.err != nil {
@@ -295,11 +509,11 @@ func (s *logFileStream) peek() (log.Entry, bool) {
 			s.e = log.Entry{}
 			break
 		}
-		if e != s.e { // Upon re-opening the file, we'll read s.e again.
-			s.e = e
-		} else {
+		// Upon re-opening the file, we'll read s.e again.
+		if justOpened && e == s.e {
 			continue
 		}
+		s.e = e
 		if s.e.Time < s.prevTime {
 			s.e.Time = s.prevTime
 		} else {
@@ -318,7 +532,7 @@ func (s *logFileStream) peek() (log.Entry, bool) {
 	return s.e, s.err == nil
 }
 
-func (s *logFileStream) pop() (e log.Entry, ok bool) {
+func (s *fileLogStream) pop() (e log.Entry, ok bool) {
 	if e, ok = s.peek(); !ok {
 		return
 	}
@@ -326,9 +540,8 @@ func (s *logFileStream) pop() (e log.Entry, ok bool) {
 	return e, ok
 }
 
-func (s *logFileStream) fileInfo() *log.FileInfo { return &s.fi.FileInfo }
-
-func (s *logFileStream) error() error { return s.err }
+func (s *fileLogStream) fileInfo() *log.FileInfo { return &s.fi.FileInfo }
+func (s *fileLogStream) error() error            { return s.err }
 
 // seekToFirstAfterFrom uses binary search to seek to an offset after all
 // entries which occur before from.
