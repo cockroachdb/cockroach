@@ -130,6 +130,13 @@ func (s *spanFrontier) Frontier() hlc.Timestamp {
 	return s.minHeap[0].ts
 }
 
+func (s *spanFrontier) peekFrontierSpan() roachpb.Span {
+	if s.minHeap.Len() == 0 {
+		return roachpb.Span{}
+	}
+	return s.minHeap[0].span
+}
+
 // Forward advances the timestamp for a span. Any part of the span that doesn't
 // overlap the tracked span set will be ignored. True is returned if the
 // frontier advanced as a result.
