@@ -94,6 +94,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderInTransferBackoffsErrCount = metric.Metadata{
+		Name:        "distsender.errors.intransferbackoff",
+		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer.",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -112,6 +118,7 @@ type DistSenderMetrics struct {
 	LocalSentCount         *metric.Counter
 	NextReplicaErrCount    *metric.Counter
 	NotLeaseHolderErrCount *metric.Counter
+	InTransferBackoffs     *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -124,6 +131,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
 		NextReplicaErrCount:    metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		InTransferBackoffs:     metric.NewCounter(metaDistSenderInTransferBackoffsErrCount),
 	}
 }
 
@@ -1324,6 +1332,15 @@ func (ds *DistSender) sendToReplicas(
 	}
 	br, err := transport.SendNext(ctx, ba)
 
+	// maxSeenLeaseSequence tracks the maximum LeaseSequence seen in a
+	// NotLeaseHolderError. If we encounter a sequence number less than or equal
+	// to maxSeenLeaseSequence number in a subsequent NotLeaseHolderError then
+	// the range must be experiencing a least transfer and the client should back
+	// off using inTransferRetry.
+	maxSeenLeaseSequence := roachpb.LeaseSequence(-1)
+	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
+	inTransferRetry.Next() // The first call to Next does not block.
+
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
 	for {
@@ -1408,6 +1425,19 @@ func (ds *DistSender) sendToReplicas(
 						// Move the new lease holder to the head of the queue for the next retry.
 						transport.MoveToFront(*lh)
 					}
+				}
+				if l := tErr.Lease; !propagateError && l != nil {
+					// Check whether we've seen this lease or a prior lease before and
+					// backoff if so or update maxSeenLeaseSequence if not.
+					if l.Sequence > maxSeenLeaseSequence {
+						maxSeenLeaseSequence = l.Sequence
+						inTransferRetry.Reset() // The following Next call will not block.
+					} else {
+						ds.metrics.InTransferBackoffs.Inc(1)
+						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr at "+
+							"LeaseSequence %d <= %d", l.Sequence, maxSeenLeaseSequence)
+					}
+					inTransferRetry.Next()
 				}
 			default:
 				propagateError = true
