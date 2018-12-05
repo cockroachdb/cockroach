@@ -538,6 +538,10 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 		}
 	}
 	if err := <-txnCh5; err != nil {
-		t.Fatal(err)
+		// txn5 can end up being aborted due to a perceived deadlock. This
+		// is rare and isn't important to the test, so we allow it.
+		if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
+			t.Fatal(err)
+		}
 	}
 }
