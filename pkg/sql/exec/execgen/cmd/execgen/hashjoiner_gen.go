@@ -35,24 +35,38 @@ func genHashJoiner(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_SEL_CLAUSE_BEGIN()", `
+		{{range $sel := $sels}}
+		{{.ClauseBegin}}
+	`, -1)
+	s = strings.Replace(s, "_SEL_CLAUSE_END()", `
+		{{.ClauseEnd}}
+		{{end}}
+	`, -1)
 
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	s = assignNeRe.ReplaceAllString(s, "{{$$neType.Assign $1 $2 $3}}")
 
 	assignHash := regexp.MustCompile(`_ASSIGN_HASH\((.*),(.*)\)`)
-	s = assignHash.ReplaceAllString(s, "{{.UnaryAssign $1 $2}}")
+	s = assignHash.ReplaceAllString(s, "{{$$hashType.UnaryAssign $1 $2}}")
+
+	wrapSel := regexp.MustCompile(`_WRAP_SEL\((.*?)\)`)
+	s = wrapSel.ReplaceAllString(s, `{{call .WrapSel $1}}`)
 
 	tmpl, err := template.New("hashjoiner_op").Parse(s)
+
 	if err != nil {
 		return err
 	}
 
 	return tmpl.Execute(wr, struct {
-		NETemplate   []*overload
-		HashTemplate []*overload
+		NETemplate   interface{}
+		HashTemplate interface{}
+		SelTemplate  interface{}
 	}{
 		NETemplate:   comparisonOpToOverloads[tree.NE],
 		HashTemplate: hashOverloads,
+		SelTemplate:  selOverloads,
 	})
 }
 

@@ -49,7 +49,18 @@ func _ASSIGN_HASH(_, _ string) uint64 {
 	panic("")
 }
 
+// _WRAP_SEL is the template funcion for obtaining the next index of the
+// selection vector if it is non-nil.
+func _WRAP_SEL(_ string) uint64 {
+	panic("")
+}
+
+func _SEL_CLAUSE_BEGIN() {}
+func _SEL_CLAUSE_END()   {}
+
 // */}}
+
+// {{ $sels := .SelTemplate }}
 
 // rehash takes a element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
@@ -58,25 +69,19 @@ func (ht *hashTable) rehash(
 	buckets []uint64, keyIdx int, t types.T, col ColVec, nKeys uint64, sel []uint16,
 ) {
 	switch t {
-	// {{range .HashTemplate}}
+	// {{range $hashType := .HashTemplate}}
 	case _TYPES_T:
 		keys := col._TemplateType()
-		if sel != nil {
-			for i := uint64(0); i < nKeys; i++ {
-				v := keys[sel[i]]
-				var hash uint64
-				_ASSIGN_HASH("hash", "v")
-				buckets[i] = buckets[i]*31 + hash
-			}
-		} else {
-			for i := uint64(0); i < nKeys; i++ {
-				v := keys[i]
-				var hash uint64
-				_ASSIGN_HASH("hash", "v")
-				buckets[i] = buckets[i]*31 + hash
-			}
+
+		_SEL_CLAUSE_BEGIN()
+		for i := uint64(0); i < nKeys; i++ {
+			v := keys[_WRAP_SEL("i")]
+			var hash uint64
+			_ASSIGN_HASH("hash", "v")
+			buckets[i] = buckets[i]*31 + hash
 		}
-		// {{end}}
+		_SEL_CLAUSE_END()
+	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
@@ -88,7 +93,7 @@ func (ht *hashTable) rehash(
 // element in the key is null, then there is no match.
 func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
-	// {{range .NETemplate}}
+	// {{range $neType := .NETemplate}}
 	case _TYPES_T:
 		buildVec := prober.ht.vals[prober.ht.keyCols[keyColIdx]]
 		probeVec := prober.keys[keyColIdx]
@@ -96,46 +101,80 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 		buildKeys := buildVec._TemplateType()
 		probeKeys := probeVec._TemplateType()
 
-		if sel != nil {
-			for i := uint16(0); i < nToCheck; i++ {
-				// keyID of 0 is reserved to represent the end of the next chain.
+		if probeVec.HasNulls() {
+			if buildVec.HasNulls() {
+				_SEL_CLAUSE_BEGIN()
+				for i := uint16(0); i < nToCheck; i++ {
+					// keyID of 0 is reserved to represent the end of the next chain.
 
-				if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-					// the build table key (calculated using keys[keyID - 1] = key) is
-					// compared to the corresponding probe table to determine if a match is
-					// found.
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						// the build table key (calculated using keys[keyID - 1] = key) is
+						// compared to the corresponding probe table to determine if a match is
+						// found.
 
-					if probeVec.NullAt(sel[prober.toCheck[i]]) {
-						prober.groupID[prober.toCheck[i]] = 0
-					} else if buildVec.NullAt64(keyID - 1) {
-						prober.differs[prober.toCheck[i]] = true
-					} else {
-						buildVal := buildKeys[keyID-1]
-						probeVal := probeKeys[sel[prober.toCheck[i]]]
-						var unique bool
-						_ASSIGN_NE("unique", "buildVal", "probeVal")
-
-						if unique {
+						if probeVec.NullAt(_WRAP_SEL("prober.toCheck[i]")) {
+							prober.groupID[prober.toCheck[i]] = 0
+						} else if buildVec.NullAt64(keyID - 1) {
 							prober.differs[prober.toCheck[i]] = true
+						} else {
+							buildVal := buildKeys[keyID-1]
+							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
+							var unique bool
+							_ASSIGN_NE("unique", "buildVal", "probeVal")
+
+							if unique {
+								prober.differs[prober.toCheck[i]] = true
+							}
 						}
 					}
 				}
+				_SEL_CLAUSE_END()
+			} else {
+				_SEL_CLAUSE_BEGIN()
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if probeVec.NullAt(_WRAP_SEL("prober.toCheck[i]")) {
+							prober.groupID[prober.toCheck[i]] = 0
+						} else {
+							buildVal := buildKeys[keyID-1]
+							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
+							var unique bool
+							_ASSIGN_NE("unique", "buildVal", "probeVal")
+
+							if unique {
+								prober.differs[prober.toCheck[i]] = true
+							}
+						}
+					}
+				}
+				_SEL_CLAUSE_END()
 			}
 		} else {
-			for i := uint16(0); i < nToCheck; i++ {
-				// keyID of 0 is reserved to represent the end of the next chain.
-				if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-					// the build table key (calculated using keys[keyID - 1] = key) is
-					// compared to the corresponding probe table to determine if a match is
-					// found.
+			if buildVec.HasNulls() {
+				_SEL_CLAUSE_BEGIN()
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildVec.NullAt64(keyID - 1) {
+							prober.differs[prober.toCheck[i]] = true
+						} else {
+							buildVal := buildKeys[keyID-1]
+							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
+							var unique bool
+							_ASSIGN_NE("unique", "buildVal", "probeVal")
 
-					if probeVec.NullAt(prober.toCheck[i]) {
-						prober.groupID[prober.toCheck[i]] = 0
-					} else if buildVec.NullAt64(keyID - 1) {
-						prober.differs[prober.toCheck[i]] = true
-					} else {
+							if unique {
+								prober.differs[prober.toCheck[i]] = true
+							}
+						}
+					}
+				}
+				_SEL_CLAUSE_END()
+			} else {
+				_SEL_CLAUSE_BEGIN()
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
 						buildVal := buildKeys[keyID-1]
-						probeVal := probeKeys[prober.toCheck[i]]
+						probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
 						var unique bool
 						_ASSIGN_NE("unique", "buildVal", "probeVal")
 
@@ -144,6 +183,7 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 						}
 					}
 				}
+				_SEL_CLAUSE_END()
 			}
 		}
 		// {{end}}

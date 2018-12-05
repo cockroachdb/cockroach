@@ -60,6 +60,28 @@ var comparisonOpInfix = map[tree.ComparisonOperator]string{
 	tree.GE: ">=",
 }
 
+// selOverloads represents the different selection vector states.
+var selOverloads = []struct {
+	ClauseBegin string
+	ClauseEnd   string
+
+	WrapSel func(i string) string
+}{
+	{
+		ClauseBegin: "if sel != nil {",
+		WrapSel: func(i string) string {
+			return fmt.Sprintf("sel[%s]", i)
+		},
+	},
+	{
+		ClauseBegin: "} else {",
+		ClauseEnd:   "}",
+		WrapSel: func(i string) string {
+			return i
+		},
+	},
+}
+
 type overload struct {
 	Name string
 	// Only one of CmpOp and BinOp will be set, depending on whether the overload
