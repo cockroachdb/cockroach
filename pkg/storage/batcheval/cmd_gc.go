@@ -52,7 +52,7 @@ func declareKeysGC(
 			// waiter which blocks only those reads far enough in the
 			// past to be affected by the in-flight GCRequest (i.e.
 			// normally none). This means this key would be special
-			// cased and not tracked by the command queue.
+			// cased and would not acquire latches.
 			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
 		})
 	}

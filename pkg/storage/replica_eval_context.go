@@ -24,7 +24,7 @@ import (
 )
 
 // todoSpanSet is a placeholder value for callsites that need to pass a properly
-// populated SpanSet (with according protection by the command queue) but fail
+// populated SpanSet (with according protection by the spanlatch manager) but fail
 // to do so at the time of writing.
 //
 // See https://github.com/cockroachdb/cockroach/issues/19851.

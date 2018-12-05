@@ -73,15 +73,14 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    ordering guarantees between concurrent requests in the same transaction to
 //    avoid needing explicit chaining. For instance, DistSender uses unary gRPC
 //    requests instead of gRPC streams, so it can't natively expose strong ordering
-//    guarantees. Perhaps more importantly, even when a command has entered the
-//    command queue and evaluated on a Replica, it is not guaranteed to be applied
-//    before interfering commands. This is because the command may be retried
-//    outside of the serialization of the command queue for any number of reasons,
-//    such as leaseholder changes. When the command re-enters the command queue,
-//    it's possible that interfering commands may jump ahead of it. To combat
-//    this, the txnPipeliner uses chaining to throw an error when these
-//    re-orderings would have affected the order that transactional requests
-//    evaluate in.
+//    guarantees. Perhaps more importantly, even when a command has acquired latches
+//    and evaluated on a Replica, it is not guaranteed to be applied before
+//    interfering commands. This is because the command may be retried outside of
+//    the serialization of the spanlatch manager for any number of reasons, such as
+//    leaseholder changes. When the command re-acquired its latches, it's possible
+//    that interfering commands may jump ahead of it. To combat this, the
+//    txnPipeliner uses chaining to throw an error when these re-orderings would
+//    have affected the order that transactional requests evaluate in.
 //
 // The interceptor proves all outstanding writes before committing a transaction
 // by tacking on a QueryIntent request for each one to the front of an

@@ -8,8 +8,8 @@ Index backfills work as follows:
 1. Wait until index converges to write/delete state. This means that every
    write and delete to the primary table gets reflected in the index.
 2. Fix an MVCC timestamp, `tScan`. This timestamp will be used to perform scans
-   in the fast path, which are fast because historical scans don't need to wait
-   in the command queue.
+   in the fast path, which are fast because historical scans don't need to
+   acquire latches that could conflict with foreground traffic.
 3. Backfill in chunks of size `n`, using DistSQL. The chunks should be distinct,
    but the chunk procedure works even if they're not. Each chunk performs steps
    3 to the end, occurring in parallel.

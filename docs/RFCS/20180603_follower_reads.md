@@ -256,19 +256,19 @@ before. This replaces 1), but retrieving an *MLAI* is also less straightforward
 than before.
 
 Assume the replica shows a *Lease Applied Index* of 12, but three proposals are
-in-flight whereas another two have cleared the command queue but are still
-evaluating. Presumably the in-flight proposals were assigned to *Lease Applied
-Indexes* 13 through 15, and the ones being evaluated will receive 15 and 16
-(depending on the order in which they enter Raft). This is where the *MPT*'s
-second function comes in: it tracks writes until they are assigned a
-(provisional) *Lease Applied Index*, and makes sure that an authoritative *MLAI*
-delta is returned with each closed timestamp. This delta is *authoritative* in
-the sense that it will reflect the largest **proposed** *MLAI* seen relevant
-to the newly closed timestamp (relative to the previous one).
+in-flight whereas another two have acquired latches and are still evaluating.
+Presumably the in-flight proposals were assigned to *Lease Applied Indexes* 13
+through 15, and the ones being evaluated will receive 15 and 16 (depending on
+the order in which they enter Raft). This is where the *MPT*'s second function
+comes in: it tracks writes until they are assigned a (provisional) *Lease
+Applied Index*, and makes sure that an authoritative *MLAI* delta is returned
+with each closed timestamp. This delta is *authoritative* in the sense that it
+will reflect the largest **proposed** *MLAI* seen relevant to the newly closed
+timestamp (relative to the previous one).
 
 Consequently when we say that a proposal is tracked, we're talking about the
-interval between determining the request timestamp (which is after clearing the
-command queue) and determining the proposal's *Lease Applied Index*.
+interval between determining the request timestamp (which is after acquiring
+latches) and determining the proposal's *Lease Applied Index*.
 
 It's natural to ask whether there may be "false positives", i.e. whether a
 command proposed for some *Lease Applied Index* may never actually return from
