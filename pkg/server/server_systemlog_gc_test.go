@@ -66,7 +66,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				storagepb.RangeLogEventType_add,
+				storagepb.RangeLogEventType_add.String(),
 			)
 			a.NoError(err)
 		}
