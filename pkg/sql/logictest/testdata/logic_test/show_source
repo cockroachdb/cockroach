@@ -33,9 +33,9 @@ datestyle                          ISO, MDY
 default_transaction_isolation      serializable
 default_transaction_read_only      off
 distsql                            2.0-off
+experimental_enable_zigzag_join    off
 experimental_force_lookup_join     off
 experimental_force_split_at        off
-experimental_force_zigzag_join     off
 experimental_serial_normalization  rowid
 experimental_vectorize             off
 extra_float_digits                 0

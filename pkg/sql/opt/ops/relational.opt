@@ -293,6 +293,63 @@ define MergeJoinPrivate {
 	RightOrdering OrderingChoice
 }
 
+# ZigzagJoin represents a join that is executed using the zigzag joiner.
+# All fields except for the ON expression are stored in the private;
+# since the zigzag joiner operates directly on indexes and doesn't
+# support arbitrary inputs.
+#
+# TODO(itsbilal): Add support for representing multi-way zigzag joins.
+[Relational]
+define ZigzagJoin {
+	On   FiltersExpr
+
+	_ ZigzagJoinPrivate
+}
+
+[Private]
+define ZigzagJoinPrivate {
+	# LeftTable and RightTable identifies the left and right tables for this
+	# join.
+	LeftTable TableID
+	RightTable TableID
+
+	# LeftIndex and RightIndex identifies the index to do lookups in (whether
+	# primary or secondary). It can be passed to the opt.Table.Index(i int)
+	# method in order to fetch the opt.Index metadata.
+	LeftIndex int
+	RightIndex int
+
+	# LeftEqCols and RightEqCols contains lists of columns on the left and
+	# right sides that are being equated. Both lists must be of equal length.
+	LeftEqCols ColList
+	RightEqCols ColList
+
+	# FixedVals, LeftFixedCols and RightFixedCols reference fixed values.
+	# Fixed values are constants that constrain each index' prefix columns
+	# (the ones denoted in {Left,Right}FixedCols). These fixed columns must
+	# lie at the start of the index and must immediately precede EqCols.
+	#
+	# FixedVals is a list of 2 tuples, each representing one side's fixed
+	# values.
+	#
+	# Read the comment in pkg/sql/distsqlrun/zigzagjoiner.go for more on
+	# fixed and equality columns.
+	FixedVals ScalarListExpr
+	LeftFixedCols ColList
+	RightFixedCols ColList
+
+	# Cols is the set of columns produced by the zigzag join. This set can
+	# contain columns from either side's index.
+	Cols ColSet
+
+	# leftProps and rightProps cache relational properties corresponding to an
+	# unconstrained scan on the respective indexes. By putting this in the
+	# expr, zigzag joins can reuse a lot of the logical property building code
+	# for joins.
+	leftProps RelProps
+	rightProps RelProps
+}
+
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.

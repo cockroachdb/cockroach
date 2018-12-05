@@ -143,13 +143,14 @@ func (f *stubFactory) ConstructLookupJoin(
 }
 
 func (f *stubFactory) ConstructZigzagJoin(
-	joinType sqlbase.JoinType,
 	leftTable opt.Table,
 	leftIndex opt.Index,
 	rightTable opt.Table,
 	rightIndex opt.Index,
 	leftEqCols []exec.ColumnOrdinal,
 	rightEqCols []exec.ColumnOrdinal,
+	leftCols exec.ColumnOrdinalSet,
+	rightCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,

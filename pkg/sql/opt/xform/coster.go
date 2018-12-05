@@ -124,6 +124,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.LookupJoinOp:
 		cost = c.computeLookupJoinCost(candidate.(*memo.LookupJoinExpr))
 
+	case opt.ZigzagJoinOp:
+		cost = c.computeZigzagJoinCost(candidate.(*memo.ZigzagJoinExpr))
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		cost = c.computeSetCost(candidate)
@@ -311,6 +314,21 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
 	perRowCost := seqIOCostFactor + c.rowScanCost(join.Table, join.Index, numLookupCols)
 	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
+	return cost
+}
+
+func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
+	rowCount := join.Relational().Stats.RowCount
+
+	// Zigzag joins only scan columns in either index, the number of additional
+	// columns scanned is 0. Assume the upper bound on per-row cost to be the
+	// sum of the two scan costs.
+	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, 0)
+	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, 0)
+
+	// Double the cost of emitting rows as well as the cost of seeking rows,
+	// given two indexes will be accessed.
+	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost)
 	return cost
 }
 
