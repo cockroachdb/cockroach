@@ -216,20 +216,17 @@ join            ·                  ·                (x, z)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
-root                 ·              ·                       ("array")  ·
- ├── values          ·              ·                       ("array")  ·
- │                   size           1 column, 1 row         ·          ·
- │                   row 0, expr 0  COALESCE(@S1, ARRAY[])  ·          ·
- └── subquery        ·              ·                       ("array")  ·
-      │              id             @S1                     ·          ·
-      │              original sql   (SELECT x FROM b)       ·          ·
-      │              exec mode      one row                 ·          ·
-      └── group      ·              ·                       (agg0)     ·
-           │         aggregate 0    array_agg(x)            ·          ·
-           │         scalar         ·                       ·          ·
-           └── scan  ·              ·                       (x)        ·
-·                    table          b@primary               ·          ·
-·                    spans          ALL                     ·          ·
+root            ·              ·                  ("array")  ·
+ ├── values     ·              ·                  ("array")  ·
+ │              size           1 column, 1 row    ·          ·
+ │              row 0, expr 0  ARRAY @S1          ·          ·
+ └── subquery   ·              ·                  ("array")  ·
+      │         id             @S1                ·          ·
+      │         original sql   (SELECT x FROM b)  ·          ·
+      │         exec mode      all rows           ·          ·
+      └── scan  ·              ·                  (x)        ·
+·               table          b@primary          ·          ·
+·               spans          ALL                ·          ·
 
 # Case where the plan has an apply join.
 query error could not decorrelate subquery

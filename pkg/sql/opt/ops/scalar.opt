@@ -38,6 +38,12 @@ define Subquery {
 [Private]
 define SubqueryPrivate {
 	OriginalExpr Subquery
+	Ordering Ordering
+
+  # RequestedCol is set if there could possibly be other columns in the input
+  # (say, if there was an ordering that must be respected) besides the one that
+  # will eventually be output.
+	RequestedCol ColumnID
 
 	# Cmp is only used for AnyOp.
 	Cmp Operator
@@ -635,6 +641,17 @@ define Array {
 define Indirection {
     Input ScalarExpr
     Index ScalarExpr
+}
+
+# ArrayFlatten is an ARRAY(<subquery>) expression. ArrayFlatten takes as input
+# a subquery which returns a single column and constructs a scalar array as the
+# output. Any NULLs are included in the results, and if the subquery has an
+# ORDER BY clause that ordering will be respected by the resulting array.
+[Scalar]
+define ArrayFlatten {
+    Input RelExpr
+
+    _ SubqueryPrivate
 }
 
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given

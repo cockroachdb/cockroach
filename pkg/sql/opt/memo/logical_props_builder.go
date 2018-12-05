@@ -1076,7 +1076,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 		// Division by zero error is possible.
 		shared.CanHaveSideEffects = true
 
-	case *SubqueryExpr, *ExistsExpr, *AnyExpr:
+	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
 		shared.HasCorrelatedSubquery = !e.Child(0).(RelExpr).Relational().OuterCols.Empty()
 
