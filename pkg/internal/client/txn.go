@@ -58,7 +58,6 @@ type Txn struct {
 		syncutil.Mutex
 		ID        uuid.UUID
 		debugName string
-		isolation enginepb.IsolationType
 
 		// userPriority is the transaction's priority. If not set,
 		// NormalUserPriority will be used.
@@ -242,25 +241,11 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetIsolation sets the transaction's isolation type. Transactions default to
-// serializable isolation. The isolation must be set before any operations are
-// performed on the transaction.
-func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-
-	if err := txn.mu.sender.SetIsolation(isolation); err != nil {
-		return err
-	}
-	txn.mu.isolation = isolation
-	return nil
-}
-
 // Isolation returns the transaction's isolation type.
 func (txn *Txn) Isolation() enginepb.IsolationType {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.isolation
+	return enginepb.SERIALIZABLE
 }
 
 // OrigTimestamp returns the transaction's starting timestamp.
@@ -973,7 +958,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 			txn.debugNameLocked(),
 			nil, // baseKey
 			txn.mu.userPriority,
-			txn.mu.isolation,
+			enginepb.SERIALIZABLE,
 			now,
 			txn.db.clock.MaxOffset().Nanoseconds(),
 		))

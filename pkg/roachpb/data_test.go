@@ -476,7 +476,7 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation: enginepb.SNAPSHOT,
+		Isolation: enginepb.SERIALIZABLE,
 		Key:       Key("foo"),
 		ID:        uuid.MakeV4(),
 		Epoch:     2,
@@ -493,7 +493,6 @@ var nonZeroTxn = Transaction{
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:                  true,
 	WriteTooOld:              true,
-	RetryOnPush:              true,
 	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
@@ -515,7 +514,7 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
-	txn3.Isolation = enginepb.SNAPSHOT
+	txn3.Isolation = enginepb.SERIALIZABLE
 	txn3.Update(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {

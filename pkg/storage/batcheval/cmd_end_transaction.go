@@ -389,9 +389,6 @@ func IsEndTransactionTriggeringRetryError(
 		if isTxnPushed {
 			if txn.Isolation == enginepb.SERIALIZABLE {
 				retry, reason = true, roachpb.RETRY_SERIALIZABLE
-			} else if txn.RetryOnPush {
-				// If pushing requires a retry and the transaction was pushed, retry.
-				retry, reason = true, roachpb.RETRY_DELETE_RANGE
 			}
 		}
 	}

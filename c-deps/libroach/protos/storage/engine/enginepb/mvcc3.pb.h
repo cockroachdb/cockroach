@@ -104,13 +104,12 @@ namespace enginepb {
 
 enum IsolationType {
   SERIALIZABLE = 0,
-  SNAPSHOT = 1,
   IsolationType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   IsolationType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool IsolationType_IsValid(int value);
 const IsolationType IsolationType_MIN = SERIALIZABLE;
-const IsolationType IsolationType_MAX = SNAPSHOT;
+const IsolationType IsolationType_MAX = SERIALIZABLE;
 const int IsolationType_ARRAYSIZE = IsolationType_MAX + 1;
 
 // ===================================================================

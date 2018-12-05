@@ -3057,7 +3057,6 @@ const int Transaction::kRefreshedTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
-const int Transaction::kRetryOnPushFieldNumber;
 const int Transaction::kIntentsFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
@@ -3327,20 +3326,6 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // bool retry_on_push = 13;
-      case 13: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(104u /* 104 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &retry_on_push_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       case 14: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(114u /* 114 & 0xFF */)) {
@@ -3465,11 +3450,6 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(12, this->write_too_old(), output);
   }
 
-  // bool retry_on_push = 13;
-  if (this->retry_on_push() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->retry_on_push(), output);
-  }
-
   if (this->has_epoch_zero_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       14, this->_internal_epoch_zero_timestamp(), output);
@@ -3575,11 +3555,6 @@ size_t Transaction::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  // bool retry_on_push = 13;
-  if (this->retry_on_push() != 0) {
-    total_size += 1 + 1;
-  }
-
   // bool orig_timestamp_was_observed = 16;
   if (this->orig_timestamp_was_observed() != 0) {
     total_size += 2 + 1;
@@ -3635,9 +3610,6 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.write_too_old() != 0) {
     set_write_too_old(from.write_too_old());
   }
-  if (from.retry_on_push() != 0) {
-    set_retry_on_push(from.retry_on_push());
-  }
   if (from.orig_timestamp_was_observed() != 0) {
     set_orig_timestamp_was_observed(from.orig_timestamp_was_observed());
   }
@@ -3673,7 +3645,6 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(status_, other->status_);
   swap(writing_, other->writing_);
   swap(write_too_old_, other->write_too_old_);
-  swap(retry_on_push_, other->retry_on_push_);
   swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

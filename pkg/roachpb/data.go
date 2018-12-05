@@ -922,7 +922,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
-	t.RetryOnPush = false
 	t.Sequence = 0
 	// Reset Writing. Since we're using a new epoch, we don't care about the abort
 	// cache.
@@ -973,14 +972,12 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// If the epoch or refreshed timestamp move forward, overwrite
-	// WriteTooOld and RetryOnPush, otherwise the flags are cumulative.
+	// WriteTooOld, otherwise the flags are cumulative.
 	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
 		t.WriteTooOld = o.WriteTooOld
-		t.RetryOnPush = o.RetryOnPush
 		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
 	} else {
 		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-		t.RetryOnPush = t.RetryOnPush || o.RetryOnPush
 		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
 	}
 
@@ -1043,9 +1040,9 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d "+
-		"ts=%s orig=%s max=%s wto=%t rop=%t seq=%d",
+		"ts=%s orig=%s max=%s wto=%t seq=%d",
 		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush, t.Sequence)
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}

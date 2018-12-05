@@ -6376,13 +6376,6 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if retry, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
 		return false
 	}
-	if ba.Txn.Isolation == enginepb.SNAPSHOT && ba.Txn.OrigTimestamp != ba.Txn.Timestamp {
-		// Snapshot transactions that have been pushed are never eligible for
-		// the 1PC path. Instead, they must go through the slow path when their
-		// timestamp has been pushed. See comments on Transaction.orig_timestamp
-		// for the reasons why this is necessary to prevent lost update anomalies.
-		return false
-	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
 }
 

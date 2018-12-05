@@ -41,15 +41,6 @@ func QueryIntent(
 	h := cArgs.Header
 	reply := resp.(*roachpb.QueryIntentResponse)
 
-	// Snapshot transactions cannot be prevented using a QueryIntent command.
-	// This is because we use the timestamp cache to prevent a transaction from
-	// committing, but a SNAPSHOT transaction does not need to restart/abort if
-	// it runs into the timestamp cache and its timestamp is pushed forwards.
-	if args.Txn.Isolation == enginepb.SNAPSHOT &&
-		args.IfMissing == roachpb.QueryIntentRequest_PREVENT {
-		return result.Result{}, errors.Errorf("cannot prevent SNAPSHOT transaction with QueryIntent")
-	}
-
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.

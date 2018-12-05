@@ -212,12 +212,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 	ts.mu.Unlock()
 
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		panic(err)
-	}
-	if err := ts.setIsolationLevel(isolation); err != nil {
-		panic(err)
-	}
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
@@ -283,14 +277,6 @@ func (ts *txnState) finishExternalTxn() {
 	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.txn = nil
-}
-
-func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		return err
-	}
-	ts.isolation = isolation
-	return nil
 }
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {

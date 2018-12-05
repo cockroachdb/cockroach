@@ -24,7 +24,7 @@ enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;
 
   SERIALIZABLE = 0;
-  SNAPSHOT = 1;
+  reserved 1;
 }
 
 // TxnMeta is the metadata of a Transaction record.
@@ -85,7 +85,7 @@ message MVCCStatsDelta {
   option (gogoproto.equal) = true;
 
   // TODO(nvanbenschoten): now that we've split MVCCPersistentStats
-  // from this MVCCStatsDelta type, we can turn contains_estimates 
+  // from this MVCCStatsDelta type, we can turn contains_estimates
   // into a three-valued type ('UNCHANGED', 'NO', and 'YES').
   bool contains_estimates = 14;
   sfixed64 last_update_nanos = 1;

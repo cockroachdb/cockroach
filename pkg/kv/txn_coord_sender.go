@@ -247,7 +247,6 @@ type TxnMetrics struct {
 
 	// Counts of restart types.
 	RestartsWriteTooOld       *metric.Counter
-	RestartsDeleteRange       *metric.Counter
 	RestartsSerializable      *metric.Counter
 	RestartsPossibleReplay    *metric.Counter
 	RestartsAsyncWriteFailure *metric.Counter
@@ -299,12 +298,6 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRestartsDeleteRange = metric.Metadata{
-		Name:        "txn.restarts.deleterange",
-		Help:        "Number of restarts due to a forwarded commit timestamp and a DeleteRange command",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRestartsSerializable = metric.Metadata{
 		Name:        "txn.restarts.serializable",
 		Help:        "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
@@ -336,7 +329,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Durations:                 metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                  metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:       metric.NewCounter(metaRestartsWriteTooOld),
-		RestartsDeleteRange:       metric.NewCounter(metaRestartsDeleteRange),
 		RestartsSerializable:      metric.NewCounter(metaRestartsSerializable),
 		RestartsPossibleReplay:    metric.NewCounter(metaRestartsPossibleReplay),
 		RestartsAsyncWriteFailure: metric.NewCounter(metaRestartsAsyncWriteFailure),
@@ -825,8 +817,6 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		switch tErr.Reason {
 		case roachpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc(1)
-		case roachpb.RETRY_DELETE_RANGE:
-			tc.metrics.RestartsDeleteRange.Inc(1)
 		case roachpb.RETRY_SERIALIZABLE:
 			tc.metrics.RestartsSerializable.Inc(1)
 		case roachpb.RETRY_POSSIBLE_REPLAY:
@@ -984,21 +974,6 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 		panic("cannot change the debug name of a running transaction")
 	}
 	tc.mu.txn.Name = name
-}
-
-// SetIsolation is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SetIsolation(isolation enginepb.IsolationType) error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
-	if tc.mu.txn.Isolation == isolation {
-		return nil
-	}
-	if tc.mu.active {
-		return errors.Errorf("cannot change the isolation level of a running transaction")
-	}
-	tc.mu.txn.Isolation = isolation
-	return nil
 }
 
 // OrigTimestamp is part of the client.TxnSender interface.
