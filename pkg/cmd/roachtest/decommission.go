@@ -63,7 +63,9 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 	waitReplicatedAwayFrom := func(downNodeID string) error {
 		db := c.Conn(ctx, nodes)
-		defer db.Close()
+		defer func() {
+			_ = db.Close()
+		}()
 
 		for {
 			var count int
@@ -93,7 +95,9 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 	waitUpReplicated := func(targetNodeID string) error {
 		db := c.Conn(ctx, nodes)
-		defer db.Close()
+		defer func() {
+			_ = db.Close()
+		}()
 
 		for ok := false; !ok; {
 			stmtReplicaCount := fmt.Sprintf(
@@ -253,24 +257,22 @@ func registerDecommission(r *registry) {
 	})
 }
 
+func execCLI(
+	ctx context.Context, t *test, c *cluster, runNode int, extraArgs ...string,
+) (string, error) {
+	args := []string{"./cockroach"}
+	args = append(args, extraArgs...)
+	args = append(args, "--insecure")
+	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
+	t.l.Printf("%s\n", buf)
+	return string(buf), err
+}
+
 func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
-
-	execCLI := func(
-		ctx context.Context,
-		runNode int,
-		extraArgs ...string,
-	) (string, error) {
-		args := []string{"./cockroach"}
-		args = append(args, extraArgs...)
-		args = append(args, "--insecure")
-		args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
-		t.l.Printf("%s\n", buf)
-		return string(buf), err
-	}
 
 	decommission := func(
 		ctx context.Context,
@@ -283,7 +285,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		for _, target := range targetNodes {
 			args = append(args, strconv.Itoa(target))
 		}
-		return execCLI(ctx, runNode, args...)
+		return execCLI(ctx, t, c, runNode, args...)
 	}
 
 	matchCSV := func(csvStr string, matchColRow [][]string) (err error) {
@@ -366,7 +368,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// Check that even though the node is decommissioned, we still see it (since
 	// it remains live) in `node ls`.
 	{
-		o, err := execCLI(ctx, 2, "node", "ls", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format", "csv")
 		if err != nil {
 			t.Fatalf("node-ls failed: %v", err)
 		}
@@ -383,7 +385,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 	// Ditto `node status`.
 	{
-		o, err := execCLI(ctx, 2, "node", "status", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -433,7 +435,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		// likely stuck forever and we want to see the output.
 		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
-		if _, err := execCLI(timeoutCtx, 3, "quit", "--decommission"); err != nil {
+		if _, err := execCLI(timeoutCtx, t, c, 3, "quit", "--decommission"); err != nil {
 			if timeoutCtx.Err() != nil {
 				t.Fatalf("quit --decommission failed: %s", err)
 			}
@@ -557,7 +559,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// Check that (at least after a bit) the node disappears from `node ls`
 	// because it is decommissioned and not live.
 	for {
-		o, err := execCLI(ctx, 2, "node", "ls", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format", "csv")
 		if err != nil {
 			t.Fatalf("node-ls failed: %v", err)
 		}
@@ -576,7 +578,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		break
 	}
 	for {
-		o, err := execCLI(ctx, 2, "node", "status", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -605,7 +607,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	if err := retry.WithMaxAttempts(ctx, retryOpts, 20, func() error {
-		o, err := execCLI(ctx, 2, "node", "status", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -697,5 +699,127 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 	// absorb the first one's replicas.
 	if _, err := decommission(ctx, 2, c.Node(1), "decommission"); err != nil {
 		t.Fatalf("decommission failed: %v", err)
+	}
+}
+
+func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster) {
+	if c.nodes != 6 {
+		t.Fatal("test needs to be run with 6 nodes")
+	}
+
+	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Start(ctx, t, args, c.Range(1, 3))
+
+	t.Status("waiting for full replication")
+	func() {
+		db := c.Conn(ctx, 3)
+		defer func() {
+			_ = db.Close()
+		}()
+		for {
+			var fullReplicated bool
+			if err := db.QueryRow(
+				// Check if all ranges are fully replicated.
+				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+			).Scan(&fullReplicated); err != nil {
+				t.Fatal(err)
+			}
+			if fullReplicated {
+				break
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+
+	c.Run(ctx, c.Node(1), "./workload run kv {pgurl:1} --init --max-ops=1 --splits 100")
+
+	// Kill the third node so it won't know that all of its replicas are moved
+	// elsewhere. (We don't use the first because that's what roachtest will
+	// join new nodes to).
+	c.Stop(ctx, c.Node(3))
+
+	// Start three new nodes that will take over all data.
+	c.Start(ctx, t, args, c.Range(4, 6))
+
+	if _, err := execCLI(ctx, t, c, 2, "node", "decommission", "1", "2", "3"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stop the remaining two old nodes.
+	c.Stop(ctx, c.Range(1, 2))
+
+	db4 := c.Conn(ctx, 4)
+	defer func() {
+		_ = db4.Close()
+	}()
+
+	for _, change := range []string{
+		"RANGE default", "RANGE meta", "RANGE system", "RANGE liveness", "DATABASE system", "TABLE system.jobs",
+	} {
+		stmt := `ALTER ` + change + ` CONFIGURE ZONE = 'constraints: {"-deadnode"}'`
+		c.l.Printf(stmt + "\n")
+		if _, err := db4.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Recommission n3 so that when it starts again, it doesn't even know that
+	// it decommissioned (being decommissioning basically lets the replica GC
+	// queue run wild).
+	if _, err := execCLI(ctx, t, c, 4, "node", "recommission", "3"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart the remainder of the cluster. This makes sure there are lots of
+	// dormant ranges.
+	//
+	// TODO(tbg): understand why this step is necessary (without it, n3 sheds
+	// its replicas really quickly). It shouldn't matter that the ranges are
+	// not dormant because n3 doesn't know any of those peers and those peers
+	// won't contact the replicas of n3. Perhaps the real reason is the loss
+	// of Gossip state. Maybe n3 catches wind of its having been decommissioned
+	// that way?
+	c.Stop(ctx, c.Range(4, 6))
+	c.Start(ctx, t, args, c.Range(4, 6))
+
+	// Restart n3. We have to manually tell it where to find a new node or it
+	// won't be able to connect. Give it the attribute that we've used as a
+	// negative constraint for "everything" so that no new replicas are added
+	// to this node.
+	//
+	// TODO(tbg): construct a proper join flag. We don't have the right roachprod
+	// extender to do so ergonomically. Probably should add {pghost}.
+	c.Start(ctx, t, c.Node(3), startArgs(
+		"--args=--join=127.0.0.1:{pgport:4}",
+		"--args=--attrs=deadnode",
+		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
+	))
+
+	db3 := c.Conn(ctx, 3)
+	defer func() {
+		_ = db3.Close()
+	}()
+
+	// Loop for two metric sample intervals (10s) to make sure n3 doesn't see any
+	// underreplicated ranges.
+	var sawNonzero bool
+	var n int
+	for tBegin := timeutil.Now(); timeutil.Since(tBegin) < 5*time.Minute; time.Sleep(time.Second) {
+		if err := db3.QueryRowContext(
+			ctx,
+			`SELECT value FROM crdb_internal.node_metrics WHERE name = 'replicas'`,
+		).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("%d replicas on n3\n", n)
+		if sawNonzero && n == 0 {
+			break
+		}
+		sawNonzero = true
+	}
+	if n != 0 {
+		t.Fatalf("replica count didn't drop to zero: %d", n)
 	}
 }
