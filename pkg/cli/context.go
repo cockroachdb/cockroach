@@ -142,6 +142,10 @@ func initCLIDefaults() {
 	systemBenchCtx.writeSize = 32 << 10
 	systemBenchCtx.syncInterval = 512 << 10
 
+	networkBenchCtx.server = true
+	networkBenchCtx.port = 8081
+	networkBenchCtx.addresses = []string{"localhost:8081"}
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -305,7 +309,7 @@ var nodeCtx struct {
 	statusShowAll          bool
 }
 
-// systemBenchCtx captures the command-line parameters of the `bench` command.
+// systemBenchCtx captures the command-line parameters of the `systembench` command.
 // Defaults set by InitCLIDefaults() above.
 var systemBenchCtx struct {
 	concurrency  int
@@ -313,6 +317,13 @@ var systemBenchCtx struct {
 	tempDir      string
 	writeSize    int64
 	syncInterval int64
+}
+
+var networkBenchCtx struct {
+	server    bool
+	port      int
+	addresses []string
+	latency   bool
 }
 
 // sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
