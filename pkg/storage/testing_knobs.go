@@ -34,10 +34,16 @@ type StoreTestingKnobs struct {
 	EvalKnobs storagebase.BatchEvalTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each command on a
-	// replica. The filter is run before the request is added to the
-	// CommandQueue, so blocking in the filter will not block interfering
-	// requests. If it returns an error, the command will not be evaluated.
+	// replica. The filter is run before the request acquires latches, so
+	// blocking in the filter will not block interfering requests. If it
+	// returns an error, the command will not be evaluated.
 	TestingRequestFilter storagebase.ReplicaRequestFilter
+
+	// TestingLatchFilter is called before evaluating each command on a replica
+	// but after acquiring latches for the command. Blocking in the filter will
+	// block interfering requests. If it returns an error, the command will not
+	// be evaluated.
+	TestingLatchFilter storagebase.ReplicaRequestFilter
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter storagebase.ReplicaProposalFilter
@@ -67,9 +73,6 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
-	// OnCommandQueueAction is called when the BatchRequest performs an action
-	// on the CommandQueue.
-	OnCommandQueueAction func(*roachpb.BatchRequest, storagebase.CommandQueueAction)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.

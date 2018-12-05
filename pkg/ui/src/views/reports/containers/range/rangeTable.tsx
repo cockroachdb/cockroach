@@ -16,7 +16,6 @@ import classNames from "classnames";
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
-import { Link } from "react-router";
 import React from "react";
 
 import * as protos from "src/js/protos";
@@ -87,10 +86,8 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "mvccIntentBytesCount", display: "MVCC Intent Bytes/Count", compareToLeader: true },
   { variable: "mvccSystemBytesCount", display: "MVCC System Bytes/Count", compareToLeader: true },
   { variable: "rangeMaxBytes", display: "Max Range Size Before Split", compareToLeader: true },
-  { variable: "cmdQWrites", display: "CmdQ Writes Local/Global", compareToLeader: false },
-  { variable: "cmdQReads", display: "CmdQ Reads Local/Global", compareToLeader: false },
-  { variable: "cmdQMaxOverlapsSeen", display: "CmdQ Max Overlaps Local/Global", compareToLeader: false },
-  { variable: "cmdQTreeSize", display: "CmdQ Tree Size Local/Global", compareToLeader: false },
+  { variable: "writeLatches", display: "Write Latches Local/Global", compareToLeader: false },
+  { variable: "readLatches", display: "Read Latches Local/Global", compareToLeader: false },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -152,7 +149,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     return {
       value: [`${humanizedBytes} / ${count.toString()} count`],
       title: [`${humanizedBytes} / ${count.toString()} count`,
-              `${bytes.toString()} bytes / ${count.toString()} count`],
+      `${bytes.toString()} bytes / ${count.toString()} count`],
     };
   }
 
@@ -176,7 +173,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     };
   }
 
-  contentCommandQueue(
+  contentLatchInfo(
     local: Long | number, global: Long | number, isRaftLeader: boolean,
   ): RangeTableCellContent {
     if (isRaftLeader) {
@@ -398,33 +395,6 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     );
   }
 
-  renderCommandQueueVizRow(
-    sortedStoreIDs: number[],
-    rangeID: Long,
-    leader: protos.cockroach.server.serverpb.IRangeInfo,
-  ) {
-    const vizLink = (
-      <Link
-        to={`/reports/range/${rangeID}/cmdqueue`}
-        className="debug-link">
-        Visualize
-      </Link>
-    );
-
-    return (
-      <tr className="range-table__row">
-        <th className="range-table__cell range-table__cell--header">
-          CmdQ State
-        </th>
-        {sortedStoreIDs.map((storeId) => (
-          <td className="range-table__cell" key={storeId}>
-            {storeId === leader.source_store_id ? vizLink : "-"}
-          </td>
-        ))}
-      </tr>
-    );
-  }
-
   render() {
     const { infos, replicas } = this.props;
     const leader = _.head(infos);
@@ -520,24 +490,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
         mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
         rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
-        cmdQWrites: this.contentCommandQueue(
-          FixLong(info.cmd_q_local.write_commands),
-          FixLong(info.cmd_q_global.write_commands),
+        writeLatches: this.contentLatchInfo(
+          FixLong(info.latches_local.write_count),
+          FixLong(info.latches_global.write_count),
           raftLeader,
         ),
-        cmdQReads: this.contentCommandQueue(
-          FixLong(info.cmd_q_local.read_commands),
-          FixLong(info.cmd_q_global.read_commands),
-          raftLeader,
-        ),
-        cmdQMaxOverlapsSeen: this.contentCommandQueue(
-          FixLong(info.cmd_q_local.max_overlaps_seen),
-          FixLong(info.cmd_q_global.max_overlaps_seen),
-          raftLeader,
-        ),
-        cmdQTreeSize: this.contentCommandQueue(
-          info.cmd_q_local.tree_size,
-          info.cmd_q_global.tree_size,
+        readLatches: this.contentLatchInfo(
+          FixLong(info.latches_local.read_count),
+          FixLong(info.latches_global.read_count),
           raftLeader,
         ),
       });
@@ -572,7 +532,6 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
                 )
               ))
             }
-            {this.renderCommandQueueVizRow(sortedStoreIDs, rangeID, leader)}
             {
               _.map(replicas, (replica, key) => (
                 this.renderRangeReplicaRow(

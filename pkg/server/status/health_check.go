@@ -50,7 +50,7 @@ var trackedMetrics = map[string]threshold{
 	"ranges.unavailable":          gaugeZero,
 	"ranges.underreplicated":      gaugeZero,
 	"requests.backpressure.split": gaugeZero,
-	"requests.slow.commandqueue":  gaugeZero,
+	"requests.slow.latch":         gaugeZero,
 	"requests.slow.lease":         gaugeZero,
 	"requests.slow.raft":          gaugeZero,
 	"sys.goroutines":              {gauge: true, min: 5000},

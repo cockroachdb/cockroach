@@ -1201,18 +1201,17 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Install a hook to observe when a get request for a special key,
-	// rhsSentinel, exits the command queue.
+	// rhsSentinel, acquires latches and begins evaluating.
 	const getConcurrency = 10
 	rhsSentinel := roachpb.Key("rhs-sentinel")
-	getExitedCommandQueue := make(chan struct{}, getConcurrency)
-	storeCfg.TestingKnobs.OnCommandQueueAction = func(ba *roachpb.BatchRequest, action storagebase.CommandQueueAction) {
-		if action == storagebase.CommandQueueBeginExecuting {
-			for _, r := range ba.Requests {
-				if get := r.GetGet(); get != nil && get.RequestHeader.Key.Equal(rhsSentinel) {
-					getExitedCommandQueue <- struct{}{}
-				}
+	getAcquiredLatch := make(chan struct{}, getConcurrency)
+	storeCfg.TestingKnobs.TestingLatchFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, r := range ba.Requests {
+			if get := r.GetGet(); get != nil && get.RequestHeader.Key.Equal(rhsSentinel) {
+				getAcquiredLatch <- struct{}{}
 			}
 		}
+		return nil
 	}
 
 	mtc := &multiTestContext{storeConfig: &storeCfg}
@@ -1271,7 +1270,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// Note that the first request would never hit this race on its own. Nor would
 	// any request that arrived early enough to see an outdated lease in
 	// Replica.mu.state.Lease. All of these requests joined the in-progress lease
-	// acquisition and blocked until the lease command exited the command queue,
+	// acquisition and blocked until the lease command acquires its latches,
 	// at which point the mergeComplete channel was updated. To hit the race, the
 	// request needed to arrive exactly between the update to
 	// Replica.mu.state.Lease and the update to Replica.mu.mergeComplete.
@@ -1300,12 +1299,12 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Wait for the get requests to fall out of the command queue, which is as far
-	// as they can get while the merge is in progress. Then wait a little bit
-	// longer. This tests that the requests really do get stuck waiting for the
-	// merge to complete without depending too heavily on implementation details.
+	// Wait for the get requests to acquire latches, which is as far as they can
+	// get while the merge is in progress. Then wait a little bit longer. This
+	// tests that the requests really do get stuck waiting for the merge to
+	// complete without depending too heavily on implementation details.
 	for i := 0; i < getConcurrency; i++ {
-		<-getExitedCommandQueue
+		<-getAcquiredLatch
 	}
 	time.Sleep(50 * time.Millisecond)
 
@@ -1361,7 +1360,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 			//
 			// This scenario previously caused deadlock. The merge was not able to
 			// complete until the Subsume request completed, but the Subsume request
-			// was stuck in the command queue until the Get request finished, which
+			// was unable to acquire latches until the Get request finished, which
 			// was itself waiting for the merge to complete. Whoops!
 			mtc.advanceClock(ctx)
 		}
