@@ -16,15 +16,15 @@ statement ok
 ALTER INDEX t@v EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM INDEX t@v
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM INDEX t@v]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /10      1         {1}       1
-/10        /20      2         {2}       2
-/20        /30      3         {3}       3
-/30        /40      4         {4}       4
-/40        NULL     5         {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       /10      {1}       1
+/10        /20      {2}       2
+/20        /30      {3}       3
+/30        /40      {4}       4
+/40        NULL     {5}       5
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50]
