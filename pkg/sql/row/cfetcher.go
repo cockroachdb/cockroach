@@ -18,12 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -31,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // Only unique secondary indexes have extra columns to decode (namely the
@@ -81,21 +77,14 @@ type cTableInfo struct {
 	// index (into cols); -1 if we don't need the value for that column.
 	extraValColOrdinals []int
 
-	// -- Fields updated during a scan --
+	// maxColumnFamilyID is the maximum possible family id for the configured
+	// table.
+	maxColumnFamilyID sqlbase.FamilyID
 
-	// foundFirstRow is set to true once we finished decoding the first row in a
-	// scan. It's used to break the ambiguity of the very first row for the
-	// purposes of incrementing rowIdx - although the first row appears like a
-	// new row, it's still the 0th row, so we don't want to bump rowIdx the very
-	// first time we see a new row.
-	foundFirstRow bool
-	// rowIdx is always set to the ordinal of the row we're currently writing to
-	// within the current batch. It's incremented as soon as we detect that a row
-	// is finished.
-	rowIdx uint16
-	batch  exec.ColBatch
-
-	colvecs []exec.ColVec
+	// knownPrefixLength is the number of bytes in the index key prefix this
+	// Fetcher is configured for. The index key prefix is the table id, index
+	// id pair at the start of the key.
+	knownPrefixLength int
 
 	keyValTypes []sqlbase.ColumnType
 	extraTypes  []sqlbase.ColumnType
@@ -119,26 +108,15 @@ type cTableInfo struct {
 //      // Process res.colBatch
 //   }
 type CFetcher struct {
-	// tables is a slice of all the tables and their descriptors for which
-	// rows are returned.
-	tables []cTableInfo
-
-	// allEquivSignatures is a map used for checking if an equivalence
-	// signature belongs to any table or table's ancestor. It also maps the
-	// string representation of every table's and every table's ancestors'
-	// signature to the table's index in 'tables' for lookup during decoding.
-	// If 2+ tables share the same ancestor signature, allEquivSignatures
-	// will map the signature to the largest 'tables' index.
-	// The full signature for a given table in 'tables' will always map to
-	// its own index in 'tables'.
-	allEquivSignatures map[string]int
+	// table is the table that's configured for fetching.
+	table cTableInfo
 
 	// reverse denotes whether or not the spans should be read in reverse
 	// or not when StartScan is invoked.
 	reverse bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
-	// out of all the tables. This is used to calculate the kvFetcher's
+	// out of all the tables. This is used to calculate the kvBatchFetcher's
 	// firstBatchLimit.
 	maxKeysPerRow int
 
@@ -148,12 +126,7 @@ type CFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
-	// knownPrefixLength is the number of bytes in the index key prefix this
-	// Fetcher is configured for. The index key prefix is the table id, index
-	// id pair at the start of the key.
-	knownPrefixLength int
-
-	// returnRangeInfo, if set, causes the underlying kvFetcher to return
+	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
 	// info is actually useful for correcting the plan (e.g. not for the PK-side
@@ -165,39 +138,38 @@ type CFetcher struct {
 	// when beginning a new scan.
 	traceKV bool
 
-	// -- Fields updated during a scan --
+	// fetcher is the underlying fetcher that provides KVs.
+	fetcher kvFetcher
 
-	kvFetcher      kvFetcher
-	indexKey       []byte // the index key of the current row
-	prettyValueBuf *bytes.Buffer
+	// machine contains fields that get updated during the run of the fetcher.
+	machine struct {
+		// state is the queue of next states of the state machine. The 0th entry
+		// is the next state.
+		state [3]fetcherState
+		// rowIdx is always set to the ordinal of the row we're currently writing to
+		// within the current batch. It's incremented as soon as we detect that a row
+		// is finished.
+		rowIdx uint16
+		// curSpan is the current span that the kv fetcher just returned data from.
+		curSpan roachpb.Span
+		// nextKV is the kv to process next.
+		nextKV roachpb.KeyValue
+		// seekPrefix is the prefix to seek to in stateSeekPrefix.
+		seekPrefix roachpb.Key
+		// lastRowPrefix is the row prefix for the last row we saw a key for. New
+		// keys are compared against this prefix to determine whether they're part
+		// of a new row or not.
+		lastRowPrefix roachpb.Key
+		// prettyValueBuf is a temp buffer used to create strings for tracing.
+		prettyValueBuf *bytes.Buffer
 
-	valueColsFound int // how many needed cols we've found so far in the value
+		// batch is the output batch the fetcher writes to.
+		batch exec.ColBatch
 
-	rowReadyTable *cTableInfo // the table for which a row was fully decoded and ready for output
-	currentTable  *cTableInfo // the most recent table for which a key was decoded
-
-	// The current key/value, unless kvEnd is true.
-	kv                roachpb.KeyValue
-	keyRemainingBytes []byte
-	kvEnd             bool
-
-	// savedKv is the last kv we saw right before filling up our batch. Once the
-	// batch becomes full, we need to immediately return it to the user, since
-	// there's no space left in the batch to write new values to. But we only
-	// detect that the batch is full when we see a key from the next row, and at
-	// that point we're already trying to write that key into the next position
-	// in the batch. To solve this, we preserve that key (the first key of the
-	// next batch) in this field until the next invocation of NextBatch.
-	savedKv *roachpb.KeyValue
-
-	kvs []roachpb.KeyValue
-
-	batchResponse []byte
-	batchNumKvs   int64
-
-	// isCheck indicates whether or not we are running checks for k/v
-	// correctness. It is set only during SCRUB commands.
-	isCheck bool
+		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
+		// having to call batch.ColVec too often in the tight loop.
+		colvecs []exec.ColVec
+	}
 }
 
 // Init sets up a Fetcher for a given table and index. If we are using a
@@ -213,99 +185,82 @@ func (rf *CFetcher) Init(
 
 	rf.reverse = reverse
 	rf.returnRangeInfo = returnRangeInfo
-	rf.isCheck = isCheck
 
-	// We must always decode the index key if we need to distinguish between
-	// rows from more than one table.
-	nTables := len(tables)
-	multipleTables := nTables >= 2
-	rf.mustDecodeIndexKey = multipleTables
-	if multipleTables {
-		rf.allEquivSignatures = make(map[string]int, len(tables))
+	if len(tables) > 1 {
+		return errors.New("multiple tables not supported in cfetcher")
 	}
 
-	if cap(rf.tables) >= nTables {
-		rf.tables = rf.tables[:nTables]
+	tableArgs := tables[0]
+	oldTable := rf.table
+
+	table := cTableInfo{
+		spans:            tableArgs.Spans,
+		desc:             tableArgs.Desc.TableDesc(),
+		colIdxMap:        tableArgs.ColIdxMap,
+		index:            tableArgs.Index,
+		isSecondaryIndex: tableArgs.IsSecondaryIndex,
+		cols:             tableArgs.Cols,
+
+		// These slice fields might get re-allocated below, so reslice them from
+		// the old table here in case they've got enough capacity already.
+		indexColOrdinals:    oldTable.indexColOrdinals[:0],
+		extraValColOrdinals: oldTable.extraValColOrdinals[:0],
+	}
+	typs := make([]types.T, len(table.cols))
+	for i := range typs {
+		typs[i] = types.FromColumnType(table.cols[i].Type)
+		if typs[i] == types.Unhandled {
+			return errors.Errorf("unhandled type %+v", table.cols[i].Type)
+		}
+	}
+	rf.machine.batch = exec.NewMemBatch(typs)
+	rf.machine.colvecs = rf.machine.batch.ColVecs()
+
+	var err error
+
+	// Scan through the entire columns map to see which columns are
+	// required.
+	for col, idx := range table.colIdxMap {
+		if tableArgs.ValNeededForCol.Contains(idx) {
+			// The idx-th column is required.
+			table.neededCols.Add(int(col))
+		}
+	}
+
+	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
+
+	var indexColumnIDs []sqlbase.ColumnID
+	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
+
+	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
+	neededIndexCols := 0
+	nIndexCols := len(indexColumnIDs)
+	if cap(table.indexColOrdinals) >= nIndexCols {
+		table.indexColOrdinals = table.indexColOrdinals[:nIndexCols]
 	} else {
-		rf.tables = make([]cTableInfo, nTables)
+		table.indexColOrdinals = make([]int, nIndexCols)
 	}
-	for tableIdx, tableArgs := range tables {
-		oldTable := rf.tables[tableIdx]
-
-		table := cTableInfo{
-			spans:            tableArgs.Spans,
-			desc:             tableArgs.Desc.TableDesc(),
-			colIdxMap:        tableArgs.ColIdxMap,
-			index:            tableArgs.Index,
-			isSecondaryIndex: tableArgs.IsSecondaryIndex,
-			cols:             tableArgs.Cols,
-
-			// These slice fields might get re-allocated below, so reslice them from
-			// the old table here in case they've got enough capacity already.
-			indexColOrdinals:    oldTable.indexColOrdinals[:0],
-			extraValColOrdinals: oldTable.extraValColOrdinals[:0],
-		}
-		typs := make([]types.T, len(table.cols))
-		for i := range typs {
-			typs[i] = types.FromColumnType(table.cols[i].Type)
-			if typs[i] == types.Unhandled {
-				return errors.Errorf("unhandled type %+v", table.cols[i].Type)
+	for i, id := range indexColumnIDs {
+		colIdx, ok := table.colIdxMap[id]
+		if ok {
+			table.indexColOrdinals[i] = colIdx
+			if table.neededCols.Contains(int(id)) {
+				neededIndexCols++
+				table.neededValueColsByIdx.Remove(colIdx)
 			}
-		}
-		table.batch = exec.NewMemBatch(typs)
-		table.colvecs = table.batch.ColVecs()
-
-		var err error
-		if multipleTables {
-			panic("CFetcher doesn't support multi-table reads yet.")
-		}
-
-		// Scan through the entire columns map to see which columns are
-		// required.
-		for col, idx := range table.colIdxMap {
-			if tableArgs.ValNeededForCol.Contains(idx) {
-				// The idx-th column is required.
-				table.neededCols.Add(int(col))
-			}
-		}
-
-		rf.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
-
-		var indexColumnIDs []sqlbase.ColumnID
-		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
-
-		table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
-		neededIndexCols := 0
-		nIndexCols := len(indexColumnIDs)
-		if cap(table.indexColOrdinals) >= nIndexCols {
-			table.indexColOrdinals = table.indexColOrdinals[:nIndexCols]
 		} else {
-			table.indexColOrdinals = make([]int, nIndexCols)
-		}
-		for i, id := range indexColumnIDs {
-			colIdx, ok := table.colIdxMap[id]
-			if ok {
-				table.indexColOrdinals[i] = colIdx
-				if table.neededCols.Contains(int(id)) {
-					neededIndexCols++
-					table.neededValueColsByIdx.Remove(colIdx)
-				}
-			} else {
-				table.indexColOrdinals[i] = -1
-				if table.neededCols.Contains(int(id)) {
-					panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
-				}
+			table.indexColOrdinals[i] = -1
+			if table.neededCols.Contains(int(id)) {
+				panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
 			}
 		}
 
-		// - If there is more than one table, we have to decode the index key to
-		//   figure out which table the row belongs to.
 		// - If there are interleaves, we need to read the index key in order to
 		//   determine whether this row is actually part of the index we're scanning.
 		// - If there are needed columns from the index key, we need to read it.
 		//
 		// Otherwise, we can completely avoid decoding the index key.
-		if !rf.mustDecodeIndexKey && (neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
+		if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
 			rf.mustDecodeIndexKey = true
 		}
 
@@ -358,15 +313,14 @@ func (rf *CFetcher) Init(
 			rf.maxKeysPerRow = keysPerRow
 		}
 
-		rf.tables[tableIdx] = table
-	}
+		for i := range table.desc.Families {
+			id := table.desc.Families[i].ID
+			if id > table.maxColumnFamilyID {
+				table.maxColumnFamilyID = id
+			}
+		}
 
-	if len(tables) == 1 {
-		// If there is more than one table, currentTable will be
-		// updated every time NextKey is invoked and rowReadyTable
-		// will be updated when a row is fully decoded.
-		rf.currentTable = &(rf.tables[0])
-		rf.rowReadyTable = &(rf.tables[0])
+		rf.table = table
 	}
 
 	return nil
@@ -402,232 +356,308 @@ func (rf *CFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := makeKVBatchFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	rf.machine.lastRowPrefix = nil
+	rf.fetcher = newKVFetcher(&f)
+	rf.machine.state[0] = stateInitFetch
+	return nil
 }
 
-// StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
-// used multiple times.
-func (rf *CFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
-	rf.indexKey = nil
-	rf.kvFetcher = f
-	rf.kvs = nil
-	rf.batchNumKvs = 0
-	rf.batchResponse = nil
-	// Retrieve the first key.
-	_, err := rf.NextKey(ctx)
-	return err
-}
+// fetcherState is the state enum for NextBatch.
+type fetcherState int
 
-// Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
-// the next batch until there are no more kvs to fetch.
-// Returns whether or not there are more kvs to fetch, the kv that was fetched,
-// and any errors that may have occurred.
-func (rf *CFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
-	if len(rf.kvs) != 0 {
-		kv = rf.kvs[0]
-		rf.kvs = rf.kvs[1:]
-		return true, kv, nil
-	}
-	if rf.batchNumKvs > 0 {
-		rf.batchNumKvs--
-		var key []byte
-		var rawBytes []byte
-		var err error
-		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
-		if err != nil {
-			return false, kv, err
-		}
-		return true, roachpb.KeyValue{
-			Key: key,
-			Value: roachpb.Value{
-				RawBytes: rawBytes,
-			},
-		}, nil
-	}
+//go:generate stringer -type=fetcherState
 
-	var numKeys int64
-	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
-	if rf.batchResponse != nil {
-		rf.batchNumKvs = numKeys
-	}
-	if err != nil {
-		return ok, kv, err
-	}
-	if !ok {
-		return false, kv, nil
-	}
-	return rf.nextKV(ctx)
-}
+const (
+	stateInvalid fetcherState = iota
 
-// NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
-// has been completed.
-func (rf *CFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
-	var ok bool
+	// stateInitFetch is the empty state of a fetcher: there is no current KV to
+	// look at, and there's no current row, either because the fetcher has just
+	// started, or because the last row was already finalized.
+	//
+	//   1. fetch next kv into nextKV buffer
+	//     -> decodeFirstKVOfRow
+	stateInitFetch
 
-	if rf.savedKv != nil {
-		// This is the last key we saw right before returning the last batch to the
-		// user. Decode it and carry on with the loop.
-		rf.keyRemainingBytes, ok, err = colencoding.DecodeIndexKeyToCols(
-			rf.currentTable.colvecs,
-			rf.currentTable.rowIdx,
-			rf.currentTable.desc,
-			rf.currentTable.index,
-			rf.currentTable.indexColOrdinals,
-			rf.currentTable.keyValTypes,
-			rf.currentTable.indexColumnDirs,
-			rf.kv.Key[rf.knownPrefixLength:],
-		)
-		rf.savedKv = nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if ok {
-		return false, nil
-	}
+	// stateDecodeFirstKVOfRow is the state of looking at a key that is part of
+	// a row that the fetcher hasn't processed before. s.machine.nextKV must be
+	// set.
+	//   1. skip common prefix
+	//   2. parse key (past common prefix) into row buffer, setting last row prefix buffer
+	//   3. interleave detected?
+	//      - set skip prefix
+	//      -> seekPrefix(decodeFirstKVOfRow)
+	//   4. parse value into row buffer.
+	//   5. 1-cf or secondary index?
+	//     -> doneRow(initFetch)
+	//   else:
+	//     -> fetchNextKVWithUnfinishedRow
+	stateDecodeFirstKVOfRow
 
+	// stateSeekPrefix is the state of skipping all keys that sort before a
+	// prefix. s.machine.seekPrefix must be set to the prefix to seek to.
+	// state[1] must be set, and seekPrefix will transition to that state once it
+	// finds the first key with that prefix.
+	//   1. fetch next kv into nextKV buffer
+	//   2. kv doesn't match seek prefix?
+	//     -> seekPrefix
+	//   else:
+	//     -> nextState
+	stateSeekPrefix
+
+	// stateFetchNextKVWithUnfinishedRow is the state of getting a new key for
+	// the current row. The machine will read a new key from the underlying
+	// fetcher, process it, and either add the results to the current row, or
+	// shift to a new row.
+	//   1. fetch next kv into nextKV buffer
+	//   2. skip common prefix
+	//   3. check equality to last row prefix buffer
+	//   4. no?
+	//     -> finalizeRow(decodeFirstKVOfRow)
+	//   5. skip to end of last row prefix buffer
+	//   6. interleave detected?
+	//     - set skip prefix
+	//     -> finalizeRow(seekPrefix(decodeFirstKVOfRow))
+	//   6. parse value into row buffer
+	//   7. -> fetchNextKVWithUnfinishedRow
+	stateFetchNextKVWithUnfinishedRow
+
+	// stateFinalizeRow is the state of finalizing a row. It assumes that no more
+	// keys for the current row are present.
+	// state[1] must be set, and stateFinalizeRow will transition to that state
+	// once it finishes finalizing the row.
+	//   1. fill missing nulls
+	//   2. bump rowIDX
+	//   -> nextState and optionally return if row-by-row or batch full
+	stateFinalizeRow
+
+	// stateEmitLastBatch emits the current batch and then transitions to
+	// stateFinished.
+	stateEmitLastBatch
+
+	// stateFinished is the end state of the state machine - it causes NextBatch
+	// to return empty batches forever.
+	stateFinished
+)
+
+// Turn this on to enable super verbose logging of the fetcher state machine.
+const debugState = false
+
+// NextBatch processes keys until we complete one batch of rows, ColBatchSize
+// in length, which are returned in columnar format as an exec.ColBatch. The
+// batch contains one ColVec per table column, regardless of the index used;
+// columns that are not needed (as per neededCols) are empty. The
+// ColBatch should not be modified and is only valid until the next call.
+// When there are no more rows, the ColBatch.Length is 0.
+func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 	for {
-		ok, rf.kv, err = rf.nextKV(ctx)
-		if err != nil {
-			return false, err
+		if debugState {
+			log.Infof(ctx, "State %s", rf.machine.state[0])
 		}
-		rf.kvEnd = !ok
-		if rf.kvEnd {
-			// No more keys in the scan. We need to transition
-			// rf.rowReadyTable to rf.currentTable for the last
-			// row.
-			rf.rowReadyTable = rf.currentTable
-			return true, nil
-		}
-
-		// unchangedPrefix will be set to true if we can skip decoding the index key
-		// completely, because the last key we saw has identical prefix to the
-		// current key.
-		unchangedPrefix := rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
-		if unchangedPrefix {
-			keySuffix := rf.kv.Key[len(rf.indexKey):]
-			if _, foundSentinel := encoding.DecodeIfInterleavedSentinel(keySuffix); foundSentinel {
-				// We found an interleaved sentinel, which means that the key we just
-				// found belongs to a different interleave. That means we have to go
-				// through with index key decoding.
-				unchangedPrefix = false
-			} else {
-				rf.keyRemainingBytes = keySuffix
-			}
-		} else {
-			// The prefix changed, which means the row changed. Bump our rowIdx.
-			if rf.currentTable.foundFirstRow {
-				rf.currentTable.rowIdx++
-			} else {
-				rf.currentTable.foundFirstRow = true
-			}
-		}
-		// See Init() for a detailed description of when we can get away with not
-		// reading the index key.
-		if unchangedPrefix {
-			// Skip decoding!
-			// We must set the rowReadyTable to the currentTable like ReadIndexKey
-			// would do. This will happen when we see 2 rows in a row with the same
-			// prefix. If the previous prefix was from a different table, then we must
-			// update the ready table to the current table, updating the fetcher state
-			// machine to recognize that the next row that it outputs will be from
-			// rf.currentTable, which will be set to the table of the key that was
-			// last sent to ReadIndexKey.
-			//
-			// TODO(jordan): this is a major (but correct) mess. The fetcher is past
-			// due for a refactor, now that it's (more) clear what the state machine
-			// it's trying to model is.
-		} else if rf.mustDecodeIndexKey || rf.traceKV {
-			if rf.currentTable.rowIdx >= exec.ColBatchSize {
-				// No more room in the current batch - save the current kv for the next
-				// round and return. We did finish a row, since our prefix changed, so
-				// return true.
-				rf.savedKv = &rf.kv
-				return true, nil
-			}
-			rf.keyRemainingBytes, ok, err = colencoding.DecodeIndexKeyToCols(
-				rf.currentTable.colvecs,
-				rf.currentTable.rowIdx,
-				rf.currentTable.desc,
-				rf.currentTable.index,
-				rf.currentTable.indexColOrdinals,
-				rf.currentTable.keyValTypes,
-				rf.currentTable.indexColumnDirs,
-				rf.kv.Key[rf.knownPrefixLength:],
-			)
+		switch rf.machine.state[0] {
+		case stateInvalid:
+			return nil, errors.New("invalid fetcher state")
+		case stateInitFetch:
+			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
-			if !ok {
-				// The key did not match any of the table
-				// descriptors, which means it's interleaved
-				// data from some other table or index.
+			if !moreKeys {
+				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
-		} else {
-			// We still need to consume the key until the family
-			// id, so processKV can know whether we've finished a
-			// row or not.
-			prefixLen, err := keys.GetRowPrefixLength(rf.kv.Key)
-			if err != nil {
-				return false, err
+			if newSpan {
+				rf.machine.curSpan = rf.fetcher.span
+				// TODO(jordan): parse the logical longest common prefix of the span
+				// into a buffer. The logical longest common prefix is the longest
+				// common prefix that contains only full key components. For example,
+				// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
+				// have LLCS of /Table/53/1/foo, even though they share a b prefix of
+				// the next key, since that prefix isn't a complete key component.
+				/*
+					lcs := rf.fetcher.span.LongestCommonPrefix()
+					// parse lcs into stuff
+					key, matches, err := sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+						rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
+						rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
+					)
+					if err != nil {
+						// This is expected - the longest common prefix of the keyspan might
+						// end half way through a key. Suppress the error and set the actual
+						// LCS we'll use later to the decodable components of the key.
+					}
+				*/
 			}
-			rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
-		}
 
-		// For unique secondary indexes, the index-key does not distinguish one row
-		// from the next if both rows contain identical values along with a NULL.
-		// Consider the keys:
-		//
-		//   /test/unique_idx/NULL/0
-		//   /test/unique_idx/NULL/1
-		//
-		// The index-key extracted from the above keys is /test/unique_idx/NULL. The
-		// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-		// NULL is present. Currently we don't detect NULLs on decoding. If we did
-		// we could detect this case and enlarge the index-key. A simpler fix for
-		// this problem is to simply always output a row for each key scanned from a
-		// secondary index as secondary indexes have only one key per row.
-		// If rf.rowReadyTable differs from rf.currentTable, this denotes
-		// a row is ready for output.
-		switch {
-		case rf.currentTable.isSecondaryIndex:
-			// Secondary indexes have only one key per row.
-			rowDone = true
-		case !bytes.HasPrefix(rf.kv.Key, rf.indexKey):
-			// If the prefix of the key has changed, current key is from a different
-			// row than the previous one.
-			rowDone = true
-		case rf.rowReadyTable != rf.currentTable:
-			// For rowFetchers with more than one table, if the table changes the row
-			// is done.
-			rowDone = true
-		default:
-			rowDone = false
-		}
+			rf.machine.nextKV = kv
+			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
-		if rf.indexKey != nil && rowDone {
-			// The current key belongs to a new row. Output the
-			// current row.
-			rf.indexKey = nil
-			return true, nil
-		}
+		case stateDecodeFirstKVOfRow:
+			if rf.mustDecodeIndexKey {
+				if debugState {
+					log.Infof(ctx, "Decoding key %s", rf.machine.nextKV.Key)
+				}
+				key, matches, err := colencoding.DecodeIndexKeyToCols(
+					rf.machine.colvecs,
+					rf.machine.rowIdx,
+					rf.table.desc,
+					rf.table.index,
+					rf.table.indexColOrdinals,
+					rf.table.keyValTypes,
+					rf.table.indexColumnDirs,
+					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !matches {
+					// We found an interleave. Set our skip prefix.
+					seekPrefix := rf.machine.nextKV.Key[:len(key)+rf.table.knownPrefixLength]
+					if debugState {
+						log.Infof(ctx, "Setting seek prefix to %s", seekPrefix)
+					}
+					rf.machine.seekPrefix = seekPrefix
+					rf.machine.state[0] = stateSeekPrefix
+					rf.machine.state[1] = stateDecodeFirstKVOfRow
+					continue
+				}
+				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
+				rf.machine.lastRowPrefix = prefix
+			}
+			// Process the current KV's value component.
+			if _, _, err := rf.processValue(ctx, sqlbase.FamilyID(0)); err != nil {
+				return nil, err
+			}
+			if rf.table.isSecondaryIndex || len(rf.table.desc.Families) == 1 {
+				rf.machine.state[0] = stateFinalizeRow
+				rf.machine.state[1] = stateInitFetch
+				continue
+			}
+			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
+		case stateSeekPrefix:
+			for {
+				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if debugState {
+					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
+				}
+				if !moreRows {
+					// We ran out of data, so ignore whatever our next state was going to
+					// be and emit the final batch.
+					rf.machine.state[1] = stateEmitLastBatch
+					break
+				}
+				// TODO(jordan): if nextKV returns newSpan = true, set the new span
+				// prefix and indicate that it needs decoding.
+				if bytes.Compare(kv.Key, rf.machine.seekPrefix) >= 0 {
+					rf.machine.nextKV = kv
+					break
+				}
+			}
+			rf.shiftState()
 
-		return false, nil
+		case stateFetchNextKVWithUnfinishedRow:
+			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if !moreKVs {
+				// No more data. Finalize the row and exit.
+				rf.machine.state[0] = stateFinalizeRow
+				rf.machine.state[1] = stateEmitLastBatch
+				continue
+			}
+			// TODO(jordan): if nextKV returns newSpan = true, set the new span
+			// prefix and indicate that it needs decoding.
+			rf.machine.nextKV = kv
+
+			// TODO(jordan): optimize this prefix check by skipping span prefix.
+			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
+				// The kv we just found is from a different row.
+				rf.machine.state[0] = stateFinalizeRow
+				rf.machine.state[1] = stateDecodeFirstKVOfRow
+				continue
+			}
+
+			key := kv.Key[len(rf.machine.lastRowPrefix):]
+			_, foundInterleave := encoding.DecodeIfInterleavedSentinel(key)
+
+			if foundInterleave {
+				// The key we just found isn't relevant to the current row, so finalize
+				// the current row, then skip all KVs with the current interleave prefix.
+				rf.machine.state[0] = stateFinalizeRow
+				rf.machine.state[1] = stateSeekPrefix
+				rf.machine.state[2] = stateDecodeFirstKVOfRow
+				continue
+			}
+
+			var id uint64
+			_, id, err = encoding.DecodeUvarintAscending(key)
+			familyID := sqlbase.FamilyID(id)
+			if err != nil {
+				return nil, scrub.WrapError(scrub.IndexKeyDecodingError, err)
+			}
+
+			// Process the current KV'rf value component.
+			if _, _, err := rf.processValue(ctx, familyID); err != nil {
+				return nil, err
+			}
+
+			if familyID == rf.table.maxColumnFamilyID {
+				// We know the row can't have any more keys, so finalize the row.
+				rf.machine.state[0] = stateFinalizeRow
+				rf.machine.state[1] = stateInitFetch
+			} else {
+				// Continue with current state.
+				rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
+			}
+
+		case stateFinalizeRow:
+			// We're finished with a row. Bump the row index, fill the row in with
+			// nulls if necessary, emit the batch if necessary, and move to the next
+			// state.
+			rf.machine.rowIdx++
+			rf.shiftState()
+			if rf.machine.rowIdx >= exec.ColBatchSize {
+				rf.machine.batch.SetLength(rf.machine.rowIdx)
+				rf.machine.rowIdx = 0
+				return rf.machine.batch, nil
+			}
+
+		case stateEmitLastBatch:
+			rf.machine.state[0] = stateFinished
+			rf.machine.batch.SetLength(rf.machine.rowIdx)
+			rf.machine.rowIdx = 0
+			return rf.machine.batch, nil
+
+		case stateFinished:
+			rf.machine.batch.SetLength(0)
+			return rf.machine.batch, nil
+		}
 	}
 }
 
-// processKV processes the given key/value, setting values in the row
-// accordingly. If debugStrings is true, returns pretty printed key and value
+// shiftState shifts the state queue to the left, removing the first element and
+// clearing the last element.
+func (rf *CFetcher) shiftState() {
+	copy(rf.machine.state[:2], rf.machine.state[1:])
+	rf.machine.state[2] = stateInvalid
+}
+
+// processValue processes the state machine's current value component, setting
+// columns in the rowIdx'th tuple in the current batch depending on what data
+// is found in the current value component.
+// If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *CFetcher) processKV(
-	ctx context.Context, kv roachpb.KeyValue,
+func (rf *CFetcher) processValue(
+	ctx context.Context, familyID sqlbase.FamilyID,
 ) (prettyKey string, prettyValue string, err error) {
-	table := rf.currentTable
+	table := &rf.table
 
 	if rf.traceKV {
 		prettyKey = fmt.Sprintf(
@@ -640,25 +670,6 @@ func (rf *CFetcher) processKV(
 		)
 	}
 
-	// Either this is the first key of the fetch or the first key of a new
-	// row.
-	if rf.indexKey == nil {
-		// This is the first key for the row.
-		rf.indexKey = []byte(kv.Key[:len(kv.Key)-len(rf.keyRemainingBytes)])
-
-		// Reset the row to nil; it will get filled in with the column
-		// values as we decode the key-value pairs for the row.
-		// We only need to reset the needed columns in the value component, because
-		// non-needed columns are never set and key columns are unconditionally set
-		// below.
-		for idx, ok := table.neededValueColsByIdx.Next(0); ok; idx, ok = table.neededValueColsByIdx.Next(idx + 1) {
-			// TODO(jordan): null out batch.
-			//table.row[idx].UnsetDatum()
-		}
-
-		rf.valueColsFound = 0
-	}
-
 	if table.neededCols.Empty() {
 		// We don't need to decode any values.
 		if rf.traceKV {
@@ -667,7 +678,8 @@ func (rf *CFetcher) processKV(
 		return prettyKey, prettyValue, nil
 	}
 
-	if !table.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
+	val := rf.machine.nextKV.Value
+	if !table.isSecondaryIndex {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -678,32 +690,36 @@ func (rf *CFetcher) processKV(
 		// In these cases, the correct value will be present in family 0 and the
 		// table.row value gets overwritten.
 
-		switch kv.Value.GetTag() {
+		switch val.GetTag() {
 		case roachpb.ValueType_TUPLE:
 			// In this case, we don't need to decode the column family ID, because
 			// the ValueType_TUPLE encoding includes the column id with every encoded
 			// column value.
-			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, kv, prettyKey)
+			tupleBytes, err := val.GetTuple()
+			if err != nil {
+				return "", "", err
+			}
+			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, tupleBytes, prettyKey)
+			if err != nil {
+				return "", "", err
+			}
 		default:
-			var familyID uint64
-			_, familyID, err = encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
-			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
-			}
-
 			var family *sqlbase.ColumnFamilyDescriptor
-			family, err = table.desc.FindFamilyByID(sqlbase.FamilyID(familyID))
+			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
 
-			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, kv, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)
+			if err != nil {
+				return "", "", err
+			}
 		}
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
-		valueBytes, err := kv.Value.GetBytes()
+		valueBytes, err := val.GetBytes()
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
@@ -713,8 +729,8 @@ func (rf *CFetcher) processKV(
 			// column values from the value.
 			var err error
 			valueBytes, err = colencoding.DecodeKeyValsToCols(
-				table.colvecs,
-				table.rowIdx,
+				rf.machine.colvecs,
+				rf.machine.rowIdx,
 				table.extraValColOrdinals,
 				table.extraTypes,
 				nil,
@@ -727,7 +743,7 @@ func (rf *CFetcher) processKV(
 
 		if len(valueBytes) > 0 {
 			prettyKey, prettyValue, err = rf.processValueBytes(
-				ctx, table, kv, valueBytes, prettyKey,
+				ctx, table, valueBytes, prettyKey,
 			)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -749,32 +765,70 @@ func (rf *CFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
 	family *sqlbase.ColumnFamilyDescriptor,
-	kv roachpb.KeyValue,
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
-	return "", "", errors.New("CFetcher doesn't support directly marshaled single values yet")
+	// If this is the row sentinel (in the legacy pre-family format),
+	// a value is not expected, so we're done.
+	if family.ID == 0 {
+		return "", "", nil
+	}
+
+	colID := family.DefaultColumnID
+	if colID == 0 {
+		return "", "", errors.Errorf("single entry value with no default column id")
+	}
+
+	if rf.traceKV || table.neededCols.Contains(int(colID)) {
+		if idx, ok := table.colIdxMap[colID]; ok {
+			if rf.traceKV {
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
+			}
+			val := rf.machine.nextKV.Value
+			if len(val.RawBytes) == 0 {
+				return prettyKey, "", nil
+			}
+			typ := table.cols[idx].Type
+			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
+			if err != nil {
+				return "", "", err
+			}
+			if rf.traceKV {
+				// TODO(jordan): handle this case by reaching into the colvecs array and
+				// pulling out a pretty value.
+				prettyValue = "?"
+			}
+			if debugRowFetch {
+				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
+			}
+			return prettyKey, prettyValue, nil
+		}
+	}
+
+	// No need to unmarshal the column value. Either the column was part of
+	// the index key or it isn't needed.
+	if debugRowFetch {
+		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
+	}
+	return prettyKey, prettyValue, nil
 }
 
 func (rf *CFetcher) processValueBytes(
-	ctx context.Context,
-	table *cTableInfo,
-	kv roachpb.KeyValue,
-	valueBytes []byte,
-	prettyKeyPrefix string,
+	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if rf.traceKV {
-		if rf.prettyValueBuf == nil {
-			rf.prettyValueBuf = &bytes.Buffer{}
+		if rf.machine.prettyValueBuf == nil {
+			rf.machine.prettyValueBuf = &bytes.Buffer{}
 		}
-		rf.prettyValueBuf.Reset()
+		rf.machine.prettyValueBuf.Reset()
 	}
 
 	var colIDDiff uint32
 	var lastColID sqlbase.ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
-	for len(valueBytes) > 0 && rf.valueColsFound < table.neededValueCols {
+	valueColsFound := 0
+	for len(valueBytes) > 0 && valueColsFound < table.neededValueCols {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -789,7 +843,7 @@ func (rf *CFetcher) processValueBytes(
 			}
 			valueBytes = valueBytes[len:]
 			if debugRowFetch {
-				log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
+				log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 			}
 			continue
 		}
@@ -799,20 +853,21 @@ func (rf *CFetcher) processValueBytes(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 		}
 
-		vec := table.batch.ColVec(idx)
+		vec := rf.machine.colvecs[idx]
 
 		valTyp := &table.cols[idx].Type
-		valueBytes, err = colencoding.DecodeTableValueToCol(vec, table.rowIdx, typ, dataOffset, valTyp, valueBytes[typeOffset:])
+		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
+			valueBytes[typeOffset:])
 		if err != nil {
 			return "", "", err
 		}
 		if rf.traceKV {
-			fmt.Fprintf(rf.prettyValueBuf, "/?")
+			fmt.Fprintf(rf.machine.prettyValueBuf, "/?")
 		}
-		rf.valueColsFound++
+		valueColsFound++
 	}
 	if rf.traceKV {
-		prettyValue = rf.prettyValueBuf.String()
+		prettyValue = rf.machine.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
 }
@@ -820,107 +875,7 @@ func (rf *CFetcher) processValueBytes(
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the rf.row accordingly. The key is only used for logging.
 func (rf *CFetcher) processValueTuple(
-	ctx context.Context, table *cTableInfo, kv roachpb.KeyValue, prettyKeyPrefix string,
+	ctx context.Context, table *cTableInfo, tupleBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
-	tupleBytes, err := kv.Value.GetTuple()
-	if err != nil {
-		return "", "", err
-	}
-	return rf.processValueBytes(ctx, table, kv, tupleBytes, prettyKeyPrefix)
-}
-
-// NextBatch processes keys until we complete one batch of rows, ColBatchSize
-// in length, which are returned in columnar format as an exec.ColBatch. The
-// batch contains one ColVec per table column, regardless of the index used;
-// columns that are not needed (as per neededCols) are empty. The
-// ColBatch should not be modified and is only valid until the next call.
-// When there are no more rows, the ColBatch.Length is 0.
-// It also returns the table and index descriptor associated with the row
-// (relevant when more than one table is specified during initialization).
-func (rf *CFetcher) NextBatch(
-	ctx context.Context,
-) (
-	batch exec.ColBatch,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	err error,
-) {
-	rf.rowReadyTable.rowIdx = 0
-	if rf.kvEnd {
-		rf.rowReadyTable.batch.SetLength(0)
-		return rf.rowReadyTable.batch, nil, nil, nil
-	}
-
-	// All of the columns for a particular row will be grouped together. We
-	// loop over the key/value pairs and decode the key to extract the
-	// columns encoded within the key and the column ID. We use the column
-	// ID to lookup the column and decode the value. All of these values go
-	// into a map keyed by column name. When the index key changes we
-	// output a row containing the current values.
-	for rf.rowReadyTable.rowIdx < exec.ColBatchSize {
-		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if rf.traceKV {
-			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
-		}
-
-		rowDone, err := rf.NextKey(ctx)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if rowDone {
-			err := rf.finalizeRow()
-			if err != nil {
-				return nil, nil, nil, err
-			}
-		}
-		if rf.kvEnd {
-			// We're finished with the scan - bump rowIdx so we write the correct
-			// length to the batch.
-			rf.rowReadyTable.rowIdx++
-			break
-		}
-	}
-	rf.rowReadyTable.batch.SetLength(rf.rowReadyTable.rowIdx)
-	return rf.rowReadyTable.batch, rf.rowReadyTable.desc, rf.rowReadyTable.index, err
-}
-
-func (rf *CFetcher) finalizeRow() error {
-	table := rf.rowReadyTable
-	// Fill in any missing values with NULLs
-	for i := range table.cols {
-		if rf.valueColsFound == table.neededValueCols {
-			// Found all cols - done!
-			return nil
-		}
-		if table.neededCols.Contains(int(table.cols[i].ID)) && table.batch.ColVec(i).NullAt(table.rowIdx) {
-			// If the row was deleted, we'll be missing any non-primary key
-			// columns, including nullable ones, but this is expected.
-			if !table.cols[i].Nullable {
-				var indexColValues []string
-				for i := range table.indexColOrdinals {
-					indexColValues = append(indexColValues, "?"+string(i))
-				}
-				if rf.isCheck {
-					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-						"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-						table.desc.Name, table.cols[i].Name, table.index.Name,
-						strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
-				}
-				panic(fmt.Sprintf(
-					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.Name, table.cols[i].Name, table.index.Name,
-					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
-			}
-			table.colvecs[i].SetNull(table.rowIdx)
-			// We've set valueColsFound to the number of present columns in the row
-			// already, in processValueBytes. Now, we're filling in columns that have
-			// no encoded values with NULL - so we increment valueColsFound to permit
-			// early exit from this loop once all needed columns are filled in.
-			rf.valueColsFound++
-		}
-	}
-	return nil
+	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
 }

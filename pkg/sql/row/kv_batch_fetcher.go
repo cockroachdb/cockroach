@@ -33,7 +33,7 @@ import (
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
-// SetKVBatchSize changes the kvFetcher batch size, and returns a function that restores it.
+// SetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 func SetKVBatchSize(val int64) func() {
 	oldVal := kvBatchSize
 	kvBatchSize = val
@@ -51,25 +51,33 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
-	// returnRangeInfo, if set, causes the kvFetcher to populate rangeInfos.
+	// returnRangeInfo, if set, causes the kvBatchFetcher to populate rangeInfos.
 	// See also rowFetcher.returnRangeInfo.
 	returnRangeInfo bool
 
-	fetchEnd  bool
-	batchIdx  int
-	responses []roachpb.ResponseUnion
+	fetchEnd bool
+	batchIdx int
 
-	// As the kvFetcher fetches batches of kvs, it accumulates information on the
+	// requestSpans contains the spans that were requested in the last request,
+	// and is one to one with responses. This field is kept separately from spans
+	// so that the fetcher can keep track of which response was produced for each
+	// input span.
+	requestSpans roachpb.Spans
+	responses    []roachpb.ResponseUnion
+
+	// As the kvBatchFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
 	// getRangeInfo(), to be used for updating caches.
 	// rangeInfos are deduped, so they're not ordered in any particular way and
-	// they don't map to kvFetcher.spans in any particular way.
+	// they don't map to kvBatchFetcher.spans in any particular way.
 	rangeInfos []roachpb.RangeInfo
 }
 
+var _ kvBatchFetcher = &txnKVFetcher{}
+
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
-		panic("GetRangeInfo() called on kvFetcher that wasn't configured with returnRangeInfo")
+		panic("GetRangeInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo")
 	}
 	return f.rangeInfos
 }
@@ -120,14 +128,14 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	}
 }
 
-// makeKVFetcher initializes a kvFetcher for the given spans.
+// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
 //
 // If useBatchLimit is true, batches are limited to kvBatchSize. If
 // firstBatchLimit is also set, the first batch is limited to that value.
 // Subsequent batches are larger, up to kvBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
-func makeKVFetcher(
+func makeKVBatchFetcher(
 	txn *client.Txn,
 	spans roachpb.Spans,
 	reverse bool,
@@ -209,6 +217,12 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}
+	if cap(f.requestSpans) < len(f.spans) {
+		f.requestSpans = make(roachpb.Spans, len(f.spans))
+	} else {
+		f.requestSpans = f.requestSpans[:len(f.spans)]
+	}
+	copy(f.requestSpans, f.spans)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		buf := bytes.NewBufferString("Scan ")
@@ -273,26 +287,36 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 }
 
 // nextBatch returns the next batch of key/value pairs. If there are none
-// available, a fetch is initiated. When there are no more keys, returns false.
-// ok returns whether or not there are more kv pairs to be fetched.
+// available, a fetch is initiated. When there are no more keys, ok is false.
+// origSpan returns the span that batch was fetched from, and bounds all of the
+// keys returned.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
+) (
+	ok bool,
+	kvs []roachpb.KeyValue,
+	batchResponse []byte,
+	numKvs int64,
+	origSpan roachpb.Span,
+	err error,
+) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
+		origSpan := f.requestSpans[0]
+		f.requestSpans = f.requestSpans[1:]
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, origSpan, nil
 		case *roachpb.ReverseScanResponse:
-			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, origSpan, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil, 0, nil
+		return false, nil, nil, 0, roachpb.Span{}, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, 0, err
+		return false, nil, nil, 0, roachpb.Span{}, err
 	}
 	return f.nextBatch(ctx)
 }
