@@ -329,8 +329,7 @@ var informationSchemaEnabledRoles = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
@@ -394,7 +393,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 	CONSTRAINT_CATALOG STRING NOT NULL,
 	CONSTRAINT_SCHEMA  STRING NOT NULL,
 	CONSTRAINT_NAME    STRING NOT NULL
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
@@ -454,7 +453,7 @@ CREATE TABLE information_schema.key_column_usage (
 	COLUMN_NAME        STRING NOT NULL,
 	ORDINAL_POSITION   INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
@@ -544,8 +543,7 @@ CREATE TABLE information_schema.parameters (
 	MAXIMUM_CARDINALITY INT,
 	DTD_IDENTIFIER STRING,
 	PARAMETER_DEFAULT STRING
-);
-`,
+)`,
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
@@ -602,7 +600,7 @@ CREATE TABLE information_schema.referential_constraints (
 	DELETE_RULE               STRING NOT NULL,
 	TABLE_NAME                STRING NOT NULL,
 	REFERENCED_TABLE_NAME     STRING NOT NULL
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
@@ -659,8 +657,7 @@ CREATE TABLE information_schema.role_table_grants (
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING,
 	WITH_HIERARCHY STRING
-);
-`,
+)`,
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
@@ -753,7 +750,7 @@ CREATE TABLE information_schema.routines (
 	RESULT_CAST_SCOPE_NAME STRING,
 	RESULT_CAST_MAXIMUM_CARDINALITY INT,
 	RESULT_CAST_DTD_IDENTIFIER STRING
-); `,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -762,13 +759,7 @@ CREATE TABLE information_schema.routines (
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-schemata.html
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html
 var informationSchemaSchemataTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.schemata (
-	CATALOG_NAME               STRING NOT NULL,
-	SCHEMA_NAME                STRING NOT NULL,
-	DEFAULT_CHARACTER_SET_NAME STRING,
-	SQL_PATH                   STRING
-);`,
+	schema: vtable.InformationSchemaSchemata,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
 			return forEachSchemaName(ctx, p, db, func(sc string) error {
@@ -793,8 +784,7 @@ CREATE TABLE information_schema.schema_privileges (
 	TABLE_SCHEMA    STRING NOT NULL,
 	PRIVILEGE_TYPE  STRING NOT NULL,
 	IS_GRANTABLE    STRING
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
 			return forEachSchemaName(ctx, p, db, func(scName string) error {
@@ -854,7 +844,7 @@ CREATE TABLE information_schema.sequences (
     MAXIMUM_VALUE            STRING NOT NULL,
     INCREMENT                STRING NOT NULL,
     CYCLE_OPTION             STRING NOT NULL
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*no sequences in virtual schemas*/
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
@@ -897,7 +887,7 @@ CREATE TABLE information_schema.statistics (
 	DIRECTION     STRING NOT NULL,
 	STORING       STRING NOT NULL,
 	IMPLICIT      STRING NOT NULL
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes*/
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
@@ -992,7 +982,7 @@ CREATE TABLE information_schema.table_constraints (
 	CONSTRAINT_TYPE    STRING NOT NULL,
 	IS_DEFERRABLE      STRING NOT NULL,
 	INITIALLY_DEFERRED STRING NOT NULL
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
@@ -1039,7 +1029,7 @@ CREATE TABLE information_schema.user_privileges (
 	TABLE_CATALOG  STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, func(dbDesc *DatabaseDescriptor) error {
 			dbNameStr := tree.NewDString(dbDesc.Name)
@@ -1074,8 +1064,7 @@ CREATE TABLE information_schema.table_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING,
 	WITH_HIERARCHY STRING
-);
-`,
+)`,
 	populate: populateTablePrivileges,
 }
 
@@ -1161,7 +1150,7 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_UPDATABLE       STRING,
     IS_TRIGGER_DELETABLE       STRING,
     IS_TRIGGER_INSERTABLE_INTO STRING
-);`,
+)`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
