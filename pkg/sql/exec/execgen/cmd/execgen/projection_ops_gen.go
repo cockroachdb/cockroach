@@ -53,7 +53,7 @@ type {{template "opConstName" .}} struct {
 
 func (p *{{template "opConstName" .}}) Next() ColBatch {
 	batch := p.input.Next()
-	if p.outputIdx == len(batch.ColVecs()) {
+	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
@@ -87,7 +87,7 @@ type {{template "opName" .}} struct {
 
 func (p *{{template "opName" .}}) Next() ColBatch {
 	batch := p.input.Next()
-	if p.outputIdx == len(batch.ColVecs()) {
+	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
