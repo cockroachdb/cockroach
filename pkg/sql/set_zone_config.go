@@ -210,6 +210,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			inheritVal, expr := val.inheritValue, val.explicitValue
 			if inheritVal {
 				copyFromParentList = append(copyFromParentList, *name)
+				if optionStr.Len() > 0 {
+					optionStr.WriteString(", ")
+				}
+				fmt.Fprintf(&optionStr, "%s = COPY FROM PARENT", string(*name))
 				continue
 			}
 			datum, err := expr.Eval(params.EvalContext())
