@@ -454,7 +454,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 	// If cluster version is below 2.2, just write the complete zone
 	// config instead of the partial for backwards compatibility reasons.
-	// Otherwise write the partial zone configutation.
+	// Otherwise write the partial zone configuration.
 	hasNewSubzones := !deleteZone && index != nil
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone
