@@ -1688,7 +1688,7 @@ func TestParse2(t *testing.T) {
 		{`ALTER INDEX i CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`,
-			`ALTER INDEX i CONFIGURE ZONE USING "foo" = COPY FROM PARENT`},
+			`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`},
 
 		// Alternative forms for table patterns.
 
