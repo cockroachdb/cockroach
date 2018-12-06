@@ -379,6 +379,28 @@ func (z *ZoneConfig) IsComplete() bool {
 		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
+// ValidateTandemFields returns an error if the ZoneConfig to be written
+// specifies a configuration that could cause problems with the introduction
+// of cascading zone configs.
+func (z *ZoneConfig) ValidateTandemFields() error {
+	var numConstrainedRepls int32
+	for _, constraint := range z.Constraints {
+		numConstrainedRepls += constraint.NumReplicas
+	}
+
+	if numConstrainedRepls > 0 && z.NumReplicas == nil {
+		return fmt.Errorf("when per-replica constraints are set, num_replicas must be set as well")
+	}
+	if (z.RangeMinBytes != nil || z.RangeMaxBytes != nil) &&
+		(z.RangeMinBytes == nil || z.RangeMaxBytes == nil) {
+		return fmt.Errorf("range_min_bytes and range_max_bytes must be set together")
+	}
+	if !z.InheritedLeasePreferences && z.InheritedConstraints {
+		return fmt.Errorf("lease preferences can not be set unless the constraints are explicitly set as well")
+	}
+	return nil
+}
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {
