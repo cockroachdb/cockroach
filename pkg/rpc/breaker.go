@@ -19,9 +19,8 @@ import (
 
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/facebookgo/clock"
-
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/facebookgo/clock"
 )
 
 const maxBackoff = time.Second

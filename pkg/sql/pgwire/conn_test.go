@@ -28,10 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -50,6 +46,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Test the conn struct: check that it marshalls the correct commands to the

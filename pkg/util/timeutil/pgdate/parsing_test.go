@@ -23,9 +23,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	_ "github.com/lib/pq"
 )
 
 var modes = []pgdate.ParseMode{

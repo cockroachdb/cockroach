@@ -20,10 +20,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach-go/crdb"
 )
 
 func registerCopy(r *registry) {

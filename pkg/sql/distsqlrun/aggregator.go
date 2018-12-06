@@ -16,10 +16,9 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"unsafe"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

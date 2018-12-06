@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup

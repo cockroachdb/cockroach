@@ -14,9 +14,7 @@
 
 package ctpb
 
-import (
-	"context"
-)
+import "context"
 
 // InboundClient is an interface that narrows ClosedTimestamp_GetServer down to what's
 // actually required.

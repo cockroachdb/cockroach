@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 // Table generators, also called "set-generating functions", are
 // special functions that return an entire table.

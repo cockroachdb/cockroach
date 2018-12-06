@@ -27,8 +27,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/spf13/pflag"
 )
 
 // TestDumpData uses the testdata/dump directory to execute SQL statements

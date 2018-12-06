@@ -14,9 +14,7 @@
 
 package memo
 
-import (
-	"math"
-)
+import "math"
 
 // Cost is the best-effort approximation of the actual cost of executing a
 // particular operator tree.

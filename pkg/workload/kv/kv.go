@@ -27,11 +27,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 const (

@@ -17,10 +17,8 @@ package sqlbase
 import (
 	"context"
 	"testing"
-
-	"unsafe"
-
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

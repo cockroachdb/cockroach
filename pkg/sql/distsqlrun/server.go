@@ -17,13 +17,8 @@ package distsqlrun
 import (
 	"context"
 	"io"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -40,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -47,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // DistSQLVersion identifies DistSQL engine versions.

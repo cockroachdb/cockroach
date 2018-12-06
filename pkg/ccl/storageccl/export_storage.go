@@ -26,17 +26,12 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/api/option"
-
 	gcs "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/pkg/errors"
-	"golang.org/x/oauth2/google"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -44,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
 )
 
 const (

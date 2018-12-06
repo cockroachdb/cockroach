@@ -22,10 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,6 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 // startGossip creates and starts a gossip instance.

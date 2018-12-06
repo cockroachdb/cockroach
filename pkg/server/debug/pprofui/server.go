@@ -22,12 +22,11 @@ import (
 	"net/http/pprof"
 	"net/url"
 	"path"
+	runtimepprof "runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	runtimepprof "runtime/pprof"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/google/pprof/driver"

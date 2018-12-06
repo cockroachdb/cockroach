@@ -32,8 +32,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -47,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"gopkg.in/yaml.v2"
 )
 
 var (

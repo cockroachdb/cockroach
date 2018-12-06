@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 
 	"github.com/biogo/store/llrb"
-
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )

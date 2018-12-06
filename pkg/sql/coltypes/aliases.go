@@ -17,10 +17,9 @@ package coltypes
 import (
 	"strings"
 
-	"github.com/lib/pq/oid"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/lib/pq/oid"
 )
 
 var (

@@ -17,11 +17,10 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/spf13/pflag"
 )
 
 // These need to be kept in sync with the zones used when --geo is passed

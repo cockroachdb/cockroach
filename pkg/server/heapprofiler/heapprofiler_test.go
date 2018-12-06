@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

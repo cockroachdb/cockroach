@@ -17,13 +17,14 @@ package systembench
 import (
 	"context"
 	"fmt"
+	"math"
+	"sync/atomic"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"math"
-	"sync/atomic"
-	"time"
 )
 
 // CPUBenchmarkType represents a CPU Benchmark.

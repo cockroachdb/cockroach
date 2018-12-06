@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

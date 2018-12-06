@@ -26,14 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage"
-
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
@@ -47,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,6 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (

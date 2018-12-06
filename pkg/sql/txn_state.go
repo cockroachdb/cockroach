@@ -18,9 +18,6 @@ import (
 	"context"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // txnState contains state associated with an ongoing SQL txn; it constitutes

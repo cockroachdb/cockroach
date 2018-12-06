@@ -32,11 +32,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -59,6 +54,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 )
 
 // jemallocHeapDump is an optional function to be called at heap dump time.

@@ -20,9 +20,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // serverCfg is used as the client-side copy of default server

@@ -22,9 +22,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -44,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // Returns an error if a zone config for the specified table or

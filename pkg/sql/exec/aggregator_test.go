@@ -15,9 +15,8 @@
 package exec
 
 import (
-	"testing"
-
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"

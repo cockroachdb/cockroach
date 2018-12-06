@@ -15,10 +15,9 @@
 package kv
 
 import (
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/pkg/errors"
 )
 
 var emptySpan = roachpb.Span{}

@@ -14,9 +14,7 @@
 
 package sessiondata
 
-import (
-	"strings"
-)
+import "strings"
 
 // PgDatabaseName is the name of the default postgres system database.
 const PgDatabaseName = "postgres"

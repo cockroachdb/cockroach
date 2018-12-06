@@ -25,11 +25,10 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/oauth2"
-
 	"github.com/google/go-github/github"
 	version "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
 )
 
 const (

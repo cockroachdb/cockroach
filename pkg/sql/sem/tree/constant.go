@@ -21,12 +21,11 @@ import (
 	"math"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/pkg/errors"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.

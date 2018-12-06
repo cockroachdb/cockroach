@@ -18,10 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
@@ -46,6 +42,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -149,8 +148,7 @@ func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
 	create *tree.CreateTable,
-	parentID,
-	tableID sqlbase.ID,
+	parentID, tableID sqlbase.ID,
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.MutableTableDescriptor, error) {

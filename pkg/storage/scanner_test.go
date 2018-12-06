@@ -20,9 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/btree"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/google/btree"
+	"github.com/pkg/errors"
 )
 
 func makeAmbCtx() log.AmbientContext {

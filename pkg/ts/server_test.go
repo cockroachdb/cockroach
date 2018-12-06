@@ -24,20 +24,17 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/storage"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/kr/pretty"
-
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 func TestServerQuery(t *testing.T) {

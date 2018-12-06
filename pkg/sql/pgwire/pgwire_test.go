@@ -33,10 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -49,6 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/jackc/pgx"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 func wrongArgCountString(want, got int) string {

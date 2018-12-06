@@ -20,8 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 )
 
 func TestCloneProto(t *testing.T) {

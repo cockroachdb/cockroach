@@ -18,10 +18,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 )
 
 // Resolver is an interface which provides an abstract factory for

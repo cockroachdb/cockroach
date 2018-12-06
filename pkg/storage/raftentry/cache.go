@@ -21,11 +21,10 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // Cache is a specialized data structure for storing deserialized raftpb.Entry

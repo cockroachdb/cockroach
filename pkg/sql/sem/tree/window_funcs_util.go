@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/ring"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/ring"
 
 // PeerGroupChecker can check if a pair of row indices within a partition are
 // in the same peer group.

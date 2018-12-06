@@ -18,13 +18,12 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // kvBatchSize is the number of keys we request at a time.

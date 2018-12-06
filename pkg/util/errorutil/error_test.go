@@ -14,9 +14,7 @@
 
 package errorutil
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	err := UnexpectedWithIssueErrorf(1234, "args: %d %s %f", 1, "two", 3.0)
@@ -30,7 +28,7 @@ func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	}
 
 	safeMsg := err.(UnexpectedWithIssueErr).SafeMessage()
-	exp = "issue #1234: error_test.go:22: args: %d %s %f | int; string; float64"
+	exp = "issue #1234: error_test.go:20: args: %d %s %f | int; string; float64"
 	if safeMsg != exp {
 		t.Errorf("Expected SafeMessage:\n%s\ngot:\n%s", exp, safeMsg)
 	}

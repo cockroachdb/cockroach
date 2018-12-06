@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 

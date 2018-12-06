@@ -26,8 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -38,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 )
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.

@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/pkg/errors"
 )
 
 // This file contains facilities to encode primary and secondary

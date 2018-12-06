@@ -20,9 +20,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestConcurrentRequestLimiter(t *testing.T) {

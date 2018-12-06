@@ -18,9 +18,6 @@ import (
 	"context"
 	"math"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // StateLoader contains accessor methods to read or write the

@@ -28,13 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,6 +44,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type ctxI interface {

@@ -14,9 +14,7 @@
 
 package props
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 const (
 	// initialColStatsCap is the initial number of column statistics that can be

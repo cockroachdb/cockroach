@@ -17,9 +17,8 @@ package exec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSortedDistinct(t *testing.T) {

@@ -21,9 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -41,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestChangefeedBasics(t *testing.T) {

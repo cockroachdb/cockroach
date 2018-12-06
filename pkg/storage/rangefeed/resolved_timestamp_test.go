@@ -17,12 +17,11 @@ package rangefeed
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnresolvedIntentQueue(t *testing.T) {

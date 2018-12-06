@@ -20,15 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 func ExampleSingleStorage() {

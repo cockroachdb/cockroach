@@ -25,14 +25,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/ttycolor"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type tpccOptions struct {

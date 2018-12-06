@@ -25,9 +25,8 @@ import (
 	"math/big"
 	"unsafe"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal

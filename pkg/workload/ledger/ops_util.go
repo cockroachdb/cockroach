@@ -24,9 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/syncmap"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"golang.org/x/sync/syncmap"
 )
 
 // querier is the common interface to execute queries on a DB, Tx, or Conn.

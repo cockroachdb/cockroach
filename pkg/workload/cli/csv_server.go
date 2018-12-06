@@ -20,9 +20,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/spf13/cobra"
 )
 
 var csvServerCmd = SetCmdDefaults(&cobra.Command{
