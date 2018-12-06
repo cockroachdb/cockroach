@@ -25,6 +25,8 @@ type ColBatch interface {
 	Length() uint16
 	// SetLength sets the number of values in the columns in the batch.
 	SetLength(uint16)
+	// Width returns the number of columns in the batch.
+	Width() int
 	// ColVec returns the ith ColVec in this batch.
 	ColVec(i int) ColVec
 	// ColVecs returns all of the underlying ColVecs in this batch.
@@ -88,6 +90,10 @@ func (m *memBatch) Length() uint16 {
 	return m.n
 }
 
+func (m *memBatch) Width() int {
+	return len(m.b)
+}
+
 func (m *memBatch) ColVec(i int) ColVec {
 	return m.b[i]
 }
@@ -132,4 +138,17 @@ func newProjectionBatch(projection []uint32) *projectingBatch {
 
 func (b *projectingBatch) ColVec(i int) ColVec {
 	return b.ColBatch.ColVec(int(b.projection[i]))
+}
+
+func (b *projectingBatch) ColVecs() []ColVec {
+	panic("projectingBatch doesn't support ColVecs()")
+}
+
+func (b *projectingBatch) Width() int {
+	return len(b.projection)
+}
+
+func (b *projectingBatch) AppendCol(t types.T) {
+	b.ColBatch.AppendCol(t)
+	b.projection = append(b.projection, uint32(b.ColBatch.Width())-1)
 }
