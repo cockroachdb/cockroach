@@ -120,7 +120,7 @@ func Load(
 			return backupccl.BackupDescriptor{}, errors.Wrap(err, "read line")
 		}
 		currentCmd.WriteString(line)
-		if !isEndOfStatement(currentCmd.String()) {
+		if !parser.EndsInSemicolon(currentCmd.String()) {
 			currentCmd.WriteByte('\n')
 			continue
 		}
@@ -352,16 +352,6 @@ func (i inserter) InitPut(key, value interface{}, failOnTombstones bool) {
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),
 	})
-}
-
-// isEndOfStatement returns true if stmt ends with a semicolon.
-func isEndOfStatement(stmt string) bool {
-	sc := parser.MakeScanner(stmt)
-	var last int
-	sc.Tokens(func(t int) {
-		last = t
-	})
-	return last == ';'
 }
 
 func writeSST(

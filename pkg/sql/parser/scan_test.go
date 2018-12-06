@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -103,7 +104,7 @@ func TestScanner(t *testing.T) {
 		{`1e-1`, []int{FCONST}},
 	}
 	for i, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var tokens []int
 		for {
 			var lval sqlSymType
@@ -140,7 +141,7 @@ foo`, "", "foo"},
 		{`/* /* */`, "unterminated comment", ""},
 	}
 	for i, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var lval sqlSymType
 		present, ok := s.scanComment(&lval)
 		if d.err == "" && (!present || !ok) {
@@ -156,7 +157,7 @@ foo`, "", "foo"},
 
 func TestScanKeyword(t *testing.T) {
 	for kwName, kwID := range lex.Keywords {
-		s := MakeScanner(kwName)
+		s := makeScanner(kwName)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if kwID.Tok != id {
@@ -196,7 +197,7 @@ func TestScanNumber(t *testing.T) {
 		{`9223372036854775809`, `9223372036854775809`, ICONST},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if d.id != id {
@@ -218,7 +219,7 @@ func TestScanPlaceholder(t *testing.T) {
 		{`$123`, "123"},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if id != PLACEHOLDER {
@@ -294,7 +295,7 @@ world`},
 		{`B'100101'`, "100101"},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var lval sqlSymType
 		_ = s.Lex(&lval)
 		if d.expected != lval.str {
@@ -326,7 +327,7 @@ func TestScanError(t *testing.T) {
 		{`B'123'`, `"2" is not a valid binary digit`},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql)
+		s := makeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if id != ERROR {
@@ -338,48 +339,121 @@ func TestScanError(t *testing.T) {
 	}
 }
 
-func TestScanUntil(t *testing.T) {
+func TestSplitFirstStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []struct {
-		s     string
-		until int
-		pos   int
+		s, res string
 	}{
 		{
-			``,
-			0,
-			0,
+			s:   "SELECT 1",
+			res: "",
 		},
 		{
-			`;`,
-			';',
-			1,
+			s:   "SELECT 1;",
+			res: "SELECT 1;",
 		},
 		{
-			`;`,
-			'a',
-			0,
+			s:   "SELECT 1  /* comment */ ;",
+			res: "SELECT 1  /* comment */ ;",
 		},
 		{
-			"123;",
-			';',
-			4,
+			s:   "SELECT 1;SELECT 2",
+			res: "SELECT 1;",
 		},
 		{
-			`
---SELECT 1, 2, 3;
-SELECT 4, 5;
---blah`,
-			';',
-			31,
+			s:   "SELECT 1  /* comment */ ;SELECT 2",
+			res: "SELECT 1  /* comment */ ;",
+		},
+		{
+			s:   "SELECT 1  /* comment */ ; /* comment */ SELECT 2",
+			res: "SELECT 1  /* comment */ ;",
+		},
+		{
+			s:   ";",
+			res: ";",
+		},
+		{
+			s:   "SELECT ';'",
+			res: "",
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(fmt.Sprintf("%c: %q", tc.until, tc.s), func(t *testing.T) {
-			s := MakeScanner(tc.s)
-			pos := s.Until(tc.until)
-			if pos != tc.pos {
-				t.Fatalf("got %d; expected %d", pos, tc.pos)
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			pos, ok := SplitFirstStatement(tc.s)
+			if !ok && pos != 0 {
+				t.Fatalf("!ok but nonzero pos")
+			}
+			if tc.res != tc.s[:pos] {
+				t.Errorf("expected `%s` but got `%s`", tc.res, tc.s[:pos])
+			}
+		})
+	}
+}
+
+func TestLastLexicalToken(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tests := []struct {
+		s   string
+		res int
+	}{
+		{
+			s:   "",
+			res: 0,
+		},
+		{
+			s:   " /* comment */ ",
+			res: 0,
+		},
+		{
+			s:   "SELECT",
+			res: SELECT,
+		},
+		{
+			s:   "SELECT 1",
+			res: ICONST,
+		},
+		{
+			s:   "SELECT 1;",
+			res: ';',
+		},
+		{
+			s:   "SELECT 1; /* comment */",
+			res: ';',
+		},
+		{
+			s: `SELECT 1;
+			    -- comment`,
+			res: ';',
+		},
+		{
+			s: `
+				--SELECT 1, 2, 3;
+				SELECT 4, 5
+				--blah`,
+			res: ICONST,
+		},
+		{
+			s: `
+				--SELECT 1, 2, 3;
+				SELECT 4, 5;
+				--blah`,
+			res: ';',
+		},
+		{
+			s:   `SELECT 'unfinished`,
+			res: ERROR,
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			tok, ok := LastLexicalToken(tc.s)
+			if !ok && tok != 0 {
+				t.Fatalf("!ok but nonzero tok")
+			}
+			if tc.res != tok {
+				t.Errorf("expected %d but got %d", tc.res, tok)
 			}
 		})
 	}

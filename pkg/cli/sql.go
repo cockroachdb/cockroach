@@ -458,17 +458,6 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	return nextState
 }
 
-func checkTokens(fullStmt string) (isEmpty bool, lastTok int) {
-	sc := parser.MakeScanner(fullStmt)
-	isEmpty = true
-	var last int
-	sc.Tokens(func(t int) {
-		isEmpty = false
-		last = t
-	})
-	return isEmpty, last
-}
-
 func isEndOfStatement(lastTok int) bool {
 	return lastTok == ';' || lastTok == parser.HELPTOKEN
 }
@@ -1059,9 +1048,9 @@ func (c *cliState) doPrepareStatementLine(
 		return startState
 	}
 
-	isEmpty, lastTok := checkTokens(c.concatLines)
+	lastTok, ok := parser.LastLexicalToken(c.concatLines)
 	endOfStmt := isEndOfStatement(lastTok)
-	if c.partialStmtsLen == 0 && isEmpty {
+	if c.partialStmtsLen == 0 && !ok {
 		// More whitespace, or comments. Still nothing to do. However
 		// if the syntax was non-trivial to arrive here,
 		// keep it for history.
