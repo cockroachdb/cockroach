@@ -176,6 +176,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.MergeJoinExpr:
 		ep, err = b.buildMergeJoin(t)
 
+	case *memo.Max1RowExpr:
+		ep, err = b.buildMax1Row(t)
+
 	case *memo.ProjectSetExpr:
 		ep, err = b.buildProjectSet(t)
 
@@ -982,6 +985,20 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	}
 
 	return res, nil
+}
+
+func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
+	input, err := b.buildRelational(max1Row.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	node, err := b.factory.ConstructMax1Row(input.root)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
+
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
