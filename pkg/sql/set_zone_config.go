@@ -454,12 +454,24 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 	// If cluster version is below 2.2, just write the complete zone
 	// config instead of the partial for backwards compatibility reasons.
-	// Otherwise write the partial zone configutation.
+	// Otherwise write the partial zone configuration.
 	hasNewSubzones := !deleteZone && index != nil
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone
 	if !execConfig.Settings.Version.IsMinSupported(cluster.VersionCascadingZoneConfigs) {
 		zoneToWrite = completeZone
+	}
+
+	// Finally check for the extra protection partial zone configs would
+	// require from changes made to parent zones. The extra protections are:
+	//
+	// RangeMinBytes and RangeMaxBytes must be set together
+	// LeasePreferences cannot be set unless Constraints are explicitly set
+	// Per-replica constraints cannot be set unless num_replicas is explicitly set
+	if err := zoneToWrite.ValidateTandemFields(); err != nil {
+		return pgerror.NewErrorf(pgerror.CodeInternalError,
+			fmt.Sprintf("could not validate zone config: %s", err)).SetHintf(
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
