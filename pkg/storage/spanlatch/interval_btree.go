@@ -678,9 +678,13 @@ func (t *btree) Delete(la *latch) {
 	if out, _ := mut(&t.root).remove(la); out != nil {
 		t.length--
 	}
-	if t.root.count == 0 && !t.root.leaf {
+	if t.root.count == 0 {
 		old := t.root
-		t.root = t.root.children[0]
+		if t.root.leaf {
+			t.root = nil
+		} else {
+			t.root = t.root.children[0]
+		}
 		old.decRef(false /* recursive */)
 	}
 }
