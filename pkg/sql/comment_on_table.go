@@ -36,9 +36,6 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc == nil {
-		return newZeroNode(nil /* columns */), nil
-	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err

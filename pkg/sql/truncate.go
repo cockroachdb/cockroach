@@ -276,38 +276,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Reassign comment.
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
-		ctx,
-		"select-comment",
-		p.txn,
-		`SELECT comment FROM system.comments WHERE object_id=$1`,
-		id)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx,
-			"upsert-comment",
-			p.txn,
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.TableCommentType,
-			newID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-	}
-
-	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-		ctx,
-		"delete-comment",
-		p.txn,
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-		keys.TableCommentType,
-		id)
-	if err != nil {
+	if err := reassignComment(p, ctx, id, newID); err != nil {
 		return err
 	}
 
@@ -412,6 +381,46 @@ func reassignReferencedTables(
 		}
 	}
 	return changed, nil
+}
+
+// reassignComment reassign comment on table
+func reassignComment(p *planner, ctx context.Context, oldID, newID sqlbase.ID) error {
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+		ctx,
+		"select-comment",
+		p.txn,
+		`SELECT comment FROM system.comments WHERE object_id=$1`,
+		oldID)
+	if err != nil {
+		return err
+	}
+
+	if comment != nil {
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+			ctx,
+			"upsert-comment",
+			p.txn,
+			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
+			keys.TableCommentType,
+			newID,
+			comment[0])
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.TableCommentType,
+		oldID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
