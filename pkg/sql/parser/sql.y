@@ -41,17 +41,17 @@ const MaxUint = ^uint(0)
 const MaxInt = int(MaxUint >> 1)
 
 func unimplemented(sqllex sqlLexer, feature string) int {
-    sqllex.(*scanner).Unimplemented(feature)
+    sqllex.(*lexer).Unimplemented(feature)
     return 1
 }
 
 func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
-    sqllex.(*scanner).UnimplementedWithIssue(issue)
+    sqllex.(*lexer).UnimplementedWithIssue(issue)
     return 1
 }
 
 func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int {
-    sqllex.(*scanner).UnimplementedWithIssueDetail(issue, detail)
+    sqllex.(*lexer).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
 %}
@@ -1032,7 +1032,7 @@ func newNameFromStr(s string) *tree.Name {
 stmt_block:
   stmt_list
   {
-    sqllex.(*scanner).stmts = $1.stmts()
+    sqllex.(*lexer).stmts = $1.stmts()
   }
 
 stmt_list:
@@ -6557,7 +6557,7 @@ const_typename:
   }
 | SERIAL
   {
-    $$.val = sqllex.(*scanner).nakedSerialType
+    $$.val = sqllex.(*lexer).nakedSerialType
   }
 | SERIAL2
   {
@@ -6647,11 +6647,11 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = sqllex.(*scanner).nakedIntType
+    $$.val = sqllex.(*lexer).nakedIntType
   }
 | INTEGER
   {
-    $$.val = sqllex.(*scanner).nakedIntType
+    $$.val = sqllex.(*lexer).nakedIntType
   }
 | INT2
   {
