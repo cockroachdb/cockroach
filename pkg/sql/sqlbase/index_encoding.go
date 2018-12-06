@@ -245,6 +245,13 @@ func appendEncDatumsToKey(
 	return key, nil
 }
 
+// EncodeTableIDIndexID encodes a table id followed by an index id.
+func EncodeTableIDIndexID(key []byte, tableID ID, indexID IndexID) []byte {
+	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
+	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
+	return key
+}
+
 // DecodeTableIDIndexID decodes a table id followed by an index id.
 func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 	var tableID uint64

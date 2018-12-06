@@ -559,21 +559,21 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       data types, browse around the [`util/encoding
       directory`](https://github.com/cockroachdb/cockroach/tree/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/util/encoding).
 
-      For actually reading a KV pair from the database, the `rowFetcher` delegates to the `kvFetcher`.
+      For actually reading a KV pair from the database, the `rowFetcher` delegates to the `kvBatchFetcher`.
 
-   2. [`kvFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L84):
-      The `kvFetcher` finally reads data from the KV database. It
+   2. [`kvBatchFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L84):
+      The `kvBatchFetcher` finally reads data from the KV database. It
       understands nothing of SQL concepts, such as tables, rows or
       columns. When it is created, it is configured with a number of "key
       spans" that it needs to read (these might be, for example, a single
       span for reading a whole table, or a couple of spans for reading
       parts of the PK or of an index).
 
-      To actually read data from the KV database, the `kvFetcher` uses the
+      To actually read data from the KV database, the `kvBatchFetcher` uses the
       KV layer's "client" interface, namely
       [`client.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/batch.go#L30). This
       is where the "SQL layer" interfaces with the "KV layer" - the
-      `kvFetcher` will
+      `kvBatchFetcher` will
       [build](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L197)
       such `Batch`es of requests, [send them for
       execution](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L203)
@@ -586,7 +586,7 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       [`ScanRequest`s](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L204).
 
 The rest of this document will walk through the "execution" of KV
-requests, such as the ones sent by the `kvFetcher`.
+requests, such as the ones sent by the `kvBatchFetcher`.
 
 ## KV
 
@@ -616,7 +616,7 @@ context of a transaction). Afterwards, a
 [`Txn`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L36)
 object is available for [executing requests in the context of that
 transaction](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L295)
-- this is what, for example, the `kvFetcher` uses. If you trace what
+- this is what, for example, the `kvBatchFetcher` uses. If you trace what
 happens inside that `Txn.Run()` method you eventually get to
 [`txn.db.sender.Send(...,
 batch)`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L587):

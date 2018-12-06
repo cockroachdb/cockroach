@@ -573,6 +573,16 @@ func (v Value) GetDecimal() (apd.Decimal, error) {
 	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
 }
 
+// GetDecimalInto decodes a decimal value from the bytes of the receiver,
+// writing it directly into the provided non-null apd.Decimal. If the
+// tag is not DECIMAL an error will be returned.
+func (v Value) GetDecimalInto(d *apd.Decimal) error {
+	if tag := v.GetTag(); tag != ValueType_DECIMAL {
+		return fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+	}
+	return encoding.DecodeIntoNonsortingDecimal(d, v.dataBytes(), nil)
+}
+
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
 // field of the receiver. An error will be returned if the tag is not
 // TIMESERIES or if decoding fails.

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,13 +38,13 @@ import (
 // this to avoid using log.V in the hot path.
 const debugRowFetch = false
 
-type kvFetcher interface {
+type kvBatchFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, err error)
+		batchResponse []byte, numKvs int64, origSpan roachpb.Span, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -87,6 +86,11 @@ type tableInfo struct {
 	// index (into cols); -1 if we don't need the value for that column.
 	indexColIdx []int
 
+	// knownPrefixLength is the number of bytes in the index key prefix this
+	// Fetcher is configured for. The index key prefix is the table id, index
+	// id pair at the start of the key.
+	knownPrefixLength int
+
 	// -- Fields updated during a scan --
 
 	keyValTypes []sqlbase.ColumnType
@@ -105,7 +109,7 @@ type tableInfo struct {
 	// was modified in any way.
 	rowLastModified hlc.Timestamp
 	// rowIsDeleted is true when the row has been deleted. This is only
-	// meaningful when kv deletion tombstones are returned by the kvFetcher,
+	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
 	// changefeeds use this by providing raw kvs with tombstones unfiltered via
 	// `StartScanFrom`.
@@ -178,7 +182,7 @@ type Fetcher struct {
 	reverse bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
-	// out of all the tables. This is used to calculate the kvFetcher's
+	// out of all the tables. This is used to calculate the kvBatchFetcher's
 	// firstBatchLimit.
 	maxKeysPerRow int
 
@@ -188,12 +192,7 @@ type Fetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
-	// knownPrefixLength is the number of bytes in the index key prefix this
-	// Fetcher is configured for. The index key prefix is the table id, index
-	// id pair at the start of the key.
-	knownPrefixLength int
-
-	// returnRangeInfo, if set, causes the underlying kvFetcher to return
+	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
 	// info is actually useful for correcting the plan (e.g. not for the PK-side
@@ -222,11 +221,6 @@ type Fetcher struct {
 	kv                roachpb.KeyValue
 	keyRemainingBytes []byte
 	kvEnd             bool
-
-	kvs []roachpb.KeyValue
-
-	batchResponse []byte
-	batchNumKvs   int64
 
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
@@ -339,7 +333,7 @@ func (rf *Fetcher) Init(
 			}
 		}
 
-		rf.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
+		table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
 		var indexColumnIDs []sqlbase.ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -471,65 +465,21 @@ func (rf *Fetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := makeKVBatchFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
 	return rf.StartScanFrom(ctx, &f)
 }
 
-// StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
+// StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
 // used multiple times.
-func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
 	rf.indexKey = nil
-	rf.kvFetcher = f
-	rf.kvs = nil
-	rf.batchNumKvs = 0
-	rf.batchResponse = nil
+	rf.kvFetcher = newKVFetcher(f)
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
-}
-
-// Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
-// the next batch until there are no more kvs to fetch.
-// Returns whether or not there are more kvs to fetch, the kv that was fetched,
-// and any errors that may have occurred.
-func (rf *Fetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
-	if len(rf.kvs) != 0 {
-		kv = rf.kvs[0]
-		rf.kvs = rf.kvs[1:]
-		return true, kv, nil
-	}
-	if rf.batchNumKvs > 0 {
-		rf.batchNumKvs--
-		var key []byte
-		var rawBytes []byte
-		var err error
-		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
-		if err != nil {
-			return false, kv, err
-		}
-		return true, roachpb.KeyValue{
-			Key: key,
-			Value: roachpb.Value{
-				RawBytes: rawBytes,
-			},
-		}, nil
-	}
-
-	var numKeys int64
-	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
-	if rf.batchResponse != nil {
-		rf.batchNumKvs = numKeys
-	}
-	if err != nil {
-		return ok, kv, err
-	}
-	if !ok {
-		return false, kv, nil
-	}
-	return rf.nextKV(ctx)
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
@@ -538,7 +488,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.nextKV(ctx)
+		ok, rf.kv, _, err = rf.kvFetcher.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -641,7 +591,7 @@ func (rf *Fetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err
 			rf.currentTable.keyValTypes,
 			rf.currentTable.keyVals,
 			rf.currentTable.indexColumnDirs,
-			key[rf.knownPrefixLength:],
+			key[rf.currentTable.knownPrefixLength:],
 		)
 	}
 
@@ -1093,7 +1043,7 @@ func (rf *Fetcher) RowLastModified() hlc.Timestamp {
 
 // RowIsDeleted may only be called after NextRow has returned a non-nil row and
 // returns true if that row was most recently deleted. This method is only
-// meaningful when the configured kvFetcher returns deletion tombstones, which
+// meaningful when the configured kvBatchFetcher returns deletion tombstones, which
 // the normal one (via `StartScan`) does not.
 func (rf *Fetcher) RowIsDeleted() bool {
 	return rf.rowReadyTable.rowIsDeleted
@@ -1330,11 +1280,11 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 		return nil, nil
 	}
 	n, err := consumeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.currentTable.index, nCols, rf.kv.Key[rf.knownPrefixLength:])
+		rf.currentTable.index, nCols, rf.kv.Key[rf.currentTable.knownPrefixLength:])
 	if err != nil {
 		return nil, err
 	}
-	return rf.kv.Key[:n+rf.knownPrefixLength], nil
+	return rf.kv.Key[:n+rf.currentTable.knownPrefixLength], nil
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.

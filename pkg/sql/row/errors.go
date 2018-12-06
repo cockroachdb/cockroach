@@ -27,24 +27,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// singleKVFetcher is a kvFetcher that returns a single kv.
+// singleKVFetcher is a kvBatchFetcher that returns a single kv.
 type singleKVFetcher struct {
 	kvs  [1]roachpb.KeyValue
 	done bool
 }
 
-// nextBatch implements the kvFetcher interface.
+// nextBatch implements the kvBatchFetcher interface.
 func (f *singleKVFetcher) nextBatch(
 	_ context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
+) (
+	ok bool,
+	kvs []roachpb.KeyValue,
+	batchResponse []byte,
+	numKvs int64,
+	span roachpb.Span,
+	err error,
+) {
 	if f.done {
-		return false, nil, nil, 0, nil
+		return false, nil, nil, 0, roachpb.Span{}, nil
 	}
 	f.done = true
-	return true, f.kvs[:], nil, 0, nil
+	return true, f.kvs[:], nil, 0, roachpb.Span{}, nil
 }
 
-// getRangesInfo implements the kvFetcher interface.
+// getRangesInfo implements the kvBatchFetcher interface.
 func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	panic("getRangesInfo() called on singleKVFetcher")
 }
