@@ -659,10 +659,21 @@ func GenerateInsertRow(
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
+	checkNullViolation := func(col *sqlbase.ColumnDescriptor) error {
+		if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !col.Nullable && (!ok || rowVals[i] == tree.DNull) {
+			return sqlbase.NewNonNullViolationError(col.Name)
+		}
+		return nil
+	}
 	for _, col := range tableDesc.Columns {
-		if !col.Nullable {
-			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
-				return nil, sqlbase.NewNonNullViolationError(col.Name)
+		if err := checkNullViolation(&col); err != nil {
+			return nil, err
+		}
+	}
+	for _, m := range tableDesc.Mutations {
+		if c := m.GetColumn(); c != nil && m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+			if err := checkNullViolation(c); err != nil {
+				return nil, err
 			}
 		}
 	}

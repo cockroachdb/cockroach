@@ -2196,7 +2196,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	backfillNotification := make(chan bool)
-	continueBackfillNotification := make(chan bool)
+
+	backfillCompleteNotification := make(chan bool)
+	continueSchemaChangeNotification := make(chan bool)
+
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &distsqlrun.TestingKnobs{
@@ -2206,9 +2209,18 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 					// been queued and the backfill has started.
 					close(backfillNotification)
 					backfillNotification = nil
-					<-continueBackfillNotification
+					<-continueSchemaChangeNotification
 				}
 				return nil
+			},
+			RunAfterBackfillChunk: func() {
+				if backfillCompleteNotification != nil {
+					// Close channel to notify that the schema change
+					// backfill is complete and not finalized.
+					close(backfillCompleteNotification)
+					backfillCompleteNotification = nil
+					<-continueSchemaChangeNotification
+				}
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
@@ -2223,7 +2235,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test (
     k INT NOT NULL,
-    v INT NOT NULL,
+    v INT,
     length INT NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (k),
     INDEX v_idx (v),
@@ -2238,10 +2250,11 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 
 	// Run the column schema change in a separate goroutine.
 	notification := backfillNotification
+	doneNotification := backfillCompleteNotification
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT NOT NULL DEFAULT 2;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT NOT NULL DEFAULT 2, ADD u INT NOT NULL AS (v+1) STORED;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2262,7 +2275,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	// Wait until both mutations are queued up.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-		if l := len(tableDesc.Mutations); l != 2 {
+		if l := len(tableDesc.Mutations); l != 3 {
 			return errors.Errorf("number of mutations = %d", l)
 		}
 		return nil
@@ -2347,7 +2360,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	}
 	expect := `CREATE TABLE test (
 	k INT NOT NULL,
-	v INT NOT NULL,
+	v INT NULL,
 	length INT NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX v_idx (v ASC),
@@ -2358,11 +2371,24 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	if l := len(tableDesc.Mutations); l != 2 {
+	if l := len(tableDesc.Mutations); l != 3 {
 		t.Fatalf("number of mutations = %d", l)
 	}
 
-	close(continueBackfillNotification)
+	continueSchemaChangeNotification <- true
+
+	<-doneNotification
+
+	expectedErr := "\"u\" violates not-null constraint"
+	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, length) VALUES (5, NULL, 8)`); !testutils.IsError(err, expectedErr) {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = NULL WHERE k = 0`); !testutils.IsError(err, expectedErr) {
+		t.Fatal(err)
+	}
+
+	close(continueSchemaChangeNotification)
 
 	wg.Wait()
 
@@ -2370,26 +2396,26 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 		t.Fatal(err)
 	}
 	// Check data!
-	rows, err := sqlDB.Query(`SELECT k, v, length, id, z FROM t.test`)
+	rows, err := sqlDB.Query(`SELECT k, v, length, id, u, z FROM t.test`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 	expected := [][]int{
-		{0, 1, 27000, 2, 2},
-		{3, 1, 3, 2, 5},
-		{4, 5, 270, 2, 6},
+		{0, 1, 27000, 2, 2, 2},
+		{3, 1, 3, 2, 2, 5},
+		{4, 5, 270, 2, 6, 6},
 	}
 	count := 0
 	for ; rows.Next(); count++ {
-		var i1, i2, i3, i4, i5 *int
-		if err := rows.Scan(&i1, &i2, &i3, &i4, &i5); err != nil {
+		var i1, i2, i3, i4, i5, i6 *int
+		if err := rows.Scan(&i1, &i2, &i3, &i4, &i5, &i6); err != nil {
 			t.Errorf("row %d scan failed: %s", count, err)
 			continue
 		}
-		row := fmt.Sprintf("%d %d %d %d %d", *i1, *i2, *i3, *i4, *i5)
+		row := fmt.Sprintf("%d %d %d %d %d %d", *i1, *i2, *i3, *i4, *i5, *i6)
 		exp := expected[count]
-		expRow := fmt.Sprintf("%d %d %d %d %d", exp[0], exp[1], exp[2], exp[3], exp[4])
+		expRow := fmt.Sprintf("%d %d %d %d %d %d", exp[0], exp[1], exp[2], exp[3], exp[4], exp[5])
 		if row != expRow {
 			t.Errorf("expected %q but read %q", expRow, row)
 		}
