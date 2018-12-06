@@ -363,3 +363,4 @@ func registerTypeCustomizers() {
 
 // Avoid unused warning for Assign, which is only used in templates.
 var _ = overload{}.Assign
+var _ = overload{}.UnaryAssign
