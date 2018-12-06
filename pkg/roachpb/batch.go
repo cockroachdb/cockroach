@@ -502,7 +502,14 @@ func (ba BatchRequest) String() string {
 			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
 		} else {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
+			var s string
+			if req.Method() == PushTxn {
+				pushReq := req.(*PushTxnRequest)
+				s = fmt.Sprintf("PushTxn(%s->%s)", pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
+			} else {
+				s = req.Method().String()
+			}
+			str = append(str, fmt.Sprintf("%s [%s,%s)", s, h.Key, h.EndKey))
 		}
 	}
 	return strings.Join(str, ", ")
