@@ -32,7 +32,8 @@ import (
 
 // Verify asserts that the tree's structural invariants all hold.
 func (t *btree) Verify(tt *testing.T) {
-	if t.root == nil {
+	if t.length == 0 {
+		require.Nil(tt, t.root)
 		return
 	}
 	t.verifyLeafSameDepth(tt)
