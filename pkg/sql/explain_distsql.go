@@ -42,6 +42,10 @@ type explainDistSQLNode struct {
 	// returned by the node.
 	analyze bool
 
+	// optimizeSubqueries indicates whether to invoke optimizeSubquery and
+	// setUnlimited on the subqueries.
+	optimizeSubqueries bool
+
 	run explainDistSQLRun
 }
 
@@ -59,6 +63,15 @@ type explainDistSQLRun struct {
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
+	if n.analyze &&
+		(params.SessionData().DistSQLMode == sessiondata.DistSQLOff ||
+			params.SessionData().DistSQLMode == sessiondata.DistSQL2Dot0Off) {
+		return pgerror.NewErrorf(
+			pgerror.CodeObjectNotInPrerequisiteStateError,
+			"cannot run EXPLAIN ANALYZE while distsql is disabled",
+		)
+	}
+
 	// Trigger limit propagation.
 	params.p.prepareForDistSQLSupportCheck()
 
@@ -76,13 +89,30 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	// original text in the plan.
 	planCtx.noEvalSubqueries = !n.analyze
 
-	outerSubqueries := planCtx.planner.curPlan.subqueryPlans
-	defer func() {
-		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
-	}()
-	planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
-
 	if n.analyze && len(n.subqueryPlans) > 0 {
+		outerSubqueries := planCtx.planner.curPlan.subqueryPlans
+		defer func() {
+			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+		}()
+		planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
+
+		if n.optimizeSubqueries {
+			// The sub-plan's subqueries have been captured local to the
+			// explainDistSQLNode node so that they would not be automatically
+			// started for execution by planTop.start(). But this also means
+			// they were not yet processed by makePlan()/optimizePlan(). Do it
+			// here.
+			for i := range n.subqueryPlans {
+				if err := params.p.optimizeSubquery(params.ctx, &n.subqueryPlans[i]); err != nil {
+					return err
+				}
+
+				// Trigger limit propagation. This would be done otherwise when
+				// starting the plan. However we do not want to start the plan.
+				params.p.setUnlimited(n.subqueryPlans[i].plan)
+			}
+		}
+
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
@@ -107,7 +137,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				ret := *params.extendedEvalCtx
 				return &ret
 			},
-			params.p.curPlan.subqueryPlans,
+			n.subqueryPlans,
 			recv,
 			true,
 		) {
@@ -131,13 +161,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	if n.analyze {
-		if params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
-			return pgerror.NewErrorf(
-				pgerror.CodeObjectNotInPrerequisiteStateError,
-				"cannot run EXPLAIN ANALYZE while distsql is disabled",
-			)
-		}
-
 		// TODO(andrei): We don't create a child span if the parent is already
 		// recording because we don't currently have a good way to ask for a
 		// separate recording for the child such that it's also guaranteed that we
@@ -223,4 +246,12 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
+	for i := range n.subqueryPlans {
+		// Once a subquery plan has been evaluated, it already closes its
+		// plan.
+		if n.subqueryPlans[i].plan != nil {
+			n.subqueryPlans[i].plan.Close(ctx)
+			n.subqueryPlans[i].plan = nil
+		}
+	}
 }

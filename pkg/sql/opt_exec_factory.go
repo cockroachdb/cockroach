@@ -742,6 +742,14 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
+// ConstructMax1Row is part of the exec.Factory interface.
+func (ef *execFactory) ConstructMax1Row(input exec.Node) (exec.Node, error) {
+	plan := input.(planNode)
+	return &max1RowNode{
+		plan: plan,
+	}, nil
+}
+
 // ConstructProjectSet is part of the exec.Factory interface.
 func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,

@@ -45,6 +45,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *limitNode:
 		setNeededColumns(n.plan, needed)
 
+	case *max1RowNode:
+		setNeededColumns(n.plan, needed)
+
 	case *spoolNode:
 		setNeededColumns(n.source, needed)
 

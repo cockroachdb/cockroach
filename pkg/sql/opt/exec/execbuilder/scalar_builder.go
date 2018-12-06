@@ -500,11 +500,6 @@ func (b *Builder) buildSubquery(
 ) (tree.TypedExpr, error) {
 	subquery := scalar.(*memo.SubqueryExpr)
 	input := subquery.Input
-	// Typically, the input is a Max1RowOp; it might be elided if the optimizer
-	// proves that more than 1 result is not possible.
-	if subquery.Input.Op() == opt.Max1RowOp {
-		input = input.Child(0).(memo.RelExpr)
-	}
 
 	// TODO(radu): for now we only support the trivial projection.
 	cols := input.Relational().OutputCols

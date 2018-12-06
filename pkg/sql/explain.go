@@ -41,15 +41,21 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		if analyze && IsStmtParallelized(n.Statement) {
 			return nil, errors.New("EXPLAIN ANALYZE does not support RETURNING NOTHING statements")
 		}
+		// Build the plan for the query being explained.  We want to capture
+		// all the analyzed sub-queries in the explain node, so we are going
+		// to override the planner's subquery plan slice.
+		defer func(s []subquery) { p.curPlan.subqueryPlans = s }(p.curPlan.subqueryPlans)
+		p.curPlan.subqueryPlans = nil
 		plan, err := p.newPlan(ctx, n.Statement, nil)
 		if err != nil {
 			return nil, err
 		}
 		return &explainDistSQLNode{
-			plan:          plan,
-			subqueryPlans: p.curPlan.subqueryPlans,
-			analyze:       analyze,
-			stmtType:      n.Statement.StatementType(),
+			plan:               plan,
+			subqueryPlans:      p.curPlan.subqueryPlans,
+			optimizeSubqueries: true,
+			analyze:            analyze,
+			stmtType:           n.Statement.StatementType(),
 		}, nil
 
 	case tree.ExplainPlan:
