@@ -40,7 +40,7 @@ CREATE TABLE information_schema.columns (
 	GENERATION_EXPRESSION    STRING,          -- MySQL/CockroachDB extension.
 	IS_HIDDEN                STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
 	CRDB_SQL_TYPE            STRING NOT NULL  -- CockroachDB extension for SHOW COLUMNS / dump.
-);`
+)`
 
 // InformationSchemaAdministrableRoleAuthorizations describes the schema of the
 // information_schema.administrable_role_authorizations table.
@@ -51,7 +51,7 @@ CREATE TABLE information_schema.administrable_role_authorizations (
 	GRANTEE      STRING NOT NULL,
 	ROLE_NAME    STRING NOT NULL,
 	IS_GRANTABLE STRING NOT NULL
-);`
+)`
 
 // InformationSchemaApplicableRoles describes the schema of the
 // information_schema.applicable_roles table.
@@ -62,7 +62,7 @@ CREATE TABLE information_schema.applicable_roles (
 	GRANTEE      STRING NOT NULL,
 	ROLE_NAME    STRING NOT NULL,
 	IS_GRANTABLE STRING NOT NULL
-);`
+)`
 
 // InformationSchemaColumnPrivileges describes the schema of the
 // information_schema.column_privileges table.
@@ -78,7 +78,7 @@ CREATE TABLE information_schema.column_privileges (
 	COLUMN_NAME    STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING
-);`
+)`
 
 // InformationSchemaSchemata describes the schema of the
 // information_schema.schemata table.
@@ -88,7 +88,7 @@ CREATE TABLE information_schema.schemata (
 	SCHEMA_NAME                STRING NOT NULL,
 	DEFAULT_CHARACTER_SET_NAME STRING,
 	SQL_PATH                   STRING
-);`
+)`
 
 // InformationSchemaTables describes the schema of the
 // information_schema.tables table.
@@ -102,4 +102,4 @@ CREATE TABLE information_schema.tables (
 	TABLE_TYPE         STRING NOT NULL,
 	IS_INSERTABLE_INTO STRING NOT NULL,
 	VERSION            INT
-);`
+)`
