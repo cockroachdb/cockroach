@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -117,7 +116,8 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		case types.String:
 		case types.Bytes:
 		default:
-			return nil, fmt.Errorf("zone config must be of type string or bytes, not %s", typ)
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				"zone config must be of type string or bytes, not %s", typ)
 		}
 	}
 
@@ -130,11 +130,13 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		options = make(map[tree.Name]optionValue)
 		for _, opt := range n.Options {
 			if _, alreadyExists := options[opt.Key]; alreadyExists {
-				return nil, fmt.Errorf("duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
 			req, ok := supportedZoneConfigOptions[opt.Key]
 			if !ok {
-				return nil, fmt.Errorf("unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
 			if opt.Value == nil {
 				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
@@ -209,6 +211,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			inheritVal, expr := val.inheritValue, val.explicitValue
 			if inheritVal {
 				copyFromParentList = append(copyFromParentList, *name)
+				if optionStr.Len() > 0 {
+					optionStr.WriteString(", ")
+				}
+				fmt.Fprintf(&optionStr, "%s = COPY FROM PARENT", name)
 				continue
 			}
 			datum, err := expr.Eval(params.EvalContext())
@@ -216,14 +222,15 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 			if datum == tree.DNull {
-				return fmt.Errorf("unsupported NULL value for %q", tree.ErrString(name))
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"unsupported NULL value for %q", tree.ErrString(name))
 			}
 			setter := supportedZoneConfigOptions[*name].setter
 			setters = append(setters, func(c *config.ZoneConfig) { setter(c, datum) })
 			if optionStr.Len() > 0 {
 				optionStr.WriteString(", ")
 			}
-			fmt.Fprintf(&optionStr, "%s = %s", string(*name), datum)
+			fmt.Fprintf(&optionStr, "%s = %s", name, datum)
 
 		}
 	}
@@ -361,12 +368,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// empty, in which case the unmarshaling will be a no-op. This is
 		// innocuous.
 		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
-			return fmt.Errorf("could not parse zone config: %v", err)
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+				"could not parse zone config: %v", err)
 		}
 
 		// Load settings from YAML into the partial zone as well.
 		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
-			return fmt.Errorf("could not parse zone config: %v", err)
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+				"could not parse zone config: %v", err)
 		}
 
 		// Load settings from var = val assignments. If there were no such
@@ -447,7 +456,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		// Finally revalidate everything. Validate only the completeZone config.
 		if err := completeZone.Validate(); err != nil {
-			return fmt.Errorf("could not validate zone config: %s", err)
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+				"could not validate zone config: %v", err)
 		}
 	}
 
@@ -469,7 +479,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// Per-replica constraints cannot be set unless num_replicas is explicitly set
 	if err := zoneToWrite.ValidateTandemFields(); err != nil {
 		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
-			fmt.Sprintf("could not validate zone config: %s", err)).SetHintf(
+			"could not validate zone config: %v", err).SetHintf(
 			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
@@ -581,7 +591,7 @@ func validateZoneAttrsAndLocalities(
 			}
 		}
 		if !found {
-			return fmt.Errorf(
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 				"constraint %q matches no existing nodes within the cluster - did you enter it correctly?",
 				constraint)
 		}
@@ -602,7 +612,8 @@ func writeZoneConfig(
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
-			return 0, errors.New("cluster version does not support zone configs on indexes or partitions")
+			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
+				"cluster version does not support zone configs on indexes or partitions")
 		}
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
 			st, execCfg.ClusterID(), table, zone.Subzones, hasNewSubzones)
@@ -616,14 +627,14 @@ func writeZoneConfig(
 	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
 		st := execCfg.Settings
 		if !st.Version.IsMinSupported(cluster.VersionPerReplicaZoneConstraints) {
-			return 0, errors.New(
+			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
 				"cluster version does not support zone configs with per-replica constraints")
 		}
 	}
 	if len(zone.LeasePreferences) > 0 {
 		st := execCfg.Settings
 		if !st.Version.IsMinSupported(cluster.VersionLeasePreferences) {
-			return 0, errors.New(
+			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
 				"cluster version does not support zone configs with lease placement preferences")
 		}
 	}
@@ -635,7 +646,8 @@ func writeZoneConfig(
 
 	buf, err := protoutil.Marshal(zone)
 	if err != nil {
-		return 0, fmt.Errorf("could not marshal zone config: %s", err)
+		return 0, pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			"could not marshal zone config: %v", err)
 	}
 	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
 		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)

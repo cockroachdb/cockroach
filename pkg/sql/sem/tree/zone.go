@@ -102,6 +102,18 @@ func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 		}
 	} else {
 		ctx.WriteString("USING ")
-		ctx.FormatNode(&node.Options)
+		kvOptions := node.Options
+		comma := ""
+		for _, kv := range kvOptions {
+			ctx.WriteString(comma)
+			comma = ", "
+			ctx.FormatNode(&kv.Key)
+			if kv.Value != nil {
+				ctx.WriteString(` = `)
+				ctx.FormatNode(kv.Value)
+			} else {
+				ctx.WriteString(` = COPY FROM PARENT`)
+			}
+		}
 	}
 }
