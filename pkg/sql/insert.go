@@ -133,17 +133,7 @@ func (p *planner) Insert(
 		// not care: the backfill is also inserting defaults, and we do
 		// not provide guarantees about the evaluation order of default
 		// expressions.
-		insertCols = desc.Columns
-		// Add mutation columns.
-		if len(desc.Mutations) > 0 {
-			insertCols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-			insertCols = append(insertCols, desc.Columns...)
-			for i := range desc.Mutations {
-				if c := desc.Mutations[i].GetColumn(); c != nil && desc.Mutations[i].State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-					insertCols = append(insertCols, *c)
-				}
-			}
-		}
+		insertCols = desc.WritableColumns
 	} else {
 		var err error
 		if insertCols, err = p.processColumns(desc, n.Columns,
@@ -659,21 +649,10 @@ func GenerateInsertRow(
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
-	checkNullViolation := func(col *sqlbase.ColumnDescriptor) error {
-		if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !col.Nullable && (!ok || rowVals[i] == tree.DNull) {
-			return sqlbase.NewNonNullViolationError(col.Name)
-		}
-		return nil
-	}
-	for _, col := range tableDesc.Columns {
-		if err := checkNullViolation(&col); err != nil {
-			return nil, err
-		}
-	}
-	for _, m := range tableDesc.Mutations {
-		if c := m.GetColumn(); c != nil && m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			if err := checkNullViolation(c); err != nil {
-				return nil, err
+	for _, col := range tableDesc.WritableColumns {
+		if !col.Nullable {
+			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
+				return nil, sqlbase.NewNonNullViolationError(col.Name)
 			}
 		}
 	}
