@@ -66,16 +66,10 @@ func MakeInserter(
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state
 	// DELETE_AND_WRITE_ONLY.
-	if len(tableDesc.Mutations) > 0 {
-		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	if len(tableDesc.WriteOnlyIndexes) > 0 {
+		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.WriteOnlyIndexes))
 		indexes = append(indexes, tableDesc.Indexes...)
-		for _, m := range tableDesc.Mutations {
-			if m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				if index := m.GetIndex(); index != nil {
-					indexes = append(indexes, *index)
-				}
-			}
-		}
+		indexes = append(indexes, tableDesc.WriteOnlyIndexes...)
 	}
 
 	ri := Inserter{
@@ -479,37 +473,34 @@ func makeUpdaterWithoutCascader(
 		}) != nil
 	}
 
-	indexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	writeIndexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.WriteOnlyIndexes))
 	for _, index := range tableDesc.Indexes {
 		if needsUpdate(index) {
-			indexes = append(indexes, index)
+			writeIndexes = append(writeIndexes, index)
+		}
+	}
+	for _, index := range tableDesc.WriteOnlyIndexes {
+		if needsUpdate(index) {
+			writeIndexes = append(writeIndexes, index)
 		}
 	}
 
 	// Columns of the table to update, including those in delete/write-only state
 	tableCols := tableDesc.Columns
-	if len(tableDesc.Mutations) > 0 {
-		tableCols = make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
+	if len(tableDesc.MutationColumns) > 0 {
+		tableCols = make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.MutationColumns))
 		tableCols = append(tableCols, tableDesc.Columns...)
+		tableCols = append(tableCols, tableDesc.MutationColumns...)
 	}
 
 	var deleteOnlyIndexes []sqlbase.IndexDescriptor
-	for _, m := range tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			if needsUpdate(*index) {
-				switch m.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
-					if deleteOnlyIndexes == nil {
-						// Allocate at most once.
-						deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Mutations))
-					}
-					deleteOnlyIndexes = append(deleteOnlyIndexes, *index)
-				default:
-					indexes = append(indexes, *index)
-				}
+	for _, idx := range tableDesc.DeleteOnlyIndexes {
+		if needsUpdate(idx) {
+			if deleteOnlyIndexes == nil {
+				// Allocate at most once.
+				deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes))
 			}
-		} else if col := m.GetColumn(); col != nil {
-			tableCols = append(tableCols, *col)
+			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
 		}
 	}
 
@@ -520,7 +511,7 @@ func makeUpdaterWithoutCascader(
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(tableDesc, indexes),
+		Helper:                newRowHelper(tableDesc, writeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
@@ -604,7 +595,7 @@ func makeUpdaterWithoutCascader(
 
 		// Fetch all columns from indices that are being update so that they can
 		// be used to create the new kv pairs for those indices.
-		for _, index := range indexes {
+		for _, index := range writeIndexes {
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err
 			}
@@ -915,14 +906,10 @@ func makeRowDeleterWithoutCascader(
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
 	indexes := tableDesc.Indexes
-	if len(tableDesc.Mutations) > 0 {
-		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	if len(tableDesc.MutationIndexes) > 0 {
+		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.MutationIndexes))
 		indexes = append(indexes, tableDesc.Indexes...)
-		for _, m := range tableDesc.Mutations {
-			if index := m.GetIndex(); index != nil {
-				indexes = append(indexes, *index)
-			}
-		}
+		indexes = append(indexes, tableDesc.MutationIndexes...)
 	}
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]

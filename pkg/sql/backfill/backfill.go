@@ -306,18 +306,11 @@ type IndexBackfiller struct {
 
 // Init initializes an IndexBackfiller.
 func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
-	numCols := len(desc.Columns)
 	cols := desc.Columns
-	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
+	if len(desc.WriteOnlyColumns) > 0 {
+		cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.WriteOnlyColumns))
 		cols = append(cols, desc.Columns...)
-		for _, m := range desc.Mutations {
-			if column := m.GetColumn(); column != nil &&
-				m.Direction == sqlbase.DescriptorMutation_ADD &&
-				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				cols = append(cols, *column)
-			}
-		}
+		cols = append(cols, desc.WriteOnlyColumns...)
 	}
 
 	var valNeededForCol util.FastIntSet

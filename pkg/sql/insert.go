@@ -135,14 +135,10 @@ func (p *planner) Insert(
 		// expressions.
 		insertCols = desc.Columns
 		// Add mutation columns.
-		if len(desc.Mutations) > 0 {
-			insertCols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+		if len(desc.WriteOnlyColumns) > 0 {
+			insertCols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.WriteOnlyColumns))
 			insertCols = append(insertCols, desc.Columns...)
-			for i := range desc.Mutations {
-				if c := desc.Mutations[i].GetColumn(); c != nil && desc.Mutations[i].State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-					insertCols = append(insertCols, *c)
-				}
-			}
+			insertCols = append(insertCols, desc.WriteOnlyColumns...)
 		}
 	} else {
 		var err error
@@ -670,11 +666,9 @@ func GenerateInsertRow(
 			return nil, err
 		}
 	}
-	for _, m := range tableDesc.Mutations {
-		if c := m.GetColumn(); c != nil && m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			if err := checkNullViolation(c); err != nil {
-				return nil, err
-			}
+	for _, col := range tableDesc.WriteOnlyColumns {
+		if err := checkNullViolation(&col); err != nil {
+			return nil, err
 		}
 	}
 

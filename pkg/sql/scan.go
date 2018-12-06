@@ -353,7 +353,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 
 // initCols initializes n.cols and n.numBackfillColumns according to n.desc and n.colCfg.
 func (n *scanNode) initCols() error {
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.MutationColumns))
 	if n.colCfg.wantedColumns == nil {
 		n.cols = append(n.cols, n.desc.Columns...)
 	} else {
@@ -389,18 +389,14 @@ func (n *scanNode) initCols() error {
 		}
 	}
 
-	n.numBackfillColumns = 0
 	if n.colCfg.visibility == publicAndNonPublicColumns {
-		for _, mutation := range n.desc.Mutations {
-			if c := mutation.GetColumn(); c != nil {
-				col := *c
-				// Even if the column is non-nullable it can be null in the
-				// middle of a schema change.
-				col.Nullable = true
-				n.cols = append(n.cols, col)
-				n.numBackfillColumns++
-			}
+		for _, col := range n.desc.MutationColumns {
+			// Even if the column is non-nullable it can be null in the
+			// middle of a schema change.
+			col.Nullable = true
+			n.cols = append(n.cols, col)
 		}
+		n.numBackfillColumns = len(n.desc.MutationColumns)
 	}
 	return nil
 }

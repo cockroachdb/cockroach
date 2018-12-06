@@ -117,6 +117,24 @@ type MutableTableDescriptor struct {
 // should be const.
 type ImmutableTableDescriptor struct {
 	TableDescriptor
+
+	// MutationIndexes is a list of indexes going through a schema change.
+	MutationIndexes []IndexDescriptor
+
+	// DeleteOnlyIndexes is a list of indexes in the DELETE_ONLY state.
+	DeleteOnlyIndexes []IndexDescriptor
+
+	// WriteOnlyIndexes is a list of indexes in the DELETE_AND_WRITE_ONLY state.
+	WriteOnlyIndexes []IndexDescriptor
+
+	// MutationColumns is a list of columns going through a schema change.
+	MutationColumns []ColumnDescriptor
+
+	// DeleteOnlyColumns is a list of indexes in the DELETE_ONLY state.
+	DeleteOnlyColumns []ColumnDescriptor
+
+	// WriteOnlyColumns is a list of indexes in the DELETE_AND_WRITE_ONLY state.
+	WriteOnlyColumns []ColumnDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -179,7 +197,53 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	return &ImmutableTableDescriptor{TableDescriptor: tbl}
+	var deleteOnlyIndexes, writeOnlyIndexes, mutationIndexes []IndexDescriptor
+	var deleteOnlyCols, writeOnlyCols, mutationCols []ColumnDescriptor
+
+	if len(tbl.Mutations) > 0 {
+		mutationIndexes = make([]IndexDescriptor, 0, len(tbl.Mutations))
+		mutationCols = make([]ColumnDescriptor, 0, len(tbl.Mutations))
+
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					mutationIndexes = append(mutationIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					mutationCols = append(mutationCols, *col)
+				}
+			}
+		}
+
+		// Number of delete-only indexes and columns.
+		numDelIndexes, numDelCols := len(mutationIndexes), len(mutationCols)
+
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_AND_WRITE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					mutationIndexes = append(mutationIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					mutationCols = append(mutationCols, *col)
+				}
+			}
+		}
+
+		deleteOnlyIndexes = mutationIndexes[:numDelIndexes]
+		writeOnlyIndexes = mutationIndexes[numDelIndexes:]
+
+		deleteOnlyCols = mutationCols[:numDelCols]
+		writeOnlyCols = mutationCols[numDelCols:]
+	}
+	return &ImmutableTableDescriptor{
+		TableDescriptor:   tbl,
+		MutationIndexes:   mutationIndexes,
+		DeleteOnlyIndexes: deleteOnlyIndexes,
+		WriteOnlyIndexes:  writeOnlyIndexes,
+		MutationColumns:   mutationCols,
+		DeleteOnlyColumns: deleteOnlyCols,
+		WriteOnlyColumns:  writeOnlyCols,
+	}
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database

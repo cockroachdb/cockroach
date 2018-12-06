@@ -114,11 +114,8 @@ func processColumnSet(
 	}
 	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY that also
 	// satisfies the condition.
-	for _, m := range tableDesc.Mutations {
-		if col := m.GetColumn(); col != nil &&
-			m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			addIf(*col)
-		}
+	for _, col := range tableDesc.WriteOnlyColumns {
+		addIf(col)
 	}
 	return cols
 }
