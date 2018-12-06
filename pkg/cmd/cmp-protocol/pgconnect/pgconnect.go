@@ -51,7 +51,11 @@ func Connect(
 	send := make(chan pgproto3.FrontendMessage)
 	recv := make(chan pgproto3.BackendMessage)
 	var res []byte
+	// Use go routines to divide up work in order to improve debugging. These
+	// aren't strictly necessary, but they make it easy to print when messages
+	// are received.
 	g := ctxgroup.WithContext(ctx)
+	// The send chan sends messages to the server.
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(send)
 		for {
@@ -66,6 +70,9 @@ func Connect(
 			}
 		}
 	})
+	// The recv go routine receives messages from the server and puts them on
+	// the recv chan. It makes a copy of them when it does since the next message
+	// received will otherwise use the same pointer.
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(recv)
 		for {
@@ -89,9 +96,10 @@ func Connect(
 			}
 		}
 	})
+	// The main go routine executing the logic.
 	g.GoCtx(func(ctx context.Context) error {
 		send <- &pgproto3.StartupMessage{
-			ProtocolVersion: 196608,
+			ProtocolVersion: 196608, // Version 3.0
 			Parameters: map[string]string{
 				"user": user,
 			},
