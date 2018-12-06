@@ -129,3 +129,9 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
 }
+
+// AddToIntentHistory adds the sequence and value to the intent history.
+func (meta *MVCCMetadata) AddToIntentHistory(seq int32, val []byte) {
+	meta.IntentHistory = append(meta.IntentHistory,
+		MVCCMetadata_SequencedIntent{Sequence: seq, Value: val})
+}
