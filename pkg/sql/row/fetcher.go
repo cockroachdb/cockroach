@@ -1200,6 +1200,10 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 	}
 
 	evalCtx := tree.EvalContext{}
+	// Iterate through columns in order, comparing each value to the value in the
+	// previous row in that column. When the first column with a differing value
+	// is found, compare the values to ensure the ordering matches the column
+	// ordering.
 	for i, id := range rf.rowReadyTable.index.ColumnIDs {
 		idx := rf.rowReadyTable.colIdxMap[id]
 		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
@@ -1210,11 +1214,16 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 			expectedDirection = sqlbase.IndexDescriptor_ASC
 		}
 
-		if expectedDirection == sqlbase.IndexDescriptor_ASC && result < 0 ||
-			expectedDirection == sqlbase.IndexDescriptor_DESC && result > 0 {
-			return scrub.WrapError(scrub.IndexKeyDecodingError,
-				errors.Errorf("key ordering did not match datum ordering. IndexDescriptor=%s",
-					expectedDirection))
+		if result != 0 {
+			if expectedDirection == sqlbase.IndexDescriptor_ASC && result < 0 ||
+				expectedDirection == sqlbase.IndexDescriptor_DESC && result > 0 {
+				return scrub.WrapError(scrub.IndexKeyDecodingError,
+					errors.Errorf("key ordering did not match datum ordering. IndexDescriptor=%s",
+						expectedDirection))
+			}
+			// After the first column with a differing value is found, the remaining
+			// columns are skipped (see #32874).
+			break
 		}
 	}
 	return nil
