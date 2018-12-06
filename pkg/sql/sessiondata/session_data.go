@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -34,9 +33,6 @@ type SessionData struct {
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
-	// DefaultIsolationLevel indicates the default isolation level of
-	// newly created transactions.
-	DefaultIsolationLevel enginepb.IsolationType
 	// DefaultReadOnly indicates the default read-only status of newly created
 	// transactions.
 	DefaultReadOnly bool

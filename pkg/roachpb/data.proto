@@ -238,11 +238,10 @@ message ObservedTimestamp {
 }
 
 // A Transaction is a unit of work performed on the database.
-// Cockroach transactions support two isolation levels: snapshot
-// isolation and serializable snapshot isolation. Each Cockroach
-// transaction is assigned a random priority. This priority will be
-// used to decide whether a transaction will be aborted during
-// contention.
+// Cockroach transactions always operate at the serializable isolation
+// level. Each Cockroach transaction is assigned a random priority.
+// This priority will be used to decide whether a transaction will be
+// aborted during contention.
 //
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
@@ -376,12 +375,7 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
-  // If retry_on_push is true, the transaction must retry in the event
-  // that the commit timestamp is pushed forward. This flag is set if
-  // the transaction contains any calls to DeleteRange, in order to
-  // prevent the LostDeleteRange anomaly. This flag is relevant only
-  // for SNAPSHOT transactions.
-  bool retry_on_push = 13;
+  reserved 13;
   repeated Span intents = 11 [(gogoproto.nullable) = false];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the

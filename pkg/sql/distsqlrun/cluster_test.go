@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -88,7 +87,6 @@ func TestClusterFlow(t *testing.T) {
 		"cluster-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		enginepb.SERIALIZABLE,
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
@@ -391,7 +389,6 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		"deadlock-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		enginepb.SERIALIZABLE,
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
@@ -646,7 +643,6 @@ func BenchmarkInfrastructure(b *testing.B) {
 						"cluster-test",
 						nil, // baseKey
 						roachpb.NormalUserPriority,
-						enginepb.SERIALIZABLE,
 						tc.Server(0).Clock().Now(),
 						0, // maxOffset
 					)

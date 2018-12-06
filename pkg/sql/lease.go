@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -316,12 +315,6 @@ func maybeIncrementVersion(
 	// Already incremented, no-op.
 	if desc.Version == desc.ClusterVersion.Version+1 {
 		return nil
-	}
-	// Use SERIALIZABLE transactions so that the ModificationTime on the
-	// descriptor is the commit timestamp.
-	if txn.Isolation() != enginepb.SERIALIZABLE {
-		return pgerror.NewErrorf(pgerror.CodeInvalidTransactionStateError,
-			"transaction involving a schemas change needs to be SERIALIZABLE")
 	}
 	desc.Version++
 	// We need to set ModificationTime to the transaction's commit

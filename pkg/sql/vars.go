@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -226,7 +225,7 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			switch strings.ToUpper(s) {
 			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `SERIALIZABLE`, `DEFAULT`:
-				m.SetDefaultIsolationLevel(enginepb.SERIALIZABLE)
+				// Do nothing. All transactions execute with serializable isolation.
 			default:
 				return newVarValueError(`default_transaction_isolation`, s, "serializable")
 			}
@@ -234,7 +233,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.DefaultIsolationLevel.ToLowerCaseString()
+			return "serializable"
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "default" },
 	},
@@ -563,17 +562,14 @@ var varGen = map[string]sessionVar{
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.Txn.Isolation().ToLowerCaseString()
+			return "serializable"
 		},
 		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, s string) error {
-			isolationLevel, ok := tree.IsolationLevelMap[s]
+			_, ok := tree.IsolationLevelMap[s]
 			if !ok {
 				return newVarValueError(`transaction_isolation`, s, "serializable")
 			}
-			return evalCtx.TxnModesSetter.setTransactionModes(
-				tree.TransactionModes{
-					Isolation: isolationLevel,
-				})
+			return nil
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "serializable" },
 	},

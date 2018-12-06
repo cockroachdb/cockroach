@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -183,7 +182,7 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 		var baWrite roachpb.BatchRequest
 		r := &roachpb.DeleteRequest{}
 		r.Key = desc.StartKey.AsRawKey()
-		txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, enginepb.SERIALIZABLE, baRead.Timestamp, 100)
+		txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, baRead.Timestamp, 100)
 		baWrite.Txn = &txn
 		baWrite.Add(r)
 		baWrite.RangeID = repls[0].RangeID
