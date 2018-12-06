@@ -218,16 +218,9 @@ func (s *catchUpScan) Cancel() {
 type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
 	// timestamp. It returns the resulting transaction protos.
-	//
-	// TODO(nvanbenschoten): Implement by mapping calls
-	// intentResolver.maybePushTransactions with a PUSH_TIMESTAMP
-	// and a high-priority transaction.
 	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]roachpb.Transaction, error)
 	// CleanupTxnIntentsAsync asynchronously cleans up intents owned
 	// by the specified transactions.
-	//
-	// TODO(nvanbenschoten): Implement by mapping calls
-	// intentResolver.cleanupTxnIntentsAsync.
 	CleanupTxnIntentsAsync(context.Context, []roachpb.Transaction) error
 }
 
