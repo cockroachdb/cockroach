@@ -63,23 +63,8 @@ func MakeInserter(
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
-	indexes := tableDesc.Indexes
-	// Also include the secondary indexes in mutation state
-	// DELETE_AND_WRITE_ONLY.
-	if len(tableDesc.Mutations) > 0 {
-		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
-		indexes = append(indexes, tableDesc.Indexes...)
-		for _, m := range tableDesc.Mutations {
-			if m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				if index := m.GetIndex(); index != nil {
-					indexes = append(indexes, *index)
-				}
-			}
-		}
-	}
-
 	ri := Inserter{
-		Helper:                newRowHelper(tableDesc, indexes),
+		Helper:                newRowHelper(tableDesc, tableDesc.WritableIndexes),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
@@ -479,37 +464,24 @@ func makeUpdaterWithoutCascader(
 		}) != nil
 	}
 
-	indexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
-	for _, index := range tableDesc.Indexes {
+	writeIndexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.WritableIndexes))
+	for _, index := range tableDesc.WritableIndexes {
 		if needsUpdate(index) {
-			indexes = append(indexes, index)
+			writeIndexes = append(writeIndexes, index)
 		}
 	}
 
 	// Columns of the table to update, including those in delete/write-only state
-	tableCols := tableDesc.Columns
-	if len(tableDesc.Mutations) > 0 {
-		tableCols = make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
-		tableCols = append(tableCols, tableDesc.Columns...)
-	}
+	tableCols := tableDesc.DeletableColumns
 
 	var deleteOnlyIndexes []sqlbase.IndexDescriptor
-	for _, m := range tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			if needsUpdate(*index) {
-				switch m.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
-					if deleteOnlyIndexes == nil {
-						// Allocate at most once.
-						deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Mutations))
-					}
-					deleteOnlyIndexes = append(deleteOnlyIndexes, *index)
-				default:
-					indexes = append(indexes, *index)
-				}
+	for _, idx := range tableDesc.DeleteOnlyIndexes {
+		if needsUpdate(idx) {
+			if deleteOnlyIndexes == nil {
+				// Allocate at most once.
+				deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes))
 			}
-		} else if col := m.GetColumn(); col != nil {
-			tableCols = append(tableCols, *col)
+			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
 		}
 	}
 
@@ -520,7 +492,7 @@ func makeUpdaterWithoutCascader(
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(tableDesc, indexes),
+		Helper:                newRowHelper(tableDesc, writeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
@@ -553,22 +525,23 @@ func makeUpdaterWithoutCascader(
 		// ru.FetchColIDtoRowIndex if it isn't already present.
 		maybeAddCol := func(colID sqlbase.ColumnID) error {
 			if _, ok := ru.FetchColIDtoRowIndex[colID]; !ok {
-				col, err := tableDesc.FindActiveColumnByID(colID)
 				var column sqlbase.ColumnDescriptor
-				if err != nil {
-					// Active column lookup failed, try inactive columns.
-					col, err = tableDesc.FindInactiveColumnByID(colID)
-					if err != nil {
-						return err
+				if col, err := tableDesc.FindActiveColumnByID(colID); err != nil {
+					// Active column lookup failed, try non-public columns.
+					found := false
+					for _, column = range tableDesc.ReadableNonPublicColumns {
+						if column.ID == colID {
+							found = true
+							break
+						}
 					}
-					column = *col
-					// Even if the column is non-nullable it can be null in the
-					// middle of a schema change.
-					column.Nullable = true
+					if !found {
+						return fmt.Errorf("column-id \"%d\" does not exist", colID)
+					}
 				} else {
 					column = *col
 				}
-				ru.FetchColIDtoRowIndex[col.ID] = len(ru.FetchCols)
+				ru.FetchColIDtoRowIndex[column.ID] = len(ru.FetchCols)
 				ru.FetchCols = append(ru.FetchCols, column)
 			}
 			return nil
@@ -604,7 +577,7 @@ func makeUpdaterWithoutCascader(
 
 		// Fetch all columns from indices that are being update so that they can
 		// be used to create the new kv pairs for those indices.
-		for _, index := range indexes {
+		for _, index := range writeIndexes {
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err
 			}
@@ -914,16 +887,7 @@ func makeRowDeleterWithoutCascader(
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
-	indexes := tableDesc.Indexes
-	if len(tableDesc.Mutations) > 0 {
-		indexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
-		indexes = append(indexes, tableDesc.Indexes...)
-		for _, m := range tableDesc.Mutations {
-			if index := m.GetIndex(); index != nil {
-				indexes = append(indexes, *index)
-			}
-		}
-	}
+	indexes := tableDesc.DeletableIndexes
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
 	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)

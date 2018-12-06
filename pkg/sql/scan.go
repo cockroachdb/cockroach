@@ -353,7 +353,13 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 
 // initCols initializes n.cols and n.numBackfillColumns according to n.desc and n.colCfg.
 func (n *scanNode) initCols() error {
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	if n.colCfg.wantedColumns == nil && n.colCfg.visibility == publicColumns {
+		// Avoid allocation.
+		n.cols = n.desc.Columns
+		return nil
+	}
+
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.ReadableNonPublicColumns))
 	if n.colCfg.wantedColumns == nil {
 		n.cols = append(n.cols, n.desc.Columns...)
 	} else {
@@ -389,18 +395,9 @@ func (n *scanNode) initCols() error {
 		}
 	}
 
-	n.numBackfillColumns = 0
 	if n.colCfg.visibility == publicAndNonPublicColumns {
-		for _, mutation := range n.desc.Mutations {
-			if c := mutation.GetColumn(); c != nil {
-				col := *c
-				// Even if the column is non-nullable it can be null in the
-				// middle of a schema change.
-				col.Nullable = true
-				n.cols = append(n.cols, col)
-				n.numBackfillColumns++
-			}
-		}
+		n.cols = append(n.cols, n.desc.ReadableNonPublicColumns...)
+		n.numBackfillColumns = len(n.desc.ReadableNonPublicColumns)
 	}
 	return nil
 }

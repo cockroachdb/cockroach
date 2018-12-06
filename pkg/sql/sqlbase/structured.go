@@ -117,6 +117,27 @@ type MutableTableDescriptor struct {
 // should be const.
 type ImmutableTableDescriptor struct {
 	TableDescriptor
+
+	// WritableColumns is a list of columns which are public or in the
+	// DELETE_AND_WRITE_ONLY state.
+	WritableColumns []ColumnDescriptor
+
+	// WritableIndexes is a list of indexes which are public or in the
+	// DELETE_AND_WRITE_ONLY state.
+	WritableIndexes []IndexDescriptor
+
+	// DeletableColumns is a list of public and non-public columns.
+	DeletableColumns []ColumnDescriptor
+
+	// DeletableIndexes is a list of public and non-public indexes.
+	DeletableIndexes []IndexDescriptor
+
+	// ReadableNonPublicColumns is a list of columns undergoing a schema
+	// change and are all nullable.
+	ReadableNonPublicColumns []ColumnDescriptor
+
+	// DeleteOnlyIndexes is a list of indexes in the DELETE_ONLY state.
+	DeleteOnlyIndexes []IndexDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -179,7 +200,68 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	return &ImmutableTableDescriptor{TableDescriptor: tbl}
+	writableCols, deletableCols := tbl.Columns, tbl.Columns
+	writableIndexes, deletableIndexes := tbl.Indexes, tbl.Indexes
+
+	var readableNonPublicCols []ColumnDescriptor
+	var deleteOnlyIndexes []IndexDescriptor
+
+	if len(tbl.Mutations) > 0 {
+		deletableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
+		deletableIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
+		readableNonPublicCols = make([]ColumnDescriptor, 0, len(tbl.Mutations))
+
+		deletableCols = append(deletableCols, tbl.Columns...)
+		deletableIndexes = append(deletableIndexes, tbl.Indexes...)
+
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_AND_WRITE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					deletableIndexes = append(deletableIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					deletableCols = append(deletableCols, *col)
+
+					// Mutation column may need to be fetched, but may not be completely
+					// backfilled and can be nullable. Same for delete-only columns.
+					column := *col
+					column.Nullable = true
+					readableNonPublicCols = append(readableNonPublicCols, column)
+				}
+			}
+		}
+
+		// Number of write-only indexes and columns.
+		numWriteIndexes, numWriteCols := len(deletableIndexes), len(deletableCols)
+
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					deletableIndexes = append(deletableIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					deletableCols = append(deletableCols, *col)
+					column := *col
+					column.Nullable = true
+					readableNonPublicCols = append(readableNonPublicCols, column)
+				}
+			}
+		}
+
+		writableCols = deletableCols[:numWriteCols]
+
+		writableIndexes = deletableIndexes[:numWriteIndexes]
+		deleteOnlyIndexes = deletableIndexes[numWriteIndexes:]
+	}
+	return &ImmutableTableDescriptor{
+		TableDescriptor:          tbl,
+		WritableColumns:          writableCols,
+		WritableIndexes:          writableIndexes,
+		DeletableColumns:         deletableCols,
+		DeletableIndexes:         deletableIndexes,
+		ReadableNonPublicColumns: readableNonPublicCols,
+		DeleteOnlyIndexes:        deleteOnlyIndexes,
+	}
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
@@ -1926,18 +2008,6 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 	for i, c := range desc.Columns {
 		if c.ID == id {
 			return &desc.Columns[i], nil
-		}
-	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-}
-
-// FindInactiveColumnByID finds the inactive column with specified ID.
-func (desc *TableDescriptor) FindInactiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
-	for _, m := range desc.Mutations {
-		if c := m.GetColumn(); c != nil {
-			if c.ID == id {
-				return c, nil
-			}
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
