@@ -36,39 +36,60 @@ import (
 // package.
 type Parser struct {
 	scanner    scanner
+	lexer      lexer
 	parserImpl sqlParserImpl
+	tokBuf     [8]sqlSymType
 }
+
+// INT8 is the historical interpretation of INT. This should be left
+// alone in the future, since there are many sql fragments stored
+// in various descriptors.  Any user input that was created after
+// INT := INT4 will simply use INT4 in any resulting code.
+var defaultNakedIntType = coltypes.Int8
+var defaultNakedSerialType = coltypes.Serial8
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
-	return p.parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
+	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 func (p *Parser) parseWithDepth(
 	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
 ) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
-	p.scanner.nakedIntType = nakedIntType
-	p.scanner.nakedSerialType = nakedSerialType
-	if p.parserImpl.Parse(&p.scanner) != 0 {
+	tokens := p.tokBuf[:0]
+	var tok sqlSymType
+	for {
+		p.scanner.scan(&tok)
+		if tok.id == 0 {
+			break
+		}
+		tokens = append(tokens, tok)
+		if tok.id == ERROR {
+			break
+		}
+	}
+	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
+	if p.parserImpl.Parse(&p.lexer) != 0 {
+		lastError := p.lexer.lastError
 		var err *pgerror.Error
-		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
+		if feat := lastError.unimplementedFeature; feat != "" {
 			// UnimplementedWithDepth populates the generic hint. However
 			// in some cases we have a more specific hint. This is overridden
 			// below.
-			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, p.scanner.lastError.msg)
+			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, lastError.msg)
 		} else {
-			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, p.scanner.lastError.msg)
+			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, lastError.msg)
 		}
-		if p.scanner.lastError.hint != "" {
+		if lastError.hint != "" {
 			// If lastError.hint is not set, e.g. from (*scanner).Unimplemented(),
 			// we're OK with the default hint. Otherwise, override it.
-			err.Hint = p.scanner.lastError.hint
+			err.Hint = lastError.hint
 		}
-		err.Detail = p.scanner.lastError.detail
+		err.Detail = lastError.detail
 		return nil, err
 	}
-	return p.scanner.stmts, nil
+	return p.lexer.stmts, nil
 }
 
 // unaryNegation constructs an AST node for a negation. This attempts
@@ -88,7 +109,7 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (tree.StatementList, error) {
-	return parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
+	return parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
@@ -115,7 +136,7 @@ func parseWithDepth(
 // bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (tree.Statement, error) {
-	stmts, err := parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
+	stmts, err := parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 	if err != nil {
 		return nil, err
 	}
