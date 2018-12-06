@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log" // Don't bring cockroach/util/log into this low-level package.
-
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"

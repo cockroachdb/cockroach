@@ -18,10 +18,9 @@ import (
 	"context"
 	"testing"
 
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestAnnotateCtxTags(t *testing.T) {

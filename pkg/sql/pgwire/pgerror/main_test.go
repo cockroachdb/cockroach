@@ -13,10 +13,8 @@
 // permissions and limitations under the License.
 package pgerror
 
-import (
-	// Import the logging package so that tests in this package can accept the
-	// --vmodule flag and friends. As of 03/2017, no test in this package needs
-	// logging, but we want the test binary to accept the flags for uniformity
-	// with the other tests.
-	_ "github.com/cockroachdb/cockroach/pkg/util/log"
-)
+// Import the logging package so that tests in this package can accept the
+// --vmodule flag and friends. As of 03/2017, no test in this package needs
+// logging, but we want the test binary to accept the flags for uniformity
+// with the other tests.
+import _ "github.com/cockroachdb/cockroach/pkg/util/log"

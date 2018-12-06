@@ -16,9 +16,7 @@
 
 package fsm
 
-import (
-	"context"
-)
+import "context"
 
 // State is a node in a Machine's transition graph.
 type State interface {

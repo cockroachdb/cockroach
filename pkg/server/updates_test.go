@@ -28,9 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -47,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 func stubURL(target **url.URL, stubURL *url.URL) func() {

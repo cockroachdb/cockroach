@@ -16,9 +16,8 @@ package distsqlrun
 
 import (
 	"context"
-	"testing"
-
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

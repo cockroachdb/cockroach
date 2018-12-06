@@ -17,12 +17,10 @@ package log
 import (
 	"context"
 
-	"golang.org/x/net/trace"
-
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/net/trace"
 )
 
 // AmbientContext is a helper type used to "annotate" context.Contexts with log

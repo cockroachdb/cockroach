@@ -28,13 +28,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/google/btree"
-	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -71,6 +64,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/google/btree"
+	"github.com/kr/pretty"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 const (

@@ -17,9 +17,8 @@ package client
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/pkg/errors"
 )
 
 const (

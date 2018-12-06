@@ -18,13 +18,12 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/golang/leveldb/db"
 	"github.com/golang/leveldb/memfs"
 	"github.com/golang/leveldb/table"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
 var readerOpts = &db.Options{

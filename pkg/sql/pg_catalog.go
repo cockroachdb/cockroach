@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -24,18 +25,15 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-	"golang.org/x/text/collate"
-
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
+	"golang.org/x/text/collate"
 )
 
 var (

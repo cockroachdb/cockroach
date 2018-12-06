@@ -24,21 +24,19 @@ import (
 	"text/tabwriter"
 
 	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
-
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
-	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank" // registers workloads
+	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples" // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"       // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"     // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"     // registers workloads
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 // Main is the entry point for the cli, with a single line calling it intended

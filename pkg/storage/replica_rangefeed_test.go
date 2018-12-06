@@ -19,9 +19,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc/metadata"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -29,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/metadata"
 )
 
 // testStream is a mock implementation of roachpb.Internal_RangeFeedServer.

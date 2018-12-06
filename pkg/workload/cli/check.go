@@ -20,11 +20,10 @@ import (
 	gosql "database/sql"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 func init() {

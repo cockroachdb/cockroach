@@ -18,12 +18,11 @@ package tpcc
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"net/url"
 	"strings"
 	"sync"
-
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"

@@ -16,15 +16,13 @@
 package tpcc
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
-	"time"
-
-	"context"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

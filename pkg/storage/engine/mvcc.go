@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -225,8 +224,7 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 func updateStatsOnPut(
 	key roachpb.Key,
 	prevValSize int64,
-	origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64,
+	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
@@ -386,8 +384,7 @@ func updateStatsOnPut(
 func updateStatsOnResolve(
 	key roachpb.Key,
 	prevValSize int64,
-	origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64,
+	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta enginepb.MVCCMetadata,
 	commit bool,
 ) enginepb.MVCCStats {
@@ -489,8 +486,7 @@ func updateStatsOnResolve(
 // count if the restored value isn't a deletion tombstone.
 func updateStatsOnAbort(
 	key roachpb.Key,
-	origMetaKeySize, origMetaValSize,
-	restoredMetaKeySize, restoredMetaValSize int64,
+	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
 ) enginepb.MVCCStats {
@@ -1629,8 +1625,7 @@ func MVCCDeleteRange(
 	ctx context.Context,
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
-	key,
-	endKey roachpb.Key,
+	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,

@@ -16,9 +16,7 @@
 
 package json
 
-import (
-	"math/rand"
-)
+import "math/rand"
 
 type containsTester interface {
 	// slowContains is a slower but simpler implementation of contains to check

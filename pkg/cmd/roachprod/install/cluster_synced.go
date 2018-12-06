@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-
 	"github.com/pkg/errors"
 )
 

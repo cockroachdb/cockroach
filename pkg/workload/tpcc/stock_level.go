@@ -16,9 +16,8 @@
 package tpcc
 
 import (
-	"math/rand"
-
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

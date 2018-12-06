@@ -21,10 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -39,6 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // replicaRaftStorage implements the raft.Storage interface.
@@ -229,8 +228,7 @@ func iterateEntries(
 	ctx context.Context,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
-	lo,
-	hi uint64,
+	lo, hi uint64,
 	scanFunc func(roachpb.KeyValue) (bool, error),
 ) error {
 	_, err := engine.MVCCIterate(

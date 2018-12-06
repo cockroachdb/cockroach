@@ -17,10 +17,9 @@ package row
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
-
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

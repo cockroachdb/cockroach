@@ -15,12 +15,10 @@
 package timeofday
 
 import (
-	"math/rand"
-	"time"
-
 	"fmt"
-
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

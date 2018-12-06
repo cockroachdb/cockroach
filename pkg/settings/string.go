@@ -14,9 +14,7 @@
 
 package settings
 
-import (
-	"github.com/pkg/errors"
-)
+import "github.com/pkg/errors"
 
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting

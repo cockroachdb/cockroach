@@ -15,17 +15,15 @@
 package engine
 
 import (
-	"C"
 	"bufio"
 	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/pkg/errors"
 )
 
 const lockFilename = `TEMP_DIR.LOCK`

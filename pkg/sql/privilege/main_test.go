@@ -14,9 +14,6 @@
 
 package privilege_test
 
-import
-
-// Needed for the -verbosity flag on circleci tests.
-_ "github.com/cockroachdb/cockroach/pkg/util/log"
+import _ "github.com/cockroachdb/cockroach/pkg/util/log"
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go

@@ -14,9 +14,7 @@
 
 package lang
 
-import (
-	"bytes"
-)
+import "bytes"
 
 // AnyDataType is a data type about which nothing is known, and so could be any
 // data type. Among other uses, it is assigned to custom functions:

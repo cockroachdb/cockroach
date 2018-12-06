@@ -15,12 +15,10 @@
 package storage
 
 import (
-	"fmt"
-
-	"unsafe"
-
 	"bytes"
+	"fmt"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"

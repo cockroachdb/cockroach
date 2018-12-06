@@ -19,11 +19,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"unicode"
-
-	"github.com/pkg/errors"
-
 	"sort"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -40,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // This file contains utility functions for tests (in other packages).

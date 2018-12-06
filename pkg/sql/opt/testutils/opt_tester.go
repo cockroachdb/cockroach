@@ -24,8 +24,6 @@ import (
 	"testing"
 	"text/tabwriter"
 
-	"github.com/pmezard/go-difflib/difflib"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -38,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // RuleSet efficiently stores an unordered set of RuleNames.

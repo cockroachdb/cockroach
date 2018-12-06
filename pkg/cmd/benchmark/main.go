@@ -30,11 +30,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/perf/storage"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func main() {

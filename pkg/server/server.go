@@ -31,12 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/raven-go"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -81,6 +75,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/getsentry/raven-go"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -753,8 +752,7 @@ type ListenError struct {
 func inspectEngines(
 	ctx context.Context,
 	engines []engine.Engine,
-	minVersion,
-	serverVersion roachpb.Version,
+	minVersion, serverVersion roachpb.Version,
 	clusterIDContainer *base.ClusterIDContainer,
 ) (
 	bootstrappedEngines []engine.Engine,

@@ -16,14 +16,12 @@
 package tpcc
 
 import (
-	gosql "database/sql"
-	"math/rand"
-	"sync/atomic"
-
 	"context"
-
+	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

@@ -14,9 +14,7 @@
 
 package exec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 // countOp is an operator that counts the number of input rows it receives,
 // consuming its entire input and outputting a batch with a single integer

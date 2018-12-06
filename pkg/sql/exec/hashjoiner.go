@@ -14,9 +14,7 @@
 
 package exec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 // todo(changangela): support rehashing instead of large fixed bucket size
 const hashTableBucketSize = 1 << 16

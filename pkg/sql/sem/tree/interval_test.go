@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestValidSQLIntervalSyntax(t *testing.T) {
 	testData := []struct {

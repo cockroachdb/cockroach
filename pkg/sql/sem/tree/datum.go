@@ -27,12 +27,6 @@ import (
 	"unicode"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-	"golang.org/x/text/collate"
-	"golang.org/x/text/language"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -46,8 +40,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 )
 
 var (

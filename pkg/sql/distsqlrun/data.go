@@ -15,9 +15,8 @@
 package distsqlrun
 
 import (
-	"fmt"
-
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"

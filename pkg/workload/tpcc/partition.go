@@ -23,10 +23,9 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // partitioner encapsulates all logic related to partitioning discrete numbers

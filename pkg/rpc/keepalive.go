@@ -17,9 +17,8 @@ package rpc
 import (
 	"time"
 
-	"google.golang.org/grpc/keepalive"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"google.golang.org/grpc/keepalive"
 )
 
 // To prevent unidirectional network partitions from keeping an unhealthy
