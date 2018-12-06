@@ -15,7 +15,7 @@ send "select 1;\r"
 eexpect "1 row"
 # trace result
 eexpect "session recording"
-eexpect "executing: SELECT 1"
+eexpect "executing: select 1"
 eexpect "rows affected: 1"
 eexpect root@
 end_test
@@ -26,7 +26,7 @@ send "select woo;\r"
 eexpect "column \"woo\" does not exist"
 # trace result
 eexpect "session recording"
-eexpect "executing: SELECT woo"
+eexpect "executing: select woo"
 eexpect "does not exist"
 eexpect root@
 end_test
@@ -43,7 +43,7 @@ send "select * from t;\r"
 eexpect "2 rows"
 # trace result
 eexpect "session recording"
-eexpect "executing: SELECT \* FROM t"
+eexpect "executing: select \* from t"
 eexpect "output row:"
 eexpect "output row:"
 eexpect "rows affected: 2"

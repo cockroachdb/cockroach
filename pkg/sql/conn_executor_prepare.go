@@ -53,7 +53,7 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	ps, err := ex.addPreparedStmt(
-		ctx, parseCmd.Name, Statement{AST: parseCmd.Stmt}, parseCmd.TypeHints,
+		ctx, parseCmd.Name, Statement{SQL: parseCmd.SQL, AST: parseCmd.Stmt}, parseCmd.TypeHints,
 	)
 	if err != nil {
 		return retErr(err)
