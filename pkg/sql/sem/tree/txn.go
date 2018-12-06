@@ -38,7 +38,6 @@ var isolationLevelNames = [...]string{
 // level, in the lowercase format that set isolation_level supports.
 var IsolationLevelMap = map[string]IsolationLevel{
 	"serializable": SerializableIsolation,
-	"snapshot":     SerializableIsolation,
 }
 
 func (i IsolationLevel) String() string {

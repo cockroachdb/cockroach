@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -135,9 +134,6 @@ type TxnSender interface {
 
 	// SetDebugName sets the txn's debug name.
 	SetDebugName(name string)
-
-	// SetIsolation sets the transaction's isolation level.
-	SetIsolation(isolation enginepb.IsolationType) error
 
 	// TxnStatus exports the txn's status.
 	TxnStatus() roachpb.TransactionStatus
@@ -312,12 +308,6 @@ func (m *MockTransactionalSender) SetUserPriority(pri roachpb.UserPriority) erro
 // SetDebugName is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetDebugName(name string) {
 	m.txn.Name = name
-}
-
-// SetIsolation is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetIsolation(isolation enginepb.IsolationType) error {
-	m.txn.Isolation = isolation
-	return nil
 }
 
 // OrigTimestamp is part of the TxnSender interface.

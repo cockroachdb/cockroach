@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -565,7 +564,6 @@ func (s *Server) newConnExecutorWithTxn(
 		ctx,
 		explicitTxn,
 		txn.OrigTimestamp().GoTime(),
-		txn.Isolation(),
 		txn.UserPriority(),
 		tree.ReadWrite,
 		txn,
@@ -1679,30 +1677,11 @@ func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
 			return err
 		}
 	}
-	if modes.Isolation != tree.UnspecifiedIsolation {
-		iso, err := ex.isolationToProto(modes.Isolation)
-		if err != nil {
-			return err
-		}
-		if err := ex.state.setIsolationLevel(iso); err != nil {
-			return err
-		}
+	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
+		return errors.Errorf("unknown isolation level: %s", modes.Isolation)
 	}
 
 	return ex.state.setReadOnlyMode(modes.ReadWriteMode)
-}
-
-func (ex *connExecutor) isolationToProto(mode tree.IsolationLevel) (enginepb.IsolationType, error) {
-	var iso enginepb.IsolationType
-	switch mode {
-	case tree.UnspecifiedIsolation:
-		iso = ex.sessionData.DefaultIsolationLevel
-	case tree.SerializableIsolation:
-		iso = enginepb.SERIALIZABLE
-	default:
-		return enginepb.IsolationType(0), errors.Errorf("unknown isolation level: %s", mode)
-	}
-	return iso, nil
 }
 
 func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {

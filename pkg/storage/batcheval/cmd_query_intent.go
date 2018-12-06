@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -39,15 +38,6 @@ func QueryIntent(
 	args := cArgs.Args.(*roachpb.QueryIntentRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.QueryIntentResponse)
-
-	// Snapshot transactions cannot be prevented using a QueryIntent command.
-	// This is because we use the timestamp cache to prevent a transaction from
-	// committing, but a SNAPSHOT transaction does not need to restart/abort if
-	// it runs into the timestamp cache and its timestamp is pushed forwards.
-	if args.Txn.Isolation == enginepb.SNAPSHOT &&
-		args.IfMissing == roachpb.QueryIntentRequest_PREVENT {
-		return result.Result{}, errors.Errorf("cannot prevent SNAPSHOT transaction with QueryIntent")
-	}
 
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
@@ -83,14 +73,10 @@ func QueryIntent(
 
 		// Check whether the intent was pushed past its expected timestamp.
 		if reply.FoundIntent && args.Txn.Timestamp.Less(curIntent.Txn.Timestamp) {
-			// The intent matched but was pushed to a later timestamp.
+			// The intent matched but was pushed to a later timestamp. Consider a
+			// pushed intent a missing intent.
 			curIntentPushed = true
-
-			// If the transaction is SERIALIZABLE, consider a pushed intent as a
-			// missing intent. If the transaction is SNAPSHOT, don't.
-			if args.Txn.Isolation == enginepb.SERIALIZABLE {
-				reply.FoundIntent = false
-			}
+			reply.FoundIntent = false
 
 			// If the request was querying an intent in its own transaction, update
 			// the response transaction.

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	// We dot-import fsm to use common names such as fsm.True/False.
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -119,7 +118,6 @@ func (tc *testContext) createOpenState(
 		sp:            sp,
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
-		isolation:     enginepb.SERIALIZABLE,
 		priority:      roachpb.NormalUserPriority,
 		mon:           &txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
@@ -200,7 +198,6 @@ func checkAdv(adv advanceInfo, expCode advanceCode, expRewPos CmdPos, expEv txnE
 // correspond to expectations. Any field left nil will not be checked.
 type expKVTxn struct {
 	debugName    *string
-	isolation    *enginepb.IsolationType
 	userPriority *roachpb.UserPriority
 	// For the timestamps we just check the physical part. The logical part is
 	// incremented every time the clock is read and so it's unpredictable.
@@ -216,10 +213,6 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 	if exp.debugName != nil && !strings.HasPrefix(txn.DebugName(), *exp.debugName+" (") {
 		return errors.Errorf("expected DebugName: %s, but got: %s",
 			*exp.debugName, txn.DebugName())
-	}
-	if exp.isolation != nil && *exp.isolation != txn.Isolation() {
-		return errors.Errorf("expected isolation: %s, but got: %s",
-			*exp.isolation, txn.Isolation())
 	}
 	if exp.userPriority != nil && *exp.userPriority != txn.UserPriority() {
 		return errors.Errorf("expected UserPriority: %s, but got: %s",
@@ -265,7 +258,6 @@ func TestTransitions(t *testing.T) {
 
 	txnName := sqlTxnName
 	now := testCon.clock.Now()
-	iso := enginepb.SERIALIZABLE
 	pri := roachpb.NormalUserPriority
 	maxTS := testCon.clock.Now().Add(testCon.clock.MaxOffset().Nanoseconds(), 0 /* logical */)
 	type test struct {
@@ -306,7 +298,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnStart{ImplicitTxn: True},
-			evPayload: makeEventTxnStartPayload(iso, pri, tree.ReadWrite, timeutil.Now(), tranCtx),
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
 			expState:  stateOpen{ImplicitTxn: True, RetryIntent: False},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
@@ -316,7 +308,6 @@ func TestTransitions(t *testing.T) {
 			},
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
-				isolation:    &iso,
 				userPriority: &pri,
 				tsNanos:      &now.WallTime,
 				origTSNanos:  &now.WallTime,
@@ -331,7 +322,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(iso, pri, tree.ReadWrite, timeutil.Now(), tranCtx),
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
 			expState:  stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -339,7 +330,6 @@ func TestTransitions(t *testing.T) {
 			},
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
-				isolation:    &iso,
 				userPriority: &pri,
 				tsNanos:      &now.WallTime,
 				origTSNanos:  &now.WallTime,
@@ -658,7 +648,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(iso, pri, tree.ReadWrite, timeutil.Now(), tranCtx),
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
 			expState:  stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
 				expCode: advanceOne,

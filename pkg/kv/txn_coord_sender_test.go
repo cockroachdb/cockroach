@@ -106,9 +106,6 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
 	txn.SetDebugName("test txn")
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
 	if err := txn.Put(ctx, key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
@@ -121,9 +118,6 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	}
 	if !bytes.Equal(proto.Key, key) {
 		t.Errorf("expected txn Key to match %q != %q", key, proto.Key)
-	}
-	if proto.Isolation != enginepb.SNAPSHOT {
-		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", proto.Isolation)
 	}
 }
 
@@ -453,16 +447,13 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-		// Set to SNAPSHOT so that it can be pushed without restarting.
-		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-			t.Fatal(err)
-		}
 		// Initialize the transaction.
 		if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Conflicting transaction that pushes the above transaction.
 		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+		conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
 		if _, pErr := conflictTxn.Get(ctx, key); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -806,7 +797,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				"test txn",
 				key,
 				roachpb.UserPriority(0),
-				enginepb.SERIALIZABLE,
 				clock.Now(),
 				clock.MaxOffset().Nanoseconds(),
 			)
@@ -949,7 +939,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			key := roachpb.Key("test")
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
-			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
+			txn := roachpb.MakeTransaction("test", key, 0, clock.Now(), 0)
 			meta := roachpb.MakeTxnCoordMeta(txn)
 			tc := factory.TransactionalSender(client.RootTxn, meta)
 			ba.Txn = &txn
@@ -1171,10 +1161,6 @@ func TestTxnAbortCount(t *testing.T) {
 	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		key := []byte("key-abort")
 
-		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-			return err
-		}
-
 		if err := txn.Put(ctx, key, value); err != nil {
 			t.Fatal(err)
 		}
@@ -1254,9 +1240,6 @@ func TestTxnDurations(t *testing.T) {
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
 		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-				return err
-			}
 			if err := txn.Put(ctx, key, []byte("val")); err != nil {
 				return err
 			}
@@ -1603,7 +1586,6 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 		"test txn",
 		key,
 		roachpb.UserPriority(0),
-		enginepb.SERIALIZABLE,
 		clock.Now(),
 		clock.MaxOffset().Nanoseconds(),
 	)

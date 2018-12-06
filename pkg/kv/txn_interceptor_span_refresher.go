@@ -83,10 +83,7 @@ func (sr *txnSpanRefresher) SendLocked(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
 		et := rArgs.(*roachpb.EndTransactionRequest)
-		if ba.Txn.IsSerializable() &&
-			!sr.refreshInvalid &&
-			len(sr.refreshReads) == 0 &&
-			len(sr.refreshWrites) == 0 {
+		if !sr.refreshInvalid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 			et.NoRefreshSpans = true
 		}
 	}
@@ -113,28 +110,25 @@ func (sr *txnSpanRefresher) SendLocked(
 	}
 
 	// Iterate over and aggregate refresh spans in the requests,
-	// qualified by possible resume spans in the responses, if the txn
-	// has serializable isolation and we haven't yet exceeded the max
-	// read key bytes.
-	if ba.Txn.IsSerializable() {
-		if !sr.refreshInvalid {
-			ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
-			if !sr.appendRefreshSpans(ctx, ba, br) {
-				// The refresh spans are out of date, return a generic client-side retry error.
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn,
-				)
-			}
+	// qualified by possible resume spans in the responses, if we
+	// haven't yet exceeded the max read key bytes.
+	if !sr.refreshInvalid {
+		ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
+		if !sr.appendRefreshSpans(ctx, ba, br) {
+			// The refresh spans are out of date, return a generic client-side retry error.
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn,
+			)
 		}
-		// Verify and enforce the size in bytes of all read-only spans
-		// doesn't exceed the max threshold.
-		if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
-			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
-			sr.refreshReads = nil
-			sr.refreshWrites = nil
-			sr.refreshInvalid = true
-			sr.refreshSpansBytes = 0
-		}
+	}
+	// Verify and enforce the size in bytes of all read-only spans
+	// doesn't exceed the max threshold.
+	if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
+		log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
+		sr.refreshReads = nil
+		sr.refreshWrites = nil
+		sr.refreshInvalid = true
+		sr.refreshSpansBytes = 0
 	}
 	// If the transaction will retry and the refresh spans are
 	// exhausted, return a non-retryable error indicating that the

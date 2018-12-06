@@ -299,7 +299,6 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			"test",
 			nil, // baseKey
 			roachpb.NormalUserPriority,
-			enginepb.SERIALIZABLE,
 			ts,
 			base.DefaultMaxClockOffset.Nanoseconds(),
 		)

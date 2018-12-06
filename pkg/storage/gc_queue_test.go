@@ -347,7 +347,7 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
 		txn := newTransaction(
-			"txn", roachpb.Key("key"), roachpb.NormalUserPriority, enginepb.SERIALIZABLE,
+			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
 			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
@@ -446,7 +446,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
@@ -461,7 +461,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"))
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
@@ -709,7 +709,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
 		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
-		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
+		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
@@ -828,8 +828,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
-		newTransaction("txn2", roachpb.Key("1-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
+		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS

@@ -55,7 +55,7 @@ func makeMockTxnPipeliner() (txnPipeliner, *mockLockedSender) {
 }
 
 func makeTxnProto() roachpb.Transaction {
-	return roachpb.MakeTransaction("test", []byte("key"), 0, 0, hlc.Timestamp{}, 0)
+	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{}, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that 1PC transactions pass through the
