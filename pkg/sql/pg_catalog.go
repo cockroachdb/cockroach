@@ -928,10 +928,49 @@ CREATE TABLE pg_catalog.pg_description (
 	classoid OID,
 	objsubid INT,
 	description STRING
-)`,
-	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Comments on database objects are not currently supported.
-		return nil
+);
+`,
+	populate: func(
+		ctx context.Context,
+		p *planner,
+		dbContext *DatabaseDescriptor,
+		addRow func(...tree.Datum) error) error {
+		comments, _, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+			ctx,
+			"select-comments",
+			p.EvalContext().Txn,
+			"SELECT object_id, sub_id, comment FROM system.comments")
+		if err != nil {
+			return err
+		}
+
+		commentMap := make(map[tree.DInt]tree.Datums)
+		for _, comment := range comments {
+			id := *comment[0].(*tree.DInt)
+			commentMap[id] = comment
+		}
+
+		h := makeOidHasher()
+		return forEachTableDescWithTableLookup(
+			ctx,
+			p,
+			dbContext,
+			hideVirtual,
+			func(
+				db *sqlbase.DatabaseDescriptor,
+				scName string,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn) error {
+				if comment, ok := commentMap[tree.DInt(table.ID)]; ok {
+					return addRow(
+						h.TableOid(db, scName, table),
+						oidZero,
+						comment[1],
+						comment[2])
+				}
+
+				return nil
+			})
 	},
 }
 

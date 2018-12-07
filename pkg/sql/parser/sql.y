@@ -722,7 +722,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_zone_stmt
 
 %type <str> session_var
-%type <str> comment_text
+%type <*string> comment_text
 
 %type <tree.Statement> transaction_stmt
 %type <tree.Statement> truncate_stmt
@@ -819,6 +819,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SequenceOption> sequence_option_elem
 
 %type <bool> all_or_distinct
+%type <bool> with_comment
 %type <empty> join_outer
 %type <tree.JoinCond> join_qual
 %type <str> join_type
@@ -2008,7 +2009,12 @@ cancel_sessions_stmt:
 comment_stmt:
   COMMENT ON TABLE table_name IS comment_text
   {
-    return unimplementedWithIssueDetail(sqllex, 19472, "table")
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.CommentOnTable{Table: name, Comment: $6.strPtr()}
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
@@ -2020,8 +2026,15 @@ comment_stmt:
   }
 
 comment_text:
-  SCONST    { $$ = $1 }
-  | NULL    { $$ = "" }
+  SCONST
+  {
+    $$.val = &$1
+  }
+| NULL
+  {
+    var str *string
+    $$.val = str
+  }
 
 // %Help: CREATE
 // %Category: Group
@@ -3368,29 +3381,35 @@ show_sessions_stmt:
 // %Text: SHOW TABLES [FROM <databasename> [ . <schemaname> ] ]
 // %SeeAlso: WEBDOCS/show-tables.html
 show_tables_stmt:
-  SHOW TABLES FROM name '.' name
+  SHOW TABLES FROM name '.' name with_comment
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
         ExplicitSchema: true,
-    }}
+    },
+    WithComment: $7.bool()}
   }
-| SHOW TABLES FROM name
+| SHOW TABLES FROM name with_comment
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
         ExplicitSchema: true,
-    }}
+    },
+    WithComment: $5.bool()}
   }
-| SHOW TABLES
+| SHOW TABLES with_comment
   {
-    $$.val = &tree.ShowTables{}
+    $$.val = &tree.ShowTables{WithComment: $3.bool()}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+with_comment:
+  WITH COMMENT { $$.val = true }
+| /* EMPTY */  { $$.val = false }
 
 // %Help: SHOW SCHEMAS - list schemas
 // %Category: DDL
