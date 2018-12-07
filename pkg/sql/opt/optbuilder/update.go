@@ -55,6 +55,10 @@ import (
 // Computed columns result in an additional wrapper projection that can depend
 // on input columns.
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
+	if !b.evalCtx.SessionData.OptimizerUpdates {
+		panic(unimplementedf("cost-based optimizer is not planning UPDATE statements"))
+	}
+
 	// UX friendliness safeguard.
 	if upd.Where == nil && b.evalCtx.SessionData.SafeUpdates {
 		panic(builderError{pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")})

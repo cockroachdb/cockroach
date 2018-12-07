@@ -917,6 +917,13 @@ func (t *logicTest) setUser(user string) func() {
 		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
 			t.Fatal(err)
 		}
+
+		// Use the cost-based-optimizer for planning UPDATE statements.
+		if optMode == "on" {
+			if _, err := db.Exec("SET experimental_optimizer_updates = true"); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	// The default value for extra_float_digits assumed by tests is
 	// 0. However, lib/pq by default configures this to 2 during
