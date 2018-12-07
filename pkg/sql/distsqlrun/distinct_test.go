@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,12 +36,12 @@ func TestDistinct(t *testing.T) {
 	}
 
 	testCases := []struct {
-		spec     DistinctSpec
+		spec     distsqlpb.DistinctSpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			spec: DistinctSpec{
+			spec: distsqlpb.DistinctSpec{
 				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
@@ -61,7 +62,7 @@ func TestDistinct(t *testing.T) {
 			},
 		},
 		{
-			spec: DistinctSpec{
+			spec: distsqlpb.DistinctSpec{
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{0, 1},
 			},
@@ -83,7 +84,7 @@ func TestDistinct(t *testing.T) {
 			},
 		},
 		{
-			spec: DistinctSpec{
+			spec: distsqlpb.DistinctSpec{
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{1},
 			},
@@ -122,7 +123,7 @@ func TestDistinct(t *testing.T) {
 				EvalCtx:  &evalCtx,
 			}
 
-			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &PostProcessSpec{}, out)
+			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &distsqlpb.PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -159,12 +160,12 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	spec := &DistinctSpec{
+	spec := &distsqlpb.DistinctSpec{
 		DistinctColumns: []uint32{0, 1},
 	}
 	spec.OrderedColumns = orderedColumns
 
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			input := NewRepeatableRowSource(twoIntCols, makeIntRows(numRows, numCols))

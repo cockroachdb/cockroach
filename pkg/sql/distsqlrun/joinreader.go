@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -131,12 +132,12 @@ const joinReaderProcName = "join reader"
 func newJoinReader(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *JoinReaderSpec,
+	spec *distsqlpb.JoinReaderSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
-	if spec.Visibility != ScanVisibility_PUBLIC {
+	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
 		return nil, pgerror.NewAssertionErrorf("joinReader specified with visibility %+v", spec.Visibility)
 	}
 
@@ -218,7 +219,7 @@ func newJoinReader(
 		_, _, err = initRowFetcher(
 			jr.primaryFetcher, &jr.desc, 0 /* indexIdx */, jr.colIdxMap, false, /* reverse */
 			jr.neededRightCols(), false /* isCheck */, &jr.alloc,
-			ScanVisibility_PUBLIC,
+			distsqlpb.ScanVisibility_PUBLIC,
 		)
 		if err != nil {
 			return nil, err
@@ -237,7 +238,7 @@ func newJoinReader(
 	_, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		neededIndexColumns, false /* isCheck */, &jr.alloc,
-		ScanVisibility_PUBLIC,
+		distsqlpb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return nil, err
@@ -670,7 +671,7 @@ func (jr *joinReader) ConsumerClosed() {
 	jr.InternalClose()
 }
 
-var _ DistSQLSpanStats = &JoinReaderStats{}
+var _ distsqlpb.DistSQLSpanStats = &JoinReaderStats{}
 
 const joinReaderTagPrefix = "joinreader."
 

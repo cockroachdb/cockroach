@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,9 +67,9 @@ func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
 // becomes column indexVarMap[i].
 func MakeExpression(
 	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
-) (distsqlrun.Expression, error) {
+) (distsqlpb.Expression, error) {
 	if expr == nil {
-		return distsqlrun.Expression{}, nil
+		return distsqlpb.Expression{}, nil
 	}
 
 	if ctx.IsLocal() {
@@ -79,7 +79,7 @@ func MakeExpression(
 			newExpr, _ := tree.WalkExpr(v, expr)
 			expr = newExpr.(tree.TypedExpr)
 		}
-		return distsqlrun.Expression{LocalExpr: expr}, nil
+		return distsqlpb.Expression{LocalExpr: expr}, nil
 	}
 
 	evalCtx := ctx.EvalContext()
@@ -91,12 +91,12 @@ func MakeExpression(
 	if ctx.EvaluateSubqueries() {
 		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
 		if subqueryVisitor.err != nil {
-			return distsqlrun.Expression{}, subqueryVisitor.err
+			return distsqlpb.Expression{}, subqueryVisitor.err
 		}
 	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
-	fmtCtx := distsqlrun.ExprFmtCtxBase(&buf, evalCtx)
+	fmtCtx := distsqlpb.ExprFmtCtxBase(&buf, evalCtx)
 	if indexVarMap != nil {
 		fmtCtx.WithIndexedVarFormat(
 			func(ctx *tree.FmtCtx, idx int) {
@@ -112,7 +112,7 @@ func MakeExpression(
 	if log.V(1) {
 		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(outExpr))
 	}
-	return distsqlrun.Expression{Expr: buf.String()}, nil
+	return distsqlpb.Expression{Expr: buf.String()}, nil
 }
 
 type evalAndReplaceSubqueryVisitor struct {

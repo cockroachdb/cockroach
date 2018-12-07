@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/types"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func TestTableReader(t *testing.T) {
@@ -67,37 +68,37 @@ func TestTableReader(t *testing.T) {
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	makeIndexSpan := func(start, end int) TableReaderSpan {
+	makeIndexSpan := func(start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.Indexes[0].ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return TableReaderSpan{Span: span}
+		return distsqlpb.TableReaderSpan{Span: span}
 	}
 
 	testCases := []struct {
-		spec     TableReaderSpec
-		post     PostProcessSpec
+		spec     distsqlpb.TableReaderSpec
+		post     distsqlpb.PostProcessSpec
 		expected string
 	}{
 		{
-			spec: TableReaderSpec{
-				Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+			spec: distsqlpb.TableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 			},
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
 		},
 		{
-			spec: TableReaderSpec{
-				Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+			spec: distsqlpb.TableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 			},
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@3 < 5 AND @2 != 3"},
 				Projection:    true,
 				OutputColumns: []uint32{3}, // s
 				Limit:         4,
@@ -105,14 +106,14 @@ func TestTableReader(t *testing.T) {
 			expected: "[['one'] ['two'] ['four'] ['one-zero']]",
 		},
 		{
-			spec: TableReaderSpec{
+			spec: distsqlpb.TableReaderSpec{
 				IndexIdx:  1,
 				Reverse:   true,
-				Spans:     []TableReaderSpan{makeIndexSpan(4, 6)},
+				Spans:     []distsqlpb.TableReaderSpan{makeIndexSpan(4, 6)},
 				LimitHint: 1,
 			},
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@1 < 3"}, // sum < 8
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 < 3"}, // sum < 8
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -219,11 +220,11 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		nodeID:   nodeID,
 	}
-	spec := TableReaderSpec{
-		Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+	spec := distsqlpb.TableReaderSpec{
+		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 		Table: *td,
 	}
-	post := PostProcessSpec{
+	post := distsqlpb.PostProcessSpec{
 		Projection:    true,
 		OutputColumns: []uint32{0},
 	}
@@ -329,13 +330,13 @@ func TestLimitScans(t *testing.T) {
 		txn:      client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
 	}
-	spec := TableReaderSpec{
+	spec := distsqlpb.TableReaderSpec{
 		Table: *tableDesc,
-		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+		Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 	}
 	// We're going to ask for 3 rows, all contained in the first range.
 	const limit = 3
-	post := PostProcessSpec{Limit: limit}
+	post := distsqlpb.PostProcessSpec{Limit: limit}
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
@@ -435,11 +436,11 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			spec := TableReaderSpec{
+			spec := distsqlpb.TableReaderSpec{
 				Table: *tableDesc,
-				Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+				Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 			}
-			post := PostProcessSpec{}
+			post := distsqlpb.PostProcessSpec{}
 
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -28,7 +29,7 @@ import (
 )
 
 type mergeJoinerTestCase struct {
-	spec          MergeJoinerSpec
+	spec          distsqlpb.MergeJoinerSpec
 	outCols       []uint32
 	leftTypes     []sqlbase.ColumnType
 	leftInput     sqlbase.EncDatumRows
@@ -50,12 +51,12 @@ func TestMergeJoiner(t *testing.T) {
 
 	testCases := []mergeJoinerTestCase{
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -86,12 +87,12 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -127,17 +128,17 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   sqlbase.InnerJoin,
-				OnExpr: Expression{Expr: "@4 >= 4"},
+				OnExpr: distsqlpb.Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
@@ -178,17 +179,17 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   sqlbase.FullOuterJoin,
-				OnExpr: Expression{Expr: "@2 >= @4"},
+				OnExpr: distsqlpb.Expression{Expr: "@2 >= @4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
@@ -243,12 +244,12 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -282,12 +283,12 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -321,12 +322,12 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -360,13 +361,13 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 						{ColIdx: 1, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 						{ColIdx: 1, Direction: encoding.Ascending},
@@ -400,12 +401,12 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that NULL = NULL is not matched.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -428,12 +429,12 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			// Ensure that semi joins doesn't output duplicates from
 			// the right side.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -459,12 +460,12 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			// Ensure that duplicate rows in the left are matched
 			// in the output in semi-joins.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -493,12 +494,12 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that NULL == NULL doesn't match in semi-join.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -523,17 +524,17 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that OnExprs are satisfied for semi-joins.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   sqlbase.LeftSemiJoin,
-				OnExpr: Expression{Expr: "@1 >= 4"},
+				OnExpr: distsqlpb.Expression{Expr: "@1 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -570,12 +571,12 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			// Ensure that duplicate rows in the left are matched
 			// in the output in anti-joins.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -603,12 +604,12 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that NULL == NULL doesn't match in anti-join.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
@@ -633,17 +634,17 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that OnExprs are satisfied for semi-joins.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
+			spec: distsqlpb.MergeJoinerSpec{
+				LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightOrdering: convertToSpecOrdering(
+				RightOrdering: distsqlpb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   sqlbase.LeftAntiJoin,
-				OnExpr: Expression{Expr: "@1 >= 4"},
+				OnExpr: distsqlpb.Expression{Expr: "@1 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -707,7 +708,7 @@ func TestMergeJoiner(t *testing.T) {
 				EvalCtx:  &evalCtx,
 			}
 
-			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &ms, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
@@ -747,12 +748,12 @@ func TestConsumerClosed(t *testing.T) {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
-	spec := MergeJoinerSpec{
-		LeftOrdering: convertToSpecOrdering(
+	spec := distsqlpb.MergeJoinerSpec{
+		LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
-		RightOrdering: convertToSpecOrdering(
+		RightOrdering: distsqlpb.ConvertToSpecOrdering(
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
@@ -813,7 +814,7 @@ func TestConsumerClosed(t *testing.T) {
 				Settings: st,
 				EvalCtx:  &evalCtx,
 			}
-			post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
@@ -838,19 +839,19 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		EvalCtx:  &evalCtx,
 	}
 
-	spec := &MergeJoinerSpec{
-		LeftOrdering: convertToSpecOrdering(
+	spec := &distsqlpb.MergeJoinerSpec{
+		LeftOrdering: distsqlpb.ConvertToSpecOrdering(
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
-		RightOrdering: convertToSpecOrdering(
+		RightOrdering: distsqlpb.ConvertToSpecOrdering(
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
 		Type: sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 	disposer := &RowDisposer{}
 
 	const numCols = 1

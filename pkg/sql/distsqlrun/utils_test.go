@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -183,7 +184,7 @@ func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr
 	rpcContext := newInsecureRPCContext(stopper)
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()
-	RegisterDistSQLServer(server, mock)
+	distsqlpb.RegisterDistSQLServer(server, mock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 	if err != nil {
 		return nil, nil, err
@@ -212,17 +213,17 @@ type MockDistSQLServer struct {
 // that a new gRPC call has arrived and thus a stream has arrived. The rpc
 // handler is blocked until donec is signaled.
 type InboundStreamNotification struct {
-	stream DistSQL_FlowStreamServer
+	stream distsqlpb.DistSQL_FlowStreamServer
 	donec  chan<- error
 }
 
 type RunSyncFlowCall struct {
-	stream DistSQL_RunSyncFlowServer
+	stream distsqlpb.DistSQL_RunSyncFlowServer
 	donec  chan<- error
 }
 
 // MockDistSQLServer implements the DistSQLServer interface.
-var _ DistSQLServer = &MockDistSQLServer{}
+var _ distsqlpb.DistSQLServer = &MockDistSQLServer{}
 
 func newMockDistSQLServer() *MockDistSQLServer {
 	return &MockDistSQLServer{
@@ -232,7 +233,7 @@ func newMockDistSQLServer() *MockDistSQLServer {
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
+func (ds *MockDistSQLServer) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) error {
 	donec := make(chan error)
 	ds.runSyncFlowCalls <- RunSyncFlowCall{stream: stream, donec: donec}
 	return <-donec
@@ -240,13 +241,13 @@ func (ds *MockDistSQLServer) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error
 
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) SetupFlow(
-	_ context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
+	_ context.Context, req *distsqlpb.SetupFlowRequest,
+) (*distsqlpb.SimpleResponse, error) {
 	return nil, nil
 }
 
 // FlowStream is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
+func (ds *MockDistSQLServer) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) error {
 	donec := make(chan error)
 	ds.inboundStreams <- InboundStreamNotification{stream: stream, donec: donec}
 	return <-donec
@@ -262,8 +263,8 @@ func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
 // server stream. The server-side RPC call will be blocked until the caller
 // calls the returned cleanup function.
 func createDummyStream() (
-	serverStream DistSQL_FlowStreamServer,
-	clientStream DistSQL_FlowStreamClient,
+	serverStream distsqlpb.DistSQL_FlowStreamServer,
+	clientStream distsqlpb.DistSQL_FlowStreamClient,
 	cleanup func(),
 	err error,
 ) {
@@ -277,7 +278,7 @@ func createDummyStream() (
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	client := NewDistSQLClient(conn)
+	client := distsqlpb.NewDistSQLClient(conn)
 	clientStream, err = client.FlowStream(context.TODO())
 	if err != nil {
 		return nil, nil, nil, err
@@ -332,8 +333,8 @@ func makeRepeatedIntRows(n int, numRows int, numCols int) sqlbase.EncDatumRows {
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
 	t *testing.T,
-	core ProcessorCoreUnion,
-	post PostProcessSpec,
+	core distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	inputTypes []sqlbase.ColumnType,
 	inputRows sqlbase.EncDatumRows,
 	outputTypes []sqlbase.ColumnType,

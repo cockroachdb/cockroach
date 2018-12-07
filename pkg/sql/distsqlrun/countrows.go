@@ -18,6 +18,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -45,7 +46,11 @@ var outputTypes = []sqlbase.ColumnType{
 }
 
 func newCountAggregator(
-	flowCtx *FlowCtx, processorID int32, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	input RowSource,
+	post *distsqlpb.PostProcessSpec,
+	output RowReceiver,
 ) (*countAggregator, error) {
 	ag := &countAggregator{}
 	ag.input = input

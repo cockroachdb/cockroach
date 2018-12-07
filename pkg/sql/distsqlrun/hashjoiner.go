@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -137,10 +138,10 @@ const hashJoinerProcName = "hash joiner"
 func newHashJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *HashJoinerSpec,
+	spec *distsqlpb.HashJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
@@ -783,7 +784,7 @@ func (h *hashJoiner) maybeMakeMemErr(action string) error {
 	return nil
 }
 
-var _ DistSQLSpanStats = &HashJoinerStats{}
+var _ distsqlpb.DistSQLSpanStats = &HashJoinerStats{}
 
 const hashJoinerTagPrefix = "hashjoiner."
 

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -78,15 +79,15 @@ func TestSampleAggregator(t *testing.T) {
 		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
 	}
 
-	sketchSpecs := []SketchSpec{
+	sketchSpecs := []distsqlpb.SketchSpec{
 		{
-			SketchType:        SketchType_HLL_PLUS_PLUS_V1,
+			SketchType:        distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:           []uint32{0},
 			GenerateHistogram: false,
 			StatName:          "a",
 		},
 		{
-			SketchType:          SketchType_HLL_PLUS_PLUS_V1,
+			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:             []uint32{1},
 			GenerateHistogram:   true,
 			HistogramMaxBuckets: 4,
@@ -106,8 +107,8 @@ func TestSampleAggregator(t *testing.T) {
 		in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
 		outputs[i] = NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
 
-		spec := &SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
-		p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, outputs[i])
+		spec := &distsqlpb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
+		p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, outputs[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +128,7 @@ func TestSampleAggregator(t *testing.T) {
 
 	// Now run the sample aggregator.
 	finalOut := NewRowBuffer([]sqlbase.ColumnType{}, nil /* rows*/, RowBufferArgs{})
-	spec := &SampleAggregatorSpec{
+	spec := &distsqlpb.SampleAggregatorSpec{
 		SampleSize:       100,
 		Sketches:         sketchSpecs,
 		SampledColumnIDs: []sqlbase.ColumnID{100, 101},
@@ -135,7 +136,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	agg, err := newSampleAggregator(
-		&flowCtx, 0 /* processorID */, spec, samplerResults, &PostProcessSpec{}, finalOut,
+		&flowCtx, 0 /* processorID */, spec, samplerResults, &distsqlpb.PostProcessSpec{}, finalOut,
 	)
 	if err != nil {
 		t.Fatal(err)

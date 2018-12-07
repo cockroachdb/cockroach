@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -64,9 +65,9 @@ const indexJoinerProcName = "index joiner"
 func newIndexJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *JoinReaderSpec,
+	spec *distsqlpb.JoinReaderSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*indexJoiner, error) {
 	if spec.IndexIdx != 0 {
@@ -78,7 +79,7 @@ func newIndexJoiner(
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
-	needMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	needMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if err := ij.Init(
 		ij,
 		post,

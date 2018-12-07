@@ -21,20 +21,16 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-// processorIDTagKey is the key used for processor id tags in tracing spans.
-const processorIDTagKey = tracing.TagPrefix + "processorid"
 
 // Processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
@@ -103,7 +99,10 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *PostProcessSpec, types []sqlbase.ColumnType, evalCtx *tree.EvalContext, output RowReceiver,
+	post *distsqlpb.PostProcessSpec,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -113,7 +112,7 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(types)
-	if post.Filter != (Expression{}) {
+	if post.Filter != (distsqlpb.Expression{}) {
 		h.filter = &exprHelper{}
 		if err := h.filter.init(post.Filter, types, evalCtx); err != nil {
 			return err
@@ -824,7 +823,7 @@ type ProcStateOpts struct {
 // Init initializes the ProcessorBase.
 func (pb *ProcessorBase) Init(
 	self RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	types []sqlbase.ColumnType,
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -840,7 +839,7 @@ func (pb *ProcessorBase) Init(
 // InitWithEvalCtx initializes the ProcessorBase with a given EvalContext.
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	types []sqlbase.ColumnType,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
@@ -985,8 +984,8 @@ func newProcessor(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
-	core *ProcessorCoreUnion,
-	post *PostProcessSpec,
+	core *distsqlpb.ProcessorCoreUnion,
+	post *distsqlpb.PostProcessSpec,
 	inputs []RowSource,
 	outputs []RowReceiver,
 	localProcessors []LocalProcessor,
@@ -1075,9 +1074,9 @@ func newProcessor(
 			return nil, err
 		}
 		switch core.Backfiller.Type {
-		case BackfillerSpec_Index:
+		case distsqlpb.BackfillerSpec_Index:
 			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
-		case BackfillerSpec_Column:
+		case distsqlpb.BackfillerSpec_Column:
 			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
@@ -1194,7 +1193,7 @@ func newProcessor(
 type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
-	InitWithOutput(post *PostProcessSpec, output RowReceiver) error
+	InitWithOutput(post *distsqlpb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
@@ -1203,245 +1202,17 @@ type LocalProcessor interface {
 
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadImportDataProcessor func(*FlowCtx, int32, ReadImportDataSpec, RowReceiver) (Processor, error)
+var NewReadImportDataProcessor func(*FlowCtx, int32, distsqlpb.ReadImportDataSpec, RowReceiver) (Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*FlowCtx, int32, SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewSSTWriterProcessor func(*FlowCtx, int32, distsqlpb.SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
-var NewCSVWriterProcessor func(*FlowCtx, int32, CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewCSVWriterProcessor func(*FlowCtx, int32, distsqlpb.CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // NewChangeAggregatorProcessor is externally implemented.
-var NewChangeAggregatorProcessor func(*FlowCtx, int32, ChangeAggregatorSpec, RowReceiver) (Processor, error)
+var NewChangeAggregatorProcessor func(*FlowCtx, int32, distsqlpb.ChangeAggregatorSpec, RowReceiver) (Processor, error)
 
 // NewChangeFrontierProcessor is externally implemented.
-var NewChangeFrontierProcessor func(*FlowCtx, int32, ChangeFrontierSpec, RowSource, RowReceiver) (Processor, error)
-
-// Equals returns true if two aggregation specifiers are identical (and thus
-// will always yield the same result).
-func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
-	if a.Func != b.Func || a.Distinct != b.Distinct {
-		return false
-	}
-	if a.FilterColIdx == nil {
-		if b.FilterColIdx != nil {
-			return false
-		}
-	} else {
-		if b.FilterColIdx == nil || *a.FilterColIdx != *b.FilterColIdx {
-			return false
-		}
-	}
-	if len(a.ColIdx) != len(b.ColIdx) {
-		return false
-	}
-	for i, c := range a.ColIdx {
-		if c != b.ColIdx[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
-	switch w {
-	case tree.RANGE:
-		*spec = WindowerSpec_Frame_RANGE
-	case tree.ROWS:
-		*spec = WindowerSpec_Frame_ROWS
-	case tree.GROUPS:
-		*spec = WindowerSpec_Frame_GROUPS
-	default:
-		panic("unexpected WindowFrameMode")
-	}
-}
-
-func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundType) {
-	switch bt {
-	case tree.UnboundedPreceding:
-		*spec = WindowerSpec_Frame_UNBOUNDED_PRECEDING
-	case tree.OffsetPreceding:
-		*spec = WindowerSpec_Frame_OFFSET_PRECEDING
-	case tree.CurrentRow:
-		*spec = WindowerSpec_Frame_CURRENT_ROW
-	case tree.OffsetFollowing:
-		*spec = WindowerSpec_Frame_OFFSET_FOLLOWING
-	case tree.UnboundedFollowing:
-		*spec = WindowerSpec_Frame_UNBOUNDED_FOLLOWING
-	default:
-		panic("unexpected WindowFrameBoundType")
-	}
-}
-
-// If offset exprs are present, we evaluate them and save the encoded results
-// in the spec.
-func (spec *WindowerSpec_Frame_Bounds) initFromAST(
-	b tree.WindowFrameBounds, m tree.WindowFrameMode, evalCtx *tree.EvalContext,
-) error {
-	if b.StartBound == nil {
-		return errors.Errorf("unexpected: Start Bound is nil")
-	}
-	spec.Start = WindowerSpec_Frame_Bound{}
-	spec.Start.BoundType.initFromAST(b.StartBound.BoundType)
-	if b.StartBound.HasOffset() {
-		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
-		dStartOffset, err := typedStartOffset.Eval(evalCtx)
-		if err != nil {
-			return err
-		}
-		if dStartOffset == tree.DNull {
-			return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
-		}
-		switch m {
-		case tree.ROWS:
-			startOffset := int(tree.MustBeDInt(dStartOffset))
-			if startOffset < 0 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
-			}
-			spec.Start.IntOffset = uint32(startOffset)
-		case tree.RANGE:
-			if isNegative(evalCtx, dStartOffset) {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
-			}
-			typ, err := sqlbase.DatumTypeToColumnType(dStartOffset.ResolvedType())
-			if err != nil {
-				return err
-			}
-			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
-			var buf []byte
-			var a sqlbase.DatumAlloc
-			datum := sqlbase.DatumToEncDatum(typ, dStartOffset)
-			buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
-			if err != nil {
-				return err
-			}
-			spec.Start.TypedOffset = buf
-		case tree.GROUPS:
-			startOffset := int(tree.MustBeDInt(dStartOffset))
-			if startOffset < 0 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
-			}
-			spec.Start.IntOffset = uint32(startOffset)
-		}
-	}
-
-	if b.EndBound != nil {
-		spec.End = &WindowerSpec_Frame_Bound{}
-		spec.End.BoundType.initFromAST(b.EndBound.BoundType)
-		if b.EndBound.HasOffset() {
-			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
-			dEndOffset, err := typedEndOffset.Eval(evalCtx)
-			if err != nil {
-				return err
-			}
-			if dEndOffset == tree.DNull {
-				return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
-			}
-			switch m {
-			case tree.ROWS:
-				endOffset := int(tree.MustBeDInt(dEndOffset))
-				if endOffset < 0 {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
-				}
-				spec.End.IntOffset = uint32(endOffset)
-			case tree.RANGE:
-				if isNegative(evalCtx, dEndOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
-				}
-				typ, err := sqlbase.DatumTypeToColumnType(dEndOffset.ResolvedType())
-				if err != nil {
-					return err
-				}
-				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
-				var buf []byte
-				var a sqlbase.DatumAlloc
-				datum := sqlbase.DatumToEncDatum(typ, dEndOffset)
-				buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
-				if err != nil {
-					return err
-				}
-				spec.End.TypedOffset = buf
-			case tree.GROUPS:
-				endOffset := int(tree.MustBeDInt(dEndOffset))
-				if endOffset < 0 {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
-				}
-				spec.End.IntOffset = uint32(endOffset)
-			}
-		}
-	}
-
-	return nil
-}
-
-// isNegative returns whether offset is negative.
-func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
-	switch o := offset.(type) {
-	case *tree.DInt:
-		return *o < 0
-	case *tree.DDecimal:
-		return o.Negative
-	case *tree.DFloat:
-		return *o < 0
-	case *tree.DInterval:
-		return o.Compare(evalCtx, &tree.DInterval{Duration: duration.Duration{}}) < 0
-	default:
-		panic("unexpected offset type")
-	}
-}
-
-// InitFromAST initializes the spec based on tree.WindowFrame. It will evaluate
-// offset expressions if present in the frame.
-func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *tree.EvalContext) error {
-	spec.Mode.initFromAST(f.Mode)
-	return spec.Bounds.initFromAST(f.Bounds, f.Mode, evalCtx)
-}
-
-func (spec WindowerSpec_Frame_Mode) convertToAST() tree.WindowFrameMode {
-	switch spec {
-	case WindowerSpec_Frame_RANGE:
-		return tree.RANGE
-	case WindowerSpec_Frame_ROWS:
-		return tree.ROWS
-	case WindowerSpec_Frame_GROUPS:
-		return tree.GROUPS
-	default:
-		panic("unexpected WindowerSpec_Frame_Mode")
-	}
-}
-
-func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundType {
-	switch spec {
-	case WindowerSpec_Frame_UNBOUNDED_PRECEDING:
-		return tree.UnboundedPreceding
-	case WindowerSpec_Frame_OFFSET_PRECEDING:
-		return tree.OffsetPreceding
-	case WindowerSpec_Frame_CURRENT_ROW:
-		return tree.CurrentRow
-	case WindowerSpec_Frame_OFFSET_FOLLOWING:
-		return tree.OffsetFollowing
-	case WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-		return tree.UnboundedFollowing
-	default:
-		panic("unexpected WindowerSpec_Frame_BoundType")
-	}
-}
-
-// convertToAST produces tree.WindowFrameBounds based on
-// WindowerSpec_Frame_Bounds. Note that it might not be fully equivalent to
-// original - if offsetExprs were present in original tree.WindowFrameBounds,
-// they are not included.
-func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
-	bounds := tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{
-		BoundType: spec.Start.BoundType.convertToAST(),
-	}}
-	if spec.End != nil {
-		bounds.EndBound = &tree.WindowFrameBound{BoundType: spec.End.BoundType.convertToAST()}
-	}
-	return bounds
-}
-
-func (spec *WindowerSpec_Frame) convertToAST() *tree.WindowFrame {
-	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
-}
+var NewChangeFrontierProcessor func(*FlowCtx, int32, distsqlpb.ChangeFrontierSpec, RowSource, RowReceiver) (Processor, error)

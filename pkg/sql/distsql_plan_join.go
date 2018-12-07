@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -54,7 +54,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 	// We iterate through each table and collate their metadata for
 	// the InterleavedReaderJoinerSpec.
-	tables := make([]distsqlrun.InterleavedReaderJoinerSpec_Table, 2)
+	tables := make([]distsqlpb.InterleavedReaderJoinerSpec_Table, 2)
 	plans := make([]PhysicalPlan, 2)
 	var totalLimitHint int64
 	for i, t := range []struct {
@@ -86,7 +86,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		// for TableReader is independent of node/processor instance.
 		tr := plans[i].Processors[0].Spec.Core.TableReader
 
-		tables[i] = distsqlrun.InterleavedReaderJoinerSpec_Table{
+		tables[i] = distsqlpb.InterleavedReaderJoinerSpec_Table{
 			Desc:     tr.Table,
 			IndexIdx: tr.IndexIdx,
 			Post:     plans[i].GetLastStagePost(),
@@ -192,14 +192,14 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		}
 
 		// Make a copy of our spec for each table.
-		processorTables := make([]distsqlrun.InterleavedReaderJoinerSpec_Table, len(tables))
+		processorTables := make([]distsqlpb.InterleavedReaderJoinerSpec_Table, len(tables))
 		copy(processorTables, tables)
 		// We set the set of spans for each table to be read by the
 		// processor.
 		processorTables[ancsIdx].Spans = makeTableReaderSpans(ancsSpans)
 		processorTables[descIdx].Spans = makeTableReaderSpans(descSpans)
 
-		irj := &distsqlrun.InterleavedReaderJoinerSpec{
+		irj := &distsqlpb.InterleavedReaderJoinerSpec{
 			Tables: processorTables,
 			// We previously checked that both scans are in the
 			// same direction (useInterleavedJoin).
@@ -211,10 +211,10 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 		proc := distsqlplan.Processor{
 			Node: nodeID,
-			Spec: distsqlrun.ProcessorSpec{
-				Core:    distsqlrun.ProcessorCoreUnion{InterleavedReaderJoiner: irj},
+			Spec: distsqlpb.ProcessorSpec{
+				Core:    distsqlpb.ProcessorCoreUnion{InterleavedReaderJoiner: irj},
 				Post:    post,
-				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}
@@ -240,7 +240,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 func joinOutColumns(
 	n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
-) (post distsqlrun.PostProcessSpec, joinToStreamColMap []int) {
+) (post distsqlpb.PostProcessSpec, joinToStreamColMap []int) {
 	joinToStreamColMap = makePlanToStreamColMap(len(n.columns))
 	post.Projection = true
 
@@ -286,9 +286,9 @@ func joinOutColumns(
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
 func remapOnExpr(
 	planCtx *PlanningCtx, n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
-) (distsqlrun.Expression, error) {
+) (distsqlpb.Expression, error) {
 	if n.pred.onCond == nil {
-		return distsqlrun.Expression{}, nil
+		return distsqlpb.Expression{}, nil
 	}
 
 	joinColMap := make([]int, n.pred.numLeftCols+n.pred.numRightCols)
@@ -325,16 +325,14 @@ func eqCols(eqIndices, planToColMap []int) []uint32 {
 
 // distsqlOrdering converts the ordering specified by mergeJoinOrdering in
 // terms of the index of eqCols to the ordinal references provided by eqCols.
-func distsqlOrdering(
-	mergeJoinOrdering sqlbase.ColumnOrdering, eqCols []uint32,
-) distsqlrun.Ordering {
-	var ord distsqlrun.Ordering
-	ord.Columns = make([]distsqlrun.Ordering_Column, len(mergeJoinOrdering))
+func distsqlOrdering(mergeJoinOrdering sqlbase.ColumnOrdering, eqCols []uint32) distsqlpb.Ordering {
+	var ord distsqlpb.Ordering
+	ord.Columns = make([]distsqlpb.Ordering_Column, len(mergeJoinOrdering))
 	for i, c := range mergeJoinOrdering {
 		ord.Columns[i].ColIdx = eqCols[c.ColIdx]
-		dir := distsqlrun.Ordering_Column_ASC
+		dir := distsqlpb.Ordering_Column_ASC
 		if c.Direction == encoding.Descending {
-			dir = distsqlrun.Ordering_Column_DESC
+			dir = distsqlpb.Ordering_Column_DESC
 		}
 		ord.Columns[i].Direction = dir
 	}

@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -56,7 +56,7 @@ func PlanAndRunExport(
 	txn *client.Txn,
 	evalCtx *extendedEvalContext,
 	in planNode,
-	out distsqlrun.ProcessorCoreUnion,
+	out distsqlpb.ProcessorCoreUnion,
 	resultRows *RowResultWriter,
 ) error {
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
@@ -70,7 +70,7 @@ func PlanAndRunExport(
 	}
 
 	p.AddNoGroupingStage(
-		out, distsqlrun.PostProcessSpec{}, ExportPlanResultTypes, distsqlrun.Ordering{},
+		out, distsqlpb.PostProcessSpec{}, ExportPlanResultTypes, distsqlpb.Ordering{},
 	)
 
 	// Overwrite PlanToStreamColMap (used by recv below) to reflect the output of
@@ -215,15 +215,15 @@ func LoadCSV(
 	// Setup common to both stages.
 
 	// For each input file, assign it to a node.
-	inputSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
+	inputSpecs := make([]*distsqlpb.ReadImportDataSpec, 0, len(nodes))
 	for i, input := range from {
 		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
-			spec := &distsqlrun.ReadImportDataSpec{
+			spec := &distsqlpb.ReadImportDataSpec{
 				Tables: tables,
 				Format: format,
-				Progress: distsqlrun.JobProgress{
+				Progress: distsqlpb.JobProgress{
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
@@ -241,9 +241,9 @@ func LoadCSV(
 		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
 	}
 
-	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
+	sstSpecs := make([]distsqlpb.SSTWriterSpec, len(nodes))
 	for i := range nodes {
-		sstSpecs[i] = distsqlrun.SSTWriterSpec{
+		sstSpecs[i] = distsqlpb.SSTWriterSpec{
 			Destination:   to,
 			WalltimeNanos: walltime,
 		}
@@ -341,7 +341,7 @@ func LoadCSV(
 	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
 	// of adjacent keys.
-	spans := make([]distsqlrun.OutputRouterSpec_RangeRouterSpec_Span, len(splits)-1)
+	spans := make([]distsqlpb.OutputRouterSpec_RangeRouterSpec_Span, len(splits)-1)
 	encFn := func(b []byte) []byte {
 		return encoding.EncodeBytesAscending(nil, b)
 	}
@@ -349,12 +349,12 @@ func LoadCSV(
 		start := splits[i-1]
 		end := splits[i]
 		stream := int32((i - 1) % len(nodes))
-		spans[i-1] = distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
+		spans[i-1] = distsqlpb.OutputRouterSpec_RangeRouterSpec_Span{
 			Start:  encFn(start),
 			End:    encFn(end),
 			Stream: stream,
 		}
-		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanName{
+		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlpb.SSTWriterSpec_SpanName{
 			Name: fmt.Sprintf("%d.sst", i),
 			End:  end,
 		})
@@ -369,9 +369,9 @@ func LoadCSV(
 	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
-	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
+	routerSpec := distsqlpb.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
-		Encodings: []distsqlrun.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
+		Encodings: []distsqlpb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 			{
 				Column:   0,
 				Encoding: sqlbase.DatumEncoding_ASCENDING_KEY,
@@ -385,10 +385,10 @@ func LoadCSV(
 		rcs.SampleSize = 0
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
-			Spec: distsqlrun.ProcessorSpec{
-				Core: distsqlrun.ProcessorCoreUnion{ReadImport: rcs},
-				Output: []distsqlrun.OutputRouterSpec{{
-					Type:             distsqlrun.OutputRouterSpec_BY_RANGE,
+			Spec: distsqlpb.ProcessorSpec{
+				Core: distsqlpb.ProcessorCoreUnion{ReadImport: rcs},
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type:             distsqlpb.OutputRouterSpec_BY_RANGE,
 					RangeRouterSpec:  routerSpec,
 					DisableBuffering: true,
 				}},
@@ -417,19 +417,19 @@ func LoadCSV(
 		if len(swSpec.Spans) == 0 {
 			continue
 		}
-		swSpec.Progress = distsqlrun.JobProgress{
+		swSpec.Progress = distsqlpb.JobProgress{
 			JobID:        *job.ID(),
 			Slot:         int32(len(p.ResultRouters)),
 			Contribution: float32(len(swSpec.Spans)) / float32(len(spans)),
 		}
 		proc := distsqlplan.Processor{
 			Node: node,
-			Spec: distsqlrun.ProcessorSpec{
-				Input: []distsqlrun.InputSyncSpec{{
+			Spec: distsqlpb.ProcessorSpec{
+				Input: []distsqlpb.InputSyncSpec{{
 					ColumnTypes: firstStageTypes,
 				}},
-				Core:    distsqlrun.ProcessorCoreUnion{SSTWriter: &swSpec},
-				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Core:    distsqlpb.ProcessorCoreUnion{SSTWriter: &swSpec},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}
@@ -498,8 +498,8 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	splitSize int64,
 	oversample int64,
 	planCtx *PlanningCtx,
-	csvSpecs []*distsqlrun.ReadImportDataSpec,
-	sstSpecs []distsqlrun.SSTWriterSpec,
+	csvSpecs []*distsqlpb.ReadImportDataSpec,
+	sstSpecs []distsqlpb.SSTWriterSpec,
 ) ([][]byte, error) {
 	// splitSize is the target number of bytes at which to create SST files. We
 	// attempt to do this by sampling, which is what the first DistSQL plan of this
@@ -532,9 +532,9 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	for i, rcs := range csvSpecs {
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
-			Spec: distsqlrun.ProcessorSpec{
-				Core:    distsqlrun.ProcessorCoreUnion{ReadImport: rcs},
-				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+			Spec: distsqlpb.ProcessorSpec{
+				Core:    distsqlpb.ProcessorCoreUnion{ReadImport: rcs},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}
@@ -554,23 +554,23 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.PlanToStreamColMap = []int{0, 1}
 	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
-	kvOrdering := distsqlrun.Ordering{
-		Columns: []distsqlrun.Ordering_Column{{
+	kvOrdering := distsqlpb.Ordering{
+		Columns: []distsqlpb.Ordering_Column{{
 			ColIdx:    0,
-			Direction: distsqlrun.Ordering_Column_ASC,
+			Direction: distsqlpb.Ordering_Column_ASC,
 		}, {
 			ColIdx:    1,
-			Direction: distsqlrun.Ordering_Column_ASC,
+			Direction: distsqlpb.Ordering_Column_ASC,
 		}},
 	}
 
-	sorterSpec := distsqlrun.SorterSpec{
+	sorterSpec := distsqlpb.SorterSpec{
 		OutputOrdering: kvOrdering,
 	}
 
 	p.AddSingleGroupStage(thisNode,
-		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
-		distsqlrun.PostProcessSpec{},
+		distsqlpb.ProcessorCoreUnion{Sorter: &sorterSpec},
+		distsqlpb.PostProcessSpec{},
 		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},
 	)
 

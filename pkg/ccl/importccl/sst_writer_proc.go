@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,7 +47,7 @@ var sstOutputTypes = []sqlbase.ColumnType{
 func newSSTWriterProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.SSTWriterSpec,
+	spec distsqlpb.SSTWriterSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
@@ -62,7 +63,7 @@ func newSSTWriterProcessor(
 		progress:    spec.Progress,
 		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
-	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := sp.out.Init(&distsqlpb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return sp, nil
@@ -71,14 +72,14 @@ func newSSTWriterProcessor(
 type sstWriter struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
-	spec        distsqlrun.SSTWriterSpec
+	spec        distsqlpb.SSTWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
 	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
-	progress    distsqlrun.JobProgress
+	progress    distsqlpb.JobProgress
 	db          *client.DB
 }
 

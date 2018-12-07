@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -762,7 +763,7 @@ func TestPartitionSpans(t *testing.T) {
 		}
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
-			&distsqlrun.DistSQLVersionGossipInfo{
+			&distsqlpb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
 				Version:            distsqlrun.Version,
 			},
@@ -855,10 +856,10 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 		// planVersion is the DistSQL version that this plan is targeting.
 		// We'll play with this version and expect nodes to be skipped because of
 		// this.
-		planVersion distsqlrun.DistSQLVersion
+		planVersion distsqlpb.DistSQLVersion
 
 		// The versions accepted by each node.
-		nodeVersions map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo
+		nodeVersions map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo
 
 		// nodesNotAdvertisingDistSQLVersion is the set of nodes for which gossip is
 		// not going to have information about the supported DistSQL version. This
@@ -872,7 +873,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// In the first test, all nodes are compatible.
 			name:        "current_version",
 			planVersion: 2,
-			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -893,7 +894,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// Remember that the gateway is node 2.
 			name:        "next_version",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -912,7 +913,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// a crdb 1.0 node).
 			name:        "crdb_1.0",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
 				2: {
 					MinAcceptedVersion: 3,
 					Version:            3,
@@ -1047,7 +1048,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		// the gossip data, but other datums it advertised are left in place.
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
-			&distsqlrun.DistSQLVersionGossipInfo{
+			&distsqlpb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
 				Version:            distsqlrun.Version,
 			},
@@ -1129,7 +1130,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	}
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(nodeID),
-		&distsqlrun.DistSQLVersionGossipInfo{
+		&distsqlpb.DistSQLVersionGossipInfo{
 			MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
 			Version:            distsqlrun.Version,
 		},

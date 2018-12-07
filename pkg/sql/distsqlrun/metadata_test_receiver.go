@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -51,7 +52,7 @@ func newMetadataTestReceiver(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	senders []string,
 ) (*metadataTestReceiver, error) {

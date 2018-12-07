@@ -17,7 +17,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -154,7 +154,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	diagram, err := distsqlrun.GeneratePlanDiagram(flows)
+	diagram, err := distsqlpb.GeneratePlanDiagram(flows)
 	if err != nil {
 		return err
 	}

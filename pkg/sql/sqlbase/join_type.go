@@ -53,3 +53,8 @@ func JoinTypeFromAstString(joinStr string) JoinType {
 		panic(fmt.Sprintf("unknown join string %s", joinStr))
 	}
 }
+
+// IsSetOpJoin returns true if this join is a set operation.
+func (j JoinType) IsSetOpJoin() bool {
+	return j == IntersectAllJoin || j == ExceptAllJoin
+}

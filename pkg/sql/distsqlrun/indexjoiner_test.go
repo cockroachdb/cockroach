@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,14 +64,14 @@ func TestIndexJoiner(t *testing.T) {
 
 	testCases := []struct {
 		description string
-		post        PostProcessSpec
+		post        distsqlpb.PostProcessSpec
 		input       sqlbase.EncDatumRows
 		outputTypes []sqlbase.ColumnType
 		expected    sqlbase.EncDatumRows
 	}{
 		{
 			description: "Test selecting rows using the primary index",
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
@@ -90,8 +91,8 @@ func TestIndexJoiner(t *testing.T) {
 		},
 		{
 			description: "Test a filter in the post process spec and using a secondary index",
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
 				OutputColumns: []uint32{3},
 			},
@@ -118,14 +119,14 @@ func TestIndexJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
-			spec := JoinReaderSpec{
+			spec := distsqlpb.JoinReaderSpec{
 				Table:    *td,
 				IndexIdx: 0,
 			}
 			txn := client.NewTxn(context.Background(), s.DB(), s.NodeID(), client.RootTxn)
 			runProcessorTest(
 				t,
-				ProcessorCoreUnion{JoinReader: &spec},
+				distsqlpb.ProcessorCoreUnion{JoinReader: &spec},
 				c.post,
 				twoIntCols,
 				c.input,

@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -72,7 +73,7 @@ var _ distsqlrun.LocalProcessor = &planNodeToRowSource{}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	post *distsqlrun.PostProcessSpec, output distsqlrun.RowReceiver,
+	post *distsqlpb.PostProcessSpec, output distsqlrun.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
 		p,

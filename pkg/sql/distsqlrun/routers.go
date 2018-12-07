@@ -27,6 +27,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -47,7 +48,7 @@ type router interface {
 //
 // Pass-through routers are not supported; the higher layer is expected to elide
 // them.
-func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
+func makeRouter(spec *distsqlpb.OutputRouterSpec, streams []RowReceiver) (router, error) {
 	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
 	}
@@ -56,13 +57,13 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
 	rb.setupStreams(spec, streams)
 
 	switch spec.Type {
-	case OutputRouterSpec_BY_HASH:
+	case distsqlpb.OutputRouterSpec_BY_HASH:
 		return makeHashRouter(rb, spec.HashColumns)
 
-	case OutputRouterSpec_MIRROR:
+	case distsqlpb.OutputRouterSpec_MIRROR:
 		return makeMirrorRouter(rb)
 
-	case OutputRouterSpec_BY_RANGE:
+	case distsqlpb.OutputRouterSpec_BY_RANGE:
 		return makeRangeRouter(rb, spec.RangeRouterSpec)
 
 	default:
@@ -75,7 +76,7 @@ const routerRowBufSize = rowChannelBufSize
 // routerOutput is the data associated with one router consumer.
 type routerOutput struct {
 	stream   RowReceiver
-	streamID StreamID
+	streamID distsqlpb.StreamID
 	mu       struct {
 		syncutil.Mutex
 		// cond is signaled whenever the main router routine adds a metadata item, a
@@ -209,7 +210,7 @@ func (rb *routerBase) aggStatus() ConsumerStatus {
 	return ConsumerStatus(atomic.LoadUint32(&rb.aggregatedStatus))
 }
 
-func (rb *routerBase) setupStreams(spec *OutputRouterSpec, streams []RowReceiver) {
+func (rb *routerBase) setupStreams(spec *distsqlpb.OutputRouterSpec, streams []RowReceiver) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
 	if spec.DisableBuffering {
@@ -278,7 +279,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			var span opentracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = processorSpan(ctx, "router output")
-				span.SetTag(streamIDTagKey, ro.streamID)
+				span.SetTag(distsqlpb.StreamIDTagKey, ro.streamID)
 			}
 
 			drain := false
@@ -464,8 +465,8 @@ type rangeRouter struct {
 	alloc sqlbase.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
-	encodings []OutputRouterSpec_RangeRouterSpec_ColumnEncoding
-	spans     []OutputRouterSpec_RangeRouterSpec_Span
+	encodings []distsqlpb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding
+	spans     []distsqlpb.OutputRouterSpec_RangeRouterSpec_Span
 	// defaultDest, if set, sends any row not matching a span to this stream. If
 	// not set and a non-matching row is encountered, an error is returned and
 	// the router is shut down.
@@ -597,7 +598,9 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 	return int(crc32.Update(0, crc32Table, hr.buffer) % uint32(len(hr.outputs))), nil
 }
 
-func makeRangeRouter(rb routerBase, spec OutputRouterSpec_RangeRouterSpec) (*rangeRouter, error) {
+func makeRangeRouter(
+	rb routerBase, spec distsqlpb.OutputRouterSpec_RangeRouterSpec,
+) (*rangeRouter, error) {
 	if len(spec.Encodings) == 0 {
 		return nil, errors.New("missing encodings")
 	}
