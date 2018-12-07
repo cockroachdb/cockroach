@@ -35,7 +35,7 @@ func TestLogFilenameParsing(t *testing.T) {
 
 	for i, testCase := range testCases {
 		filename, _ := logName(program, testCase)
-		details, err := parseLogFilename(filename)
+		details, err := ParseLogFilename(filename)
 		if err != nil {
 			t.Fatal(err)
 		}
