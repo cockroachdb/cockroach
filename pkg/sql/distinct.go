@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -217,12 +218,12 @@ func (n *distinctNode) startExec(params runParams) error {
 	if err := input.startExec(params); err != nil {
 		return err
 	}
-	if err := input.InitWithOutput(&distsqlrun.PostProcessSpec{}, nil); err != nil {
+	if err := input.InitWithOutput(&distsqlpb.PostProcessSpec{}, nil); err != nil {
 		return err
 	}
 
-	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
-	var output distsqlrun.RowReceiver     // output is never used as distinct is only run as a RowSource.
+	post := &distsqlpb.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
+	var output distsqlrun.RowReceiver    // output is never used as distinct is only run as a RowSource.
 
 	proc, err := distsqlrun.NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, output)
 	if err != nil {

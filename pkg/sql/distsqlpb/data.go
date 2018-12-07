@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,20 +12,22 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package distsqlpb
 
 import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// convertToColumnOrdering converts an Ordering type (as defined in data.proto)
+// ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
 // to a sqlbase.ColumnOrdering type.
-func convertToColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
+func ConvertToColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
 	ordering := make(sqlbase.ColumnOrdering, len(specOrdering.Columns))
 	for i, c := range specOrdering.Columns {
 		ordering[i].ColIdx = int(c.ColIdx)
@@ -38,9 +40,9 @@ func convertToColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
 	return ordering
 }
 
-// convertToSpecOrdering converts a sqlbase.ColumnOrdering type
+// ConvertToSpecOrdering converts a sqlbase.ColumnOrdering type
 // to an Ordering type (as defined in data.proto).
-func convertToSpecOrdering(columnOrdering sqlbase.ColumnOrdering) Ordering {
+func ConvertToSpecOrdering(columnOrdering sqlbase.ColumnOrdering) Ordering {
 	return ConvertToMappedSpecOrdering(columnOrdering, nil)
 }
 
@@ -122,4 +124,47 @@ func (e Expression) String() string {
 		return e.Expr
 	}
 	return "none"
+}
+
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	if err := e.ErrorDetail(); err != nil {
+		return err.Error()
+	}
+	return "<nil>"
+}
+
+// NewError creates an Error from an error, to be sent on the wire. It will
+// recognize certain errors and marshall them accordingly, and everything
+// unrecognized is turned into a PGError with code "internal".
+func NewError(err error) *Error {
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		return &Error{Detail: &Error_PGError{PGError: pgErr}}
+	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
+		return &Error{
+			Detail: &Error_RetryableTxnError{
+				RetryableTxnError: retryErr,
+			}}
+	} else {
+		// Anything unrecognized is an "internal error".
+		return &Error{
+			Detail: &Error_PGError{
+				PGError: pgerror.NewError(
+					pgerror.CodeInternalError, err.Error())}}
+	}
+}
+
+// ErrorDetail returns the payload as a Go error.
+func (e *Error) ErrorDetail() error {
+	if e == nil {
+		return nil
+	}
+	switch t := e.Detail.(type) {
+	case *Error_PGError:
+		return t.PGError
+	case *Error_RetryableTxnError:
+		return t.RetryableTxnError
+	default:
+		panic(fmt.Sprintf("bad error detail: %+v", t))
+	}
 }

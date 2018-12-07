@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,10 +36,10 @@ type aggTestSpec struct {
 	filterColIdx *uint32
 }
 
-func aggregations(aggTestSpecs []aggTestSpec) []AggregatorSpec_Aggregation {
-	agg := make([]AggregatorSpec_Aggregation, len(aggTestSpecs))
+func aggregations(aggTestSpecs []aggTestSpec) []distsqlpb.AggregatorSpec_Aggregation {
+	agg := make([]distsqlpb.AggregatorSpec_Aggregation, len(aggTestSpecs))
 	for i, spec := range aggTestSpecs {
-		agg[i].Func = AggregatorSpec_Func(AggregatorSpec_Func_value[spec.fname])
+		agg[i].Func = distsqlpb.AggregatorSpec_Func(distsqlpb.AggregatorSpec_Func_value[spec.fname])
 		agg[i].Distinct = spec.distinct
 		agg[i].ColIdx = spec.colIdx
 		agg[i].FilterColIdx = spec.filterColIdx
@@ -81,8 +82,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []sqlbase.ColumnType{intType, intType, intType, decType, decType, decType, decType},
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MIN", colIdx: col0},
 						{fname: "MAX", colIdx: col0},
@@ -116,8 +117,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(2),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -146,8 +147,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(2),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -177,8 +178,8 @@ func TestAggregator(t *testing.T) {
 				Types: makeIntCols(2),
 			},
 			DisableSort: true,
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					OrderedGroupCols: col1,
 					GroupCols:        col1,
 					Aggregations: aggregations([]aggTestSpec{
@@ -208,8 +209,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []sqlbase.ColumnType{intType, decType},
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -239,8 +240,8 @@ func TestAggregator(t *testing.T) {
 				Types: []sqlbase.ColumnType{intType, decType},
 			},
 			DisableSort: true,
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					GroupCols:        col1,
 					OrderedGroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
@@ -269,8 +270,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []sqlbase.ColumnType{intType, decType},
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "COUNT", colIdx: col0},
 						{fname: "SUM", colIdx: col0},
@@ -297,8 +298,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(1),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "SUM", distinct: true, colIdx: col0},
 					}),
@@ -322,8 +323,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(1),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col0},
 					}),
@@ -348,8 +349,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(4),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MAX", colIdx: col0},
 						{fname: "MIN", colIdx: col1},
@@ -377,8 +378,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: makeIntCols(3),
 			},
-			ProcessorCore: ProcessorCoreUnion{
-				Aggregator: &AggregatorSpec{
+			ProcessorCore: distsqlpb.ProcessorCoreUnion{
+				Aggregator: &distsqlpb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MAX", colIdx: col0, filterColIdx: &filterCol1},
 						{fname: "COUNT", colIdx: col2, filterColIdx: &filterCol3},
@@ -399,17 +400,17 @@ func BenchmarkAggregation(b *testing.B) {
 	const numCols = 1
 	const numRows = 1000
 
-	aggFuncs := []AggregatorSpec_Func{
-		AggregatorSpec_ANY_NOT_NULL,
-		AggregatorSpec_AVG,
-		AggregatorSpec_COUNT,
-		AggregatorSpec_MAX,
-		AggregatorSpec_MIN,
-		AggregatorSpec_STDDEV,
-		AggregatorSpec_SUM,
-		AggregatorSpec_SUM_INT,
-		AggregatorSpec_VARIANCE,
-		AggregatorSpec_XOR_AGG,
+	aggFuncs := []distsqlpb.AggregatorSpec_Func{
+		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+		distsqlpb.AggregatorSpec_AVG,
+		distsqlpb.AggregatorSpec_COUNT,
+		distsqlpb.AggregatorSpec_MAX,
+		distsqlpb.AggregatorSpec_MIN,
+		distsqlpb.AggregatorSpec_STDDEV,
+		distsqlpb.AggregatorSpec_SUM,
+		distsqlpb.AggregatorSpec_SUM_INT,
+		distsqlpb.AggregatorSpec_VARIANCE,
+		distsqlpb.AggregatorSpec_XOR_AGG,
 	}
 
 	ctx := context.Background()
@@ -424,15 +425,15 @@ func BenchmarkAggregation(b *testing.B) {
 
 	for _, aggFunc := range aggFuncs {
 		b.Run(aggFunc.String(), func(b *testing.B) {
-			spec := &AggregatorSpec{
-				Aggregations: []AggregatorSpec_Aggregation{
+			spec := &distsqlpb.AggregatorSpec{
+				Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
 					{
 						Func:   aggFunc,
 						ColIdx: []uint32{0},
 					},
 				},
 			}
-			post := &PostProcessSpec{}
+			post := &distsqlpb.PostProcessSpec{}
 			disposer := &RowDisposer{}
 			input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
 
@@ -452,14 +453,14 @@ func BenchmarkAggregation(b *testing.B) {
 }
 
 func BenchmarkCountRows(b *testing.B) {
-	spec := &AggregatorSpec{
-		Aggregations: []AggregatorSpec_Aggregation{
+	spec := &distsqlpb.AggregatorSpec{
+		Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
 			{
-				Func: AggregatorSpec_COUNT_ROWS,
+				Func: distsqlpb.AggregatorSpec_COUNT_ROWS,
 			},
 		},
 	}
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 	disposer := &RowDisposer{}
 	const numCols = 1
 	const numRows = 100000
@@ -500,10 +501,10 @@ func BenchmarkGrouping(b *testing.B) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	spec := &AggregatorSpec{
+	spec := &distsqlpb.AggregatorSpec{
 		GroupCols: []uint32{0},
 	}
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 	disposer := &RowDisposer{}
 	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
 
@@ -526,17 +527,17 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	var groupedCols = [2]int{0, 1}
 	var allOrderedGroupCols = [2]uint32{0, 1}
 
-	aggFuncs := []AggregatorSpec_Func{
-		AggregatorSpec_ANY_NOT_NULL,
-		AggregatorSpec_AVG,
-		AggregatorSpec_COUNT,
-		AggregatorSpec_MAX,
-		AggregatorSpec_MIN,
-		AggregatorSpec_STDDEV,
-		AggregatorSpec_SUM,
-		AggregatorSpec_SUM_INT,
-		AggregatorSpec_VARIANCE,
-		AggregatorSpec_XOR_AGG,
+	aggFuncs := []distsqlpb.AggregatorSpec_Func{
+		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+		distsqlpb.AggregatorSpec_AVG,
+		distsqlpb.AggregatorSpec_COUNT,
+		distsqlpb.AggregatorSpec_MAX,
+		distsqlpb.AggregatorSpec_MIN,
+		distsqlpb.AggregatorSpec_STDDEV,
+		distsqlpb.AggregatorSpec_SUM,
+		distsqlpb.AggregatorSpec_SUM_INT,
+		distsqlpb.AggregatorSpec_VARIANCE,
+		distsqlpb.AggregatorSpec_XOR_AGG,
 	}
 
 	ctx := context.Background()
@@ -551,9 +552,9 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 
 	for _, aggFunc := range aggFuncs {
 		b.Run(aggFunc.String(), func(b *testing.B) {
-			spec := &AggregatorSpec{
+			spec := &distsqlpb.AggregatorSpec{
 				GroupCols: []uint32{0, 1},
-				Aggregations: []AggregatorSpec_Aggregation{
+				Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
 					{
 						Func:   aggFunc,
 						ColIdx: []uint32{2},
@@ -561,7 +562,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 				},
 			}
 			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
-			post := &PostProcessSpec{}
+			post := &distsqlpb.PostProcessSpec{}
 			disposer := &RowDisposer{}
 			input := NewRepeatableRowSource(threeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
 

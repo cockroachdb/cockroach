@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -33,21 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-// StreamID identifies a stream; it may be local to a flow or it may cross
-// machine boundaries. The identifier can only be used in the context of a
-// specific flow.
-type StreamID int
-
-// FlowID identifies a flow. It is most importantly used when setting up streams
-// between nodes.
-type FlowID struct {
-	uuid.UUID
-}
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
@@ -62,7 +51,7 @@ type FlowCtx struct {
 	// registry (no inbound stream connections need to be performed), they are not
 	// assigned ids. This is done for performance reasons, as local flows are
 	// more likely to be dominated by setup time.
-	id FlowID
+	id distsqlpb.FlowID
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should
 	// get a copy with NewEvalCtx instead of storing a pointer to this one
@@ -180,11 +169,11 @@ type Flow struct {
 	// goroutines.
 	startedGoroutines bool
 
-	localStreams map[StreamID]RowReceiver
+	localStreams map[distsqlpb.StreamID]RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
 	// is to be passed to flowRegistry.RegisterFlow.
-	inboundStreams map[StreamID]*inboundStreamInfo
+	inboundStreams map[distsqlpb.StreamID]*inboundStreamInfo
 
 	// waitGroup is used to wait for async components of the flow:
 	//  - processors
@@ -202,7 +191,7 @@ type Flow struct {
 	ctxDone   <-chan struct{}
 
 	// spec is the request that produced this flow. Only used for debugging.
-	spec *FlowSpec
+	spec *distsqlpb.FlowSpec
 }
 
 func newFlow(
@@ -224,34 +213,34 @@ func newFlow(
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
-	ctx context.Context, spec StreamEndpointSpec, receiver RowReceiver,
+	ctx context.Context, spec distsqlpb.StreamEndpointSpec, receiver RowReceiver,
 ) error {
 	if spec.DeprecatedTargetAddr != "" {
 		return errors.Errorf("inbound stream has target address set: %s", spec.DeprecatedTargetAddr)
 	}
 	sid := spec.StreamID
 	switch spec.Type {
-	case StreamEndpointSpec_SYNC_RESPONSE:
+	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 		return errors.Errorf("inbound stream of type SYNC_RESPONSE")
 
-	case StreamEndpointSpec_REMOTE:
+	case distsqlpb.StreamEndpointSpec_REMOTE:
 		if _, found := f.inboundStreams[sid]; found {
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
 		if f.inboundStreams == nil {
-			f.inboundStreams = make(map[StreamID]*inboundStreamInfo)
+			f.inboundStreams = make(map[distsqlpb.StreamID]*inboundStreamInfo)
 		}
 		if log.V(2) {
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
 
-	case StreamEndpointSpec_LOCAL:
+	case distsqlpb.StreamEndpointSpec_LOCAL:
 		if _, found := f.localStreams[sid]; found {
 			return errors.Errorf("local stream %d has multiple consumers", sid)
 		}
 		if f.localStreams == nil {
-			f.localStreams = make(map[StreamID]RowReceiver)
+			f.localStreams = make(map[distsqlpb.StreamID]RowReceiver)
 		}
 		f.localStreams[sid] = receiver
 
@@ -281,10 +270,10 @@ func (r *accountClearingRowReceiver) Push(
 // setupOutboundStream sets up an output stream; if the stream is local, the
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
-func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error) {
+func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (RowReceiver, error) {
 	sid := spec.StreamID
 	switch spec.Type {
-	case StreamEndpointSpec_SYNC_RESPONSE:
+	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Wrap the syncFlowConsumer in a row receiver that clears the row's memory
 		// account.
 		return &accountClearingRowReceiver{
@@ -293,12 +282,12 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 			RowReceiver: f.syncFlowConsumer,
 		}, nil
 
-	case StreamEndpointSpec_REMOTE:
+	case distsqlpb.StreamEndpointSpec_REMOTE:
 		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, spec.DeprecatedTargetAddr, f.id, sid)
 		f.startables = append(f.startables, outbox)
 		return outbox, nil
 
-	case StreamEndpointSpec_LOCAL:
+	case distsqlpb.StreamEndpointSpec_LOCAL:
 		rowChan, found := f.localStreams[sid]
 		if !found {
 			return nil, errors.Errorf("unconnected inbound stream %d", sid)
@@ -317,7 +306,7 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 // setupRouter initializes a router and the outbound streams.
 //
 // Pass-through routers are not supported; they should be handled separately.
-func (f *Flow) setupRouter(spec *OutputRouterSpec) (router, error) {
+func (f *Flow) setupRouter(spec *distsqlpb.OutputRouterSpec) (router, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -340,14 +329,14 @@ func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int)
 }
 
 func (f *Flow) makeProcessor(
-	ctx context.Context, ps *ProcessorSpec, inputs []RowSource,
+	ctx context.Context, ps *distsqlpb.ProcessorSpec, inputs []RowSource,
 ) (Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
 	var output RowReceiver
 	spec := &ps.Output[0]
-	if spec.Type == OutputRouterSpec_PASS_THROUGH {
+	if spec.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
 		// There is no entity that corresponds to a pass-through router - we just
 		// use its output stream directly.
 		if len(spec.Streams) != 1 {
@@ -409,7 +398,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 			}
 			var sync RowSource
 			switch is.Type {
-			case InputSyncSpec_UNORDERED:
+			case distsqlpb.InputSyncSpec_UNORDERED:
 				mrc := &RowChannel{}
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
@@ -418,7 +407,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 					}
 				}
 				sync = mrc
-			case InputSyncSpec_ORDERED:
+			case distsqlpb.InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
 				streams := make([]RowSource, len(is.Streams))
 				for i, s := range is.Streams {
@@ -430,7 +419,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
+				sync, err = makeOrderedSync(distsqlpb.ConvertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
 				if err != nil {
 					return nil, err
 				}
@@ -475,7 +464,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 				return false
 			}
 			ospec := &pspec.Output[0]
-			if ospec.Type != OutputRouterSpec_PASS_THROUGH {
+			if ospec.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
 				// The output is not pass-through and thus is being sent through a
 				// router.
 				return false
@@ -494,7 +483,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 					// Look for "simple" inputs: an unordered input (which, by definition,
 					// doesn't require an ordered synchronizer), with a single input stream
 					// (which doesn't require a multiplexed RowChannel).
-					if in.Type != InputSyncSpec_UNORDERED {
+					if in.Type != distsqlpb.InputSyncSpec_UNORDERED {
 						continue
 					}
 					if len(in.Streams) != 1 {
@@ -517,7 +506,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 	return nil
 }
 
-func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
+func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	// First step: setup the input synchronizers for all processors.

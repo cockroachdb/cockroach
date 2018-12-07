@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +33,7 @@ type changeAggregator struct {
 	distsqlrun.ProcessorBase
 
 	flowCtx *distsqlrun.FlowCtx
-	spec    distsqlrun.ChangeAggregatorSpec
+	spec    distsqlpb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
 
 	// cancel shuts down the processor, both the `Next()` flow and the poller.
@@ -69,7 +70,7 @@ var _ distsqlrun.RowSource = &changeAggregator{}
 func newChangeAggregatorProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.ChangeAggregatorSpec,
+	spec distsqlpb.ChangeAggregatorSpec,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -81,7 +82,7 @@ func newChangeAggregatorProcessor(
 	}
 	if err := ca.Init(
 		ca,
-		&distsqlrun.PostProcessSpec{},
+		&distsqlpb.PostProcessSpec{},
 		nil, /* types */
 		flowCtx,
 		processorID,
@@ -281,7 +282,7 @@ type changeFrontier struct {
 	distsqlrun.ProcessorBase
 
 	flowCtx *distsqlrun.FlowCtx
-	spec    distsqlrun.ChangeFrontierSpec
+	spec    distsqlpb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
 	a       sqlbase.DatumAlloc
 
@@ -327,7 +328,7 @@ var _ distsqlrun.RowSource = &changeFrontier{}
 func newChangeFrontierProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.ChangeFrontierSpec,
+	spec distsqlpb.ChangeFrontierSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
@@ -341,7 +342,7 @@ func newChangeFrontierProcessor(
 		sf:      makeSpanFrontier(spec.TrackedSpans...),
 	}
 	if err := cf.Init(
-		cf, &distsqlrun.PostProcessSpec{},
+		cf, &distsqlpb.PostProcessSpec{},
 		input.OutputTypes(),
 		flowCtx,
 		processorID,

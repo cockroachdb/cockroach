@@ -16,7 +16,7 @@ package distsqlplan
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -25,7 +25,7 @@ import (
 // in the final stage of distributed aggregations that allows us to specify the
 // corresponding inputs from the local aggregations by their indices in the LocalStage.
 type FinalStageInfo struct {
-	Fn distsqlrun.AggregatorSpec_Func
+	Fn distsqlpb.AggregatorSpec_Func
 	// Specifies the ordered slice of outputs from local aggregations to propagate
 	// as inputs to Fn. This must be ordered according to the underlying aggregate builtin
 	// arguments signature found in aggregate_builtins.go.
@@ -52,7 +52,7 @@ type FinalStageInfo struct {
 type DistAggregationInfo struct {
 	// The local stage consists of one or more aggregations. All aggregations have
 	// the same input.
-	LocalStage []distsqlrun.AggregatorSpec_Func
+	LocalStage []distsqlpb.AggregatorSpec_Func
 
 	// The final stage consists of one or more aggregations that take in an
 	// arbitrary number of inputs from the local stages. The inputs are ordered and
@@ -87,92 +87,92 @@ var passThroughLocalIdxs = []uint32{0}
 
 // DistAggregationTable is DistAggregationInfo look-up table. Functions that
 // don't have an entry in the table are not optimized with a local stage.
-var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInfo{
-	distsqlrun.AggregatorSpec_ANY_NOT_NULL: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_ANY_NOT_NULL},
+var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo{
+	distsqlpb.AggregatorSpec_ANY_NOT_NULL: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_ANY_NOT_NULL,
+				Fn:        distsqlpb.AggregatorSpec_ANY_NOT_NULL,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_BOOL_AND: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_AND},
+	distsqlpb.AggregatorSpec_BOOL_AND: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_BOOL_AND},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_BOOL_AND,
+				Fn:        distsqlpb.AggregatorSpec_BOOL_AND,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_BOOL_OR: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_OR},
+	distsqlpb.AggregatorSpec_BOOL_OR: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_BOOL_OR},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_BOOL_OR,
+				Fn:        distsqlpb.AggregatorSpec_BOOL_OR,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_COUNT: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_COUNT},
+	distsqlpb.AggregatorSpec_COUNT: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_COUNT},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_COUNT_ROWS: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_COUNT_ROWS},
+	distsqlpb.AggregatorSpec_COUNT_ROWS: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_COUNT_ROWS},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_MAX: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MAX},
+	distsqlpb.AggregatorSpec_MAX: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_MAX},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_MAX,
+				Fn:        distsqlpb.AggregatorSpec_MAX,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_MIN: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MIN},
+	distsqlpb.AggregatorSpec_MIN: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_MIN},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_MIN,
+				Fn:        distsqlpb.AggregatorSpec_MIN,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_SUM: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM},
+	distsqlpb.AggregatorSpec_SUM: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_SUM,
+				Fn:        distsqlpb.AggregatorSpec_SUM,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_XOR_AGG: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_XOR_AGG},
+	distsqlpb.AggregatorSpec_XOR_AGG: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_XOR_AGG},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_XOR_AGG,
+				Fn:        distsqlpb.AggregatorSpec_XOR_AGG,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
@@ -185,18 +185,18 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 	//  - a final rendering then divides the two results.
 	//
 	// At a high level, this is analogous to rewriting AVG(x) as SUM(x)/COUNT(x).
-	distsqlrun.AggregatorSpec_AVG: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{
-			distsqlrun.AggregatorSpec_SUM,
-			distsqlrun.AggregatorSpec_COUNT,
+	distsqlpb.AggregatorSpec_AVG: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{
+			distsqlpb.AggregatorSpec_SUM,
+			distsqlpb.AggregatorSpec_COUNT,
 		},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_SUM,
+				Fn:        distsqlpb.AggregatorSpec_SUM,
 				LocalIdxs: []uint32{0},
 			},
 			{
-				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
 				LocalIdxs: []uint32{1},
 			},
 		},
@@ -235,11 +235,11 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 	//
 	// At a high level, this is analogous to rewriting VARIANCE(x) as
 	// SQRDIFF(x)/(COUNT(x) - 1) (and STDDEV(x) as sqrt(VARIANCE(x))).
-	distsqlrun.AggregatorSpec_VARIANCE: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{
-			distsqlrun.AggregatorSpec_SQRDIFF,
-			distsqlrun.AggregatorSpec_SUM,
-			distsqlrun.AggregatorSpec_COUNT,
+	distsqlpb.AggregatorSpec_VARIANCE: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{
+			distsqlpb.AggregatorSpec_SQRDIFF,
+			distsqlpb.AggregatorSpec_SUM,
+			distsqlpb.AggregatorSpec_COUNT,
 		},
 		// Instead of have a SUM_SQRDIFFS and SUM_INT (for COUNT) stage
 		// for VARIANCE (and STDDEV) then tailoring a FinalRendering
@@ -253,21 +253,21 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 		// have one or the other
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_FINAL_VARIANCE,
+				Fn:        distsqlpb.AggregatorSpec_FINAL_VARIANCE,
 				LocalIdxs: []uint32{0, 1, 2},
 			},
 		},
 	},
 
-	distsqlrun.AggregatorSpec_STDDEV: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{
-			distsqlrun.AggregatorSpec_SQRDIFF,
-			distsqlrun.AggregatorSpec_SUM,
-			distsqlrun.AggregatorSpec_COUNT,
+	distsqlpb.AggregatorSpec_STDDEV: {
+		LocalStage: []distsqlpb.AggregatorSpec_Func{
+			distsqlpb.AggregatorSpec_SQRDIFF,
+			distsqlpb.AggregatorSpec_SUM,
+			distsqlpb.AggregatorSpec_COUNT,
 		},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_FINAL_STDDEV,
+				Fn:        distsqlpb.AggregatorSpec_FINAL_STDDEV,
 				LocalIdxs: []uint32{0, 1, 2},
 			},
 		},

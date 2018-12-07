@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -342,7 +343,7 @@ var csvOutputTypes = []sqlbase.ColumnType{
 func newReadImportDataProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.ReadImportDataSpec,
+	spec distsqlpb.ReadImportDataSpec,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readImportDataProcessor{
@@ -352,7 +353,7 @@ func newReadImportDataProcessor(
 		output:      output,
 	}
 
-	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := cp.out.Init(&distsqlpb.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return cp, nil
@@ -369,7 +370,7 @@ type inputConverter interface {
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
-	spec        distsqlrun.ReadImportDataSpec
+	spec        distsqlpb.ReadImportDataSpec
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
 }

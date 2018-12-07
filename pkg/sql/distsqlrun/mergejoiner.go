@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -53,10 +54,10 @@ const mergeJoinerProcName = "merge joiner"
 func newMergeJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *MergeJoinerSpec,
+	spec *distsqlpb.MergeJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*mergeJoiner, error) {
 	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
@@ -99,9 +100,9 @@ func newMergeJoiner(
 	var err error
 	m.streamMerger, err = makeStreamMerger(
 		m.leftSource,
-		convertToColumnOrdering(spec.LeftOrdering),
+		distsqlpb.ConvertToColumnOrdering(spec.LeftOrdering),
 		m.rightSource,
-		convertToColumnOrdering(spec.RightOrdering),
+		distsqlpb.ConvertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
 		m.MemMonitor,
 	)
@@ -190,7 +191,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// For INTERSECT ALL and EXCEPT ALL, adjust rightIdx to skip all
 			// previously matched rows on the next right-side iteration, since we
 			// don't want to match them again.
-			if isSetOpJoin(m.joinType) {
+			if m.joinType.IsSetOpJoin() {
 				m.rightIdx = m.leftIdx
 			}
 
@@ -253,7 +254,7 @@ func (m *mergeJoiner) ConsumerClosed() {
 	m.close()
 }
 
-var _ DistSQLSpanStats = &MergeJoinerStats{}
+var _ distsqlpb.DistSQLSpanStats = &MergeJoinerStats{}
 
 const mergeJoinerTagPrefix = "mergejoiner."
 

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -127,44 +128,44 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	// They are copied and/or modified via closures for each test case.
 	// For example, pdCd1Spec is the spec for full table INNER JOIN between
 	// parent and child1.
-	pdCd1Spec := InterleavedReaderJoinerSpec{
-		Tables: []InterleavedReaderJoinerSpec_Table{
+	pdCd1Spec := distsqlpb.InterleavedReaderJoinerSpec{
+		Tables: []distsqlpb.InterleavedReaderJoinerSpec_Table{
 			{
 				Desc:     *pd,
-				Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-				Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+				Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+				Spans:    []distsqlpb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 			},
 			{
 				Desc:     *cd1,
-				Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-				Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
+				Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+				Spans:    []distsqlpb.TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 			},
 		},
 		Type: sqlbase.InnerJoin,
 	}
 
-	copySpec := func(spec InterleavedReaderJoinerSpec) InterleavedReaderJoinerSpec {
-		spec.Tables = append([]InterleavedReaderJoinerSpec_Table(nil), spec.Tables...)
+	copySpec := func(spec distsqlpb.InterleavedReaderJoinerSpec) distsqlpb.InterleavedReaderJoinerSpec {
+		spec.Tables = append([]distsqlpb.InterleavedReaderJoinerSpec_Table(nil), spec.Tables...)
 		return spec
 	}
 
 	pdCd2Spec := copySpec(pdCd1Spec)
 	pdCd2Spec.Tables[1].Desc = *cd2
-	pdCd2Spec.Tables[1].Spans = []TableReaderSpan{{Span: cd2.PrimaryIndexSpan()}}
+	pdCd2Spec.Tables[1].Spans = []distsqlpb.TableReaderSpan{{Span: cd2.PrimaryIndexSpan()}}
 	pdCd3Spec := copySpec(pdCd1Spec)
 	pdCd3Spec.Tables[1].Desc = *cd3
-	pdCd3Spec.Tables[1].Spans = []TableReaderSpan{{Span: cd3.PrimaryIndexSpan()}}
+	pdCd3Spec.Tables[1].Spans = []distsqlpb.TableReaderSpan{{Span: cd3.PrimaryIndexSpan()}}
 
 	testCases := []struct {
-		spec     InterleavedReaderJoinerSpec
-		post     PostProcessSpec
+		spec     distsqlpb.InterleavedReaderJoinerSpec
+		post     distsqlpb.PostProcessSpec
 		expected string
 	}{
 		// Simple join with a post process filter and projection.
 		{
 			spec: pdCd1Spec,
-			post: PostProcessSpec{
-				Filter:     Expression{Expr: "@1 <= 4 OR @3 <= 4 OR @3 > 30"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:     distsqlpb.Expression{Expr: "@1 <= 4 OR @3 <= 4 OR @3 > 30"},
 				Projection: true,
 				// pd.pid1, cid1, cid2
 				OutputColumns: []uint32{0, 3, 4},
@@ -174,13 +175,13 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// Swapped parent-child tables.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd1Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
 				return spec
 			}(),
-			post: PostProcessSpec{
-				Filter:     Expression{Expr: "@1 <= 4 OR @1 > 30"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:     distsqlpb.Expression{Expr: "@1 <= 4 OR @1 > 30"},
 				Projection: true,
 				// pd.pid1, cid1, cid2
 				OutputColumns: []uint32{4, 1, 2},
@@ -190,7 +191,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// Not specifying spans on either table should return no joined rows.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd1Spec)
 				// No spans specified for cd1 should return no rows.
 				spec.Tables[1].Spans = nil
@@ -200,7 +201,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		},
 
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd1Spec)
 				// No spans specified for pd should return no rows.
 				spec.Tables[0].Spans = nil
@@ -212,13 +213,13 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		// Intermediate filters that are logically disjoint returns no
 		// joined rows.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd1Spec)
-				spec.Tables[0].Post = PostProcessSpec{
-					Filter: Expression{Expr: "@1 < 4"},
+				spec.Tables[0].Post = distsqlpb.PostProcessSpec{
+					Filter: distsqlpb.Expression{Expr: "@1 < 4"},
 				}
-				spec.Tables[1].Post = PostProcessSpec{
-					Filter: Expression{Expr: "@1 > 4"},
+				spec.Tables[1].Post = distsqlpb.PostProcessSpec{
+					Filter: distsqlpb.Expression{Expr: "@1 > 4"},
 				}
 				return spec
 			}(),
@@ -227,17 +228,17 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// Intermediate filters restrict range of joined rows.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd2Spec)
-				spec.Tables[0].Post = PostProcessSpec{
-					Filter: Expression{Expr: "@1 <= 18"},
+				spec.Tables[0].Post = distsqlpb.PostProcessSpec{
+					Filter: distsqlpb.Expression{Expr: "@1 <= 18"},
 				}
-				spec.Tables[1].Post = PostProcessSpec{
-					Filter: Expression{Expr: "@1 >= 12"},
+				spec.Tables[1].Post = distsqlpb.PostProcessSpec{
+					Filter: distsqlpb.Expression{Expr: "@1 >= 12"},
 				}
 				return spec
 			}(),
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection: true,
 				// id column of parent and child table.
 				OutputColumns: []uint32{0, 3, 4},
@@ -247,15 +248,15 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// Filters that are converted to spans with index constraints.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd2Spec)
 				// Filter on id <= 18.
-				spec.Tables[0].Spans = []TableReaderSpan{{Span: makeSpanWithRootBound(pd, -1, 18)}}
+				spec.Tables[0].Spans = []distsqlpb.TableReaderSpan{{Span: makeSpanWithRootBound(pd, -1, 18)}}
 				// Filter on pid >= 12.
-				spec.Tables[1].Spans = []TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
+				spec.Tables[1].Spans = []distsqlpb.TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
 				return spec
 			}(),
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection: true,
 				// id column of parent and child table.
 				OutputColumns: []uint32{0, 3, 4},
@@ -267,15 +268,15 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		// children rows, only those that fit the filter on cd2Spans
 		// (pid >= 12) are not ignored and ultimately joined.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd2Spec)
 				// Filter on pid >= 12.
-				spec.Tables[1].Spans = []TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
+				spec.Tables[1].Spans = []distsqlpb.TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
 				return spec
 			}(),
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				// Filter on id <= 18.
-				Filter:     Expression{Expr: "@1 <= 18"},
+				Filter:     distsqlpb.Expression{Expr: "@1 <= 18"},
 				Projection: true,
 				// id column of parent and child table.
 				OutputColumns: []uint32{0, 3, 4},
@@ -285,15 +286,15 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// Intermediate projections.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd2Spec)
-				spec.Tables[0].Post = PostProcessSpec{
-					Filter:        Expression{Expr: "@1 <= 18"},
+				spec.Tables[0].Post = distsqlpb.PostProcessSpec{
+					Filter:        distsqlpb.Expression{Expr: "@1 <= 18"},
 					Projection:    true,
 					OutputColumns: []uint32{0},
 				}
-				spec.Tables[1].Post = PostProcessSpec{
-					Filter:     Expression{Expr: "@1 >= 12"},
+				spec.Tables[1].Post = distsqlpb.PostProcessSpec{
+					Filter:     distsqlpb.Expression{Expr: "@1 >= 12"},
 					Projection: true,
 					// Skip the primary ID of child2.
 					OutputColumns: []uint32{0, 2},
@@ -306,7 +307,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		// Postprocess limit.
 		{
 			spec: pdCd1Spec,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Limit: 5,
 			},
 			expected: "[[1 1 1 1 0] [1 1 1 31 3] [1 1 1 61 6] [2 2 2 2 0] [2 2 2 32 3]]",
@@ -314,9 +315,9 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// With an OnExpr.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := pdCd1Spec
-				spec.OnExpr = Expression{Expr: "@4 >= 60"}
+				spec.OnExpr = distsqlpb.Expression{Expr: "@4 >= 60"}
 				return spec
 			}(),
 			expected: "[[1 1 1 61 6] [2 2 2 62 6] [30 0 30 60 6]]",
@@ -324,44 +325,44 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// FULL OUTER joins.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
 				spec.Type = sqlbase.FullOuterJoin
 				return spec
 			}(),
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 <= 7 OR @1 IS NOT DISTINCT FROM NULL"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 <= 7 OR @1 IS NOT DISTINCT FROM NULL"},
 			},
 			expected: `[[NULL NULL -1 -101 '-101'] [NULL NULL -1 -1 '-1'] [NULL NULL 0 0 '0'] [1 1 1 1 '1'] [2 2 NULL NULL NULL] [3 3 3 3 '3'] [3 3 3 103 '103'] [4 4 NULL NULL NULL] [5 5 5 5 '5'] [6 6 NULL NULL NULL] [7 7 NULL NULL NULL] [NULL NULL 31 31 '31'] [NULL NULL 31 131 '131'] [NULL NULL 32 32 '32']]`,
 		},
 
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
 				spec.Type = sqlbase.FullOuterJoin
 				return spec
 			}(),
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@4 <= 7 OR @4 IS NOT DISTINCT FROM NULL"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@4 <= 7 OR @4 IS NOT DISTINCT FROM NULL"},
 			},
 			expected: `[[-1 -101 '-101' NULL NULL] [-1 -1 '-1' NULL NULL] [0 0 '0' NULL NULL] [1 1 '1' 1 1] [NULL NULL NULL 2 2] [3 3 '3' 3 3] [3 103 '103' 3 3] [NULL NULL NULL 4 4] [5 5 '5' 5 5] [NULL NULL NULL 6 6] [NULL NULL NULL 7 7] [31 31 '31' NULL NULL] [31 131 '131' NULL NULL] [32 32 '32' NULL NULL]]`,
 		},
 
 		// LEFT OUTER joins.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
 				spec.Type = sqlbase.LeftOuterJoin
 				return spec
 			}(),
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 <= 7 OR @1 IS NOT DISTINCT FROM NULL"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 <= 7 OR @1 IS NOT DISTINCT FROM NULL"},
 			},
 			expected: `[[1 1 1 1 '1'] [2 2 NULL NULL NULL] [3 3 3 3 '3'] [3 3 3 103 '103'] [4 4 NULL NULL NULL] [5 5 5 5 '5'] [6 6 NULL NULL NULL] [7 7 NULL NULL NULL]]`,
 		},
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
 				spec.Type = sqlbase.LeftOuterJoin
@@ -372,7 +373,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 		// RIGHT OUTER joins.
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
 				spec.Type = sqlbase.RightOuterJoin
 				return spec
@@ -380,14 +381,14 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			expected: `[[NULL NULL -1 -101 '-101'] [NULL NULL -1 -1 '-1'] [NULL NULL 0 0 '0'] [1 1 1 1 '1'] [3 3 3 3 '3'] [3 3 3 103 '103'] [5 5 5 5 '5'] [NULL NULL 31 31 '31'] [NULL NULL 31 131 '131'] [NULL NULL 32 32 '32']]`,
 		},
 		{
-			spec: func() InterleavedReaderJoinerSpec {
+			spec: func() distsqlpb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
 				spec.Type = sqlbase.RightOuterJoin
 				return spec
 			}(),
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@4 <= 7 OR @4 IS NOT DISTINCT FROM NULL"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@4 <= 7 OR @4 IS NOT DISTINCT FROM NULL"},
 			},
 			expected: `[[1 1 '1' 1 1] [NULL NULL NULL 2 2] [3 3 '3' 3 3] [3 103 '103' 3 3] [NULL NULL NULL 4 4] [5 5 '5' 5 5] [NULL NULL NULL 6 6] [NULL NULL NULL 7 7]]`,
 		},
@@ -466,22 +467,22 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 	gcd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "grandchild")
 
 	testCases := []struct {
-		spec     InterleavedReaderJoinerSpec
-		post     PostProcessSpec
+		spec     distsqlpb.InterleavedReaderJoinerSpec
+		post     distsqlpb.PostProcessSpec
 		expected string
 	}{
 		{
-			spec: InterleavedReaderJoinerSpec{
-				Tables: []InterleavedReaderJoinerSpec_Table{
+			spec: distsqlpb.InterleavedReaderJoinerSpec{
+				Tables: []distsqlpb.InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Spans:    []distsqlpb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_DESC}}},
-						Spans:    []TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_DESC}}},
+						Spans:    []distsqlpb.TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -490,12 +491,12 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		},
 
 		{
-			spec: InterleavedReaderJoinerSpec{
-				Tables: []InterleavedReaderJoinerSpec_Table{
+			spec: distsqlpb.InterleavedReaderJoinerSpec{
+				Tables: []distsqlpb.InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Spans:    []distsqlpb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -504,17 +505,17 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		},
 
 		{
-			spec: InterleavedReaderJoinerSpec{
-				Tables: []InterleavedReaderJoinerSpec_Table{
+			spec: distsqlpb.InterleavedReaderJoinerSpec{
+				Tables: []distsqlpb.InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *cd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Spans:    []distsqlpb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *gcd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-						Spans:    []TableReaderSpan{{Span: gcd.PrimaryIndexSpan()}},
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Spans:    []distsqlpb.TableReaderSpan{{Span: gcd.PrimaryIndexSpan()}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -590,24 +591,24 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		nodeID: s.NodeID(),
 	}
 
-	innerJoinSpec := InterleavedReaderJoinerSpec{
-		Tables: []InterleavedReaderJoinerSpec_Table{
+	innerJoinSpec := distsqlpb.InterleavedReaderJoinerSpec{
+		Tables: []distsqlpb.InterleavedReaderJoinerSpec_Table{
 			{
 				Desc:     *pd,
-				Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-				Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+				Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+				Spans:    []distsqlpb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 			},
 			{
 				Desc:     *cd,
-				Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
-				Spans:    []TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
+				Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+				Spans:    []distsqlpb.TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
 			},
 		},
 		Type: sqlbase.InnerJoin,
 	}
 
 	out := &RowBuffer{}
-	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &PostProcessSpec{}, out)
+	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

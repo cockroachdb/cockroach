@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -43,7 +44,7 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	typing       []DatumInfo
+	typing       []distsqlpb.DatumInfo
 	data         []byte
 	numEmptyRows int
 	metadata     []ProducerMetadata
@@ -59,7 +60,7 @@ type StreamDecoder struct {
 // msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
-func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
+func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 	if msg.Header != nil {
 		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
@@ -102,19 +103,19 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 		for _, md := range msg.Data.Metadata {
 			var meta ProducerMetadata
 			switch v := md.Value.(type) {
-			case *RemoteProducerMetadata_RangeInfo:
+			case *distsqlpb.RemoteProducerMetadata_RangeInfo:
 				meta.Ranges = v.RangeInfo.RangeInfo
 
-			case *RemoteProducerMetadata_TraceData_:
+			case *distsqlpb.RemoteProducerMetadata_TraceData_:
 				meta.TraceData = v.TraceData.CollectedSpans
 
-			case *RemoteProducerMetadata_TxnCoordMeta:
+			case *distsqlpb.RemoteProducerMetadata_TxnCoordMeta:
 				meta.TxnCoordMeta = v.TxnCoordMeta
 
-			case *RemoteProducerMetadata_RowNum_:
+			case *distsqlpb.RemoteProducerMetadata_RowNum_:
 				meta.RowNum = v.RowNum
 
-			case *RemoteProducerMetadata_Error:
+			case *distsqlpb.RemoteProducerMetadata_Error:
 				meta.Err = v.Error.ErrorDetail()
 
 			default:

@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -29,7 +30,7 @@ import (
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec     SketchSpec
+	spec     distsqlpb.SketchSpec
 	sketch   *hyperloglog.Sketch
 	numNulls int64
 	numRows  int64
@@ -58,18 +59,18 @@ var _ Processor = &samplerProcessor{}
 
 const samplerProcName = "sampler"
 
-var supportedSketchTypes = map[SketchType]struct{}{
+var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
 	// (which avoids the extra complexity until we actually have multiple types).
-	SketchType_HLL_PLUS_PLUS_V1: {},
+	distsqlpb.SketchType_HLL_PLUS_PLUS_V1: {},
 }
 
 func newSamplerProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SamplerSpec,
+	spec *distsqlpb.SamplerSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*samplerProcessor, error) {
 	for _, s := range spec.Sketches {

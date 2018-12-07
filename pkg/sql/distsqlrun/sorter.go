@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -45,7 +46,7 @@ func (s *sorterBase) init(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	ordering sqlbase.ColumnOrdering,
 	matchLen uint32,
@@ -146,7 +147,7 @@ func (s *sorterBase) close() {
 	}
 }
 
-var _ DistSQLSpanStats = &SorterStats{}
+var _ distsqlpb.DistSQLSpanStats = &SorterStats{}
 
 const sorterTagPrefix = "sorter."
 
@@ -190,9 +191,9 @@ func newSorter(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SorterSpec,
+	spec *distsqlpb.SorterSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
 	count := int64(0)
@@ -245,15 +246,15 @@ func newSortAllProcessor(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SorterSpec,
+	spec *distsqlpb.SorterSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	out RowReceiver,
 ) (Processor, error) {
 	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
 		proc, flowCtx, processorID, input, post, out,
-		convertToColumnOrdering(spec.OutputOrdering),
+		distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
@@ -356,13 +357,13 @@ const sortTopKProcName = "sortTopK"
 func newSortTopKProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SorterSpec,
+	spec *distsqlpb.SorterSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	out RowReceiver,
 	k int64,
 ) (Processor, error) {
-	ordering := convertToColumnOrdering(spec.OutputOrdering)
+	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
 		proc, flowCtx, processorID, input, post, out,
@@ -460,12 +461,12 @@ const sortChunksProcName = "sortChunks"
 func newSortChunksProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SorterSpec,
+	spec *distsqlpb.SorterSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	out RowReceiver,
 ) (Processor, error) {
-	ordering := convertToColumnOrdering(spec.OutputOrdering)
+	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
 	if err := proc.sorterBase.init(

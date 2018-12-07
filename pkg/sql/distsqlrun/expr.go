@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +55,7 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
 func processExpression(
-	exprSpec Expression,
+	exprSpec distsqlpb.Expression,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	h *tree.IndexedVarHelper,
@@ -143,7 +144,7 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (eh *exprHelper) init(
-	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	expr distsqlpb.Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil
