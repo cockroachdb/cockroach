@@ -614,7 +614,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c4a33776db6799b4b76d373662939dbab8aacb0ee5ff97cc40f3941eebf40e35"
+  digest = "1:570f1ea6be627893778e09b9045495022eb0b9d00a62e7f0b8a7b961e29674f0"
   name = "github.com/golang/dep"
   packages = [
     ".",
@@ -637,7 +637,7 @@
     "internal/importers/vndr",
   ]
   pruneopts = "UT"
-  revision = "bbe56e5e9a2596e258cc3fcd24c2153c7b252cb8"
+  revision = "22125cfaa6ddc71e145b1535d4b7ee9744fefff2"
 
 [[projects]]
   branch = "master"
@@ -661,19 +661,18 @@
   revision = "259d9253d71996b7778a3efb4144fe4892342b18"
 
 [[projects]]
-  branch = "master"
-  digest = "1:ea09d130ae94bef819a6c0173dc41e7760c2ab5aeea8da4301de39bbfafb936b"
+  branch = "travis-1.9"
+  digest = "1:e8f5d9c09a7209c740e769713376abda388c41b777ba8e9ed52767e21acf379f"
   name = "github.com/golang/lint"
   packages = [
     ".",
     "golint",
   ]
   pruneopts = "UT"
-  revision = "6aaf7c34af0f4c36a57e0c429bace4d706d8e931"
+  revision = "883fe33ffc4344bad1ecd881f61afd5ec5d80e0a"
 
 [[projects]]
-  branch = "master"
-  digest = "1:6d66e8a865219bc05273b10cfc81fad65f0b9023285c0f2770bd5c3a20d22654"
+  digest = "1:6ce94e52c5f56dfbea4e3cb99ccf4b44d701d91b16167486e9842b2fe45e717a"
   name = "github.com/golang/protobuf"
   packages = [
     "jsonpb",
@@ -689,15 +688,16 @@
     "ptypes/timestamp",
   ]
   pruneopts = "UT"
-  revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
+  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
+  version = "v1.2.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:29a5ab9fa9e845fd8e8726f31b187d710afd271ef1eb32085fe3d604b7e06382"
+  digest = "1:4a0c6bb4805508a6287675fac876be2ac1182539ca8a32468d8128882e9d5009"
   name = "github.com/golang/snappy"
   packages = ["."]
   pruneopts = "UT"
-  revision = "553a641470496b2327abcac10b36396bd98e45c9"
+  revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
   branch = "master"
