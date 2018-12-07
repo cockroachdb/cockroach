@@ -1890,3 +1890,57 @@ INSERT INTO t.kv VALUES ('c', 'd');
 		t.Fatal(err)
 	}
 }
+
+// Tests that DeleteOrphanedLeases() deletes only orphaned leases.
+func TestDeleteOrphanedLeases(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{},
+	}
+
+	ctx := context.Background()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.before (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeDesc := sqlbase.GetTableDescriptor(t.kvDB, "t", "before")
+	afterDesc := sqlbase.GetTableDescriptor(t.kvDB, "t", "after")
+	dbID := beforeDesc.ParentID
+
+	// Acquire a lease on "before" by name.
+	beforeTable, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "before")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, beforeTable); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assume server shuts down here and a new instance of the server starts up.
+	// All leases created prior to this time are declared orphaned.
+	now := timeutil.Now()
+
+	// Acquire a lease on "after" by name after server startup.
+	afterTable, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "after")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, afterTable); err != nil {
+		t.Fatal(err)
+	}
+	t.expectLeases(beforeDesc.ID, "/1/1")
+	t.expectLeases(afterDesc.ID, "/1/1")
+
+	// Call DeleteOrphanedLeases() with the server startup time.
+	t.node(1).DeleteOrphanedLeases(now)
+	// Orphaned lease is gone.
+	t.expectLeases(beforeDesc.ID, "")
+	t.expectLeases(afterDesc.ID, "/1/1")
+}

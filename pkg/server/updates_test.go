@@ -215,7 +215,15 @@ func TestReportUsage(t *testing.T) {
 				{Key: "city", Value: "nyc"},
 			},
 		},
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+				// Disable SELECT called for delete orphaned leases to keep
+				// query stats stable.
+				DisableDeleteOrphanedLeases: true,
+			},
+		},
 	}
+
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	ts := s.(*TestServer)

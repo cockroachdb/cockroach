@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -52,6 +53,13 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			// Disable SELECT called for delete orphaned leases to keep
+			// query stats stable.
+			DisableDeleteOrphanedLeases: true,
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

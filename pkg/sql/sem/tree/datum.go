@@ -1909,6 +1909,30 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 	return MakeDTimestamp(t, precision), nil
 }
 
+// AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DTimestamp wrapped by a
+// *DOidWrapper is possible.
+func AsDTimestamp(e Expr) (DTimestamp, bool) {
+	switch t := e.(type) {
+	case *DTimestamp:
+		return *t, true
+	case *DOidWrapper:
+		return AsDTimestamp(t.Wrapped)
+	}
+	return DTimestamp{}, false
+}
+
+// MustBeDTimestamp attempts to retrieve a DTimestamp from an Expr, panicking if the
+// assertion fails.
+func MustBeDTimestamp(e Expr) DTimestamp {
+	t, ok := AsDTimestamp(e)
+	if !ok {
+		panic(pgerror.NewAssertionErrorf("expected *DTimestamp, found %T", e))
+	}
+	return t
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestamp) ResolvedType() types.T {
 	return types.Timestamp
@@ -2373,7 +2397,7 @@ func MakeDJSON(d interface{}) (Datum, error) {
 // AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
 // a flag signifying whether the assertion was successful. The function should
 // be used instead of direct type assertions wherever a *DJSON wrapped by a
-// *DJSON is possible.
+// *DOidWrapper is possible.
 func AsDJSON(e Expr) (*DJSON, bool) {
 	switch t := e.(type) {
 	case *DJSON:
