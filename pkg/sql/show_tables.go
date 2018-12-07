@@ -40,13 +40,49 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 		return nil, sqlbase.NewInvalidWildcardError(tree.ErrString(&n.TableNamePrefix))
 	}
 
-	const getTablesQuery = `
+	var query string
+	if n.WithComment {
+		// TODO(knz): this 3-way join is painful and would really benefit
+		// from vtables having a real table ID (#32963) so that we don't
+		// have to use `information_schema.tables` and simply join
+		// `crdb_internal.tables` with `system.comments` instead.
+		const getTablesQuery = `
+SELECT
+	i.table_name, c.comment
+FROM
+	%[1]s.information_schema.tables AS i
+	LEFT JOIN crdb_internal.tables AS t
+	ON
+		i.table_name = t.name
+		AND i.table_catalog = t.database_name
+	LEFT JOIN system.comments AS c
+	ON t.table_id = c.object_id
+WHERE
+	table_schema = %[2]s
+	AND (t.state = %[3]s OR t.state IS NULL)
+	AND (t.database_name = %[4]s OR t.database_name IS NULL)
+ORDER BY
+	table_schema, table_name`
+
+		query = fmt.Sprintf(
+			getTablesQuery,
+			&n.CatalogName,
+			lex.EscapeSQLString(n.Schema()),
+			lex.EscapeSQLString(sqlbase.TableDescriptor_PUBLIC.String()),
+			lex.EscapeSQLString(n.CatalogName.Normalize()))
+
+	} else {
+		const getTablesQuery = `
   SELECT table_name
     FROM %[1]s.information_schema.tables
    WHERE table_schema = %[2]s
 ORDER BY table_schema, table_name`
 
+		query = fmt.Sprintf(getTablesQuery,
+			&n.CatalogName, lex.EscapeSQLString(n.Schema()))
+	}
+
 	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, &n.CatalogName, lex.EscapeSQLString(n.Schema())),
+		query,
 		func(_ context.Context) error { return nil }, nil)
 }

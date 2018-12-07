@@ -197,6 +197,7 @@ func (node *ShowSchemas) Format(ctx *FmtCtx) {
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	TableNamePrefix
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -205,6 +206,10 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.TableNamePrefix)
+	}
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
 	}
 }
 
