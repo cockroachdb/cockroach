@@ -58,6 +58,12 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderSerialBatchCount = metric.Metadata{
+		Name:        "distsender.batches.serial",
+		Help:        "Number of partial batches sent in serialized fashion because a limit spanned multiple ranges",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncSentCount = metric.Metadata{
 		Name:        "distsender.batches.async.sent",
 		Help:        "Number of partial batches sent asynchronously",
@@ -106,6 +112,7 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 type DistSenderMetrics struct {
 	BatchCount             *metric.Counter
 	PartialBatchCount      *metric.Counter
+	SerialBatchCount       *metric.Counter
 	AsyncSentCount         *metric.Counter
 	AsyncThrottledCount    *metric.Counter
 	SentCount              *metric.Counter
@@ -118,6 +125,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	return DistSenderMetrics{
 		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
+		SerialBatchCount:       metric.NewCounter(metaDistSenderSerialBatchCount),
 		AsyncSentCount:         metric.NewCounter(metaDistSenderAsyncSentCount),
 		AsyncThrottledCount:    metric.NewCounter(metaDistSenderAsyncThrottledCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
@@ -733,6 +741,7 @@ func (ds *DistSender) Send(
 type response struct {
 	reply     *roachpb.BatchResponse
 	positions []int
+	rs        roachpb.RSpan
 	pErr      *roachpb.Error
 }
 
@@ -798,7 +807,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If we're in the middle of a panic, don't wait on responseChs.
 			panic(r)
 		}
-		var hadSuccessWriting bool
+		var hadSuccessWriting, seenResumeSpan bool
 		// Combine all the responses.
 		// It's important that we wait for all of them even if an error is caught
 		// because the client.Sender() contract mandates that we don't "hold on" to
@@ -811,12 +820,34 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
+			// If we've seen a resume span, skip the response.
+			if seenResumeSpan {
+				continue
+			}
 			if !hadSuccessWriting {
 				for _, i := range resp.positions {
 					req := ba.Requests[i].GetInner()
 					if !roachpb.IsReadOnly(req) {
 						hadSuccessWriting = true
 						break
+					}
+				}
+			}
+
+			// Check for the existence of a resume span in the batch
+			// responses. These might occur partway through the batch
+			// requests in the event that we optimistically parallelized the
+			// requests, but still ended up running into the
+			// MaxSpanRequestKeys limit. If this occurred, all responses
+			// after the first to receive a ResumeSpan should not be combined.
+			for _, union := range resp.reply.Responses {
+				if hdr := union.GetInner().Header(); hdr.ResumeSpan != nil {
+					seenResumeSpan = true
+					resumeReason = roachpb.RESUME_KEY_LIMIT
+					if scanDir == Ascending {
+						seekKey = resp.rs.EndKey
+					} else {
+						seekKey = resp.rs.Key
 					}
 				}
 			}
@@ -848,7 +879,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if hadSuccessWriting {
 				pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
 			}
-		} else if couldHaveSkippedResponses {
+		} else if couldHaveSkippedResponses || seenResumeSpan {
 			fillSkippedResponses(ba, br, seekKey, resumeReason)
 		}
 	}()
@@ -857,7 +888,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If min_results is set, num_results will count how many results scans have
 	// accumulated so far.
 	var numResults int64
-	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		responseCh := make(chan response, 1)
@@ -889,6 +919,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// Determine next seek key, taking a potentially sparse batch into
 		// consideration.
 		var err error
+		var fullSpan bool
 		nextRS := rs
 		if scanDir == Descending {
 			// In next iteration, query previous range.
@@ -896,6 +927,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
 			seekKey, err = prev(ba, ri.Desc().StartKey)
+			if seekKey.Equal(ri.Desc().StartKey) {
+				fullSpan = true
+			}
 			nextRS.EndKey = seekKey
 		} else {
 			// In next iteration, query next range.
@@ -906,6 +940,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
 			seekKey, err = next(ba, ri.Desc().EndKey)
+			if seekKey.Equal(ri.Desc().EndKey) {
+				fullSpan = true
+			}
 			nextRS.Key = seekKey
 		}
 		if err != nil {
@@ -914,6 +951,21 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		lastRange := !ri.NeedAnother(rs)
+
+		// Parallelize if there's no limit, or there's a limit but the
+		// batch doesn't cover the full span of the current range, and if
+		// the scan options don't specify we end on a range boundary.
+		// Note that the case where we don't have a full span causes the
+		// iteration not to count asynchronously fetched results, so the
+		// MaxSpanRequestKeys header will be ignored unless and until the
+		// batch encounters a scan which runs off the end of a range. The
+		// goal is to avoid serializing "point" scans, but continue
+		// serializing full or partial table scans.
+		canParallelize := (ba.Header.MaxSpanRequestKeys == 0 || !fullSpan) && !stopAtRangeBoundary
+		if !canParallelize {
+			ds.metrics.SerialBatchCount.Inc(1)
+		}
+
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
@@ -1102,7 +1154,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if pErr == nil {
-			return response{reply: reply, positions: positions}
+			return response{reply: reply, positions: positions, rs: rs}
 		}
 
 		// Re-map the error index within this partial batch back
@@ -1165,7 +1217,7 @@ func (ds *DistSender) sendPartialBatch(
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, batchIdx)
-			return response{reply: reply, positions: positions, pErr: pErr}
+			return response{reply: reply, positions: positions, rs: rs, pErr: pErr}
 		}
 		break
 	}
@@ -1208,7 +1260,7 @@ func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roac
 // based on ScanOptions.
 //
 // nextKey is the first key that was not processed. This will be used when
-// filling up the ResumeSpan's.
+// filling up the ResumeSpans.
 func fillSkippedResponses(
 	ba roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
