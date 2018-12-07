@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -576,6 +577,90 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
 	} else if cur != leaseHolder.StoreID {
 		t.Errorf("lease holder cache was not updated: expected %d, got %d", leaseHolder.StoreID, cur)
+	}
+}
+
+// TestRetryOnNotLeaseHolderError verifies that the DistSender backs off upon
+// receiving multiple NotLeaseHolderErrors without observing an increase in
+// LeaseSequence.
+func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	leaseHolders := testUserRangeDescriptor3Replicas.Replicas
+	for _, n := range leaseHolders {
+		if err := g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			&roachpb.NodeDescriptor{
+				NodeID:  n.NodeID,
+				Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("neverused:%d", n.NodeID)),
+			},
+			gossip.NodeDescriptorTTL,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var sequences []roachpb.LeaseSequence
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		reply := &roachpb.BatchResponse{}
+		if len(sequences) > 0 {
+			seq := sequences[0]
+			sequences = sequences[1:]
+			lease := roachpb.Lease{
+				Sequence: seq,
+				Replica:  leaseHolders[int(seq)%2],
+			}
+			reply.Error = roachpb.NewError(
+				&roachpb.NotLeaseHolderError{
+					Replica:     leaseHolders[int(seq)%2],
+					LeaseHolder: &leaseHolders[(int(seq)+1)%2],
+					Lease:       &lease,
+				})
+			return reply, nil
+		}
+		// Return an error to bail out of retries.
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
+		RPCRetryOptions: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     time.Microsecond,
+		},
+	}
+	for i, c := range []struct {
+		leaseSequences []roachpb.LeaseSequence
+		expected       int64
+	}{
+		{[]roachpb.LeaseSequence{1, 0, 1, 2}, 2},
+		{[]roachpb.LeaseSequence{0}, 0},
+		{[]roachpb.LeaseSequence{1, 0, 1, 2, 1}, 3},
+	} {
+		sequences = c.leaseSequences
+		ds := NewDistSender(cfg, g)
+		v := roachpb.MakeValueFromString("value")
+		put := roachpb.NewPut(roachpb.Key("a"), v)
+		if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+			t.Fatalf("%d: unexpected error: %v", i, pErr)
+		}
+		if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
+			t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
+		}
 	}
 }
 
