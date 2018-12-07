@@ -14,18 +14,50 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // EncryptionStatus contains encryption-related information.
 type EncryptionStatus struct {
 	// Information about the active store key, if any.
-	ActiveStoreKey *KeyInfo `protobuf:"bytes,1,opt,name=active_store_key,json=activeStoreKey" json:"active_store_key,omitempty"`
+	ActiveStoreKey *KeyInfo `protobuf:"bytes,1,opt,name=active_store_key,json=activeStoreKey,proto3" json:"active_store_key,omitempty"`
 	// Information about the active data key, if any.
-	ActiveDataKey *KeyInfo `protobuf:"bytes,2,opt,name=active_data_key,json=activeDataKey" json:"active_data_key,omitempty"`
+	ActiveDataKey        *KeyInfo `protobuf:"bytes,2,opt,name=active_data_key,json=activeDataKey,proto3" json:"active_data_key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *EncryptionStatus) Reset()                    { *m = EncryptionStatus{} }
-func (m *EncryptionStatus) String() string            { return proto.CompactTextString(m) }
-func (*EncryptionStatus) ProtoMessage()               {}
-func (*EncryptionStatus) Descriptor() ([]byte, []int) { return fileDescriptorStats, []int{0} }
+func (m *EncryptionStatus) Reset()         { *m = EncryptionStatus{} }
+func (m *EncryptionStatus) String() string { return proto.CompactTextString(m) }
+func (*EncryptionStatus) ProtoMessage()    {}
+func (*EncryptionStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptor_stats_c630a5af5cbf0575, []int{0}
+}
+func (m *EncryptionStatus) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *EncryptionStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *EncryptionStatus) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EncryptionStatus.Merge(dst, src)
+}
+func (m *EncryptionStatus) XXX_Size() int {
+	return m.Size()
+}
+func (m *EncryptionStatus) XXX_DiscardUnknown() {
+	xxx_messageInfo_EncryptionStatus.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EncryptionStatus proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*EncryptionStatus)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus")
@@ -78,6 +110,9 @@ func encodeVarintStats(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *EncryptionStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ActiveStoreKey != nil {
@@ -326,10 +361,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/stats.proto", fileDescriptorStats)
+	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/stats.proto", fileDescriptor_stats_c630a5af5cbf0575)
 }
 
-var fileDescriptorStats = []byte{
+var fileDescriptor_stats_c630a5af5cbf0575 = []byte{
 	// 245 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x32, 0x48, 0x4e, 0xce, 0xd1,
 	0x2f, 0x2e, 0xc9, 0x2f, 0x4a, 0x4c, 0x4f, 0x05, 0x31, 0x53, 0xf3, 0xd2, 0x33, 0xf3, 0x90, 0x58,

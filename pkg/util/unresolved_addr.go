@@ -78,7 +78,7 @@ func (a UnresolvedAddr) IsEmpty() bool {
 }
 
 // String returns the address's string form.
-func (a *UnresolvedAddr) String() string {
+func (a UnresolvedAddr) String() string {
 	return a.AddressField
 }
 

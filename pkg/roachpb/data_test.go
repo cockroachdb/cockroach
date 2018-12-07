@@ -764,11 +764,16 @@ func TestLeaseEqual(t *testing.T) {
 		ProposedTS            *hlc.Timestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
+		XXX_NoUnkeyedLiteral  struct{}
+		XXX_sizecache         int32
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
 	// structure AND update Lease.Equal.
 	var _ = expectedLease(Lease{})
+	// Appease the linter.
+	var _ = expectedLease{}.XXX_NoUnkeyedLiteral
+	var _ = expectedLease{}.XXX_sizecache
 
 	// Verify that nil == &hlc.Timestamp{} for the Expiration and
 	// DeprecatedStartStasis fields. See #19843.
@@ -910,28 +915,28 @@ func TestSpanContains(t *testing.T) {
 	s := Span{Key: []byte("a"), EndKey: []byte("b")}
 
 	testData := []struct {
-		start, end []byte
+		start, end string
 		contains   bool
 	}{
 		// Single keys.
-		{[]byte("a"), nil, true},
-		{[]byte("aa"), nil, true},
-		{[]byte("`"), nil, false},
-		{[]byte("b"), nil, false},
-		{[]byte("c"), nil, false},
+		{"a", "", true},
+		{"aa", "", true},
+		{"`", "", false},
+		{"b", "", false},
+		{"c", "", false},
 		// Key ranges.
-		{[]byte("a"), []byte("b"), true},
-		{[]byte("a"), []byte("aa"), true},
-		{[]byte("aa"), []byte("b"), true},
-		{[]byte("0"), []byte("9"), false},
-		{[]byte("`"), []byte("a"), false},
-		{[]byte("b"), []byte("bb"), false},
-		{[]byte("0"), []byte("bb"), false},
-		{[]byte("aa"), []byte("bb"), false},
-		{[]byte("b"), []byte("a"), false},
+		{"a", "b", true},
+		{"a", "aa", true},
+		{"aa", "b", true},
+		{"0", "9", false},
+		{"`", "a", false},
+		{"b", "bb", false},
+		{"0", "bb", false},
+		{"aa", "bb", false},
+		{"b", "a", false},
 	}
 	for i, test := range testData {
-		if s.Contains(Span{test.start, test.end}) != test.contains {
+		if s.Contains(sp(test.start, test.end)) != test.contains {
 			t.Errorf("%d: expected span %q-%q within range to be %v",
 				i, test.start, test.end, test.contains)
 		}
@@ -974,8 +979,8 @@ func TestSpanSplitOnKey(t *testing.T) {
 		// Simple split.
 		{
 			[]byte("bb"),
-			Span{[]byte("b"), []byte("bb")},
-			Span{[]byte("bb"), []byte("c")},
+			sp("b", "bb"),
+			sp("bb", "c"),
 		},
 	}
 	for testIdx, test := range testData {
@@ -1005,7 +1010,7 @@ func TestSpanValid(t *testing.T) {
 		{[]byte("b"), []byte("aa"), false},
 	}
 	for i, test := range testData {
-		s := Span{test.start, test.end}
+		s := Span{Key: test.start, EndKey: test.end}
 		if test.valid != s.Valid() {
 			t.Errorf("%d: expected span %q-%q to return %t for Valid, instead got %t",
 				i, test.start, test.end, test.valid, s.Valid())

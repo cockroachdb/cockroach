@@ -12,6 +12,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // JoinType is the particular type of a join (or join-like) operation. Not all
 // values are used in all contexts.
 type JoinType int32
@@ -112,15 +118,19 @@ func (x *JoinType) UnmarshalJSON(data []byte) error {
 	*x = JoinType(value)
 	return nil
 }
-func (JoinType) EnumDescriptor() ([]byte, []int) { return fileDescriptorJoinType, []int{0} }
+func (JoinType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_join_type_88efa33afe97ce73, []int{0}
+}
 
 func init() {
 	proto.RegisterEnum("cockroach.sql.sqlbase.JoinType", JoinType_name, JoinType_value)
 }
 
-func init() { proto.RegisterFile("sql/sqlbase/join_type.proto", fileDescriptorJoinType) }
+func init() {
+	proto.RegisterFile("sql/sqlbase/join_type.proto", fileDescriptor_join_type_88efa33afe97ce73)
+}
 
-var fileDescriptorJoinType = []byte{
+var fileDescriptor_join_type_88efa33afe97ce73 = []byte{
 	// 211 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2e, 0x2e, 0xcc, 0xd1,
 	0x2f, 0x2e, 0xcc, 0x49, 0x4a, 0x2c, 0x4e, 0xd5, 0xcf, 0xca, 0xcf, 0xcc, 0x8b, 0x2f, 0xa9, 0x2c,

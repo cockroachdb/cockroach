@@ -29,7 +29,12 @@ func NoZeroField(v interface{}) error {
 		f := ele.Field(i)
 		zero := reflect.Zero(f.Type())
 		if reflect.DeepEqual(f.Interface(), zero.Interface()) {
-			return fmt.Errorf("expected %s field to be non-zero", eleT.Field(i).Name)
+			switch field := eleT.Field(i).Name; field {
+			case "XXX_NoUnkeyedLiteral", "XXX_DiscardUnknown", "XXX_sizecache":
+				// Ignore these special protobuf fields.
+			default:
+				return fmt.Errorf("expected %s field to be non-zero", eleT.Field(i).Name)
+			}
 		}
 	}
 	return nil

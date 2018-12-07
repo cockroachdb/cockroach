@@ -1206,7 +1206,7 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	if !ok {
 		log.Fatalf(ctx,
 			"missing observed timestamp for node %d found on uncertainty restart. "+
-				"err: %s. txn: %s. Observed timestamps: %s",
+				"err: %s. txn: %s. Observed timestamps: %v",
 			origin, err, txn, txn.ObservedTimestamps)
 	}
 	// Also forward by the existing timestamp.

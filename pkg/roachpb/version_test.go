@@ -21,23 +21,31 @@ import (
 )
 
 func TestVersionLess(t *testing.T) {
+	v := func(major, minor, patch, unstable int32) Version {
+		return Version{
+			Major:    major,
+			Minor:    minor,
+			Patch:    patch,
+			Unstable: unstable,
+		}
+	}
 	testData := []struct {
 		v1, v2 Version
 		less   bool
 	}{
 		{v1: Version{}, v2: Version{}, less: false},
-		{v1: Version{0, 0, 0, 0}, v2: Version{0, 0, 0, 1}, less: true},
-		{v1: Version{0, 0, 0, 2}, v2: Version{0, 0, 0, 1}, less: false},
-		{v1: Version{0, 0, 1, 0}, v2: Version{0, 0, 0, 1}, less: false},
-		{v1: Version{0, 0, 1, 0}, v2: Version{0, 0, 0, 2}, less: false},
-		{v1: Version{0, 0, 1, 1}, v2: Version{0, 0, 1, 1}, less: false},
-		{v1: Version{0, 0, 1, 0}, v2: Version{0, 0, 1, 1}, less: true},
-		{v1: Version{0, 1, 1, 0}, v2: Version{0, 1, 0, 1}, less: false},
-		{v1: Version{0, 1, 0, 1}, v2: Version{0, 1, 1, 0}, less: true},
-		{v1: Version{1, 0, 0, 0}, v2: Version{1, 1, 0, 0}, less: true},
-		{v1: Version{1, 1, 0, 1}, v2: Version{1, 1, 0, 0}, less: false},
-		{v1: Version{1, 1, 0, 1}, v2: Version{1, 2, 0, 0}, less: true},
-		{v1: Version{2, 0, 0, 0}, v2: Version{3, 0, 0, 0}, less: true},
+		{v1: v(0, 0, 0, 0), v2: v(0, 0, 0, 1), less: true},
+		{v1: v(0, 0, 0, 2), v2: v(0, 0, 0, 1), less: false},
+		{v1: v(0, 0, 1, 0), v2: v(0, 0, 0, 1), less: false},
+		{v1: v(0, 0, 1, 0), v2: v(0, 0, 0, 2), less: false},
+		{v1: v(0, 0, 1, 1), v2: v(0, 0, 1, 1), less: false},
+		{v1: v(0, 0, 1, 0), v2: v(0, 0, 1, 1), less: true},
+		{v1: v(0, 1, 1, 0), v2: v(0, 1, 0, 1), less: false},
+		{v1: v(0, 1, 0, 1), v2: v(0, 1, 1, 0), less: true},
+		{v1: v(1, 0, 0, 0), v2: v(1, 1, 0, 0), less: true},
+		{v1: v(1, 1, 0, 1), v2: v(1, 1, 0, 0), less: false},
+		{v1: v(1, 1, 0, 1), v2: v(1, 2, 0, 0), less: true},
+		{v1: v(2, 0, 0, 0), v2: v(3, 0, 0, 0), less: true},
 	}
 
 	for _, test := range testData {

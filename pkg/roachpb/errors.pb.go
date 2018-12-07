@@ -6,7 +6,7 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
@@ -18,6 +18,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // TransactionAbortedReason specifies what caused a TransactionAbortedError.
 // The reasons below are not necessarily disjoint - they describe where the
@@ -105,7 +111,7 @@ func (x *TransactionAbortedReason) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TransactionAbortedReason) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{0}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{0}
 }
 
 // TransactionRetryReason specifies what caused a transaction retry.
@@ -156,7 +162,9 @@ func (x *TransactionRetryReason) UnmarshalJSON(data []byte) error {
 	*x = TransactionRetryReason(value)
 	return nil
 }
-func (TransactionRetryReason) EnumDescriptor() ([]byte, []int) { return fileDescriptorErrors, []int{1} }
+func (TransactionRetryReason) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{1}
+}
 
 // TransactionRestart indicates how an error should be handled in a
 // transactional context.
@@ -205,7 +213,9 @@ func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 	*x = TransactionRestart(value)
 	return nil
 }
-func (TransactionRestart) EnumDescriptor() ([]byte, []int) { return fileDescriptorErrors, []int{2} }
+func (TransactionRestart) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{2}
+}
 
 // Reason specifies what caused the error.
 type TransactionStatusError_Reason int32
@@ -247,7 +257,7 @@ func (x *TransactionStatusError_Reason) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TransactionStatusError_Reason) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{9, 0}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{9, 0}
 }
 
 // Reason specifies what caused the error.
@@ -298,7 +308,7 @@ func (x *RangeFeedRetryError_Reason) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (RangeFeedRetryError_Reason) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{29, 0}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{29, 0}
 }
 
 // A NotLeaseHolderError indicates that the current range is not the lease
@@ -318,47 +328,151 @@ type NotLeaseHolderError struct {
 	// regular spiel. Useful because we reuse this error when rejecting a command
 	// because the lease under which its application was attempted is different
 	// than the lease under which it had been proposed.
-	CustomMsg string `protobuf:"bytes,5,opt,name=custom_msg,json=customMsg" json:"custom_msg"`
+	CustomMsg            string   `protobuf:"bytes,5,opt,name=custom_msg,json=customMsg" json:"custom_msg"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NotLeaseHolderError) Reset()                    { *m = NotLeaseHolderError{} }
-func (m *NotLeaseHolderError) String() string            { return proto.CompactTextString(m) }
-func (*NotLeaseHolderError) ProtoMessage()               {}
-func (*NotLeaseHolderError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{0} }
+func (m *NotLeaseHolderError) Reset()         { *m = NotLeaseHolderError{} }
+func (m *NotLeaseHolderError) String() string { return proto.CompactTextString(m) }
+func (*NotLeaseHolderError) ProtoMessage()    {}
+func (*NotLeaseHolderError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{0}
+}
+func (m *NotLeaseHolderError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NotLeaseHolderError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NotLeaseHolderError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NotLeaseHolderError.Merge(dst, src)
+}
+func (m *NotLeaseHolderError) XXX_Size() int {
+	return m.Size()
+}
+func (m *NotLeaseHolderError) XXX_DiscardUnknown() {
+	xxx_messageInfo_NotLeaseHolderError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NotLeaseHolderError proto.InternalMessageInfo
 
 // A NodeUnavailableError indicates that the sending gateway can
 // not process requests at the time, and that the client should
 // retry the request with another peer.
 type NodeUnavailableError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NodeUnavailableError) Reset()                    { *m = NodeUnavailableError{} }
-func (m *NodeUnavailableError) String() string            { return proto.CompactTextString(m) }
-func (*NodeUnavailableError) ProtoMessage()               {}
-func (*NodeUnavailableError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{1} }
+func (m *NodeUnavailableError) Reset()         { *m = NodeUnavailableError{} }
+func (m *NodeUnavailableError) String() string { return proto.CompactTextString(m) }
+func (*NodeUnavailableError) ProtoMessage()    {}
+func (*NodeUnavailableError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{1}
+}
+func (m *NodeUnavailableError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NodeUnavailableError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NodeUnavailableError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NodeUnavailableError.Merge(dst, src)
+}
+func (m *NodeUnavailableError) XXX_Size() int {
+	return m.Size()
+}
+func (m *NodeUnavailableError) XXX_DiscardUnknown() {
+	xxx_messageInfo_NodeUnavailableError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NodeUnavailableError proto.InternalMessageInfo
 
 // An UnsupportedRequestError indicates that the recipient node
 // does not know how to handle the type of request received.
 type UnsupportedRequestError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UnsupportedRequestError) Reset()                    { *m = UnsupportedRequestError{} }
-func (m *UnsupportedRequestError) String() string            { return proto.CompactTextString(m) }
-func (*UnsupportedRequestError) ProtoMessage()               {}
-func (*UnsupportedRequestError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{2} }
+func (m *UnsupportedRequestError) Reset()         { *m = UnsupportedRequestError{} }
+func (m *UnsupportedRequestError) String() string { return proto.CompactTextString(m) }
+func (*UnsupportedRequestError) ProtoMessage()    {}
+func (*UnsupportedRequestError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{2}
+}
+func (m *UnsupportedRequestError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UnsupportedRequestError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UnsupportedRequestError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnsupportedRequestError.Merge(dst, src)
+}
+func (m *UnsupportedRequestError) XXX_Size() int {
+	return m.Size()
+}
+func (m *UnsupportedRequestError) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnsupportedRequestError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UnsupportedRequestError proto.InternalMessageInfo
 
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
 	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
 	// store_id is nonzero only if the error originated on a Store.
-	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	StoreID              StoreID  `protobuf:"varint,2,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeNotFoundError) Reset()                    { *m = RangeNotFoundError{} }
-func (m *RangeNotFoundError) String() string            { return proto.CompactTextString(m) }
-func (*RangeNotFoundError) ProtoMessage()               {}
-func (*RangeNotFoundError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{3} }
+func (m *RangeNotFoundError) Reset()         { *m = RangeNotFoundError{} }
+func (m *RangeNotFoundError) String() string { return proto.CompactTextString(m) }
+func (*RangeNotFoundError) ProtoMessage()    {}
+func (*RangeNotFoundError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{3}
+}
+func (m *RangeNotFoundError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeNotFoundError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeNotFoundError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeNotFoundError.Merge(dst, src)
+}
+func (m *RangeNotFoundError) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeNotFoundError) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeNotFoundError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeNotFoundError proto.InternalMessageInfo
 
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
@@ -372,13 +486,39 @@ type RangeKeyMismatchError struct {
 	// suggested_range is a hint to the sender of a command about the range
 	// they may be looking for. It is only populated when the recipient has
 	// authoritative knowledge of the range requested by the sender.
-	SuggestedRange *RangeDescriptor `protobuf:"bytes,4,opt,name=suggested_range,json=suggestedRange" json:"suggested_range,omitempty"`
+	SuggestedRange       *RangeDescriptor `protobuf:"bytes,4,opt,name=suggested_range,json=suggestedRange" json:"suggested_range,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
-func (m *RangeKeyMismatchError) Reset()                    { *m = RangeKeyMismatchError{} }
-func (m *RangeKeyMismatchError) String() string            { return proto.CompactTextString(m) }
-func (*RangeKeyMismatchError) ProtoMessage()               {}
-func (*RangeKeyMismatchError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{4} }
+func (m *RangeKeyMismatchError) Reset()         { *m = RangeKeyMismatchError{} }
+func (m *RangeKeyMismatchError) String() string { return proto.CompactTextString(m) }
+func (*RangeKeyMismatchError) ProtoMessage()    {}
+func (*RangeKeyMismatchError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{4}
+}
+func (m *RangeKeyMismatchError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeKeyMismatchError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeKeyMismatchError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeKeyMismatchError.Merge(dst, src)
+}
+func (m *RangeKeyMismatchError) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeKeyMismatchError) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeKeyMismatchError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeKeyMismatchError proto.InternalMessageInfo
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a write within the uncertainty interval of the reader.
@@ -389,20 +529,44 @@ func (*RangeKeyMismatchError) Descriptor() ([]byte, []int) { return fileDescript
 type ReadWithinUncertaintyIntervalError struct {
 	// This data below is purely informational and used to tailor the
 	// error message.
-	ReadTimestamp     cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=read_timestamp,json=readTimestamp" json:"read_timestamp"`
-	ExistingTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp,json=existingTimestamp" json:"existing_timestamp"`
+	ReadTimestamp     hlc.Timestamp `protobuf:"bytes,1,opt,name=read_timestamp,json=readTimestamp" json:"read_timestamp"`
+	ExistingTimestamp hlc.Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp,json=existingTimestamp" json:"existing_timestamp"`
 	// The remaining fields may be missing when running in clusters that have
 	// members at below CockroachDB v2.0.
-	MaxTimestamp       *cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=max_timestamp,json=maxTimestamp" json:"max_timestamp,omitempty"`
-	ObservedTimestamps []ObservedTimestamp           `protobuf:"bytes,4,rep,name=observed_timestamps,json=observedTimestamps" json:"observed_timestamps"`
+	MaxTimestamp         *hlc.Timestamp      `protobuf:"bytes,3,opt,name=max_timestamp,json=maxTimestamp" json:"max_timestamp,omitempty"`
+	ObservedTimestamps   []ObservedTimestamp `protobuf:"bytes,4,rep,name=observed_timestamps,json=observedTimestamps" json:"observed_timestamps"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()         { *m = ReadWithinUncertaintyIntervalError{} }
 func (m *ReadWithinUncertaintyIntervalError) String() string { return proto.CompactTextString(m) }
 func (*ReadWithinUncertaintyIntervalError) ProtoMessage()    {}
 func (*ReadWithinUncertaintyIntervalError) Descriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{5}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{5}
 }
+func (m *ReadWithinUncertaintyIntervalError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReadWithinUncertaintyIntervalError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReadWithinUncertaintyIntervalError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReadWithinUncertaintyIntervalError.Merge(dst, src)
+}
+func (m *ReadWithinUncertaintyIntervalError) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReadWithinUncertaintyIntervalError) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReadWithinUncertaintyIntervalError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReadWithinUncertaintyIntervalError proto.InternalMessageInfo
 
 // A TransactionAbortedError indicates that the client should retry the
 // transaction (and use a different txn id, as opposed to
@@ -415,36 +579,114 @@ func (*ReadWithinUncertaintyIntervalError) Descriptor() ([]byte, []int) {
 // client; the ID should be checked and then attributes like the timestamp
 // should be used in creating a new txn.
 type TransactionAbortedError struct {
-	Reason TransactionAbortedReason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.TransactionAbortedReason" json:"reason"`
+	Reason               TransactionAbortedReason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.TransactionAbortedReason" json:"reason"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *TransactionAbortedError) Reset()                    { *m = TransactionAbortedError{} }
-func (m *TransactionAbortedError) String() string            { return proto.CompactTextString(m) }
-func (*TransactionAbortedError) ProtoMessage()               {}
-func (*TransactionAbortedError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{6} }
+func (m *TransactionAbortedError) Reset()         { *m = TransactionAbortedError{} }
+func (m *TransactionAbortedError) String() string { return proto.CompactTextString(m) }
+func (*TransactionAbortedError) ProtoMessage()    {}
+func (*TransactionAbortedError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{6}
+}
+func (m *TransactionAbortedError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TransactionAbortedError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TransactionAbortedError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionAbortedError.Merge(dst, src)
+}
+func (m *TransactionAbortedError) XXX_Size() int {
+	return m.Size()
+}
+func (m *TransactionAbortedError) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionAbortedError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionAbortedError proto.InternalMessageInfo
 
 // A TransactionPushError indicates that the transaction could not
 // continue because it encountered a write intent from another
 // transaction which it was unable to push.
 type TransactionPushError struct {
-	PusheeTxn Transaction `protobuf:"bytes,1,opt,name=pushee_txn,json=pusheeTxn" json:"pushee_txn"`
+	PusheeTxn            Transaction `protobuf:"bytes,1,opt,name=pushee_txn,json=pusheeTxn" json:"pushee_txn"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *TransactionPushError) Reset()                    { *m = TransactionPushError{} }
-func (m *TransactionPushError) String() string            { return proto.CompactTextString(m) }
-func (*TransactionPushError) ProtoMessage()               {}
-func (*TransactionPushError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{7} }
+func (m *TransactionPushError) Reset()         { *m = TransactionPushError{} }
+func (m *TransactionPushError) String() string { return proto.CompactTextString(m) }
+func (*TransactionPushError) ProtoMessage()    {}
+func (*TransactionPushError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{7}
+}
+func (m *TransactionPushError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TransactionPushError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TransactionPushError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionPushError.Merge(dst, src)
+}
+func (m *TransactionPushError) XXX_Size() int {
+	return m.Size()
+}
+func (m *TransactionPushError) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionPushError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionPushError proto.InternalMessageInfo
 
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp.
 type TransactionRetryError struct {
-	Reason TransactionRetryReason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.TransactionRetryReason" json:"reason"`
+	Reason               TransactionRetryReason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.TransactionRetryReason" json:"reason"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
-func (m *TransactionRetryError) Reset()                    { *m = TransactionRetryError{} }
-func (m *TransactionRetryError) String() string            { return proto.CompactTextString(m) }
-func (*TransactionRetryError) ProtoMessage()               {}
-func (*TransactionRetryError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{8} }
+func (m *TransactionRetryError) Reset()         { *m = TransactionRetryError{} }
+func (m *TransactionRetryError) String() string { return proto.CompactTextString(m) }
+func (*TransactionRetryError) ProtoMessage()    {}
+func (*TransactionRetryError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{8}
+}
+func (m *TransactionRetryError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TransactionRetryError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TransactionRetryError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionRetryError.Merge(dst, src)
+}
+func (m *TransactionRetryError) XXX_Size() int {
+	return m.Size()
+}
+func (m *TransactionRetryError) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionRetryError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionRetryError proto.InternalMessageInfo
 
 // A TransactionStatusError indicates that the transaction status is
 // incompatible with the requested operation. This might mean the
@@ -453,14 +695,40 @@ func (*TransactionRetryError) Descriptor() ([]byte, []int) { return fileDescript
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 type TransactionStatusError struct {
-	Msg    string                        `protobuf:"bytes,1,opt,name=msg" json:"msg"`
-	Reason TransactionStatusError_Reason `protobuf:"varint,2,opt,name=reason,enum=cockroach.roachpb.TransactionStatusError_Reason" json:"reason"`
+	Msg                  string                        `protobuf:"bytes,1,opt,name=msg" json:"msg"`
+	Reason               TransactionStatusError_Reason `protobuf:"varint,2,opt,name=reason,enum=cockroach.roachpb.TransactionStatusError_Reason" json:"reason"`
+	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
+	XXX_sizecache        int32                         `json:"-"`
 }
 
-func (m *TransactionStatusError) Reset()                    { *m = TransactionStatusError{} }
-func (m *TransactionStatusError) String() string            { return proto.CompactTextString(m) }
-func (*TransactionStatusError) ProtoMessage()               {}
-func (*TransactionStatusError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{9} }
+func (m *TransactionStatusError) Reset()         { *m = TransactionStatusError{} }
+func (m *TransactionStatusError) String() string { return proto.CompactTextString(m) }
+func (*TransactionStatusError) ProtoMessage()    {}
+func (*TransactionStatusError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{9}
+}
+func (m *TransactionStatusError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TransactionStatusError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TransactionStatusError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionStatusError.Merge(dst, src)
+}
+func (m *TransactionStatusError) XXX_Size() int {
+	return m.Size()
+}
+func (m *TransactionStatusError) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionStatusError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionStatusError proto.InternalMessageInfo
 
 // A WriteIntentError indicates that one or more write intent
 // belonging to another transaction were encountered leading to a
@@ -468,76 +736,232 @@ func (*TransactionStatusError) Descriptor() ([]byte, []int) { return fileDescrip
 // was encountered are set, as are the txn records for the intents'
 // transactions.
 type WriteIntentError struct {
-	Intents []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
+	Intents              []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *WriteIntentError) Reset()                    { *m = WriteIntentError{} }
-func (m *WriteIntentError) String() string            { return proto.CompactTextString(m) }
-func (*WriteIntentError) ProtoMessage()               {}
-func (*WriteIntentError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{10} }
+func (m *WriteIntentError) Reset()         { *m = WriteIntentError{} }
+func (m *WriteIntentError) String() string { return proto.CompactTextString(m) }
+func (*WriteIntentError) ProtoMessage()    {}
+func (*WriteIntentError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{10}
+}
+func (m *WriteIntentError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WriteIntentError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WriteIntentError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WriteIntentError.Merge(dst, src)
+}
+func (m *WriteIntentError) XXX_Size() int {
+	return m.Size()
+}
+func (m *WriteIntentError) XXX_DiscardUnknown() {
+	xxx_messageInfo_WriteIntentError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WriteIntentError proto.InternalMessageInfo
 
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
 // history. The write is instead done at actual timestamp, which is
 // the timestamp of the existing version+1.
 type WriteTooOldError struct {
-	Timestamp       cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
-	ActualTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=actual_timestamp,json=actualTimestamp" json:"actual_timestamp"`
+	Timestamp            hlc.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	ActualTimestamp      hlc.Timestamp `protobuf:"bytes,2,opt,name=actual_timestamp,json=actualTimestamp" json:"actual_timestamp"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *WriteTooOldError) Reset()                    { *m = WriteTooOldError{} }
-func (m *WriteTooOldError) String() string            { return proto.CompactTextString(m) }
-func (*WriteTooOldError) ProtoMessage()               {}
-func (*WriteTooOldError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{11} }
+func (m *WriteTooOldError) Reset()         { *m = WriteTooOldError{} }
+func (m *WriteTooOldError) String() string { return proto.CompactTextString(m) }
+func (*WriteTooOldError) ProtoMessage()    {}
+func (*WriteTooOldError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{11}
+}
+func (m *WriteTooOldError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WriteTooOldError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WriteTooOldError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WriteTooOldError.Merge(dst, src)
+}
+func (m *WriteTooOldError) XXX_Size() int {
+	return m.Size()
+}
+func (m *WriteTooOldError) XXX_DiscardUnknown() {
+	xxx_messageInfo_WriteTooOldError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WriteTooOldError proto.InternalMessageInfo
 
 // An OpRequiresTxnError indicates that a command required to be
 // carried out in a transactional context but was not.
 // For example, a Scan which spans ranges requires a transaction.
 // The operation should be retried inside of a transaction.
 type OpRequiresTxnError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *OpRequiresTxnError) Reset()                    { *m = OpRequiresTxnError{} }
-func (m *OpRequiresTxnError) String() string            { return proto.CompactTextString(m) }
-func (*OpRequiresTxnError) ProtoMessage()               {}
-func (*OpRequiresTxnError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{12} }
+func (m *OpRequiresTxnError) Reset()         { *m = OpRequiresTxnError{} }
+func (m *OpRequiresTxnError) String() string { return proto.CompactTextString(m) }
+func (*OpRequiresTxnError) ProtoMessage()    {}
+func (*OpRequiresTxnError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{12}
+}
+func (m *OpRequiresTxnError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OpRequiresTxnError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *OpRequiresTxnError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OpRequiresTxnError.Merge(dst, src)
+}
+func (m *OpRequiresTxnError) XXX_Size() int {
+	return m.Size()
+}
+func (m *OpRequiresTxnError) XXX_DiscardUnknown() {
+	xxx_messageInfo_OpRequiresTxnError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OpRequiresTxnError proto.InternalMessageInfo
 
 // A ConditionFailedError indicates that the expected value
 // of a ConditionalPutRequest was not found, either
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 type ConditionFailedError struct {
-	ActualValue *Value `protobuf:"bytes,1,opt,name=actual_value,json=actualValue" json:"actual_value,omitempty"`
+	ActualValue          *Value   `protobuf:"bytes,1,opt,name=actual_value,json=actualValue" json:"actual_value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ConditionFailedError) Reset()                    { *m = ConditionFailedError{} }
-func (m *ConditionFailedError) String() string            { return proto.CompactTextString(m) }
-func (*ConditionFailedError) ProtoMessage()               {}
-func (*ConditionFailedError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{13} }
+func (m *ConditionFailedError) Reset()         { *m = ConditionFailedError{} }
+func (m *ConditionFailedError) String() string { return proto.CompactTextString(m) }
+func (*ConditionFailedError) ProtoMessage()    {}
+func (*ConditionFailedError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{13}
+}
+func (m *ConditionFailedError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ConditionFailedError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ConditionFailedError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConditionFailedError.Merge(dst, src)
+}
+func (m *ConditionFailedError) XXX_Size() int {
+	return m.Size()
+}
+func (m *ConditionFailedError) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConditionFailedError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConditionFailedError proto.InternalMessageInfo
 
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing range lease.
 type LeaseRejectedError struct {
-	Message   string `protobuf:"bytes,1,opt,name=message" json:"message"`
-	Requested Lease  `protobuf:"bytes,2,opt,name=requested" json:"requested"`
-	Existing  Lease  `protobuf:"bytes,3,opt,name=existing" json:"existing"`
+	Message              string   `protobuf:"bytes,1,opt,name=message" json:"message"`
+	Requested            Lease    `protobuf:"bytes,2,opt,name=requested" json:"requested"`
+	Existing             Lease    `protobuf:"bytes,3,opt,name=existing" json:"existing"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LeaseRejectedError) Reset()                    { *m = LeaseRejectedError{} }
-func (m *LeaseRejectedError) String() string            { return proto.CompactTextString(m) }
-func (*LeaseRejectedError) ProtoMessage()               {}
-func (*LeaseRejectedError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{14} }
+func (m *LeaseRejectedError) Reset()         { *m = LeaseRejectedError{} }
+func (m *LeaseRejectedError) String() string { return proto.CompactTextString(m) }
+func (*LeaseRejectedError) ProtoMessage()    {}
+func (*LeaseRejectedError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{14}
+}
+func (m *LeaseRejectedError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LeaseRejectedError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LeaseRejectedError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeaseRejectedError.Merge(dst, src)
+}
+func (m *LeaseRejectedError) XXX_Size() int {
+	return m.Size()
+}
+func (m *LeaseRejectedError) XXX_DiscardUnknown() {
+	xxx_messageInfo_LeaseRejectedError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LeaseRejectedError proto.InternalMessageInfo
 
 // A SendError indicates that a message could not be delivered to
 // the desired recipient(s).
 type SendError struct {
-	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
+	Message              string   `protobuf:"bytes,1,opt,name=message" json:"message"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SendError) Reset()                    { *m = SendError{} }
-func (m *SendError) String() string            { return proto.CompactTextString(m) }
-func (*SendError) ProtoMessage()               {}
-func (*SendError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{15} }
+func (m *SendError) Reset()         { *m = SendError{} }
+func (m *SendError) String() string { return proto.CompactTextString(m) }
+func (*SendError) ProtoMessage()    {}
+func (*SendError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{15}
+}
+func (m *SendError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SendError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SendError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SendError.Merge(dst, src)
+}
+func (m *SendError) XXX_Size() int {
+	return m.Size()
+}
+func (m *SendError) XXX_DiscardUnknown() {
+	xxx_messageInfo_SendError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SendError proto.InternalMessageInfo
 
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.
@@ -545,23 +969,75 @@ type AmbiguousResultError struct {
 	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
 	// This can be set to give extra information about which error was converted
 	// into an AmbiguousResultError. Useful for tests.
-	WrappedErr *Error `protobuf:"bytes,2,opt,name=wrapped_err,json=wrappedErr" json:"wrapped_err,omitempty"`
+	WrappedErr           *Error   `protobuf:"bytes,2,opt,name=wrapped_err,json=wrappedErr" json:"wrapped_err,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AmbiguousResultError) Reset()                    { *m = AmbiguousResultError{} }
-func (m *AmbiguousResultError) String() string            { return proto.CompactTextString(m) }
-func (*AmbiguousResultError) ProtoMessage()               {}
-func (*AmbiguousResultError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{16} }
+func (m *AmbiguousResultError) Reset()         { *m = AmbiguousResultError{} }
+func (m *AmbiguousResultError) String() string { return proto.CompactTextString(m) }
+func (*AmbiguousResultError) ProtoMessage()    {}
+func (*AmbiguousResultError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{16}
+}
+func (m *AmbiguousResultError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AmbiguousResultError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AmbiguousResultError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AmbiguousResultError.Merge(dst, src)
+}
+func (m *AmbiguousResultError) XXX_Size() int {
+	return m.Size()
+}
+func (m *AmbiguousResultError) XXX_DiscardUnknown() {
+	xxx_messageInfo_AmbiguousResultError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AmbiguousResultError proto.InternalMessageInfo
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for
 // the replica.
 type RaftGroupDeletedError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RaftGroupDeletedError) Reset()                    { *m = RaftGroupDeletedError{} }
-func (m *RaftGroupDeletedError) String() string            { return proto.CompactTextString(m) }
-func (*RaftGroupDeletedError) ProtoMessage()               {}
-func (*RaftGroupDeletedError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{17} }
+func (m *RaftGroupDeletedError) Reset()         { *m = RaftGroupDeletedError{} }
+func (m *RaftGroupDeletedError) String() string { return proto.CompactTextString(m) }
+func (*RaftGroupDeletedError) ProtoMessage()    {}
+func (*RaftGroupDeletedError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{17}
+}
+func (m *RaftGroupDeletedError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftGroupDeletedError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftGroupDeletedError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftGroupDeletedError.Merge(dst, src)
+}
+func (m *RaftGroupDeletedError) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftGroupDeletedError) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftGroupDeletedError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftGroupDeletedError proto.InternalMessageInfo
 
 // A ReplicaCorruptionError indicates that the replica has experienced
 // an error which puts its integrity at risk.
@@ -569,37 +1045,115 @@ type ReplicaCorruptionError struct {
 	ErrorMsg string `protobuf:"bytes,1,opt,name=error_msg,json=errorMsg" json:"error_msg"`
 	// processed indicates that the error has been taken into account and
 	// necessary steps will be taken. For now, required for testing.
-	Processed bool `protobuf:"varint,2,opt,name=processed" json:"processed"`
+	Processed            bool     `protobuf:"varint,2,opt,name=processed" json:"processed"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ReplicaCorruptionError) Reset()                    { *m = ReplicaCorruptionError{} }
-func (m *ReplicaCorruptionError) String() string            { return proto.CompactTextString(m) }
-func (*ReplicaCorruptionError) ProtoMessage()               {}
-func (*ReplicaCorruptionError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{18} }
+func (m *ReplicaCorruptionError) Reset()         { *m = ReplicaCorruptionError{} }
+func (m *ReplicaCorruptionError) String() string { return proto.CompactTextString(m) }
+func (*ReplicaCorruptionError) ProtoMessage()    {}
+func (*ReplicaCorruptionError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{18}
+}
+func (m *ReplicaCorruptionError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaCorruptionError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicaCorruptionError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaCorruptionError.Merge(dst, src)
+}
+func (m *ReplicaCorruptionError) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicaCorruptionError) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaCorruptionError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaCorruptionError proto.InternalMessageInfo
 
 // ReplicaTooOldError is sent in response to a raft message when the
 // recipient of the raft message believes the sender of the raft
 // message to have been removed from the raft group
 type ReplicaTooOldError struct {
 	// replica_id is the ID of the replica that is too old.
-	ReplicaID ReplicaID `protobuf:"varint,1,opt,name=replica_id,json=replicaId,casttype=ReplicaID" json:"replica_id"`
+	ReplicaID            ReplicaID `protobuf:"varint,1,opt,name=replica_id,json=replicaId,casttype=ReplicaID" json:"replica_id"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *ReplicaTooOldError) Reset()                    { *m = ReplicaTooOldError{} }
-func (m *ReplicaTooOldError) String() string            { return proto.CompactTextString(m) }
-func (*ReplicaTooOldError) ProtoMessage()               {}
-func (*ReplicaTooOldError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{19} }
+func (m *ReplicaTooOldError) Reset()         { *m = ReplicaTooOldError{} }
+func (m *ReplicaTooOldError) String() string { return proto.CompactTextString(m) }
+func (*ReplicaTooOldError) ProtoMessage()    {}
+func (*ReplicaTooOldError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{19}
+}
+func (m *ReplicaTooOldError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaTooOldError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicaTooOldError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaTooOldError.Merge(dst, src)
+}
+func (m *ReplicaTooOldError) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicaTooOldError) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaTooOldError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaTooOldError proto.InternalMessageInfo
 
 // A StoreNotFoundError indicates that a command was sent to a store
 // which is not hosted on this node.
 type StoreNotFoundError struct {
-	StoreID StoreID `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	StoreID              StoreID  `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StoreNotFoundError) Reset()                    { *m = StoreNotFoundError{} }
-func (m *StoreNotFoundError) String() string            { return proto.CompactTextString(m) }
-func (*StoreNotFoundError) ProtoMessage()               {}
-func (*StoreNotFoundError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{20} }
+func (m *StoreNotFoundError) Reset()         { *m = StoreNotFoundError{} }
+func (m *StoreNotFoundError) String() string { return proto.CompactTextString(m) }
+func (*StoreNotFoundError) ProtoMessage()    {}
+func (*StoreNotFoundError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{20}
+}
+func (m *StoreNotFoundError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoreNotFoundError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoreNotFoundError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoreNotFoundError.Merge(dst, src)
+}
+func (m *StoreNotFoundError) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoreNotFoundError) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoreNotFoundError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoreNotFoundError proto.InternalMessageInfo
 
 // UnhandledRetryableError tells the recipient that a KV request must be
 // retried. In case the request was transactional, the whole transaction needs
@@ -615,13 +1169,39 @@ type UnhandledRetryableError struct {
 	// The underlying storage error that is being marshaled.
 	// pErr.TransactionRestart is expected to be set, and the error
 	// detail is one of the retryable ones.
-	PErr Error `protobuf:"bytes,1,opt,name=pErr" json:"pErr"`
+	PErr                 Error    `protobuf:"bytes,1,opt,name=pErr" json:"pErr"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UnhandledRetryableError) Reset()                    { *m = UnhandledRetryableError{} }
-func (m *UnhandledRetryableError) String() string            { return proto.CompactTextString(m) }
-func (*UnhandledRetryableError) ProtoMessage()               {}
-func (*UnhandledRetryableError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{21} }
+func (m *UnhandledRetryableError) Reset()         { *m = UnhandledRetryableError{} }
+func (m *UnhandledRetryableError) String() string { return proto.CompactTextString(m) }
+func (*UnhandledRetryableError) ProtoMessage()    {}
+func (*UnhandledRetryableError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{21}
+}
+func (m *UnhandledRetryableError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UnhandledRetryableError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UnhandledRetryableError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnhandledRetryableError.Merge(dst, src)
+}
+func (m *UnhandledRetryableError) XXX_Size() int {
+	return m.Size()
+}
+func (m *UnhandledRetryableError) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnhandledRetryableError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UnhandledRetryableError proto.InternalMessageInfo
 
 // HandledRetryableTxnError is an error detail representing a retryable error
 // that has been "handled" by the TxnCoordSender. This error is produced by the
@@ -643,78 +1223,230 @@ type HandledRetryableTxnError struct {
 	// original cause of this method, this can either be the same Transaction as
 	// before, but with an incremented epoch and timestamp, or a completely new
 	// Transaction.
-	Transaction Transaction `protobuf:"bytes,3,opt,name=transaction" json:"transaction"`
+	Transaction          Transaction `protobuf:"bytes,3,opt,name=transaction" json:"transaction"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *HandledRetryableTxnError) Reset()                    { *m = HandledRetryableTxnError{} }
-func (m *HandledRetryableTxnError) String() string            { return proto.CompactTextString(m) }
-func (*HandledRetryableTxnError) ProtoMessage()               {}
-func (*HandledRetryableTxnError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{22} }
+func (m *HandledRetryableTxnError) Reset()         { *m = HandledRetryableTxnError{} }
+func (m *HandledRetryableTxnError) String() string { return proto.CompactTextString(m) }
+func (*HandledRetryableTxnError) ProtoMessage()    {}
+func (*HandledRetryableTxnError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{22}
+}
+func (m *HandledRetryableTxnError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HandledRetryableTxnError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *HandledRetryableTxnError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HandledRetryableTxnError.Merge(dst, src)
+}
+func (m *HandledRetryableTxnError) XXX_Size() int {
+	return m.Size()
+}
+func (m *HandledRetryableTxnError) XXX_DiscardUnknown() {
+	xxx_messageInfo_HandledRetryableTxnError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HandledRetryableTxnError proto.InternalMessageInfo
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
 // happens, client.Txn rejects future requests.
 type TxnAlreadyEncounteredErrorError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TxnAlreadyEncounteredErrorError) Reset()         { *m = TxnAlreadyEncounteredErrorError{} }
 func (m *TxnAlreadyEncounteredErrorError) String() string { return proto.CompactTextString(m) }
 func (*TxnAlreadyEncounteredErrorError) ProtoMessage()    {}
 func (*TxnAlreadyEncounteredErrorError) Descriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{23}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{23}
 }
+func (m *TxnAlreadyEncounteredErrorError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnAlreadyEncounteredErrorError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TxnAlreadyEncounteredErrorError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnAlreadyEncounteredErrorError.Merge(dst, src)
+}
+func (m *TxnAlreadyEncounteredErrorError) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnAlreadyEncounteredErrorError) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnAlreadyEncounteredErrorError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnAlreadyEncounteredErrorError proto.InternalMessageInfo
 
 // An IntegerOverflowError indicates that an operation was aborted because
 // it would have caused an integeter overflow.
 type IntegerOverflowError struct {
-	Key            Key   `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	CurrentValue   int64 `protobuf:"varint,2,opt,name=current_value,json=currentValue" json:"current_value"`
-	IncrementValue int64 `protobuf:"varint,3,opt,name=increment_value,json=incrementValue" json:"increment_value"`
+	Key                  Key      `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	CurrentValue         int64    `protobuf:"varint,2,opt,name=current_value,json=currentValue" json:"current_value"`
+	IncrementValue       int64    `protobuf:"varint,3,opt,name=increment_value,json=incrementValue" json:"increment_value"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *IntegerOverflowError) Reset()                    { *m = IntegerOverflowError{} }
-func (m *IntegerOverflowError) String() string            { return proto.CompactTextString(m) }
-func (*IntegerOverflowError) ProtoMessage()               {}
-func (*IntegerOverflowError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{24} }
+func (m *IntegerOverflowError) Reset()         { *m = IntegerOverflowError{} }
+func (m *IntegerOverflowError) String() string { return proto.CompactTextString(m) }
+func (*IntegerOverflowError) ProtoMessage()    {}
+func (*IntegerOverflowError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{24}
+}
+func (m *IntegerOverflowError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IntegerOverflowError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *IntegerOverflowError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IntegerOverflowError.Merge(dst, src)
+}
+func (m *IntegerOverflowError) XXX_Size() int {
+	return m.Size()
+}
+func (m *IntegerOverflowError) XXX_DiscardUnknown() {
+	xxx_messageInfo_IntegerOverflowError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IntegerOverflowError proto.InternalMessageInfo
 
 // A MixedSuccessError indicates that some portion of the batch
 // request may have succeeded, but the batch as a whole failed with
 // the wrapped error.
 type MixedSuccessError struct {
-	Wrapped *Error `protobuf:"bytes,1,opt,name=wrapped" json:"wrapped,omitempty"`
+	Wrapped              *Error   `protobuf:"bytes,1,opt,name=wrapped" json:"wrapped,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MixedSuccessError) Reset()                    { *m = MixedSuccessError{} }
-func (m *MixedSuccessError) String() string            { return proto.CompactTextString(m) }
-func (*MixedSuccessError) ProtoMessage()               {}
-func (*MixedSuccessError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{25} }
+func (m *MixedSuccessError) Reset()         { *m = MixedSuccessError{} }
+func (m *MixedSuccessError) String() string { return proto.CompactTextString(m) }
+func (*MixedSuccessError) ProtoMessage()    {}
+func (*MixedSuccessError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{25}
+}
+func (m *MixedSuccessError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MixedSuccessError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MixedSuccessError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MixedSuccessError.Merge(dst, src)
+}
+func (m *MixedSuccessError) XXX_Size() int {
+	return m.Size()
+}
+func (m *MixedSuccessError) XXX_DiscardUnknown() {
+	xxx_messageInfo_MixedSuccessError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MixedSuccessError proto.InternalMessageInfo
 
 // A BatchTimestampBeforeGCError indicates that a request's timestamp was
 // before the GC threshold.
 type BatchTimestampBeforeGCError struct {
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=Timestamp" json:"Timestamp"`
-	Threshold cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=Threshold" json:"Threshold"`
+	Timestamp            hlc.Timestamp `protobuf:"bytes,1,opt,name=Timestamp" json:"Timestamp"`
+	Threshold            hlc.Timestamp `protobuf:"bytes,2,opt,name=Threshold" json:"Threshold"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
 func (m *BatchTimestampBeforeGCError) Reset()         { *m = BatchTimestampBeforeGCError{} }
 func (m *BatchTimestampBeforeGCError) String() string { return proto.CompactTextString(m) }
 func (*BatchTimestampBeforeGCError) ProtoMessage()    {}
 func (*BatchTimestampBeforeGCError) Descriptor() ([]byte, []int) {
-	return fileDescriptorErrors, []int{26}
+	return fileDescriptor_errors_9fc5358245dd263f, []int{26}
 }
+func (m *BatchTimestampBeforeGCError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchTimestampBeforeGCError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *BatchTimestampBeforeGCError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchTimestampBeforeGCError.Merge(dst, src)
+}
+func (m *BatchTimestampBeforeGCError) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchTimestampBeforeGCError) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchTimestampBeforeGCError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchTimestampBeforeGCError proto.InternalMessageInfo
 
 // An IntentMissingError indicates that a QueryIntent request expected
 // an intent to be present at its specified key but the intent was
 // not there.
 type IntentMissingError struct {
 	// The non-matching intent that was found at that key, if any.
-	WrongIntent *Intent `protobuf:"bytes,1,opt,name=wrong_intent,json=wrongIntent" json:"wrong_intent,omitempty"`
+	WrongIntent          *Intent  `protobuf:"bytes,1,opt,name=wrong_intent,json=wrongIntent" json:"wrong_intent,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *IntentMissingError) Reset()                    { *m = IntentMissingError{} }
-func (m *IntentMissingError) String() string            { return proto.CompactTextString(m) }
-func (*IntentMissingError) ProtoMessage()               {}
-func (*IntentMissingError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{27} }
+func (m *IntentMissingError) Reset()         { *m = IntentMissingError{} }
+func (m *IntentMissingError) String() string { return proto.CompactTextString(m) }
+func (*IntentMissingError) ProtoMessage()    {}
+func (*IntentMissingError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{27}
+}
+func (m *IntentMissingError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IntentMissingError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *IntentMissingError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IntentMissingError.Merge(dst, src)
+}
+func (m *IntentMissingError) XXX_Size() int {
+	return m.Size()
+}
+func (m *IntentMissingError) XXX_DiscardUnknown() {
+	xxx_messageInfo_IntentMissingError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IntentMissingError proto.InternalMessageInfo
 
 // A MergeInProgressError indicates that the request could not be completed
 // because the replica is being merged into its left-hand neighbor. The request
@@ -722,23 +1454,75 @@ func (*IntentMissingError) Descriptor() ([]byte, []int) { return fileDescriptorE
 //
 // This error is handled by the Store and should not escape to higher levels.
 type MergeInProgressError struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MergeInProgressError) Reset()                    { *m = MergeInProgressError{} }
-func (m *MergeInProgressError) String() string            { return proto.CompactTextString(m) }
-func (*MergeInProgressError) ProtoMessage()               {}
-func (*MergeInProgressError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{28} }
+func (m *MergeInProgressError) Reset()         { *m = MergeInProgressError{} }
+func (m *MergeInProgressError) String() string { return proto.CompactTextString(m) }
+func (*MergeInProgressError) ProtoMessage()    {}
+func (*MergeInProgressError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{28}
+}
+func (m *MergeInProgressError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MergeInProgressError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MergeInProgressError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MergeInProgressError.Merge(dst, src)
+}
+func (m *MergeInProgressError) XXX_Size() int {
+	return m.Size()
+}
+func (m *MergeInProgressError) XXX_DiscardUnknown() {
+	xxx_messageInfo_MergeInProgressError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MergeInProgressError proto.InternalMessageInfo
 
 // A RangeFeedRetryError indicates that a rangefeed was disconnected, often
 // because of a range lifecycle event, and can be retried.
 type RangeFeedRetryError struct {
-	Reason RangeFeedRetryError_Reason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.RangeFeedRetryError_Reason" json:"reason"`
+	Reason               RangeFeedRetryError_Reason `protobuf:"varint,1,opt,name=reason,enum=cockroach.roachpb.RangeFeedRetryError_Reason" json:"reason"`
+	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
+	XXX_sizecache        int32                      `json:"-"`
 }
 
-func (m *RangeFeedRetryError) Reset()                    { *m = RangeFeedRetryError{} }
-func (m *RangeFeedRetryError) String() string            { return proto.CompactTextString(m) }
-func (*RangeFeedRetryError) ProtoMessage()               {}
-func (*RangeFeedRetryError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{29} }
+func (m *RangeFeedRetryError) Reset()         { *m = RangeFeedRetryError{} }
+func (m *RangeFeedRetryError) String() string { return proto.CompactTextString(m) }
+func (*RangeFeedRetryError) ProtoMessage()    {}
+func (*RangeFeedRetryError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{29}
+}
+func (m *RangeFeedRetryError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeFeedRetryError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeFeedRetryError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeFeedRetryError.Merge(dst, src)
+}
+func (m *RangeFeedRetryError) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeFeedRetryError) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeFeedRetryError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeFeedRetryError proto.InternalMessageInfo
 
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
@@ -772,13 +1556,39 @@ type ErrorDetail struct {
 	//	*ErrorDetail_IntentMissing
 	//	*ErrorDetail_MergeInProgress
 	//	*ErrorDetail_RangefeedRetry
-	Value isErrorDetail_Value `protobuf_oneof:"value"`
+	Value                isErrorDetail_Value `protobuf_oneof:"value"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *ErrorDetail) Reset()                    { *m = ErrorDetail{} }
-func (m *ErrorDetail) String() string            { return proto.CompactTextString(m) }
-func (*ErrorDetail) ProtoMessage()               {}
-func (*ErrorDetail) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{30} }
+func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
+func (m *ErrorDetail) String() string { return proto.CompactTextString(m) }
+func (*ErrorDetail) ProtoMessage()    {}
+func (*ErrorDetail) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{30}
+}
+func (m *ErrorDetail) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ErrorDetail) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ErrorDetail) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ErrorDetail.Merge(dst, src)
+}
+func (m *ErrorDetail) XXX_Size() int {
+	return m.Size()
+}
+func (m *ErrorDetail) XXX_DiscardUnknown() {
+	xxx_messageInfo_ErrorDetail.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ErrorDetail proto.InternalMessageInfo
 
 type isErrorDetail_Value interface {
 	isErrorDetail_Value()
@@ -1552,147 +2362,147 @@ func _ErrorDetail_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Value.(type) {
 	case *ErrorDetail_NotLeaseHolder:
 		s := proto.Size(x.NotLeaseHolder)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_RangeNotFound:
 		s := proto.Size(x.RangeNotFound)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_RangeKeyMismatch:
 		s := proto.Size(x.RangeKeyMismatch)
-		n += proto.SizeVarint(3<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_ReadWithinUncertaintyInterval:
 		s := proto.Size(x.ReadWithinUncertaintyInterval)
-		n += proto.SizeVarint(4<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TransactionAborted:
 		s := proto.Size(x.TransactionAborted)
-		n += proto.SizeVarint(5<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TransactionPush:
 		s := proto.Size(x.TransactionPush)
-		n += proto.SizeVarint(6<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TransactionRetry:
 		s := proto.Size(x.TransactionRetry)
-		n += proto.SizeVarint(7<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TransactionStatus:
 		s := proto.Size(x.TransactionStatus)
-		n += proto.SizeVarint(8<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_WriteIntent:
 		s := proto.Size(x.WriteIntent)
-		n += proto.SizeVarint(9<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_WriteTooOld:
 		s := proto.Size(x.WriteTooOld)
-		n += proto.SizeVarint(10<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_OpRequiresTxn:
 		s := proto.Size(x.OpRequiresTxn)
-		n += proto.SizeVarint(11<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_ConditionFailed:
 		s := proto.Size(x.ConditionFailed)
-		n += proto.SizeVarint(12<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_LeaseRejected:
 		s := proto.Size(x.LeaseRejected)
-		n += proto.SizeVarint(13<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_NodeUnavailable:
 		s := proto.Size(x.NodeUnavailable)
-		n += proto.SizeVarint(14<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_Send:
 		s := proto.Size(x.Send)
-		n += proto.SizeVarint(15<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_RaftGroupDeleted:
 		s := proto.Size(x.RaftGroupDeleted)
-		n += proto.SizeVarint(16<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_ReplicaCorruption:
 		s := proto.Size(x.ReplicaCorruption)
-		n += proto.SizeVarint(17<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_ReplicaTooOld:
 		s := proto.Size(x.ReplicaTooOld)
-		n += proto.SizeVarint(18<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_AmbiguousResult:
 		s := proto.Size(x.AmbiguousResult)
-		n += proto.SizeVarint(26<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_StoreNotFound:
 		s := proto.Size(x.StoreNotFound)
-		n += proto.SizeVarint(27<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_HandledRetryableTxnError:
 		s := proto.Size(x.HandledRetryableTxnError)
-		n += proto.SizeVarint(28<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_IntegerOverflow:
 		s := proto.Size(x.IntegerOverflow)
-		n += proto.SizeVarint(31<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_UnsupportedRequest:
 		s := proto.Size(x.UnsupportedRequest)
-		n += proto.SizeVarint(32<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_MixedSuccess:
 		s := proto.Size(x.MixedSuccess)
-		n += proto.SizeVarint(33<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TimestampBefore:
 		s := proto.Size(x.TimestampBefore)
-		n += proto.SizeVarint(34<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_TxnAlreadyEncounteredError:
 		s := proto.Size(x.TxnAlreadyEncounteredError)
-		n += proto.SizeVarint(35<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_IntentMissing:
 		s := proto.Size(x.IntentMissing)
-		n += proto.SizeVarint(36<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_MergeInProgress:
 		s := proto.Size(x.MergeInProgress)
-		n += proto.SizeVarint(37<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *ErrorDetail_RangefeedRetry:
 		s := proto.Size(x.RangefeedRetry)
-		n += proto.SizeVarint(38<<3 | proto.WireBytes)
+		n += 2 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -1706,13 +2516,39 @@ func _ErrorDetail_OneofSizer(msg proto.Message) (n int) {
 // primitive field would break compatibility with proto3, where primitive fields
 // are no longer allowed to be nullable.
 type ErrPosition struct {
-	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
+	Index                int32    `protobuf:"varint,1,opt,name=index" json:"index"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ErrPosition) Reset()                    { *m = ErrPosition{} }
-func (m *ErrPosition) String() string            { return proto.CompactTextString(m) }
-func (*ErrPosition) ProtoMessage()               {}
-func (*ErrPosition) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{31} }
+func (m *ErrPosition) Reset()         { *m = ErrPosition{} }
+func (m *ErrPosition) String() string { return proto.CompactTextString(m) }
+func (*ErrPosition) ProtoMessage()    {}
+func (*ErrPosition) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{31}
+}
+func (m *ErrPosition) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ErrPosition) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ErrPosition) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ErrPosition.Merge(dst, src)
+}
+func (m *ErrPosition) XXX_Size() int {
+	return m.Size()
+}
+func (m *ErrPosition) XXX_DiscardUnknown() {
+	xxx_messageInfo_ErrPosition.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ErrPosition proto.InternalMessageInfo
 
 // Error is a generic representation including a string message
 // and information about retryability.
@@ -1737,12 +2573,38 @@ type Error struct {
 	Index *ErrPosition `protobuf:"bytes,7,opt,name=index" json:"index,omitempty"`
 	// now is the current time at the node sending the response,
 	// which can be used by the receiver to update its local HLC.
-	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,8,opt,name=now" json:"now"`
+	Now                  hlc.Timestamp `protobuf:"bytes,8,opt,name=now" json:"now"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *Error) Reset()                    { *m = Error{} }
-func (*Error) ProtoMessage()               {}
-func (*Error) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{32} }
+func (m *Error) Reset()      { *m = Error{} }
+func (*Error) ProtoMessage() {}
+func (*Error) Descriptor() ([]byte, []int) {
+	return fileDescriptor_errors_9fc5358245dd263f, []int{32}
+}
+func (m *Error) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Error) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Error) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Error.Merge(dst, src)
+}
+func (m *Error) XXX_Size() int {
+	return m.Size()
+}
+func (m *Error) XXX_DiscardUnknown() {
+	xxx_messageInfo_Error.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Error proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*NotLeaseHolderError)(nil), "cockroach.roachpb.NotLeaseHolderError")
@@ -4729,6 +5591,9 @@ func encodeVarintErrors(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *NotLeaseHolderError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Replica.Size()
@@ -4748,18 +5613,27 @@ func (m *NotLeaseHolderError) Size() (n int) {
 }
 
 func (m *NodeUnavailableError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *UnsupportedRequestError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *RangeNotFoundError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.RangeID))
@@ -4768,6 +5642,9 @@ func (m *RangeNotFoundError) Size() (n int) {
 }
 
 func (m *RangeKeyMismatchError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RequestStartKey != nil {
@@ -4790,6 +5667,9 @@ func (m *RangeKeyMismatchError) Size() (n int) {
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ReadTimestamp.Size()
@@ -4810,6 +5690,9 @@ func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
 }
 
 func (m *TransactionAbortedError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.Reason))
@@ -4817,6 +5700,9 @@ func (m *TransactionAbortedError) Size() (n int) {
 }
 
 func (m *TransactionPushError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.PusheeTxn.Size()
@@ -4825,6 +5711,9 @@ func (m *TransactionPushError) Size() (n int) {
 }
 
 func (m *TransactionRetryError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.Reason))
@@ -4832,6 +5721,9 @@ func (m *TransactionRetryError) Size() (n int) {
 }
 
 func (m *TransactionStatusError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Msg)
@@ -4841,6 +5733,9 @@ func (m *TransactionStatusError) Size() (n int) {
 }
 
 func (m *WriteIntentError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Intents) > 0 {
@@ -4853,6 +5748,9 @@ func (m *WriteIntentError) Size() (n int) {
 }
 
 func (m *WriteTooOldError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Timestamp.Size()
@@ -4863,12 +5761,18 @@ func (m *WriteTooOldError) Size() (n int) {
 }
 
 func (m *OpRequiresTxnError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *ConditionFailedError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ActualValue != nil {
@@ -4879,6 +5783,9 @@ func (m *ConditionFailedError) Size() (n int) {
 }
 
 func (m *LeaseRejectedError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Message)
@@ -4891,6 +5798,9 @@ func (m *LeaseRejectedError) Size() (n int) {
 }
 
 func (m *SendError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Message)
@@ -4899,6 +5809,9 @@ func (m *SendError) Size() (n int) {
 }
 
 func (m *AmbiguousResultError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Message)
@@ -4911,12 +5824,18 @@ func (m *AmbiguousResultError) Size() (n int) {
 }
 
 func (m *RaftGroupDeletedError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *ReplicaCorruptionError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.ErrorMsg)
@@ -4926,6 +5845,9 @@ func (m *ReplicaCorruptionError) Size() (n int) {
 }
 
 func (m *ReplicaTooOldError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.ReplicaID))
@@ -4933,6 +5855,9 @@ func (m *ReplicaTooOldError) Size() (n int) {
 }
 
 func (m *StoreNotFoundError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.StoreID))
@@ -4940,6 +5865,9 @@ func (m *StoreNotFoundError) Size() (n int) {
 }
 
 func (m *UnhandledRetryableError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.PErr.Size()
@@ -4948,6 +5876,9 @@ func (m *UnhandledRetryableError) Size() (n int) {
 }
 
 func (m *HandledRetryableTxnError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Msg)
@@ -4960,12 +5891,18 @@ func (m *HandledRetryableTxnError) Size() (n int) {
 }
 
 func (m *TxnAlreadyEncounteredErrorError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *IntegerOverflowError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Key != nil {
@@ -4978,6 +5915,9 @@ func (m *IntegerOverflowError) Size() (n int) {
 }
 
 func (m *MixedSuccessError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Wrapped != nil {
@@ -4988,6 +5928,9 @@ func (m *MixedSuccessError) Size() (n int) {
 }
 
 func (m *BatchTimestampBeforeGCError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Timestamp.Size()
@@ -4998,6 +5941,9 @@ func (m *BatchTimestampBeforeGCError) Size() (n int) {
 }
 
 func (m *IntentMissingError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.WrongIntent != nil {
@@ -5008,12 +5954,18 @@ func (m *IntentMissingError) Size() (n int) {
 }
 
 func (m *MergeInProgressError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *RangeFeedRetryError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.Reason))
@@ -5021,6 +5973,9 @@ func (m *RangeFeedRetryError) Size() (n int) {
 }
 
 func (m *ErrorDetail) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Value != nil {
@@ -5030,6 +5985,9 @@ func (m *ErrorDetail) Size() (n int) {
 }
 
 func (m *ErrorDetail_NotLeaseHolder) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NotLeaseHolder != nil {
@@ -5039,6 +5997,9 @@ func (m *ErrorDetail_NotLeaseHolder) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_RangeNotFound) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeNotFound != nil {
@@ -5048,6 +6009,9 @@ func (m *ErrorDetail_RangeNotFound) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_RangeKeyMismatch) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeKeyMismatch != nil {
@@ -5057,6 +6021,9 @@ func (m *ErrorDetail_RangeKeyMismatch) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_ReadWithinUncertaintyInterval) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ReadWithinUncertaintyInterval != nil {
@@ -5066,6 +6033,9 @@ func (m *ErrorDetail_ReadWithinUncertaintyInterval) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TransactionAborted) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TransactionAborted != nil {
@@ -5075,6 +6045,9 @@ func (m *ErrorDetail_TransactionAborted) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TransactionPush) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TransactionPush != nil {
@@ -5084,6 +6057,9 @@ func (m *ErrorDetail_TransactionPush) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TransactionRetry) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TransactionRetry != nil {
@@ -5093,6 +6069,9 @@ func (m *ErrorDetail_TransactionRetry) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TransactionStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TransactionStatus != nil {
@@ -5102,6 +6081,9 @@ func (m *ErrorDetail_TransactionStatus) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_WriteIntent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.WriteIntent != nil {
@@ -5111,6 +6093,9 @@ func (m *ErrorDetail_WriteIntent) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_WriteTooOld) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.WriteTooOld != nil {
@@ -5120,6 +6105,9 @@ func (m *ErrorDetail_WriteTooOld) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_OpRequiresTxn) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.OpRequiresTxn != nil {
@@ -5129,6 +6117,9 @@ func (m *ErrorDetail_OpRequiresTxn) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_ConditionFailed) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ConditionFailed != nil {
@@ -5138,6 +6129,9 @@ func (m *ErrorDetail_ConditionFailed) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_LeaseRejected) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.LeaseRejected != nil {
@@ -5147,6 +6141,9 @@ func (m *ErrorDetail_LeaseRejected) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_NodeUnavailable) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeUnavailable != nil {
@@ -5156,6 +6153,9 @@ func (m *ErrorDetail_NodeUnavailable) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_Send) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Send != nil {
@@ -5165,6 +6165,9 @@ func (m *ErrorDetail_Send) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_RaftGroupDeleted) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RaftGroupDeleted != nil {
@@ -5174,6 +6177,9 @@ func (m *ErrorDetail_RaftGroupDeleted) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_ReplicaCorruption) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ReplicaCorruption != nil {
@@ -5183,6 +6189,9 @@ func (m *ErrorDetail_ReplicaCorruption) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_ReplicaTooOld) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ReplicaTooOld != nil {
@@ -5192,6 +6201,9 @@ func (m *ErrorDetail_ReplicaTooOld) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_AmbiguousResult) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.AmbiguousResult != nil {
@@ -5201,6 +6213,9 @@ func (m *ErrorDetail_AmbiguousResult) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_StoreNotFound) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.StoreNotFound != nil {
@@ -5210,6 +6225,9 @@ func (m *ErrorDetail_StoreNotFound) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_HandledRetryableTxnError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.HandledRetryableTxnError != nil {
@@ -5219,6 +6237,9 @@ func (m *ErrorDetail_HandledRetryableTxnError) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_IntegerOverflow) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.IntegerOverflow != nil {
@@ -5228,6 +6249,9 @@ func (m *ErrorDetail_IntegerOverflow) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_UnsupportedRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.UnsupportedRequest != nil {
@@ -5237,6 +6261,9 @@ func (m *ErrorDetail_UnsupportedRequest) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_MixedSuccess) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.MixedSuccess != nil {
@@ -5246,6 +6273,9 @@ func (m *ErrorDetail_MixedSuccess) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TimestampBefore) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TimestampBefore != nil {
@@ -5255,6 +6285,9 @@ func (m *ErrorDetail_TimestampBefore) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_TxnAlreadyEncounteredError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TxnAlreadyEncounteredError != nil {
@@ -5264,6 +6297,9 @@ func (m *ErrorDetail_TxnAlreadyEncounteredError) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_IntentMissing) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.IntentMissing != nil {
@@ -5273,6 +6309,9 @@ func (m *ErrorDetail_IntentMissing) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_MergeInProgress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.MergeInProgress != nil {
@@ -5282,6 +6321,9 @@ func (m *ErrorDetail_MergeInProgress) Size() (n int) {
 	return n
 }
 func (m *ErrorDetail_RangefeedRetry) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangefeedRetry != nil {
@@ -5291,6 +6333,9 @@ func (m *ErrorDetail_RangefeedRetry) Size() (n int) {
 	return n
 }
 func (m *ErrPosition) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.Index))
@@ -5298,6 +6343,9 @@ func (m *ErrPosition) Size() (n int) {
 }
 
 func (m *Error) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Message)
@@ -6008,7 +7056,7 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.MaxTimestamp == nil {
-				m.MaxTimestamp = &cockroach_util_hlc.Timestamp{}
+				m.MaxTimestamp = &hlc.Timestamp{}
 			}
 			if err := m.MaxTimestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -9501,9 +10549,9 @@ var (
 	ErrIntOverflowErrors   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/errors.proto", fileDescriptorErrors) }
+func init() { proto.RegisterFile("roachpb/errors.proto", fileDescriptor_errors_9fc5358245dd263f) }
 
-var fileDescriptorErrors = []byte{
+var fileDescriptor_errors_9fc5358245dd263f = []byte{
 	// 2767 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x58, 0xcb, 0x73, 0xdb, 0xd6,
 	0xd5, 0x27, 0x24, 0x4a, 0x94, 0x8e, 0x5e, 0xd0, 0xb5, 0x22, 0xc3, 0x72, 0x4c, 0xd9, 0x72, 0x1e,

@@ -5073,15 +5073,20 @@ func TestAllocatorError(t *testing.T) {
 		{allocatorError{constraints: nil, existingReplicas: 1, aliveStores: 2, throttledStores: 1},
 			"0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica)"},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 1},
-			"0 of 1 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one]}]"},
+			`0 of 1 live stores are able to take a new replica for the range (1 already has a replica); ` +
+				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2},
-			"0 of 2 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one]}]"},
+			`0 of 2 live stores are able to take a new replica for the range (1 already has a replica); ` +
+				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
 		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 1},
-			"0 of 1 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one +two]}]"},
+			`0 of 1 live stores are able to take a new replica for the range (1 already has a replica); ` +
+				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > constraints:<type:REQUIRED key:"" value:"two" > }]`},
 		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 2},
-			"0 of 2 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one +two]}]"},
+			`0 of 2 live stores are able to take a new replica for the range (1 already has a replica); ` +
+				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > constraints:<type:REQUIRED key:"" value:"two" > }]`},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2, throttledStores: 1},
-			"0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica); must match constraints [{0 [+one]}]"},
+			`0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica); ` +
+				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
 	}
 
 	for i, testCase := range testCases {

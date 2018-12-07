@@ -6,11 +6,9 @@ package storagepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,44 +22,128 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // Split is emitted when a Replica commits a split trigger. It signals that the
 // Replica has prepared the on-disk state for both the left and right hand
 // sides of the split, and that the left hand side Replica should be updated as
 // well as the right hand side created.
 type Split struct {
-	cockroach_roachpb1.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	roachpb.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,proto3,embedded=trigger" json:"trigger"`
 	// RHSDelta holds the statistics for what was written to what is now the
 	// right-hand side of the split during the batch which executed it.
 	// The on-disk state of the right-hand side is already correct, but the
 	// Store must learn about this delta to update its counters appropriately.
-	RHSDelta cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,2,opt,name=rhs_delta,json=rhsDelta" json:"rhs_delta"`
+	RHSDelta             enginepb.MVCCStats `protobuf:"bytes,2,opt,name=rhs_delta,json=rhsDelta,proto3" json:"rhs_delta"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
-func (m *Split) Reset()                    { *m = Split{} }
-func (m *Split) String() string            { return proto.CompactTextString(m) }
-func (*Split) ProtoMessage()               {}
-func (*Split) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{0} }
+func (m *Split) Reset()         { *m = Split{} }
+func (m *Split) String() string { return proto.CompactTextString(m) }
+func (*Split) ProtoMessage()    {}
+func (*Split) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{0}
+}
+func (m *Split) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Split) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Split) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Split.Merge(dst, src)
+}
+func (m *Split) XXX_Size() int {
+	return m.Size()
+}
+func (m *Split) XXX_DiscardUnknown() {
+	xxx_messageInfo_Split.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Split proto.InternalMessageInfo
 
 // Merge is emitted by a Replica which commits a transaction with
 // a MergeTrigger (i.e. absorbs its right neighbor).
 type Merge struct {
-	cockroach_roachpb1.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	roachpb.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,proto3,embedded=trigger" json:"trigger"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Merge) Reset()                    { *m = Merge{} }
-func (m *Merge) String() string            { return proto.CompactTextString(m) }
-func (*Merge) ProtoMessage()               {}
-func (*Merge) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{1} }
+func (m *Merge) Reset()         { *m = Merge{} }
+func (m *Merge) String() string { return proto.CompactTextString(m) }
+func (*Merge) ProtoMessage()    {}
+func (*Merge) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{1}
+}
+func (m *Merge) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Merge) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Merge) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Merge.Merge(dst, src)
+}
+func (m *Merge) XXX_Size() int {
+	return m.Size()
+}
+func (m *Merge) XXX_DiscardUnknown() {
+	xxx_messageInfo_Merge.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Merge proto.InternalMessageInfo
 
 // ChangeReplicas is emitted by a Replica which commits a transaction with
 // a ChangeReplicasTrigger.
 type ChangeReplicas struct {
-	cockroach_roachpb1.ChangeReplicasTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	roachpb.ChangeReplicasTrigger `protobuf:"bytes,1,opt,name=trigger,proto3,embedded=trigger" json:"trigger"`
+	XXX_NoUnkeyedLiteral          struct{} `json:"-"`
+	XXX_sizecache                 int32    `json:"-"`
 }
 
-func (m *ChangeReplicas) Reset()                    { *m = ChangeReplicas{} }
-func (*ChangeReplicas) ProtoMessage()               {}
-func (*ChangeReplicas) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{2} }
+func (m *ChangeReplicas) Reset()      { *m = ChangeReplicas{} }
+func (*ChangeReplicas) ProtoMessage() {}
+func (*ChangeReplicas) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{2}
+}
+func (m *ChangeReplicas) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChangeReplicas) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ChangeReplicas) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeReplicas.Merge(dst, src)
+}
+func (m *ChangeReplicas) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChangeReplicas) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChangeReplicas.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChangeReplicas proto.InternalMessageInfo
 
 // ComputeChecksum is emitted when a ComputeChecksum request is evaluated. It
 // instructs the replica to compute a checksum at the time the command is
@@ -72,39 +154,117 @@ type ComputeChecksum struct {
 	ChecksumID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=checksum_id,json=checksumId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"checksum_id"`
 	// SaveSnapshot indicates that the snapshot used to compute the checksum
 	// should be saved so that a diff of divergent replicas can later be computed.
-	SaveSnapshot bool `protobuf:"varint,2,opt,name=save_snapshot,json=saveSnapshot,proto3" json:"save_snapshot,omitempty"`
+	SaveSnapshot         bool     `protobuf:"varint,2,opt,name=save_snapshot,json=saveSnapshot,proto3" json:"save_snapshot,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ComputeChecksum) Reset()                    { *m = ComputeChecksum{} }
-func (m *ComputeChecksum) String() string            { return proto.CompactTextString(m) }
-func (*ComputeChecksum) ProtoMessage()               {}
-func (*ComputeChecksum) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{3} }
+func (m *ComputeChecksum) Reset()         { *m = ComputeChecksum{} }
+func (m *ComputeChecksum) String() string { return proto.CompactTextString(m) }
+func (*ComputeChecksum) ProtoMessage()    {}
+func (*ComputeChecksum) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{3}
+}
+func (m *ComputeChecksum) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ComputeChecksum) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ComputeChecksum) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ComputeChecksum.Merge(dst, src)
+}
+func (m *ComputeChecksum) XXX_Size() int {
+	return m.Size()
+}
+func (m *ComputeChecksum) XXX_DiscardUnknown() {
+	xxx_messageInfo_ComputeChecksum.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ComputeChecksum proto.InternalMessageInfo
 
 // Compaction holds core details about a suggested compaction.
 type Compaction struct {
 	// bytes indicates the expected space reclamation from compaction.
 	Bytes int64 `protobuf:"varint,1,opt,name=bytes,proto3" json:"bytes,omitempty"`
 	// suggested_at is nanoseconds since the epoch.
-	SuggestedAtNanos int64 `protobuf:"varint,2,opt,name=suggested_at_nanos,json=suggestedAtNanos,proto3" json:"suggested_at_nanos,omitempty"`
+	SuggestedAtNanos     int64    `protobuf:"varint,2,opt,name=suggested_at_nanos,json=suggestedAtNanos,proto3" json:"suggested_at_nanos,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Compaction) Reset()                    { *m = Compaction{} }
-func (m *Compaction) String() string            { return proto.CompactTextString(m) }
-func (*Compaction) ProtoMessage()               {}
-func (*Compaction) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{4} }
+func (m *Compaction) Reset()         { *m = Compaction{} }
+func (m *Compaction) String() string { return proto.CompactTextString(m) }
+func (*Compaction) ProtoMessage()    {}
+func (*Compaction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{4}
+}
+func (m *Compaction) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Compaction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Compaction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Compaction.Merge(dst, src)
+}
+func (m *Compaction) XXX_Size() int {
+	return m.Size()
+}
+func (m *Compaction) XXX_DiscardUnknown() {
+	xxx_messageInfo_Compaction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Compaction proto.InternalMessageInfo
 
 // SuggestedCompaction holds start and end keys in conjunction with
 // the compaction details.
 type SuggestedCompaction struct {
-	StartKey   github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,1,opt,name=start_key,json=startKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"start_key,omitempty"`
-	EndKey     github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,2,opt,name=end_key,json=endKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"end_key,omitempty"`
-	Compaction `protobuf:"bytes,3,opt,name=compaction,embedded=compaction" json:"compaction"`
+	StartKey             github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,1,opt,name=start_key,json=startKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"start_key,omitempty"`
+	EndKey               github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,2,opt,name=end_key,json=endKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"end_key,omitempty"`
+	Compaction           `protobuf:"bytes,3,opt,name=compaction,proto3,embedded=compaction" json:"compaction"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SuggestedCompaction) Reset()                    { *m = SuggestedCompaction{} }
-func (m *SuggestedCompaction) String() string            { return proto.CompactTextString(m) }
-func (*SuggestedCompaction) ProtoMessage()               {}
-func (*SuggestedCompaction) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{5} }
+func (m *SuggestedCompaction) Reset()         { *m = SuggestedCompaction{} }
+func (m *SuggestedCompaction) String() string { return proto.CompactTextString(m) }
+func (*SuggestedCompaction) ProtoMessage()    {}
+func (*SuggestedCompaction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{5}
+}
+func (m *SuggestedCompaction) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SuggestedCompaction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SuggestedCompaction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SuggestedCompaction.Merge(dst, src)
+}
+func (m *SuggestedCompaction) XXX_Size() int {
+	return m.Size()
+}
+func (m *SuggestedCompaction) XXX_DiscardUnknown() {
+	xxx_messageInfo_SuggestedCompaction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SuggestedCompaction proto.InternalMessageInfo
 
 // ReplicatedEvalResult is the structured information which together with
 // a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
@@ -119,37 +279,63 @@ type ReplicatedEvalResult struct {
 	// the comment on the ReplicaState message, this field is sparsely populated
 	// and any field set overwrites the corresponding field in the state, perhaps
 	// with additional side effects (for instance on a descriptor update).
-	State           *ReplicaState    `protobuf:"bytes,2,opt,name=state" json:"state,omitempty"`
-	Split           *Split           `protobuf:"bytes,3,opt,name=split" json:"split,omitempty"`
-	Merge           *Merge           `protobuf:"bytes,4,opt,name=merge" json:"merge,omitempty"`
-	ComputeChecksum *ComputeChecksum `protobuf:"bytes,21,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
+	State           *ReplicaState    `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	Split           *Split           `protobuf:"bytes,3,opt,name=split,proto3" json:"split,omitempty"`
+	Merge           *Merge           `protobuf:"bytes,4,opt,name=merge,proto3" json:"merge,omitempty"`
+	ComputeChecksum *ComputeChecksum `protobuf:"bytes,21,opt,name=compute_checksum,json=computeChecksum,proto3" json:"compute_checksum,omitempty"`
 	IsLeaseRequest  bool             `protobuf:"varint,6,opt,name=is_lease_request,json=isLeaseRequest,proto3" json:"is_lease_request,omitempty"`
 	// Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
 	// to verify the validity of the command (for lease coverage and GC
 	// threshold).
-	Timestamp            cockroach_util_hlc.Timestamp `protobuf:"bytes,8,opt,name=timestamp" json:"timestamp"`
-	IsConsistencyRelated bool                         `protobuf:"varint,9,opt,name=is_consistency_related,json=isConsistencyRelated,proto3" json:"is_consistency_related,omitempty"`
+	Timestamp            hlc.Timestamp `protobuf:"bytes,8,opt,name=timestamp,proto3" json:"timestamp"`
+	IsConsistencyRelated bool          `protobuf:"varint,9,opt,name=is_consistency_related,json=isConsistencyRelated,proto3" json:"is_consistency_related,omitempty"`
 	// The stats delta corresponding to the data in this WriteBatch. On
 	// a split, contains only the contributions to the left-hand side.
-	DeprecatedDelta *cockroach_storage_engine_enginepb1.MVCCStats    `protobuf:"bytes,10,opt,name=deprecated_delta,json=deprecatedDelta" json:"deprecated_delta,omitempty"`
-	Delta           cockroach_storage_engine_enginepb.MVCCStatsDelta `protobuf:"bytes,18,opt,name=delta" json:"delta"`
-	ChangeReplicas  *ChangeReplicas                                  `protobuf:"bytes,12,opt,name=change_replicas,json=changeReplicas" json:"change_replicas,omitempty"`
-	RaftLogDelta    int64                                            `protobuf:"varint,13,opt,name=raft_log_delta,json=raftLogDelta,proto3" json:"raft_log_delta,omitempty"`
-	AddSSTable      *ReplicatedEvalResult_AddSSTable                 `protobuf:"bytes,17,opt,name=add_sstable,json=addSstable" json:"add_sstable,omitempty"`
+	DeprecatedDelta *enginepb.MVCCStats              `protobuf:"bytes,10,opt,name=deprecated_delta,json=deprecatedDelta,proto3" json:"deprecated_delta,omitempty"`
+	Delta           enginepb.MVCCStatsDelta          `protobuf:"bytes,18,opt,name=delta,proto3" json:"delta"`
+	ChangeReplicas  *ChangeReplicas                  `protobuf:"bytes,12,opt,name=change_replicas,json=changeReplicas,proto3" json:"change_replicas,omitempty"`
+	RaftLogDelta    int64                            `protobuf:"varint,13,opt,name=raft_log_delta,json=raftLogDelta,proto3" json:"raft_log_delta,omitempty"`
+	AddSSTable      *ReplicatedEvalResult_AddSSTable `protobuf:"bytes,17,opt,name=add_sstable,json=addSstable,proto3" json:"add_sstable,omitempty"`
 	// suggested_compactions are sent to the engine's compactor to
 	// reclaim storage space after garbage collection or cleared /
 	// rebalanced ranges.
-	SuggestedCompactions []SuggestedCompaction `protobuf:"bytes,19,rep,name=suggested_compactions,json=suggestedCompactions" json:"suggested_compactions"`
+	SuggestedCompactions []SuggestedCompaction `protobuf:"bytes,19,rep,name=suggested_compactions,json=suggestedCompactions,proto3" json:"suggested_compactions"`
 	// This is the proposal timestamp for the active lease while evaluating a lease request.
 	// It will be used to make sure we know if a lease was extended after we sent out the request
 	// but before we tried to apply it.
-	PrevLeaseProposal *cockroach_util_hlc.Timestamp `protobuf:"bytes,20,opt,name=prev_lease_proposal,json=prevLeaseProposal" json:"prev_lease_proposal,omitempty"`
+	PrevLeaseProposal    *hlc.Timestamp `protobuf:"bytes,20,opt,name=prev_lease_proposal,json=prevLeaseProposal,proto3" json:"prev_lease_proposal,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *ReplicatedEvalResult) Reset()                    { *m = ReplicatedEvalResult{} }
-func (m *ReplicatedEvalResult) String() string            { return proto.CompactTextString(m) }
-func (*ReplicatedEvalResult) ProtoMessage()               {}
-func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{6} }
+func (m *ReplicatedEvalResult) Reset()         { *m = ReplicatedEvalResult{} }
+func (m *ReplicatedEvalResult) String() string { return proto.CompactTextString(m) }
+func (*ReplicatedEvalResult) ProtoMessage()    {}
+func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{6}
+}
+func (m *ReplicatedEvalResult) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicatedEvalResult) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicatedEvalResult) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicatedEvalResult.Merge(dst, src)
+}
+func (m *ReplicatedEvalResult) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicatedEvalResult) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicatedEvalResult.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicatedEvalResult proto.InternalMessageInfo
 
 // AddSSTable is a side effect that must execute before the Raft application
 // is committed. It must be idempotent to account for an ill-timed crash after
@@ -162,42 +348,118 @@ func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) { return fileDescripto
 // since these Ranges are not user-visible, but it is a general concern assuming
 // other such side effects are added.
 type ReplicatedEvalResult_AddSSTable struct {
-	Data  []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	CRC32 uint32 `protobuf:"varint,2,opt,name=crc32,proto3" json:"crc32,omitempty"`
+	Data                 []byte   `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	CRC32                uint32   `protobuf:"varint,2,opt,name=crc32,proto3" json:"crc32,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ReplicatedEvalResult_AddSSTable) Reset()         { *m = ReplicatedEvalResult_AddSSTable{} }
 func (m *ReplicatedEvalResult_AddSSTable) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult_AddSSTable) ProtoMessage()    {}
 func (*ReplicatedEvalResult_AddSSTable) Descriptor() ([]byte, []int) {
-	return fileDescriptorProposerKv, []int{6, 0}
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{6, 0}
 }
+func (m *ReplicatedEvalResult_AddSSTable) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicatedEvalResult_AddSSTable) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicatedEvalResult_AddSSTable) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicatedEvalResult_AddSSTable.Merge(dst, src)
+}
+func (m *ReplicatedEvalResult_AddSSTable) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicatedEvalResult_AddSSTable) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicatedEvalResult_AddSSTable.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicatedEvalResult_AddSSTable proto.InternalMessageInfo
 
 // WriteBatch is the serialized representation of a RocksDB write
 // batch. A wrapper message is used so that the absence of the field
 // can be distinguished from a zero-length batch, and so structs
 // containing pointers to it can be compared with the == operator.
 type WriteBatch struct {
-	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Data                 []byte   `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *WriteBatch) Reset()                    { *m = WriteBatch{} }
-func (m *WriteBatch) String() string            { return proto.CompactTextString(m) }
-func (*WriteBatch) ProtoMessage()               {}
-func (*WriteBatch) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{7} }
+func (m *WriteBatch) Reset()         { *m = WriteBatch{} }
+func (m *WriteBatch) String() string { return proto.CompactTextString(m) }
+func (*WriteBatch) ProtoMessage()    {}
+func (*WriteBatch) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{7}
+}
+func (m *WriteBatch) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WriteBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WriteBatch) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WriteBatch.Merge(dst, src)
+}
+func (m *WriteBatch) XXX_Size() int {
+	return m.Size()
+}
+func (m *WriteBatch) XXX_DiscardUnknown() {
+	xxx_messageInfo_WriteBatch.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WriteBatch proto.InternalMessageInfo
 
 // LogicalOpLog is a log of logical MVCC operations. A wrapper message
 // is used so that the absence of the field can be distinguished from a
 // zero-length batch, and so structs containing pointers to it can be
 // compared with the == operator.
 type LogicalOpLog struct {
-	Ops []cockroach_storage_engine_enginepb.MVCCLogicalOp `protobuf:"bytes,1,rep,name=ops" json:"ops"`
+	Ops                  []enginepb.MVCCLogicalOp `protobuf:"bytes,1,rep,name=ops,proto3" json:"ops"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *LogicalOpLog) Reset()                    { *m = LogicalOpLog{} }
-func (m *LogicalOpLog) String() string            { return proto.CompactTextString(m) }
-func (*LogicalOpLog) ProtoMessage()               {}
-func (*LogicalOpLog) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{8} }
+func (m *LogicalOpLog) Reset()         { *m = LogicalOpLog{} }
+func (m *LogicalOpLog) String() string { return proto.CompactTextString(m) }
+func (*LogicalOpLog) ProtoMessage()    {}
+func (*LogicalOpLog) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{8}
+}
+func (m *LogicalOpLog) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogicalOpLog) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogicalOpLog) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogicalOpLog.Merge(dst, src)
+}
+func (m *LogicalOpLog) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogicalOpLog) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogicalOpLog.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogicalOpLog proto.InternalMessageInfo
 
 // RaftCommand is the message written to the raft log. It contains
 // some metadata about the proposal itself, then either a BatchRequest
@@ -206,7 +468,7 @@ func (*LogicalOpLog) Descriptor() ([]byte, []int) { return fileDescriptorPropose
 type RaftCommand struct {
 	// proposer_replica is the replica which proposed this command, to be
 	// used for lease validation.
-	ProposerReplica cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,2,opt,name=proposer_replica,json=proposerReplica" json:"proposer_replica"`
+	ProposerReplica roachpb.ReplicaDescriptor `protobuf:"bytes,2,opt,name=proposer_replica,json=proposerReplica,proto3" json:"proposer_replica"`
 	// proposer_lease_seq is provided to verify at raft command apply-time
 	// that the lease under which the command was proposed remains in effect.
 	//
@@ -226,7 +488,7 @@ type RaftCommand struct {
 	// However, unless we add a check that all existing Raft logs on all nodes
 	// in the cluster contain only "new" leases, we won't be able to remove the
 	// legacy code.
-	DeprecatedProposerLease *cockroach_roachpb1.Lease `protobuf:"bytes,5,opt,name=deprecated_proposer_lease,json=deprecatedProposerLease" json:"deprecated_proposer_lease,omitempty"`
+	DeprecatedProposerLease *roachpb.Lease `protobuf:"bytes,5,opt,name=deprecated_proposer_lease,json=deprecatedProposerLease,proto3" json:"deprecated_proposer_lease,omitempty"`
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.
 	//
@@ -263,21 +525,47 @@ type RaftCommand struct {
 	// replicated_eval_result is a set of structured information that instructs
 	// replicated state changes to the part of a Range's replicated state machine
 	// that exists outside of RocksDB.
-	ReplicatedEvalResult ReplicatedEvalResult `protobuf:"bytes,13,opt,name=replicated_eval_result,json=replicatedEvalResult" json:"replicated_eval_result"`
+	ReplicatedEvalResult ReplicatedEvalResult `protobuf:"bytes,13,opt,name=replicated_eval_result,json=replicatedEvalResult,proto3" json:"replicated_eval_result"`
 	// write_batch is a RocksDB WriteBatch that will be applied to RockDB during
 	// the application of the Raft command. The batch can be thought of as a
 	// series of replicated instructions that inform a RocksDB engine on how to
 	// change.
-	WriteBatch *WriteBatch `protobuf:"bytes,14,opt,name=write_batch,json=writeBatch" json:"write_batch,omitempty"`
+	WriteBatch *WriteBatch `protobuf:"bytes,14,opt,name=write_batch,json=writeBatch,proto3" json:"write_batch,omitempty"`
 	// logical_op_log contains a series of logical MVCC operations that correspond
 	// to the physical operations being made in the write_batch.
-	LogicalOpLog *LogicalOpLog `protobuf:"bytes,15,opt,name=logical_op_log,json=logicalOpLog" json:"logical_op_log,omitempty"`
+	LogicalOpLog         *LogicalOpLog `protobuf:"bytes,15,opt,name=logical_op_log,json=logicalOpLog,proto3" json:"logical_op_log,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *RaftCommand) Reset()                    { *m = RaftCommand{} }
-func (m *RaftCommand) String() string            { return proto.CompactTextString(m) }
-func (*RaftCommand) ProtoMessage()               {}
-func (*RaftCommand) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{9} }
+func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
+func (m *RaftCommand) String() string { return proto.CompactTextString(m) }
+func (*RaftCommand) ProtoMessage()    {}
+func (*RaftCommand) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_e79e54048b29cf41, []int{9}
+}
+func (m *RaftCommand) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftCommand) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftCommand) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftCommand.Merge(dst, src)
+}
+func (m *RaftCommand) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftCommand) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftCommand.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftCommand proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Split)(nil), "cockroach.storage.storagepb.Split")
@@ -1075,6 +1363,9 @@ func encodeVarintProposerKv(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *Split) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.SplitTrigger.Size()
@@ -1085,6 +1376,9 @@ func (m *Split) Size() (n int) {
 }
 
 func (m *Merge) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.MergeTrigger.Size()
@@ -1093,6 +1387,9 @@ func (m *Merge) Size() (n int) {
 }
 
 func (m *ChangeReplicas) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ChangeReplicasTrigger.Size()
@@ -1101,6 +1398,9 @@ func (m *ChangeReplicas) Size() (n int) {
 }
 
 func (m *ComputeChecksum) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ChecksumID.Size()
@@ -1112,6 +1412,9 @@ func (m *ComputeChecksum) Size() (n int) {
 }
 
 func (m *Compaction) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Bytes != 0 {
@@ -1124,6 +1427,9 @@ func (m *Compaction) Size() (n int) {
 }
 
 func (m *SuggestedCompaction) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.StartKey)
@@ -1140,6 +1446,9 @@ func (m *SuggestedCompaction) Size() (n int) {
 }
 
 func (m *ReplicatedEvalResult) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.BlockReads {
@@ -1200,6 +1509,9 @@ func (m *ReplicatedEvalResult) Size() (n int) {
 }
 
 func (m *ReplicatedEvalResult_AddSSTable) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Data)
@@ -1213,6 +1525,9 @@ func (m *ReplicatedEvalResult_AddSSTable) Size() (n int) {
 }
 
 func (m *WriteBatch) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Data)
@@ -1223,6 +1538,9 @@ func (m *WriteBatch) Size() (n int) {
 }
 
 func (m *LogicalOpLog) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Ops) > 0 {
@@ -1235,6 +1553,9 @@ func (m *LogicalOpLog) Size() (n int) {
 }
 
 func (m *RaftCommand) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ProposerReplica.Size()
@@ -2120,7 +2441,7 @@ func (m *ReplicatedEvalResult) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DeprecatedDelta == nil {
-				m.DeprecatedDelta = &cockroach_storage_engine_enginepb1.MVCCStats{}
+				m.DeprecatedDelta = &enginepb.MVCCStats{}
 			}
 			if err := m.DeprecatedDelta.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2299,7 +2620,7 @@ func (m *ReplicatedEvalResult) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.PrevLeaseProposal == nil {
-				m.PrevLeaseProposal = &cockroach_util_hlc.Timestamp{}
+				m.PrevLeaseProposal = &hlc.Timestamp{}
 			}
 			if err := m.PrevLeaseProposal.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2595,7 +2916,7 @@ func (m *LogicalOpLog) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ops = append(m.Ops, cockroach_storage_engine_enginepb.MVCCLogicalOp{})
+			m.Ops = append(m.Ops, enginepb.MVCCLogicalOp{})
 			if err := m.Ops[len(m.Ops)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2726,7 +3047,7 @@ func (m *RaftCommand) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DeprecatedProposerLease == nil {
-				m.DeprecatedProposerLease = &cockroach_roachpb1.Lease{}
+				m.DeprecatedProposerLease = &roachpb.Lease{}
 			}
 			if err := m.DeprecatedProposerLease.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2973,9 +3294,11 @@ var (
 	ErrIntOverflowProposerKv   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/storagepb/proposer_kv.proto", fileDescriptorProposerKv) }
+func init() {
+	proto.RegisterFile("storage/storagepb/proposer_kv.proto", fileDescriptor_proposer_kv_e79e54048b29cf41)
+}
 
-var fileDescriptorProposerKv = []byte{
+var fileDescriptor_proposer_kv_e79e54048b29cf41 = []byte{
 	// 1312 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0xcf, 0x6e, 0xdb, 0xc6,
 	0x13, 0xb6, 0x6c, 0xca, 0xa1, 0x47, 0xb6, 0xc4, 0x6c, 0x9c, 0x84, 0xbf, 0xfc, 0x10, 0x2b, 0x90,

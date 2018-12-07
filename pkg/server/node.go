@@ -373,7 +373,7 @@ func (n *Node) bootstrap(
 func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
 	ctx := n.AnnotateCtx(context.Background())
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
-		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %s", cv))
+		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
 	}
 }
 
