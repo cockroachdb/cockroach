@@ -47,19 +47,14 @@ var (
 	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
 )
 
-func parseStatementList(sql string) (tree.StatementList, error) {
-	var p parser.Parser
-	return p.Parse(sql)
-}
-
 func verifyFormat(sql string) error {
-	stmts, err := parseStatementList(sql)
+	stmts, _, err := parser.Parse(sql)
 	if err != nil {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
 	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
-	formattedStmts, err := parseStatementList(formattedSQL)
+	formattedStmts, _, err := parser.Parse(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}

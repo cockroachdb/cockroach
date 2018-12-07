@@ -491,7 +491,7 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 		}
 		fmt.Println()
 	} else {
-		_, err := parser.Parse(fmt.Sprintf("select %s(??", funcName))
+		_, _, err := parser.Parse(fmt.Sprintf("select %s(??", funcName))
 		pgerr, ok := pgerror.GetPGCause(err)
 		if !ok || !strings.HasPrefix(pgerr.Hint, "help:") {
 			fmt.Fprintf(stderr,

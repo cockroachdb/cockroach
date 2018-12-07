@@ -1217,10 +1217,14 @@ func TestParse(t *testing.T) {
 		// Regression for #15926
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
+	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
+		stmts, strs, err := p.Parse(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+		}
+		if len(strs) == 1 && strs[0] != d.sql {
+			t.Errorf("expected string %s, got %s", d.sql, strs[0])
 		}
 		s := stmts.String()
 		if d.sql != s {
@@ -1870,7 +1874,7 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue))`},
 	}
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
+		stmts, _, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
@@ -1879,7 +1883,7 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := parser.Parse(s); err != nil {
+		if _, _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
@@ -1902,7 +1906,7 @@ func TestParseTree(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
+		stmts, _, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
@@ -1911,7 +1915,7 @@ func TestParseTree(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := parser.Parse(s); err != nil {
+		if _, _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
@@ -1931,7 +1935,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := parser.Parse(d.sql); err != nil {
+		if _, _, err := parser.Parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
@@ -2335,7 +2339,7 @@ HINT: try \h EXPLAIN`,
 		},
 	}
 	for _, d := range testData {
-		_, err := parser.Parse(d.sql)
+		_, _, err := parser.Parse(d.sql)
 		if err == nil {
 			t.Errorf("expected error, got nil for:\n%s", d.sql)
 			continue
@@ -2371,7 +2375,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := parser.Parse(s)
+	_, _, err := parser.Parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -2752,7 +2756,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 	}
 	for _, d := range testData {
-		_, err := parser.Parse(d.sql)
+		_, _, err := parser.Parse(d.sql)
 		if err == nil {
 			t.Errorf("%s: expected error, got nil", d.sql)
 			continue
@@ -2823,7 +2827,7 @@ func BenchmarkParse(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, err := parser.Parse(tc.query)
+				_, _, err := parser.Parse(tc.query)
 				if err != nil {
 					b.Fatal(err)
 				}
