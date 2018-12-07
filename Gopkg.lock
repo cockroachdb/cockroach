@@ -1367,7 +1367,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c1be45470234f3937c7c267b6ba610d5602fd56984d2b4ff0324cbdfe7c1ba63"
+  digest = "1:55a70b7b8111fbbe7f412b3839dbff52bfba5c35d04a21fedc0b0f724895b3a5"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
@@ -1384,31 +1384,32 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "3d3f9f413869b949e48070b5bc593aa22cc2b8f2"
+  revision = "505ab145d0a99da450461ae2c1a9f6cd10d1f447"
 
 [[projects]]
   branch = "master"
-  digest = "1:0e77bd1ff137584b2c0d86e545f1a99f077d0771076e25320d749bf84ebab3f7"
+  digest = "1:7f11db26ecf61940e5a0bf624bb630b3d89c0f989ae783fdf85c9ed896c0e79b"
   name = "golang.org/x/net"
   packages = [
     "context",
     "context/ctxhttp",
     "html",
     "html/atom",
+    "http/httpguts",
     "http2",
     "http2/hpack",
     "idna",
+    "internal/socks",
     "internal/timeseries",
-    "lex/httplex",
     "proxy",
     "trace",
   ]
   pruneopts = "UT"
-  revision = "c73622c77280266305273cb545f54516ced95b93"
+  revision = "351d144fa1fc0bd934e2408202be0c29f25e35a0"
 
 [[projects]]
   branch = "master"
-  digest = "1:1684f3f26d23b6fed3e9daa30e8f8424cb9012072e3621aaf7baefc96337d514"
+  digest = "1:23443edff0740e348959763085df98400dcfd85528d7771bb0ce9f5f2754ff4a"
   name = "golang.org/x/oauth2"
   packages = [
     ".",
@@ -1418,11 +1419,11 @@
     "jwt",
   ]
   pruneopts = "UT"
-  revision = "6881fee410a5daf86371371f9ad451b95e168b71"
+  revision = "d668ce993890a79bda886613ee587a69dd5da7a6"
 
 [[projects]]
   branch = "master"
-  digest = "1:3e0c248c3176e693252fb2ca549102f23cb10f2995fbc6aeb105272c0505f2f1"
+  digest = "1:826837a6c03df57828c1128425043fb47a6007c1ca701c8c094570563d49072d"
   name = "golang.org/x/perf"
   packages = [
     "benchstat",
@@ -1432,29 +1433,29 @@
     "storage/benchfmt",
   ]
   pruneopts = "UT"
-  revision = "4469e6ce8cc3920f1b42128b9d557bea2e08621a"
+  revision = "6e6d33e29852650cab301f4dbeac9b7d67c6d542"
 
 [[projects]]
   branch = "master"
-  digest = "1:39485a034b89a9f2892b9c0cc24e2330e1c9981794c35281c2febfcc55b90a34"
+  digest = "1:ac22b804b20a46ece20592447a2c675efccbcfb1bec61afee17ab1cd47dd227f"
   name = "golang.org/x/sync"
   packages = [
     "errgroup",
     "syncmap",
   ]
   pruneopts = "UT"
-  revision = "8e0aa688b654ef28caa72506fa5ec8dba9fc7690"
+  revision = "42b317875d0fa942474b76e1b46a6060d720ae6e"
 
 [[projects]]
   branch = "master"
-  digest = "1:e1a85d3648114c446b2874647bf30f646a8594e7e4e45db87fe962aba60e51f5"
+  digest = "1:b9dceb1408ba5105803d5859193bc7d89ac3199b611cf8681dbaa0aa09c10d9c"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "95c6576299259db960f6c5b9b69ea52422860fce"
+  revision = "70b957f3b65e069b4930ea94e2721eefa0f8f695"
 
 [[projects]]
   digest = "1:a4427f5b90e0d06b5b19d2891615137a814eb934c5a77397d0d5a753783e5f1e"
@@ -1480,15 +1481,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:51a479a09b7ed06b7be5a854e27fcc328718ae0e5ad159f9ddeef12d0326c2e7"
+  digest = "1:9fdc2b55e8e0fafe4b41884091e51e77344f7dc511c5acedcfd98200003bff90"
   name = "golang.org/x/time"
   packages = ["rate"]
   pruneopts = "UT"
-  revision = "6dc17368e09b0e8634d71cac8168d853e869a0c7"
+  revision = "85acf8d2951cb2a3bde7632f9ff273ef0379bcbd"
 
 [[projects]]
   branch = "master"
-  digest = "1:08224af962b4f6706598f999d43460f5c6a1080f033c586631d99d7ea8e5654f"
+  digest = "1:0919b0cefec5fdf196797c85e728a197b19a531a50e1044a6d1c7313be283332"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1498,12 +1499,13 @@
     "go/ast/astutil",
     "go/buildutil",
     "go/gcexportdata",
-    "go/gcimporter15",
+    "go/internal/cgo",
+    "go/internal/gcimporter",
     "go/loader",
     "go/types/typeutil",
   ]
   pruneopts = "UT"
-  revision = "90b807ada4cc7ab5d1409d637b1f3beb5a776be7"
+  revision = "bcd4e47d02889ebbc25c9f4bf3d27e4124b0bf9d"
 
 [[projects]]
   branch = "master"
