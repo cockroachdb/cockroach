@@ -1691,6 +1691,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
 
+	// Delete all orphaned table leases created by a prior instance of this
+	// node.
+	s.leaseMgr.DeleteOrphanedLeases(startTime)
+
 	log.Event(ctx, "server ready")
 
 	return nil
