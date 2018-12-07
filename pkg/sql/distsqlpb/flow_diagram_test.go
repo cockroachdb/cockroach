@@ -114,8 +114,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 			},
 			{
 				Input: []InputSyncSpec{{
-					Type:     InputSyncSpec_ORDERED,
-					Ordering: Ordering{Columns: []Ordering_Column{{1, Ordering_Column_ASC}}},
+					Type: InputSyncSpec_ORDERED,
+					Ordering: Ordering{Columns: []Ordering_Column{
+						{ColIdx: 1, Direction: Ordering_Column_ASC}},
+					},
 					Streams: []StreamEndpointSpec{
 						{StreamID: 0},
 						{StreamID: 1},

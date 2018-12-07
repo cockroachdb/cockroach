@@ -278,7 +278,7 @@ func fetchTableDescriptorVersions(
 				}
 				unsafeValue := it.UnsafeValue()
 				if unsafeValue == nil {
-					return errors.Errorf(`"%s" was dropped or truncated`, origName)
+					return errors.Errorf(`"%v" was dropped or truncated`, origName)
 				}
 				value := roachpb.Value{RawBytes: unsafeValue}
 				var desc sqlbase.Descriptor

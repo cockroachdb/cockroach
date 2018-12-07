@@ -14,28 +14,86 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // UserPrivileges describes the list of privileges available for a given user.
 type UserPrivileges struct {
 	User string `protobuf:"bytes,1,opt,name=user" json:"user"`
 	// privileges is a bitfield of 1<<Privilege values.
-	Privileges uint32 `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
+	Privileges           uint32   `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UserPrivileges) Reset()                    { *m = UserPrivileges{} }
-func (m *UserPrivileges) String() string            { return proto.CompactTextString(m) }
-func (*UserPrivileges) ProtoMessage()               {}
-func (*UserPrivileges) Descriptor() ([]byte, []int) { return fileDescriptorPrivilege, []int{0} }
+func (m *UserPrivileges) Reset()         { *m = UserPrivileges{} }
+func (m *UserPrivileges) String() string { return proto.CompactTextString(m) }
+func (*UserPrivileges) ProtoMessage()    {}
+func (*UserPrivileges) Descriptor() ([]byte, []int) {
+	return fileDescriptor_privilege_a8444a679d17e9af, []int{0}
+}
+func (m *UserPrivileges) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserPrivileges) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UserPrivileges) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserPrivileges.Merge(dst, src)
+}
+func (m *UserPrivileges) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserPrivileges) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserPrivileges.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserPrivileges proto.InternalMessageInfo
 
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 type PrivilegeDescriptor struct {
-	Users []UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users"`
+	Users                []UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
-func (m *PrivilegeDescriptor) Reset()                    { *m = PrivilegeDescriptor{} }
-func (m *PrivilegeDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*PrivilegeDescriptor) ProtoMessage()               {}
-func (*PrivilegeDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorPrivilege, []int{1} }
+func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
+func (m *PrivilegeDescriptor) String() string { return proto.CompactTextString(m) }
+func (*PrivilegeDescriptor) ProtoMessage()    {}
+func (*PrivilegeDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_privilege_a8444a679d17e9af, []int{1}
+}
+func (m *PrivilegeDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PrivilegeDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PrivilegeDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PrivilegeDescriptor.Merge(dst, src)
+}
+func (m *PrivilegeDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *PrivilegeDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_PrivilegeDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PrivilegeDescriptor proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*UserPrivileges)(nil), "cockroach.sql.sqlbase.UserPrivileges")
@@ -106,6 +164,9 @@ func encodeVarintPrivilege(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *UserPrivileges) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.User)
@@ -115,6 +176,9 @@ func (m *UserPrivileges) Size() (n int) {
 }
 
 func (m *PrivilegeDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Users) > 0 {
@@ -423,9 +487,11 @@ var (
 	ErrIntOverflowPrivilege   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/sqlbase/privilege.proto", fileDescriptorPrivilege) }
+func init() {
+	proto.RegisterFile("sql/sqlbase/privilege.proto", fileDescriptor_privilege_a8444a679d17e9af)
+}
 
-var fileDescriptorPrivilege = []byte{
+var fileDescriptor_privilege_a8444a679d17e9af = []byte{
 	// 210 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2e, 0x2e, 0xcc, 0xd1,
 	0x2f, 0x2e, 0xcc, 0x49, 0x4a, 0x2c, 0x4e, 0xd5, 0x2f, 0x28, 0xca, 0x2c, 0xcb, 0xcc, 0x49, 0x4d,

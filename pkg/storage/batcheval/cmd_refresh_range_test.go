@@ -123,7 +123,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	} else if intent != nil {
 		t.Fatalf("got unexpected intent: %v", intent)
 	} else if !val.EqualData(v) {
-		t.Fatalf("expected %s, got %s", v, val)
+		t.Fatalf("expected %v, got %v", v, val)
 	}
 
 	// Now the real test: a transaction at ts2 has been pushed to ts3

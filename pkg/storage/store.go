@@ -1781,7 +1781,7 @@ func Bootstrap(
 ) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
 	if err == nil {
-		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent)
+		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent.String())
 	}
 	if _, ok := err.(*NotBootstrappedError); !ok {
 		return err
@@ -1927,7 +1927,7 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 		for i, kv := range kvs {
 			keyVals[i] = fmt.Sprintf("%s: %q", kv.Key, kv.Value)
 		}
-		return errors.Errorf("engine belongs to store %s, contains %s", ident, keyVals)
+		return errors.Errorf("engine belongs to store %s, contains %s", ident.String(), keyVals)
 	}
 	return nil
 }

@@ -86,6 +86,11 @@ ignored = [
   name = "golang.org/x/crypto"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/gogo/protobuf"
+  source = "https://github.com/cockroachdb/gogoproto"
+  branch = "v1.2.0-with-clone-fix"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #

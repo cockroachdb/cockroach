@@ -67,10 +67,10 @@ func TestLicense(t *testing.T) {
 		var lic *License
 		if tc.licType != -1 {
 			s, err := License{
-				tc.grantedTo,
-				tc.expiration.Unix(),
-				tc.licType,
-				fmt.Sprintf("tc-%d", i),
+				ClusterID:         tc.grantedTo,
+				ValidUntilUnixSec: tc.expiration.Unix(),
+				Type:              tc.licType,
+				OrganizationName:  fmt.Sprintf("tc-%d", i),
 			}.Encode()
 			if err != nil {
 				t.Fatal(err)
