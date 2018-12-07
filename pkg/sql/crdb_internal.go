@@ -96,8 +96,7 @@ CREATE TABLE crdb_internal.node_build_info (
   node_id INT NOT NULL,
   field   STRING NOT NULL,
   value   STRING NOT NULL
-);
-`,
+)`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
 		nodeID := tree.NewDInt(tree.DInt(int64(execCfg.NodeID.Get())))
@@ -130,8 +129,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
   component STRING NOT NULL,
   field     STRING NOT NULL,
   value     STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "access the node runtime information"); err != nil {
 			return err
@@ -198,8 +196,7 @@ CREATE TABLE crdb_internal.tables (
   sc_lease_expiration_time TIMESTAMP,
   drop_time                TIMESTAMP,
   audit_mode               STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
@@ -275,8 +272,7 @@ CREATE TABLE crdb_internal.schema_changes (
   target_name   STRING,
   state         STRING NOT NULL,
   direction     STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
@@ -333,8 +329,7 @@ CREATE TABLE crdb_internal.leases (
   parent_id   INT NOT NULL,
   expiration  TIMESTAMP NOT NULL,
   deleted     BOOL NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
 		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
@@ -410,8 +405,7 @@ CREATE TABLE crdb_internal.jobs (
 	high_water_timestamp	DECIMAL,
 	error              		STRING,
 	coordinator_id     		INT
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, _ /* cols */, err :=
@@ -547,8 +541,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
   overhead_lat_var    FLOAT NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
 			return err
@@ -650,8 +643,7 @@ CREATE TABLE crdb_internal.session_trace (
   tag         STRING NOT NULL,     -- The logging tag, if any.
   message     STRING NOT NULL,     -- The logged message.
   age         INTERVAL NOT NULL    -- The age of this message relative to the beginning of the trace.
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		rows, err := p.ExtendedEvalContext().Tracing.getSessionTrace()
 		if err != nil {
@@ -675,8 +667,7 @@ CREATE TABLE crdb_internal.cluster_settings (
   value         STRING NOT NULL,
   type          STRING NOT NULL,
   description   STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.cluster_settings"); err != nil {
 			return err
@@ -702,8 +693,7 @@ var crdbInternalSessionVariablesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.session_variables (
   variable STRING NOT NULL,
   value    STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
@@ -730,8 +720,7 @@ CREATE TABLE crdb_internal.%s (
   application_name STRING,         -- the name of the application as per SET application_name
   distributed      BOOL,           -- whether the query is running distributed
   phase            STRING          -- the current execution phase
-);
-`
+)`
 
 func (p *planner) makeSessionsRequest(ctx context.Context) serverpb.ListSessionsRequest {
 	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
@@ -836,7 +825,7 @@ CREATE TABLE crdb_internal.%s (
   kv_txn             STRING,         -- the ID of the current KV transaction
   alloc_bytes        INT,            -- the number of bytes allocated by the session
   max_alloc_bytes    INT             -- the high water mark of bytes allocated by the session
-);
+)
 `
 
 // crdbInternalLocalSessionsTable exposes the list of running sessions
@@ -968,7 +957,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
   store_id 	         INT NULL,         -- the store, if any, for this metric
   name               STRING NOT NULL,  -- name of the metric
   value							 FLOAT NOT NULL    -- value of the metric
-);`,
+)`,
 
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.node_metrics"); err != nil {
@@ -1010,8 +999,7 @@ CREATE TABLE crdb_internal.builtin_functions (
   signature STRING NOT NULL,
   category  STRING NOT NULL,
   details   STRING NOT NULL
-);
-`,
+)`,
 	populate: func(ctx context.Context, _ *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames {
 			props, overloads := builtins.GetBuiltinProperties(name)

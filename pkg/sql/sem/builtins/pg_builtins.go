@@ -807,7 +807,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					ctx.Ctx(), "pg_table_is_visible",
 					ctx.Txn,
 					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
-						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true));", oid)
+						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true))", oid)
 				if err != nil {
 					return nil, err
 				}
