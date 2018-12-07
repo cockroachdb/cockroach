@@ -21,6 +21,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,8 +53,8 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 		EvalCtx:  &evalCtx,
 	}
 
-	spec := &SamplerSpec{SampleSize: uint32(numSamples)}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
+	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,20 +170,20 @@ func TestSamplerSketch(t *testing.T) {
 		EvalCtx:  &evalCtx,
 	}
 
-	spec := &SamplerSpec{
+	spec := &distsqlpb.SamplerSpec{
 		SampleSize: uint32(1),
-		Sketches: []SketchSpec{
+		Sketches: []distsqlpb.SketchSpec{
 			{
-				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{0},
 			},
 			{
-				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{1},
 			},
 		},
 	}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

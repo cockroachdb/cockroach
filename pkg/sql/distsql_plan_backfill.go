@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
@@ -32,8 +32,8 @@ func initBackfillerSpec(
 	chunkSize int64,
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
-) (distsqlrun.BackfillerSpec, error) {
-	ret := distsqlrun.BackfillerSpec{
+) (distsqlpb.BackfillerSpec, error) {
+	ret := distsqlpb.BackfillerSpec{
 		Table:       desc,
 		Duration:    duration,
 		ChunkSize:   chunkSize,
@@ -42,11 +42,11 @@ func initBackfillerSpec(
 	}
 	switch backfillType {
 	case indexBackfill:
-		ret.Type = distsqlrun.BackfillerSpec_Index
+		ret.Type = distsqlpb.BackfillerSpec_Index
 	case columnBackfill:
-		ret.Type = distsqlrun.BackfillerSpec_Column
+		ret.Type = distsqlpb.BackfillerSpec_Column
 	default:
-		return distsqlrun.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
+		return distsqlpb.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
 	}
 	return ret, nil
 }
@@ -77,18 +77,18 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	var p PhysicalPlan
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
-		ib := &distsqlrun.BackfillerSpec{}
+		ib := &distsqlpb.BackfillerSpec{}
 		*ib = spec
-		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		ib.Spans = make([]distsqlpb.TableReaderSpan, len(sp.Spans))
 		for j := range sp.Spans {
 			ib.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
-			Spec: distsqlrun.ProcessorSpec{
-				Core:   distsqlrun.ProcessorCoreUnion{Backfiller: ib},
-				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+			Spec: distsqlpb.ProcessorSpec{
+				Core:   distsqlpb.ProcessorCoreUnion{Backfiller: ib},
+				Output: []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 			},
 		}
 

@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -104,7 +105,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
 		types := sqlbase.RandColumnTypes(rng, rowLen)
-		info := make([]DatumInfo, rowLen)
+		info := make([]distsqlpb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]
 			info[i].Encoding = sqlbase.RandDatumEncoding(rng)

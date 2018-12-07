@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -49,7 +50,7 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 type runnerRequest struct {
 	ctx        context.Context
 	nodeDialer *nodedialer.Dialer
-	flowReq    *distsqlrun.SetupFlowRequest
+	flowReq    *distsqlpb.SetupFlowRequest
 	nodeID     roachpb.NodeID
 	resultChan chan<- runnerResult
 }
@@ -70,7 +71,7 @@ func (req runnerRequest) run() {
 	if err != nil {
 		res.err = err
 	} else {
-		client := distsqlrun.NewDistSQLClient(conn)
+		client := distsqlpb.NewDistSQLClient(conn)
 		// TODO(radu): do we want a timeout here?
 		resp, err := client.SetupFlow(req.ctx, req.flowReq)
 		if err != nil {
@@ -162,7 +163,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		json, url, err := distsqlrun.GeneratePlanDiagramURL(flows)
+		json, url, err := distsqlpb.GeneratePlanDiagramURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
@@ -180,8 +181,8 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
-	setupReq := distsqlrun.SetupFlowRequest{
+	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
+	setupReq := distsqlpb.SetupFlowRequest{
 		Version:     distsqlrun.Version,
 		EvalContext: evalCtxProto,
 		TraceKV:     evalCtx.Tracing.KVTracingEnabled(),

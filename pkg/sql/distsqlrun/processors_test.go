@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -59,13 +60,13 @@ func TestPostProcess(t *testing.T) {
 	}
 
 	testCases := []struct {
-		post          PostProcessSpec
+		post          distsqlpb.PostProcessSpec
 		outputTypes   []sqlbase.ColumnType
 		expNeededCols []int
 		expected      string
 	}{
 		{
-			post:          PostProcessSpec{},
+			post:          distsqlpb.PostProcessSpec{},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -73,8 +74,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -83,7 +84,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Projection.
 		{
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -94,8 +95,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter only refers to projected column.
 		{
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 = 1"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -106,8 +107,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter refers to non-projected column.
 		{
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@2 = 2"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@2 = 2"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -118,8 +119,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering.
 		{
-			post: PostProcessSpec{
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
@@ -128,9 +129,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column used in rendering.
 		{
-			post: PostProcessSpec{
-				Filter:      Expression{Expr: "@2 = 2"},
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				Filter:      distsqlpb.Expression{Expr: "@2 = 2"},
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
@@ -139,9 +140,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column not used in rendering.
 		{
-			post: PostProcessSpec{
-				Filter:      Expression{Expr: "@3 = 4"},
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				Filter:      distsqlpb.Expression{Expr: "@3 = 4"},
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -150,8 +151,8 @@ func TestPostProcess(t *testing.T) {
 
 		// More complex rendering expressions.
 		{
-			post: PostProcessSpec{
-				RenderExprs: []Expression{
+			post: distsqlpb.PostProcessSpec{
+				RenderExprs: []distsqlpb.Expression{
 					{Expr: "@1 - @2"},
 					{Expr: "@1 + @2 * @3"},
 					{Expr: "@1 >= 2"},
@@ -178,7 +179,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset.
 		{
-			post:          PostProcessSpec{Offset: 3},
+			post:          distsqlpb.PostProcessSpec{Offset: 3},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -186,25 +187,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Limit.
 		{
-			post:          PostProcessSpec{Limit: 3},
+			post:          distsqlpb.PostProcessSpec{Limit: 3},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 9},
+			post:          distsqlpb.PostProcessSpec{Limit: 9},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 10},
+			post:          distsqlpb.PostProcessSpec{Limit: 10},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 11},
+			post:          distsqlpb.PostProcessSpec{Limit: 11},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -212,25 +213,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset + limit.
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 2},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 2},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 6},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 6},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 7},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 7},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 8},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 8},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -238,8 +239,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + offset.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Offset: 1,
 			},
 			outputTypes:   threeIntCols,
@@ -249,8 +250,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + limit.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Limit:  2,
 			},
 			outputTypes:   threeIntCols,
@@ -320,74 +321,74 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	colIdx2 := uint32(1)
 
 	for i, tc := range []struct {
-		a, b     AggregatorSpec_Aggregation
+		a, b     distsqlpb.AggregatorSpec_Aggregation
 		expected bool
 	}{
 		// Func tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_AVG},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_AVG},
 			expected: false,
 		},
 
 		// ColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 
 		// FilterColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
 			expected: false,
 		},
 
 		// Distinct tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 	} {
@@ -417,7 +418,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := NewRepeatableRowSource(oneIntCol, makeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &PostProcessSpec{}, &RowDisposer{})
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &RowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

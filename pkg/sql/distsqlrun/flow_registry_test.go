@@ -16,13 +16,14 @@ package distsqlrun
 
 import (
 	"context"
-	math "math"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,7 +37,7 @@ import (
 // registered, waits until it gets registered - up to the given timeout. If the
 // timeout elapses and the flow is not registered, the bool return value will be
 // false.
-func lookupFlow(fr *flowRegistry, fid FlowID, timeout time.Duration) *Flow {
+func lookupFlow(fr *flowRegistry, fid distsqlpb.FlowID, timeout time.Duration) *Flow {
 	fr.Lock()
 	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
@@ -55,7 +56,9 @@ func lookupFlow(fr *flowRegistry, fid FlowID, timeout time.Duration) *Flow {
 //
 // A copy of the registry's inboundStreamInfo is returned so it can be accessed
 // without locking.
-func lookupStreamInfo(fr *flowRegistry, fid FlowID, sid StreamID) (inboundStreamInfo, error) {
+func lookupStreamInfo(
+	fr *flowRegistry, fid distsqlpb.FlowID, sid distsqlpb.StreamID,
+) (inboundStreamInfo, error) {
 	fr.Lock()
 	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
@@ -73,16 +76,16 @@ func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	reg := makeFlowRegistry(roachpb.NodeID(0))
 
-	id1 := FlowID{uuid.MakeV4()}
+	id1 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &Flow{}
 
-	id2 := FlowID{uuid.MakeV4()}
+	id2 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	f2 := &Flow{}
 
-	id3 := FlowID{uuid.MakeV4()}
+	id3 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	f3 := &Flow{}
 
-	id4 := FlowID{uuid.MakeV4()}
+	id4 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	f4 := &Flow{}
 
 	// A basic duration; needs to be significantly larger than possible delays
@@ -216,13 +219,13 @@ func TestStreamConnectionTimeout(t *testing.T) {
 
 	// Register a flow with a very low timeout. After it times out, we'll attempt
 	// to connect a stream, but it'll be too late.
-	id1 := FlowID{uuid.MakeV4()}
+	id1 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &Flow{}
-	streamID1 := StreamID(1)
+	streamID1 := distsqlpb.StreamID(1)
 	consumer := &RowBuffer{}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	inboundStreams := map[StreamID]*inboundStreamInfo{
+	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		streamID1: {receiver: consumer, waitGroup: wg},
 	}
 	if err := reg.RegisterFlow(
@@ -292,8 +295,8 @@ func TestHandshake(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			flowID := FlowID{uuid.MakeV4()}
-			streamID := StreamID(1)
+			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+			streamID := distsqlpb.StreamID(1)
 
 			serverStream, clientStream, cleanup, err := createDummyStream()
 			if err != nil {
@@ -316,7 +319,7 @@ func TestHandshake(t *testing.T) {
 				consumer := &RowBuffer{}
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
-				inboundStreams := map[StreamID]*inboundStreamInfo{
+				inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 					streamID: {receiver: consumer, waitGroup: wg},
 				}
 				if err := reg.RegisterFlow(
@@ -377,8 +380,8 @@ func TestFlowRegistryDrain(t *testing.T) {
 	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	flow := &Flow{}
-	id := FlowID{uuid.MakeV4()}
-	registerFlow := func(t *testing.T, id FlowID) {
+	id := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	registerFlow := func(t *testing.T, id distsqlpb.FlowID) {
 		t.Helper()
 		if err := reg.RegisterFlow(
 			ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
@@ -422,7 +425,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		}()
 		// Be relatively sure that the flowRegistry is draining.
 		time.Sleep(time.Microsecond)
-		newFlowID := FlowID{uuid.MakeV4()}
+		newFlowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 		registerFlow(t, newFlowID)
 		reg.UnregisterFlow(id)
 		select {
@@ -530,25 +533,25 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
 
 	// We create some flow; it doesn't matter what.
-	req := SetupFlowRequest{Version: Version}
-	req.Flow = FlowSpec{
-		Processors: []ProcessorSpec{
+	req := distsqlpb.SetupFlowRequest{Version: Version}
+	req.Flow = distsqlpb.FlowSpec{
+		Processors: []distsqlpb.ProcessorSpec{
 			{
-				Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
-				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				Core: distsqlpb.ProcessorCoreUnion{Values: &distsqlpb.ValuesCoreSpec{}},
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []distsqlpb.StreamEndpointSpec{{StreamID: 1, Type: distsqlpb.StreamEndpointSpec_REMOTE}},
 				}},
 			},
 			{
-				Input: []InputSyncSpec{{
-					Type:    InputSyncSpec_UNORDERED,
-					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				Input: []distsqlpb.InputSyncSpec{{
+					Type:    distsqlpb.InputSyncSpec_UNORDERED,
+					Streams: []distsqlpb.StreamEndpointSpec{{StreamID: 1, Type: distsqlpb.StreamEndpointSpec_REMOTE}},
 				}},
-				Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
-				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+				Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
 				}},
 			},
 		},
@@ -584,7 +587,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
 	rb := &RowBuffer{}
-	inboundStreams := map[StreamID]*inboundStreamInfo{
+	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rb,
 			waitGroup: &wg,
@@ -592,7 +595,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	}
 	wg.Add(1)
 	if err := fr.RegisterFlow(
-		context.Background(), FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+		context.Background(), distsqlpb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}

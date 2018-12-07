@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -64,8 +65,8 @@ var scrubTableReaderProcName = "scrub"
 func newScrubTableReader(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *TableReaderSpec,
-	post *PostProcessSpec,
+	spec *distsqlpb.TableReaderSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*scrubTableReader, error) {
 	if flowCtx.nodeID == 0 {
@@ -126,7 +127,7 @@ func newScrubTableReader(
 	if _, _, err := initRowFetcher(
 		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
-		ScanVisibility_PUBLIC,
+		distsqlpb.ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}

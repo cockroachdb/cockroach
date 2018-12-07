@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,30 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package distsqlpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// StreamID identifies a stream; it may be local to a flow or it may cross
+// machine boundaries. The identifier can only be used in the context of a
+// specific flow.
+type StreamID int
+
+// FlowID identifies a flow. It is most importantly used when setting up streams
+// between nodes.
+type FlowID struct {
+	uuid.UUID
+}
+
+// DistSQLVersion identifies DistSQL engine versions.
+type DistSQLVersion uint32
+
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
-// distsqlrun.EvalContext proto.
+// distsqlpb.EvalContext proto.
 func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
 	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {

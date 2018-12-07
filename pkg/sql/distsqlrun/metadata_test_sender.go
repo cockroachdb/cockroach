@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -41,7 +42,7 @@ func newMetadataTestSender(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	id string,
 ) (*metadataTestSender, error) {
@@ -60,7 +61,7 @@ func newMetadataTestSender(
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
 				meta := ProducerMetadata{
-					RowNum: &RemoteProducerMetadata_RowNum{
+					RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
 						RowNum:   mts.rowNumCnt,
 						SenderID: mts.id,
 						LastMsg:  true,
@@ -88,7 +89,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++
 		return nil, &ProducerMetadata{
-			RowNum: &RemoteProducerMetadata_RowNum{
+			RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
 				RowNum:   mts.rowNumCnt,
 				SenderID: mts.id,
 				LastMsg:  false,

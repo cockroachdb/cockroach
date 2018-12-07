@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -35,7 +36,11 @@ var _ RowSource = &noopProcessor{}
 const noopProcName = "noop"
 
 func newNoopProcessor(
-	flowCtx *FlowCtx, processorID int32, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	input RowSource,
+	post *distsqlpb.PostProcessSpec,
+	output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.Init(

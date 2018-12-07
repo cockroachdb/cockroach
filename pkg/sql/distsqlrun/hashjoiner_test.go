@@ -17,13 +17,14 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	math "math"
+	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -92,8 +93,8 @@ func TestHashJoiner(t *testing.T) {
 				if flowCtxSetup != nil {
 					flowCtxSetup(&flowCtx)
 				}
-				post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-				spec := &HashJoinerSpec{
+				post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+				spec := &distsqlpb.HashJoinerSpec{
 					LeftEqColumns:  c.leftEqCols,
 					RightEqColumns: c.rightEqCols,
 					Type:           c.joinType,
@@ -216,8 +217,8 @@ func TestHashJoinerError(t *testing.T) {
 				diskMonitor: &diskMonitor,
 			}
 
-			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			spec := &HashJoinerSpec{
+			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			spec := &distsqlpb.HashJoinerSpec{
 				LeftEqColumns:  c.leftEqCols,
 				RightEqColumns: c.rightEqCols,
 				Type:           c.joinType,
@@ -294,7 +295,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := HashJoinerSpec{
+	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -354,7 +355,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		EvalCtx:  &evalCtx,
 	}
 
-	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -398,7 +399,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := HashJoinerSpec{
+	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -481,7 +482,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// infrastructure.
 	settingUseTempStorageJoins.Override(&st.SV, false)
 
-	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -547,13 +548,13 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer tempEngine.Close()
 	flowCtx.TempStorage = tempEngine
 
-	spec := &HashJoinerSpec{
+	spec := &distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {

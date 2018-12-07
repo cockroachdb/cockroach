@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -58,7 +59,7 @@ func newMaterializer(
 	input exec.Operator,
 	types []sqlbase.ColumnType,
 	outputToInputColIdx []int,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*materializer, error) {
 	m := &materializer{

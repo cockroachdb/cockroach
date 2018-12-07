@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -62,13 +63,13 @@ func TestClusterFlow(t *testing.T) {
 
 	kvDB := tc.Server(0).DB()
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-	makeIndexSpan := func(start, end int) TableReaderSpan {
+	makeIndexSpan := func(start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(desc, desc.Indexes[0].ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return TableReaderSpan{Span: span}
+		return distsqlpb.TableReaderSpan{Span: span}
 	}
 
 	// Set up table readers on three hosts feeding data into a join reader on
@@ -92,120 +93,121 @@ func TestClusterFlow(t *testing.T) {
 	)
 	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 
-	tr1 := TableReaderSpec{
+	tr1 := distsqlpb.TableReaderSpec{
 		Table:    *desc,
 		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(0, 8)},
+		Spans:    []distsqlpb.TableReaderSpan{makeIndexSpan(0, 8)},
 	}
 
-	tr2 := TableReaderSpec{
+	tr2 := distsqlpb.TableReaderSpec{
 		Table:    *desc,
 		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(8, 12)},
+		Spans:    []distsqlpb.TableReaderSpan{makeIndexSpan(8, 12)},
 	}
 
-	tr3 := TableReaderSpec{
+	tr3 := distsqlpb.TableReaderSpec{
 		Table:    *desc,
 		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(12, 100)},
+		Spans:    []distsqlpb.TableReaderSpan{makeIndexSpan(12, 100)},
 	}
 
-	fid := FlowID{uuid.MakeV4()}
+	fid := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 
-	req1 := &SetupFlowRequest{
+	req1 := &distsqlpb.SetupFlowRequest{
 		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
-		Flow: FlowSpec{
+		Flow: distsqlpb.FlowSpec{
 			FlowID: fid,
-			Processors: []ProcessorSpec{{
-				Core: ProcessorCoreUnion{TableReader: &tr1},
-				Post: PostProcessSpec{
+			Processors: []distsqlpb.ProcessorSpec{{
+				Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr1},
+				Post: distsqlpb.PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
-				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []distsqlpb.StreamEndpointSpec{
+						{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
 			}},
 		},
 	}
 
-	req2 := &SetupFlowRequest{
+	req2 := &distsqlpb.SetupFlowRequest{
 		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
-		Flow: FlowSpec{
+		Flow: distsqlpb.FlowSpec{
 			FlowID: fid,
-			Processors: []ProcessorSpec{{
-				Core: ProcessorCoreUnion{TableReader: &tr2},
-				Post: PostProcessSpec{
+			Processors: []distsqlpb.ProcessorSpec{{
+				Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr2},
+				Post: distsqlpb.PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
-				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []distsqlpb.StreamEndpointSpec{
+						{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
 			}},
 		},
 	}
 
-	req3 := &SetupFlowRequest{
+	req3 := &distsqlpb.SetupFlowRequest{
 		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
-		Flow: FlowSpec{
+		Flow: distsqlpb.FlowSpec{
 			FlowID: fid,
-			Processors: []ProcessorSpec{
+			Processors: []distsqlpb.ProcessorSpec{
 				{
-					Core: ProcessorCoreUnion{TableReader: &tr3},
-					Post: PostProcessSpec{
+					Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr3},
+					Post: distsqlpb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{0, 1},
 					},
-					Output: []OutputRouterSpec{{
-						Type: OutputRouterSpec_PASS_THROUGH,
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
 					}},
 				},
 				{
-					Input: []InputSyncSpec{{
-						Type:     InputSyncSpec_ORDERED,
-						Ordering: Ordering{Columns: []Ordering_Column{{1, Ordering_Column_ASC}}},
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_REMOTE, StreamID: 0},
-							{Type: StreamEndpointSpec_REMOTE, StreamID: 1},
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+					Input: []distsqlpb.InputSyncSpec{{
+						Type: distsqlpb.InputSyncSpec_ORDERED,
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{
+							{ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 0},
+							{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 1},
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
 						ColumnTypes: twoIntCols,
 					}},
-					Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
-					Post: PostProcessSpec{
+					Core: distsqlpb.ProcessorCoreUnion{JoinReader: &distsqlpb.JoinReaderSpec{Table: *desc}},
+					Post: distsqlpb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{2},
 					},
-					Output: []OutputRouterSpec{{
-						Type:    OutputRouterSpec_PASS_THROUGH,
-						Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
 					}},
 				},
 			},
 		},
 	}
 
-	var clients []DistSQLClient
+	var clients []distsqlpb.DistSQLClient
 	for i := 0; i < 3; i++ {
 		s := tc.Server(i)
 		conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		clients = append(clients, NewDistSQLClient(conn))
+		clients = append(clients, distsqlpb.NewDistSQLClient(conn))
 	}
 
 	log.Infof(ctx, "Setting up flow on 0")
@@ -227,7 +229,7 @@ func TestClusterFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
+	err = stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: req3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,12 +377,12 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	joinerSpec := MergeJoinerSpec{
-		LeftOrdering: Ordering{
-			Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}},
+	joinerSpec := distsqlpb.MergeJoinerSpec{
+		LeftOrdering: distsqlpb.Ordering{
+			Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 		},
-		RightOrdering: Ordering{
-			Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}},
+		RightOrdering: distsqlpb.Ordering{
+			Columns: []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 		},
 		Type: sqlbase.InnerJoin,
 	}
@@ -394,76 +396,77 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	)
 	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 
-	req := SetupFlowRequest{
+	req := distsqlpb.SetupFlowRequest{
 		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
-		Flow: FlowSpec{
-			FlowID: FlowID{UUID: uuid.MakeV4()},
+		Flow: distsqlpb.FlowSpec{
+			FlowID: distsqlpb.FlowID{UUID: uuid.MakeV4()},
 			// The left-hand Values processor in the diagram above.
-			Processors: []ProcessorSpec{
+			Processors: []distsqlpb.ProcessorSpec{
 				{
-					Core: ProcessorCoreUnion{Values: &leftValuesSpec},
-					Output: []OutputRouterSpec{{
-						Type: OutputRouterSpec_PASS_THROUGH,
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 1},
+					Core: distsqlpb.ProcessorCoreUnion{Values: &leftValuesSpec},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 1},
 						},
 					}},
 				},
 				// The right-hand Values processor in the diagram above.
 				{
-					Core: ProcessorCoreUnion{Values: &rightValuesSpec},
-					Output: []OutputRouterSpec{{
-						Type:        OutputRouterSpec_BY_HASH,
+					Core: distsqlpb.ProcessorCoreUnion{Values: &rightValuesSpec},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 						HashColumns: []uint32{0},
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 3},
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2},
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 3},
 						},
 					}},
 				},
 				// The MergeJoin processor.
 				{
-					Input: []InputSyncSpec{
+					Input: []distsqlpb.InputSyncSpec{
 						{
-							Type:        InputSyncSpec_UNORDERED,
-							Streams:     []StreamEndpointSpec{{Type: StreamEndpointSpec_LOCAL, StreamID: 1}},
+							Type:        distsqlpb.InputSyncSpec_UNORDERED,
+							Streams:     []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 1}},
 							ColumnTypes: types,
 						},
 						{
-							Type:        InputSyncSpec_UNORDERED,
-							Streams:     []StreamEndpointSpec{{Type: StreamEndpointSpec_LOCAL, StreamID: 2}},
+							Type:        distsqlpb.InputSyncSpec_UNORDERED,
+							Streams:     []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2}},
 							ColumnTypes: types,
 						},
 					},
-					Core: ProcessorCoreUnion{MergeJoiner: &joinerSpec},
-					Post: PostProcessSpec{
+					Core: distsqlpb.ProcessorCoreUnion{MergeJoiner: &joinerSpec},
+					Post: distsqlpb.PostProcessSpec{
 						// Output only one (the left) column.
 						Projection:    true,
 						OutputColumns: []uint32{0},
 					},
-					Output: []OutputRouterSpec{{
-						Type: OutputRouterSpec_PASS_THROUGH,
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 4},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 4},
 						},
 					}},
 				},
 				// The final (Response) processor.
 				{
-					Input: []InputSyncSpec{{
-						Type:     InputSyncSpec_ORDERED,
-						Ordering: Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
-						Streams: []StreamEndpointSpec{
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 4},
-							{Type: StreamEndpointSpec_LOCAL, StreamID: 3},
+					Input: []distsqlpb.InputSyncSpec{{
+						Type: distsqlpb.InputSyncSpec_ORDERED,
+						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{
+							{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
+						Streams: []distsqlpb.StreamEndpointSpec{
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 4},
+							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 3},
 						},
 						ColumnTypes: types,
 					}},
-					Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
-					Output: []OutputRouterSpec{{
-						Type:    OutputRouterSpec_PASS_THROUGH,
-						Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+					Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
+					Output: []distsqlpb.OutputRouterSpec{{
+						Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
 					}},
 				},
 			},
@@ -475,11 +478,11 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stream, err := NewDistSQLClient(conn).RunSyncFlow(context.TODO())
+	stream, err := distsqlpb.NewDistSQLClient(conn).RunSyncFlow(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = stream.Send(&ConsumerSignal{SetupFlowRequest: &req})
+	err = stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: &req})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +594,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					// value is increasing.
 					rng, _ := randutil.NewPseudoRand()
 					lastVal := 1
-					valSpecs := make([]ValuesCoreSpec, numNodes)
+					valSpecs := make([]distsqlpb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
 						se := StreamEncoder{}
 						se.init(threeIntCols)
@@ -606,7 +609,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							}
 						}
 						msg := se.FormMessage(context.TODO())
-						valSpecs[i] = ValuesCoreSpec{
+						valSpecs[i] = distsqlpb.ValuesCoreSpec{
 							Columns:  msg.Typing,
 							RawBytes: [][]byte{msg.Data.RawBytes},
 						}
@@ -632,12 +635,12 @@ func BenchmarkInfrastructure(b *testing.B) {
 					//
 					// *unordered if we have a single node.
 
-					reqs := make([]SetupFlowRequest, numNodes)
-					streamType := func(i int) StreamEndpointSpec_Type {
+					reqs := make([]distsqlpb.SetupFlowRequest, numNodes)
+					streamType := func(i int) distsqlpb.StreamEndpointSpec_Type {
 						if i == 0 {
-							return StreamEndpointSpec_LOCAL
+							return distsqlpb.StreamEndpointSpec_LOCAL
 						}
-						return StreamEndpointSpec_REMOTE
+						return distsqlpb.StreamEndpointSpec_REMOTE
 					}
 					txnProto := roachpb.MakeTransaction(
 						"cluster-test",
@@ -648,16 +651,16 @@ func BenchmarkInfrastructure(b *testing.B) {
 					)
 					txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 					for i := range reqs {
-						reqs[i] = SetupFlowRequest{
+						reqs[i] = distsqlpb.SetupFlowRequest{
 							Version:      Version,
 							TxnCoordMeta: &txnCoordMeta,
-							Flow: FlowSpec{
-								Processors: []ProcessorSpec{{
-									Core: ProcessorCoreUnion{Values: &valSpecs[i]},
-									Output: []OutputRouterSpec{{
-										Type: OutputRouterSpec_PASS_THROUGH,
-										Streams: []StreamEndpointSpec{
-											{Type: streamType(i), StreamID: StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
+							Flow: distsqlpb.FlowSpec{
+								Processors: []distsqlpb.ProcessorSpec{{
+									Core: distsqlpb.ProcessorCoreUnion{Values: &valSpecs[i]},
+									Output: []distsqlpb.OutputRouterSpec{{
+										Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+										Streams: []distsqlpb.StreamEndpointSpec{
+											{Type: streamType(i), StreamID: distsqlpb.StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
 										},
 									}},
 								}},
@@ -665,48 +668,49 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 					}
 
-					reqs[0].Flow.Processors[0].Output[0].Streams[0] = StreamEndpointSpec{
-						Type:     StreamEndpointSpec_LOCAL,
+					reqs[0].Flow.Processors[0].Output[0].Streams[0] = distsqlpb.StreamEndpointSpec{
+						Type:     distsqlpb.StreamEndpointSpec_LOCAL,
 						StreamID: 0,
 					}
-					inStreams := make([]StreamEndpointSpec, numNodes)
+					inStreams := make([]distsqlpb.StreamEndpointSpec, numNodes)
 					for i := range inStreams {
 						inStreams[i].Type = streamType(i)
-						inStreams[i].StreamID = StreamID(i)
+						inStreams[i].StreamID = distsqlpb.StreamID(i)
 					}
 
-					lastProc := ProcessorSpec{
-						Input: []InputSyncSpec{{
-							Type:        InputSyncSpec_ORDERED,
-							Ordering:    Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
+					lastProc := distsqlpb.ProcessorSpec{
+						Input: []distsqlpb.InputSyncSpec{{
+							Type: distsqlpb.InputSyncSpec_ORDERED,
+							Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{
+								{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
 							Streams:     inStreams,
 							ColumnTypes: threeIntCols,
 						}},
-						Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
-						Output: []OutputRouterSpec{{
-							Type:    OutputRouterSpec_PASS_THROUGH,
-							Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+						Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
+						Output: []distsqlpb.OutputRouterSpec{{
+							Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+							Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
 						}},
 					}
 					if numNodes == 1 {
-						lastProc.Input[0].Type = InputSyncSpec_UNORDERED
-						lastProc.Input[0].Ordering = Ordering{}
+						lastProc.Input[0].Type = distsqlpb.InputSyncSpec_UNORDERED
+						lastProc.Input[0].Ordering = distsqlpb.Ordering{}
 					}
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
 
-					var clients []DistSQLClient
+					var clients []distsqlpb.DistSQLClient
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
 						conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.Background())
 						if err != nil {
 							b.Fatal(err)
 						}
-						clients = append(clients, NewDistSQLClient(conn))
+						clients = append(clients, distsqlpb.NewDistSQLClient(conn))
 					}
 
 					b.ResetTimer()
 					for repeat := 0; repeat < b.N; repeat++ {
-						fid := FlowID{uuid.MakeV4()}
+						fid := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 						for i := range reqs {
 							reqs[i].Flow.FlowID = fid
 						}
@@ -722,7 +726,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						err = stream.Send(&ConsumerSignal{SetupFlowRequest: &reqs[0]})
+						err = stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: &reqs[0]})
 						if err != nil {
 							b.Fatal(err)
 						}

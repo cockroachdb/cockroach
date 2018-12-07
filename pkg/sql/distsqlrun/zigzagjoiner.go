@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -263,9 +264,9 @@ const zigzagJoinerProcName = "zigzagJoiner"
 func newZigzagJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *ZigzagJoinerSpec,
+	spec *distsqlpb.ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
@@ -325,7 +326,9 @@ func newZigzagJoiner(
 // Helper function to convert a values spec containing one tuple into EncDatums for
 // each cell. Note that this function assumes that there is only one tuple in the
 // ValuesSpec (i.e. the way fixed values are encoded in the ZigzagJoinSpec).
-func valuesSpecToEncDatum(valuesSpec *ValuesCoreSpec) (res []sqlbase.EncDatum, err error) {
+func valuesSpecToEncDatum(
+	valuesSpec *distsqlpb.ValuesCoreSpec,
+) (res []sqlbase.EncDatum, err error) {
 	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
 	rem := valuesSpec.RawBytes[0]
 	for i, colInfo := range valuesSpec.Columns {
@@ -380,7 +383,7 @@ type zigzagJoinerInfo struct {
 // colOffset is specified to determine the appropriate range of output columns
 // to process. It is the number of columns in the tables of all previous sides
 // of the join.
-func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int) error {
+func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, colOffset int) error {
 	z.side = side
 	info := z.infos[side]
 
@@ -436,7 +439,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		neededCols,
 		false, /* check */
 		info.alloc,
-		ScanVisibility_PUBLIC,
+		distsqlpb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return err

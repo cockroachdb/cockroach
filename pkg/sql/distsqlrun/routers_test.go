@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -46,7 +47,7 @@ import (
 func setupRouter(
 	t testing.TB,
 	evalCtx *tree.EvalContext,
-	spec OutputRouterSpec,
+	spec distsqlpb.OutputRouterSpec,
 	inputTypes []sqlbase.ColumnType,
 	streams []RowReceiver,
 ) (router, *sync.WaitGroup) {
@@ -79,47 +80,47 @@ func TestRouters(t *testing.T) {
 	vals, types := sqlbase.RandSortingEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
-		spec       OutputRouterSpec
+		spec       distsqlpb.OutputRouterSpec
 		numBuckets int
 	}{
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 			numBuckets: 4,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 			numBuckets: 2,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{3}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{3}},
 			numBuckets: 4,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{1, 3}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{1, 3}},
 			numBuckets: 4,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{5, 2}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{5, 2}},
 			numBuckets: 3,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0, 1, 2, 3, 4}},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0, 1, 2, 3, 4}},
 			numBuckets: 5,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 			numBuckets: 2,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 			numBuckets: 3,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 			numBuckets: 4,
 		},
 		{
-			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
+			spec:       distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
 			numBuckets: 2,
 		},
 	}
@@ -128,11 +129,11 @@ func TestRouters(t *testing.T) {
 		t.Run(tc.spec.Type.String(), func(t *testing.T) {
 			bufs := make([]*RowBuffer, tc.numBuckets)
 			recvs := make([]RowReceiver, tc.numBuckets)
-			tc.spec.Streams = make([]StreamEndpointSpec, tc.numBuckets)
+			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
-				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
 			r, wg := setupRouter(t, evalCtx, tc.spec, types, recvs)
@@ -158,7 +159,7 @@ func TestRouters(t *testing.T) {
 			}
 
 			switch tc.spec.Type {
-			case OutputRouterSpec_BY_HASH:
+			case distsqlpb.OutputRouterSpec_BY_HASH:
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
 						// Verify there are no rows that
@@ -190,7 +191,7 @@ func TestRouters(t *testing.T) {
 					}
 				}
 
-			case OutputRouterSpec_MIRROR:
+			case distsqlpb.OutputRouterSpec_MIRROR:
 				// Verify each row is sent to each of the output streams.
 				for bIdx, r := range rows {
 					if bIdx == 0 {
@@ -224,7 +225,7 @@ func TestRouters(t *testing.T) {
 					}
 				}
 
-			case OutputRouterSpec_BY_RANGE:
+			case distsqlpb.OutputRouterSpec_BY_RANGE:
 				// Verify each row is in the correct output stream.
 				enc := testRangeRouterSpec.Encodings[0]
 				var alloc sqlbase.DatumAlloc
@@ -251,8 +252,8 @@ func TestRouters(t *testing.T) {
 const testRangeRouterSpanBreak byte = (encoding.IntMax + encoding.IntMin) / 2
 
 var (
-	testRangeRouterSpec = OutputRouterSpec_RangeRouterSpec{
-		Spans: []OutputRouterSpec_RangeRouterSpec_Span{
+	testRangeRouterSpec = distsqlpb.OutputRouterSpec_RangeRouterSpec{
+		Spans: []distsqlpb.OutputRouterSpec_RangeRouterSpec_Span{
 			{
 				Start:  []byte{0x00},
 				End:    []byte{testRangeRouterSpanBreak},
@@ -264,7 +265,7 @@ var (
 				Stream: 1,
 			},
 		},
-		Encodings: []OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
+		Encodings: []distsqlpb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 			{
 				Column:   0,
 				Encoding: sqlbase.DatumEncoding_ASCENDING_KEY,
@@ -285,19 +286,19 @@ func TestConsumerStatus(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		spec OutputRouterSpec
+		spec distsqlpb.OutputRouterSpec
 	}{
 		{
 			name: "MirrorRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 		},
 		{
 			name: "HashRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
 		{
 			name: "RangeRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
 		},
 	}
 
@@ -305,11 +306,11 @@ func TestConsumerStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			bufs := make([]*RowBuffer, 2)
 			recvs := make([]RowReceiver, 2)
-			tc.spec.Streams = make([]StreamEndpointSpec, 2)
+			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
-				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
@@ -437,19 +438,19 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		spec OutputRouterSpec
+		spec distsqlpb.OutputRouterSpec
 	}{
 		{
 			name: "MirrorRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 		},
 		{
 			name: "HashRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
 		{
 			name: "RangeRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
 		},
 	}
 
@@ -457,11 +458,11 @@ func TestMetadataIsForwarded(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
-			tc.spec.Streams = make([]StreamEndpointSpec, 2)
+			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
 				recvs[i] = &chans[i]
-				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 			router, wg := setupRouter(t, evalCtx, tc.spec, nil /* no columns */, recvs)
 
@@ -555,19 +556,19 @@ func TestRouterBlocks(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		spec OutputRouterSpec
+		spec distsqlpb.OutputRouterSpec
 	}{
 		{
 			name: "MirrorRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_MIRROR},
 		},
 		{
 			name: "HashRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
 		{
 			name: "RangeRouter",
-			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
+			spec: distsqlpb.OutputRouterSpec{Type: distsqlpb.OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
 		},
 	}
 
@@ -576,11 +577,11 @@ func TestRouterBlocks(t *testing.T) {
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
-			tc.spec.Streams = make([]StreamEndpointSpec, 2)
+			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
-				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 			router, err := makeRouter(&tc.spec, recvs)
 			if err != nil {
@@ -720,8 +721,8 @@ func TestRouterDiskSpill(t *testing.T) {
 	}
 	alloc := &sqlbase.DatumAlloc{}
 
-	var spec OutputRouterSpec
-	spec.Streams = make([]StreamEndpointSpec, 1)
+	var spec distsqlpb.OutputRouterSpec
+	spec.Streams = make([]distsqlpb.StreamEndpointSpec, 1)
 	// Initialize the RowChannel with the minimal buffer size so as to block
 	// writes to the channel (after the first one).
 	rowChan.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
@@ -827,15 +828,15 @@ func TestRangeRouterInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		spec OutputRouterSpec_RangeRouterSpec
+		spec distsqlpb.OutputRouterSpec_RangeRouterSpec
 		err  string
 	}{
 		{
 			spec: testRangeRouterSpec,
 		},
 		{
-			spec: OutputRouterSpec_RangeRouterSpec{
-				Spans: []OutputRouterSpec_RangeRouterSpec_Span{
+			spec: distsqlpb.OutputRouterSpec_RangeRouterSpec{
+				Spans: []distsqlpb.OutputRouterSpec_RangeRouterSpec_Span{
 					{
 						Start:  []byte{testRangeRouterSpanBreak},
 						End:    []byte{0xff},
@@ -852,7 +853,7 @@ func TestRangeRouterInit(t *testing.T) {
 			err: "not after previous span",
 		},
 		{
-			spec: OutputRouterSpec_RangeRouterSpec{
+			spec: distsqlpb.OutputRouterSpec_RangeRouterSpec{
 				Spans: testRangeRouterSpec.Spans,
 			},
 			err: "missing encodings",
@@ -861,18 +862,18 @@ func TestRangeRouterInit(t *testing.T) {
 
 	for i, tc := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			spec := OutputRouterSpec{
-				Type:            OutputRouterSpec_BY_RANGE,
+			spec := distsqlpb.OutputRouterSpec{
+				Type:            distsqlpb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
-			spec.Streams = make([]StreamEndpointSpec, 2)
+			spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
-				spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+				spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 			_, err := makeRouter(&spec, recvs)
 			if !testutils.IsError(err, tc.err) {
@@ -893,27 +894,27 @@ func BenchmarkRouter(b *testing.B) {
 
 	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
 
-	for _, spec := range []OutputRouterSpec{
+	for _, spec := range []distsqlpb.OutputRouterSpec{
 		{
-			Type: OutputRouterSpec_BY_RANGE,
-			RangeRouterSpec: OutputRouterSpec_RangeRouterSpec{
+			Type: distsqlpb.OutputRouterSpec_BY_RANGE,
+			RangeRouterSpec: distsqlpb.OutputRouterSpec_RangeRouterSpec{
 				Spans:     testRangeRouterSpec.Spans,
 				Encodings: testRangeRouterSpec.Encodings,
 			},
 		},
 		{
-			Type:        OutputRouterSpec_BY_HASH,
+			Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 			HashColumns: []uint32{0},
 		},
 		{
-			Type: OutputRouterSpec_MIRROR,
+			Type: distsqlpb.OutputRouterSpec_MIRROR,
 		},
 	} {
 		b.Run(spec.Type.String(), func(b *testing.B) {
 			for _, nOutputs := range []int{2, 4, 8} {
 				chans := make([]RowChannel, nOutputs)
 				recvs := make([]RowReceiver, nOutputs)
-				spec.Streams = make([]StreamEndpointSpec, nOutputs)
+				spec.Streams = make([]distsqlpb.StreamEndpointSpec, nOutputs)
 				b.Run(fmt.Sprintf("outputs=%d", nOutputs), func(b *testing.B) {
 					b.SetBytes(int64(nOutputs * numCols * numRows * 8))
 					for i := 0; i < b.N; i++ {
@@ -921,7 +922,7 @@ func BenchmarkRouter(b *testing.B) {
 						for i := 0; i < nOutputs; i++ {
 							chans[i].InitWithNumSenders(colTypes, 1)
 							recvs[i] = &chans[i]
-							spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
+							spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 						}
 						r, wg := setupRouter(b, evalCtx, spec, colTypes, recvs)
 						for i := range chans {

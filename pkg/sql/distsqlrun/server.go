@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,9 +47,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-// DistSQLVersion identifies DistSQL engine versions.
-type DistSQLVersion uint32
 
 // Version identifies the distsqlrun protocol version.
 //
@@ -76,11 +74,11 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 22
+const Version distsqlpb.DistSQLVersion = 22
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion DistSQLVersion = 21
+const MinAcceptedVersion distsqlpb.DistSQLVersion = 21
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
@@ -177,7 +175,7 @@ type ServerImpl struct {
 	regexpCache   *tree.RegexpCache
 }
 
-var _ DistSQLServer = &ServerImpl{}
+var _ distsqlpb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
@@ -206,7 +204,7 @@ func (ds *ServerImpl) Start() {
 	// for us.
 	if err := ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.Get()),
-		&DistSQLVersionGossipInfo{
+		&distsqlpb.DistSQLVersionGossipInfo{
 			Version:            Version,
 			MinAcceptedVersion: MinAcceptedVersion,
 		},
@@ -256,7 +254,7 @@ func (ds *ServerImpl) Undrain(ctx context.Context) {
 func (ds *ServerImpl) setDraining(drain bool) error {
 	return ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
-		&DistSQLDrainingInfo{
+		&distsqlpb.DistSQLDrainingInfo{
 			Draining: drain,
 		},
 		0, // ttl - no expiration
@@ -265,7 +263,7 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
 // DistSQL version.
-func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersion) bool {
+func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion distsqlpb.DistSQLVersion) bool {
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
@@ -281,7 +279,7 @@ func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
-	req *SetupFlowRequest,
+	req *distsqlpb.SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
@@ -370,11 +368,11 @@ func (ds *ServerImpl) setupFlow(
 
 		var be sessiondata.BytesEncodeFormat
 		switch req.EvalContext.BytesEncodeFormat {
-		case BytesEncodeFormat_HEX:
+		case distsqlpb.BytesEncodeFormat_HEX:
 			be = sessiondata.BytesEncodeHex
-		case BytesEncodeFormat_ESCAPE:
+		case distsqlpb.BytesEncodeFormat_ESCAPE:
 			be = sessiondata.BytesEncodeEscape
-		case BytesEncodeFormat_BASE64:
+		case distsqlpb.BytesEncodeFormat_BASE64:
 			be = sessiondata.BytesEncodeBase64
 		default:
 			return nil, nil, errors.Errorf("unknown byte encode format: %s",
@@ -476,7 +474,10 @@ func (ds *ServerImpl) setupFlow(
 // Note: the returned context contains a span that must be finished through
 // Flow.Cleanup.
 func (ds *ServerImpl) SetupSyncFlow(
-	ctx context.Context, parentMonitor *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver,
+	ctx context.Context,
+	parentMonitor *mon.BytesMonitor,
+	req *distsqlpb.SetupFlowRequest,
+	output RowReceiver,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
@@ -505,7 +506,7 @@ type LocalState struct {
 func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
-	req *SetupFlowRequest,
+	req *distsqlpb.SetupFlowRequest,
 	output RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
@@ -513,7 +514,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
+func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
 
@@ -551,8 +552,8 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
-	ctx context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
+	ctx context.Context, req *distsqlpb.SetupFlowRequest,
+) (*distsqlpb.SimpleResponse, error) {
 	parentSpan := opentracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
@@ -566,12 +567,14 @@ func (ds *ServerImpl) SetupFlow(
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
 		// function, they become part of an rpc error.
-		return &SimpleResponse{Error: NewError(err)}, nil
+		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(err)}, nil
 	}
-	return &SimpleResponse{}, nil
+	return &distsqlpb.SimpleResponse{}, nil
 }
 
-func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) flowStreamInt(
+	ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer,
+) error {
 	// Receive the first message.
 	msg, err := stream.Recv()
 	if err != nil {
@@ -600,7 +603,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 }
 
 // FlowStream is part of the DistSQLServer interface.
-func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)
 	if err != nil {

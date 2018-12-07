@@ -21,6 +21,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,13 +39,13 @@ import (
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
 	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
-	if fn.AggregateFunc != nil && *fn.AggregateFunc == AggregatorSpec_ANY_NOT_NULL {
+	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -165,9 +166,9 @@ const windowerProcName = "windower"
 func newWindower(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *WindowerSpec,
+	spec *distsqlpb.WindowerSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*windower, error) {
 	w := &windower{
@@ -492,14 +493,14 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		}
 
 		if windowFn.frame != nil {
-			frameRun.Frame = windowFn.frame.convertToAST()
+			frameRun.Frame = windowFn.frame.ConvertToAST()
 			startBound, endBound := windowFn.frame.Bounds.Start, windowFn.frame.Bounds.End
-			if startBound.BoundType == WindowerSpec_Frame_OFFSET_PRECEDING ||
-				startBound.BoundType == WindowerSpec_Frame_OFFSET_FOLLOWING {
+			if startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+				startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
 				switch windowFn.frame.Mode {
-				case WindowerSpec_Frame_ROWS:
+				case distsqlpb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
-				case WindowerSpec_Frame_RANGE:
+				case distsqlpb.WindowerSpec_Frame_RANGE:
 					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
 					if err != nil {
 						return errors.Wrapf(err, "error decoding %d bytes", len(startBound.TypedOffset))
@@ -508,19 +509,19 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						return errors.Errorf("%d trailing bytes in encoded value", len(rem))
 					}
 					frameRun.StartBoundOffset = datum
-				case WindowerSpec_Frame_GROUPS:
+				case distsqlpb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
 					panic("unexpected WindowFrameMode")
 				}
 			}
 			if endBound != nil {
-				if endBound.BoundType == WindowerSpec_Frame_OFFSET_PRECEDING ||
-					endBound.BoundType == WindowerSpec_Frame_OFFSET_FOLLOWING {
+				if endBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+					endBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
 					switch windowFn.frame.Mode {
-					case WindowerSpec_Frame_ROWS:
+					case distsqlpb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
-					case WindowerSpec_Frame_RANGE:
+					case distsqlpb.WindowerSpec_Frame_RANGE:
 						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
 						if err != nil {
 							return errors.Wrapf(err, "error decoding %d bytes", len(endBound.TypedOffset))
@@ -529,7 +530,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 							return errors.Errorf("%d trailing bytes in encoded value", len(rem))
 						}
 						frameRun.EndBoundOffset = datum
-					case WindowerSpec_Frame_GROUPS:
+					case distsqlpb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
 						panic("unexpected WindowFrameMode")
@@ -683,17 +684,17 @@ func (w *windower) populateNextOutputRow() bool {
 
 type windowFunc struct {
 	create       func(*tree.EvalContext) tree.WindowFunc
-	ordering     Ordering
+	ordering     distsqlpb.Ordering
 	argIdxStart  int
 	argCount     int
-	frame        *WindowerSpec_Frame
+	frame        *distsqlpb.WindowerSpec_Frame
 	filterColIdx int
 }
 
 type partitionSorter struct {
 	evalCtx  *tree.EvalContext
 	rows     indexedRows
-	ordering Ordering
+	ordering distsqlpb.Ordering
 }
 
 // partitionSorter implements the sort.Interface interface.
@@ -712,7 +713,7 @@ func (n *partitionSorter) Compare(i, j int) int {
 		da := ra.GetDatum(int(o.ColIdx))
 		db := rb.GetDatum(int(o.ColIdx))
 		if c := da.Compare(n.evalCtx, db); c != 0 {
-			if o.Direction != Ordering_Column_ASC {
+			if o.Direction != distsqlpb.Ordering_Column_ASC {
 				return -c
 			}
 			return c
@@ -785,7 +786,7 @@ func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
 	return datums
 }
 
-var _ DistSQLSpanStats = &WindowerStats{}
+var _ distsqlpb.DistSQLSpanStats = &WindowerStats{}
 
 const windowerTagPrefix = "windower."
 

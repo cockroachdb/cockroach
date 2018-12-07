@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -37,12 +38,12 @@ import (
 //   }
 type StreamEncoder struct {
 	// infos is fully initialized when the first row is received.
-	infos            []DatumInfo
+	infos            []distsqlpb.DatumInfo
 	infosInitialized bool
 
 	rowBuf       []byte
 	numEmptyRows int
-	metadata     []RemoteProducerMetadata
+	metadata     []distsqlpb.RemoteProducerMetadata
 
 	// headerSent is set after the first message (which contains the header) has
 	// been sent.
@@ -53,17 +54,17 @@ type StreamEncoder struct {
 	alloc      sqlbase.DatumAlloc
 
 	// Preallocated structures to avoid allocations.
-	msg    ProducerMessage
-	msgHdr ProducerHeader
+	msg    distsqlpb.ProducerMessage
+	msgHdr distsqlpb.ProducerHeader
 }
 
-func (se *StreamEncoder) setHeaderFields(flowID FlowID, streamID StreamID) {
+func (se *StreamEncoder) setHeaderFields(flowID distsqlpb.FlowID, streamID distsqlpb.StreamID) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
 }
 
 func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
-	se.infos = make([]DatumInfo, len(types))
+	se.infos = make([]distsqlpb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]
 	}
@@ -78,30 +79,30 @@ func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
 // ensuring that rows produced _after_ an error are not received _before_ the
 // error.
 func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
-	var enc RemoteProducerMetadata
+	var enc distsqlpb.RemoteProducerMetadata
 	if meta.Ranges != nil {
-		enc.Value = &RemoteProducerMetadata_RangeInfo{
-			RangeInfo: &RemoteProducerMetadata_RangeInfos{
+		enc.Value = &distsqlpb.RemoteProducerMetadata_RangeInfo{
+			RangeInfo: &distsqlpb.RemoteProducerMetadata_RangeInfos{
 				RangeInfo: meta.Ranges,
 			},
 		}
 	} else if meta.TraceData != nil {
-		enc.Value = &RemoteProducerMetadata_TraceData_{
-			TraceData: &RemoteProducerMetadata_TraceData{
+		enc.Value = &distsqlpb.RemoteProducerMetadata_TraceData_{
+			TraceData: &distsqlpb.RemoteProducerMetadata_TraceData{
 				CollectedSpans: meta.TraceData,
 			},
 		}
 	} else if meta.TxnCoordMeta != nil {
-		enc.Value = &RemoteProducerMetadata_TxnCoordMeta{
+		enc.Value = &distsqlpb.RemoteProducerMetadata_TxnCoordMeta{
 			TxnCoordMeta: meta.TxnCoordMeta,
 		}
 	} else if meta.RowNum != nil {
-		enc.Value = &RemoteProducerMetadata_RowNum_{
+		enc.Value = &distsqlpb.RemoteProducerMetadata_RowNum_{
 			RowNum: meta.RowNum,
 		}
 	} else {
-		enc.Value = &RemoteProducerMetadata_Error{
-			Error: NewError(meta.Err),
+		enc.Value = &distsqlpb.RemoteProducerMetadata_Error{
+			Error: distsqlpb.NewError(meta.Err),
 		}
 	}
 	se.metadata = append(se.metadata, enc)
@@ -148,12 +149,12 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 
 // FormMessage populates a message containing the rows added since the last call
 // to FormMessage. The returned ProducerMessage should be treated as immutable.
-func (se *StreamEncoder) FormMessage(ctx context.Context) *ProducerMessage {
+func (se *StreamEncoder) FormMessage(ctx context.Context) *distsqlpb.ProducerMessage {
 	msg := &se.msg
 	msg.Header = nil
 	msg.Data.RawBytes = se.rowBuf
 	msg.Data.NumEmptyRows = int32(se.numEmptyRows)
-	msg.Data.Metadata = make([]RemoteProducerMetadata, len(se.metadata))
+	msg.Data.Metadata = make([]distsqlpb.RemoteProducerMetadata, len(se.metadata))
 	copy(msg.Data.Metadata, se.metadata)
 	se.metadata = se.metadata[:0]
 
