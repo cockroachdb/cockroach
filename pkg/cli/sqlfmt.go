@@ -50,7 +50,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	var sl tree.StatementList
 	if len(sqlfmtCtx.execStmts) != 0 {
 		for _, exec := range sqlfmtCtx.execStmts {
-			stmts, err := parser.Parse(exec)
+			stmts, _, err := parser.Parse(exec)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		sl, err = parser.Parse(string(in))
+		sl, _, err = parser.Parse(string(in))
 		if err != nil {
 			return err
 		}

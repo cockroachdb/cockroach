@@ -142,7 +142,9 @@ type ExecStmt struct {
 func (ExecStmt) command() {}
 
 func (e ExecStmt) String() string {
-	return fmt.Sprintf("ExecStmt: %s", e.SQL)
+	// We have the original SQL, but we still use String() because it obfuscates
+	// passwords.
+	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
 }
 
 var _ Command = ExecStmt{}
@@ -191,7 +193,9 @@ type PrepareStmt struct {
 func (PrepareStmt) command() {}
 
 func (p PrepareStmt) String() string {
-	return fmt.Sprintf("PrepareStmt: %s", p.SQL)
+	// We have the original SQL, but we still use String() because it obfuscates
+	// passwords.
+	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
 }
 
 var _ Command = PrepareStmt{}

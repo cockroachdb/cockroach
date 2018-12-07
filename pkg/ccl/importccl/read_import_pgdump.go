@@ -84,7 +84,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 	for p.s.Scan() {
 		t := p.s.Text()
-		stmts, err := parser.Parse(t)
+		stmts, _, err := parser.Parse(t)
 		if err != nil {
 			// Something non-parseable may be something we don't yet parse but still
 			// want to ignore.

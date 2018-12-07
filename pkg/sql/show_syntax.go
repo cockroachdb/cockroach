@@ -81,7 +81,7 @@ func runShowSyntax(
 	report func(ctx context.Context, field, msg string) error,
 	reportErr func(err error),
 ) error {
-	stmts, err := parser.Parse(stmt)
+	stmts, _, err := parser.Parse(stmt)
 	if err != nil {
 		if reportErr != nil {
 			reportErr(err)

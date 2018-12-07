@@ -450,7 +450,7 @@ func (c *conn) handleSimpleQuery(
 	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
-	stmts, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, sqlStrs, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -467,7 +467,7 @@ func (c *conn) handleSimpleQuery(
 			})
 	}
 
-	for _, stmt := range stmts {
+	for i, stmt := range stmts {
 		// The CopyFrom statement is special. We need to detect it so we can hand
 		// control of the connection, through the stmtBuf, to a copyMachine, and
 		// block this network routine until control is passed back.
@@ -493,21 +493,10 @@ func (c *conn) handleSimpleQuery(
 			return nil
 		}
 
-		var sqlStr string
-		if len(stmts) == 1 {
-			// TODO(radu): the string could potentially contain a trailing semicolon.
-			// It's not trivial to trim the semicolon as it can be surrounded by
-			// whitespace, newlines, and/or comments.
-			sqlStr = query
-		} else {
-			// TODO(radu): return this information from the parser instead of using
-			// String.
-			sqlStr = stmt.String()
-		}
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				SQL:          sqlStr,
+				SQL:          sqlStrs[i],
 				Stmt:         stmt,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
@@ -567,7 +556,7 @@ func (c *conn) handleParse(
 
 	startParse := timeutil.Now()
 	var stmt tree.Statement
-	stmts, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, _, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if len(stmts) > 1 {
 		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	} else if len(stmts) == 1 {

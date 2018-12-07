@@ -393,7 +393,7 @@ func TestContextualHelp(t *testing.T) {
 	// The following checks that the grammar rules properly report help.
 	for _, test := range testData {
 		t.Run(test.input, func(t *testing.T) {
-			_, err := Parse(test.input)
+			_, _, err := Parse(test.input)
 			if err == nil {
 				t.Fatalf("parser didn't trigger error")
 			}
@@ -421,7 +421,7 @@ func TestHelpKeys(t *testing.T) {
 	// checks that the parser renders the correct help message.
 	for key, body := range HelpMessages {
 		t.Run(key, func(t *testing.T) {
-			_, err := Parse(key + " ??")
+			_, _, err := Parse(key + " ??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
 				return
