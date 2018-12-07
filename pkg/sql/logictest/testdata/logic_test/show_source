@@ -139,7 +139,7 @@ pg_catalog
 public
 
 query TT colnames
-SELECT * FROM [SHOW TABLES FROM system]
+SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 table_name        comment
 comments          NULL
@@ -182,11 +182,11 @@ information_schema
 pg_catalog
 public
 
-query TT colnames
+query T colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-table_name comment
-foo NULL
+table_name
+foo
 
 
 query T colnames

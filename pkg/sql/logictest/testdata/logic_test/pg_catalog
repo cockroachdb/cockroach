@@ -12,7 +12,7 @@ query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
 query TT
-SHOW TABLES FROM pg_catalog
+SHOW TABLES FROM pg_catalog WITH COMMENT
 ----
 pg_am                   NULL
 pg_attrdef              NULL
@@ -76,7 +76,7 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 # Verify pg_catalog handles reflection correctly.
 
 query TT
-SHOW TABLES FROM test.pg_catalog
+SHOW TABLES FROM test.pg_catalog WITH COMMENT
 ----
 pg_am                   NULL
 pg_attrdef              NULL

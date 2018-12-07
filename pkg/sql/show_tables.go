@@ -42,9 +42,9 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 
 	const getTablesQuery = `
 SELECT
-	i.table_name, c.comment
+	i.table_name %[1]s
 FROM
-	%[1]s.information_schema.tables AS i
+	%[2]s.information_schema.tables AS i
 	LEFT JOIN crdb_internal.tables AS t
 	ON
 		i.table_name = t.name
@@ -52,14 +52,20 @@ FROM
 	LEFT JOIN system.comments AS c
 	ON t.table_id = c.object_id
 WHERE
-	table_schema = %[2]s
-	AND (t.state = %[3]s OR t.state IS NULL)
-	AND (t.database_name = %[4]s OR t.database_name IS NULL)
+	table_schema = %[3]s
+	AND (t.state = %[4]s OR t.state IS NULL)
+	AND (t.database_name = %[5]s OR t.database_name IS NULL)
 ORDER BY
 	table_schema, table_name`
 
+	var additionalColumn string
+	if n.WithComment {
+		additionalColumn = ", c.comment"
+	}
+
 	query := fmt.Sprintf(
 		getTablesQuery,
+		additionalColumn,
 		&n.CatalogName,
 		lex.EscapeSQLString(n.Schema()),
 		lex.EscapeSQLString(sqlbase.TableDescriptor_PUBLIC.String()),

@@ -819,6 +819,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SequenceOption> sequence_option_elem
 
 %type <bool> all_or_distinct
+%type <bool> with_comment
 %type <empty> join_outer
 %type <tree.JoinCond> join_qual
 %type <str> join_type
@@ -3380,29 +3381,35 @@ show_sessions_stmt:
 // %Text: SHOW TABLES [FROM <databasename> [ . <schemaname> ] ]
 // %SeeAlso: WEBDOCS/show-tables.html
 show_tables_stmt:
-  SHOW TABLES FROM name '.' name
+  SHOW TABLES FROM name '.' name with_comment
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
         ExplicitSchema: true,
-    }}
+    },
+    WithComment: $7.bool()}
   }
-| SHOW TABLES FROM name
+| SHOW TABLES FROM name with_comment
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
         ExplicitSchema: true,
-    }}
+    },
+    WithComment: $5.bool()}
   }
-| SHOW TABLES
+| SHOW TABLES with_comment
   {
-    $$.val = &tree.ShowTables{}
+    $$.val = &tree.ShowTables{WithComment: $3.bool()}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+with_comment:
+  WITH COMMENT { $$.val = true }
+| /* EMPTY */  { $$.val = false }
 
 // %Help: SHOW SCHEMAS - list schemas
 // %Category: DDL

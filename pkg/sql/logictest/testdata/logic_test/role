@@ -82,15 +82,15 @@ SHOW DATABASES
 ----
 publicdb
 
-query TT
+query T
 SHOW TABLES FROM publicdb
 ----
-publictable NULL
+publictable
 
-query TT
+query T
 SHOW TABLES FROM privatedb
 ----
-publictable NULL
+publictable
 
 statement ok
 SELECT * FROM publicdb.publictable
@@ -124,6 +124,6 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query TT
+query T
 SHOW TABLES FROM publicdb
 ----

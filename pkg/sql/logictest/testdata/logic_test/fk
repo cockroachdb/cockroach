@@ -806,7 +806,7 @@ DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
 query TT
-SHOW TABLES FROM test
+SHOW TABLES FROM test WITH COMMENT
 ----
 bar                   NULL
 child                 NULL

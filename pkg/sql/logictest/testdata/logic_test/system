@@ -9,7 +9,7 @@ system
 test
 
 query TT
-SHOW TABLES FROM system
+SHOW TABLES FROM system WITH COMMENT
 ----
 comments          NULL
 descriptor        NULL

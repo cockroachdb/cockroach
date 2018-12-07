@@ -12,7 +12,7 @@ query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
 query TT
-SHOW TABLES FROM information_schema
+SHOW TABLES FROM information_schema WITH COMMENT
 ----
 administrable_role_authorizations  NULL
 applicable_roles                   NULL
@@ -118,7 +118,7 @@ system
 test
 
 query TT
-SHOW TABLES FROM test.information_schema
+SHOW TABLES FROM test.information_schema WITH COMMENT
 ----
 administrable_role_authorizations  NULL
 applicable_roles                   NULL

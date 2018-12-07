@@ -10,7 +10,7 @@ query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
 query TT
-SHOW TABLES FROM crdb_internal
+SHOW TABLES FROM crdb_internal WITH COMMENT
 ----
 backward_dependencies      NULL
 builtin_functions          NULL

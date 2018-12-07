@@ -43,7 +43,7 @@ statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
 query TT colnames
-SHOW TABLES FROM test
+SHOW TABLES FROM test WITH COMMENT
 ----
 table_name  comment
 a           a_comment
@@ -118,7 +118,7 @@ b            INT        false        NULL            ·                      {pr
 c            INT        false        NULL            ·                      {primary}  false
 
 query TT
-SHOW TABLES FROM test
+SHOW TABLES FROM test WITH COMMENT
 ----
 a a_comment
 b NULL
