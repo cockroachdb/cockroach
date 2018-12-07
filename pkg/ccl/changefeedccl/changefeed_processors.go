@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -150,7 +151,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
 		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
-		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr,
+		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr, metrics,
 	)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
@@ -158,7 +159,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
+	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -300,6 +301,8 @@ type changeFrontier struct {
 	freqEmitResolved time.Duration
 	// lastEmitResolved is the last time a resolved timestamp was emitted.
 	lastEmitResolved time.Time
+	// lastSlowSpanLog is the last time a slow span from `sf` was logged.
+	lastSlowSpanLog time.Time
 
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
@@ -497,7 +500,9 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
 		return errors.Wrapf(err, `unmarshalling resolved span: %x`, raw)
 	}
-	if cf.sf.Forward(resolved.Span, resolved.Timestamp) {
+
+	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
+	if frontierChanged {
 		newResolved := cf.sf.Frontier()
 		cf.metrics.mu.Lock()
 		if cf.metricsID != -1 {
@@ -517,6 +522,25 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 			cf.lastEmitResolved = newResolved.GoTime()
 		}
 	}
+
+	// Potentially log the most behind span in the frontier for debugging.
+	slownessThreshold := 10 * changefeedPollInterval.Get(&cf.flowCtx.Settings.SV)
+	frontier := cf.sf.Frontier()
+	now := timeutil.Now()
+	if resolvedBehind := now.Sub(frontier.GoTime()); resolvedBehind > slownessThreshold {
+		if frontierChanged {
+			log.Infof(cf.Ctx, "job %d new resolved timestamp %s is behind by %s",
+				cf.spec.JobID, frontier, resolvedBehind)
+		}
+		const slowSpanMaxFrequency = 10 * time.Second
+		if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
+			cf.lastSlowSpanLog = now
+			s := cf.sf.peekFrontierSpan()
+			log.Infof(cf.Ctx, "job %d span [%s,%s) is behind by %s",
+				cf.spec.JobID, s.Key, s.EndKey, resolvedBehind)
+		}
+	}
+
 	return nil
 }
 

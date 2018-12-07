@@ -492,6 +492,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 		&s.nodeIDContainer,
 		st,
+		s.cfg.HistogramWindowInterval(),
 		func(opName, user string) (interface{}, func()) {
 			// This is a hack to get around a Go package dependency cycle. See comment
 			// in sql/jobs/registry.go on planHookMaker.
