@@ -21,7 +21,9 @@ UTF8                1
 # We filter here because optimizer will be different depending on which
 # configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer' AND variable != 'crdb_version'
+SELECT *
+FROM [SHOW ALL]
+WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'experimental_optimizer_updates'
 ----
 variable                           value
 application_name                   ·

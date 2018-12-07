@@ -633,8 +633,8 @@ query T
 SELECT create_statement FROM [SHOW CREATE t32759]
 ----
 CREATE TABLE t32759 (
-   x INT NULL,
-   z INT NULL,
+   x INT8 NULL,
+   z INT8 NULL,
    FAMILY "primary" (x, z, rowid)
 )
 
