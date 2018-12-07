@@ -119,15 +119,15 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},
 		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable},
+		{keys.CommentsTableID, sqlbase.CommentsTableSchema, sqlbase.CommentsTable},
 	} {
-		// Always create tables with "admin" privileges included, or CreateTestTableDescriptor fails.
-		privs := sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemAllowedPrivileges[test.id])
+		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(
 			context.TODO(),
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
-			privs,
+			&privs,
 		)
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
