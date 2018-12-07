@@ -73,7 +73,7 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 			t.Fatalf("unprintable character: %v (%v): %s %v", ch, input, sql, []byte(sql))
 		}
 	}
-	stmts, err := parser.Parse(sql)
+	stmts, _, err := parser.Parse(sql)
 	if err != nil {
 		t.Fatalf("%s: expected success, but found %s", sql, err)
 	}

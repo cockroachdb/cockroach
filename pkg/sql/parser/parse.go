@@ -40,6 +40,7 @@ type Parser struct {
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
 	stmtBuf    [1]tree.Statement
+	strBuf     [1]string
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -50,8 +51,25 @@ var defaultNakedIntType = coltypes.Int8
 var defaultNakedSerialType = coltypes.Serial8
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
+func (p *Parser) Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+}
+
+// ParseOne parses a sql statement string, ensuring that it contains only a
+// single statement, and returns that Statement.
+func (p *Parser) ParseOne(sql string) (tree.Statement, error) {
+	return p.parseOneWithDepth(1, sql)
+}
+
+func (p *Parser) parseOneWithDepth(depth int, sql string) (tree.Statement, error) {
+	stmts, _, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
+	}
+	return stmts[0], nil
 }
 
 func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
@@ -89,23 +107,25 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 func (p *Parser) parseWithDepth(
 	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (stmts tree.StatementList, err error) {
-	res := tree.StatementList(p.stmtBuf[:0])
+) (stmts tree.StatementList, sqlStrings []string, err error) {
+	stmts = tree.StatementList(p.stmtBuf[:0])
+	sqlStrings = p.strBuf[:0]
 	p.scanner.init(sql)
 	for {
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if stmt != nil {
-			res = append(res, stmt)
+			stmts = append(stmts, stmt)
+			sqlStrings = append(sqlStrings, sql)
 		}
 		if done {
 			break
 		}
 	}
-	return res, nil
+	return stmts, sqlStrings, nil
 }
 
 // parse parses a statement from the given scanned tokens.
@@ -155,14 +175,16 @@ func unaryNegation(e tree.Expr) tree.Expr {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (tree.StatementList, error) {
+func Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, error) {
+func ParseWithInt(
+	sql string, nakedIntType *coltypes.TInt,
+) (stmts tree.StatementList, sqlStrings []string, _ error) {
 	nakedSerialType := coltypes.Serial8
 	if nakedIntType == coltypes.Int4 {
 		nakedSerialType = coltypes.Serial4
@@ -179,14 +201,7 @@ func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, 
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (tree.Statement, error) {
 	var p Parser
-	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
-	}
-	return stmts[0], nil
+	return p.parseOneWithDepth(1, sql)
 }
 
 // ParseTableNameWithIndex parses a table name with index.
@@ -266,41 +281,3 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 
 	return cast.Type, nil
 }
-
-//func (p *Parser) SplitStmts(sql string) []string {
-//	var res []string
-//
-//	p.scanner.init(sql)
-//	var lval sqlSymType
-//	lastStart := -1
-//	for {
-//		posBeforeScan := p.scanner.pos
-//		p.scanner.scan(&lval)
-//		switch lval.id {
-//		case 0:
-//			// Done.
-//			if lastStart != -1 {
-//				res = append(res, sql[lastStart:posBeforeScan])
-//			}
-//			return res
-//
-//		case ERROR:
-//			if lastStart == -1 {
-//				lastStart = posBeforeScan
-//			}
-//			res = append(res, sql[lastStart:])
-//			return res
-//
-//		case ';':
-//			if lastStart != -1 {
-//				res = append(res, sql[lastStart:posBeforeScan])
-//			}
-//			lastStart = -1
-//
-//		default:
-//			if lastStart == -1 {
-//				lastStart = lval.pos
-//			}
-//		}
-//	}
-//}

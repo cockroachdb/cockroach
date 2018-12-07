@@ -41,5 +41,7 @@ type Statement struct {
 }
 
 func (s Statement) String() string {
-	return s.SQL
+	// We have the original SQL, but we still use String() because it obfuscates
+	// passwords.
+	return s.AST.String()
 }

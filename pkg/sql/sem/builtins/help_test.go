@@ -31,7 +31,7 @@ func TestHelpFunctions(t *testing.T) {
 			continue
 		}
 		t.Run(f, func(t *testing.T) {
-			_, err := parser.Parse("select " + f + "(??")
+			_, _, err := parser.Parse("select " + f + "(??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
 				return

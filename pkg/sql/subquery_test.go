@@ -28,14 +28,10 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sql := "SELECT 1 WHERE (SELECT crdb_internal.force_error('xxx', 'forced') > 0)"
 	p := makeTestPlanner()
-	stmts, err := p.parser.Parse(sql)
+	stmt, err := p.parser.ParseOne(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stmts) != 1 {
-		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
-	}
-	stmt := stmts[0]
 	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}

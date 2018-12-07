@@ -324,14 +324,10 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	// planner with the session so that its copy of the session data gets updated.
 	p.extendedEvalCtx.SessionData.Database = "test"
 
-	stmts, err := p.parser.Parse(sql)
+	stmt, err := p.parser.ParseOne(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stmts) != 1 {
-		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
-	}
-	stmt := stmts[0]
 	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}

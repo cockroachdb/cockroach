@@ -529,7 +529,7 @@ func (ls *logicStatement) readSQL(
 		if !hasVars {
 			newSyntax, err := func(inSql string) (string, error) {
 				// Can't rewrite the SQL otherwise because the vars make it invalid.
-				stmtList, err := parser.Parse(inSql)
+				stmtList, _, err := parser.Parse(inSql)
 				if err != nil {
 					if ls.expectErr != "" {
 						// Maybe a parse error was expected. Simply do not rewrite.
