@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,7 +41,7 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 	}
 	if err := c.ProcessorBase.Init(
 		nil,
-		&PostProcessSpec{},
+		&distsqlpb.PostProcessSpec{},
 		input.OutputTypes(),
 		flowCtx,
 		processorID,

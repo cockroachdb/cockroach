@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -25,7 +26,7 @@ import (
 type valuesProcessor struct {
 	ProcessorBase
 
-	columns []DatumInfo
+	columns []distsqlpb.DatumInfo
 	data    [][]byte
 	// numRows is only guaranteed to be set if there are zero columns (because of
 	// backward compatibility). If it set and there are columns, it matches the
@@ -44,8 +45,8 @@ const valuesProcName = "values"
 func newValuesProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *ValuesCoreSpec,
-	post *PostProcessSpec,
+	spec *distsqlpb.ValuesCoreSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
@@ -71,9 +72,9 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 
 	// Add a bogus header to appease the StreamDecoder, which wants to receive a
 	// header before any data.
-	m := &ProducerMessage{
+	m := &distsqlpb.ProducerMessage{
 		Typing: v.columns,
-		Header: &ProducerHeader{},
+		Header: &distsqlpb.ProducerHeader{},
 	}
 	if err := v.sd.AddMessage(m); err != nil {
 		v.MoveToDraining(err)
@@ -99,7 +100,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		if row == nil {
 			// Push a chunk of data to the stream decoder.
-			m := &ProducerMessage{}
+			m := &distsqlpb.ProducerMessage{}
 			if len(v.columns) == 0 {
 				if v.numRows == 0 {
 					v.MoveToDraining(nil /* err */)

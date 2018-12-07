@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -51,17 +52,17 @@ func (jb *joinerBase) init(
 	leftTypes []sqlbase.ColumnType,
 	rightTypes []sqlbase.ColumnType,
 	jType sqlbase.JoinType,
-	onExpr Expression,
+	onExpr distsqlpb.Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
 	numMergedColumns uint32,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	opts ProcStateOpts,
 ) error {
 	jb.joinType = jType
 
-	if isSetOpJoin(jb.joinType) {
+	if jb.joinType.IsSetOpJoin() {
 		if !onExpr.Empty() {
 			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 		}
@@ -160,10 +161,6 @@ func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
 	default:
 		return true
 	}
-}
-
-func isSetOpJoin(joinType sqlbase.JoinType) bool {
-	return joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with

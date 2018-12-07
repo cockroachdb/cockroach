@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -58,7 +59,7 @@ func (s *colBatchScan) Next() exec.ColBatch {
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec,
+	flowCtx *FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
 ) (*colBatchScan, error) {
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
@@ -67,7 +68,7 @@ func newColBatchScan(
 	limitHint := limitHint(spec.LimitHint, post)
 
 	numCols := len(spec.Table.Columns)
-	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if returnMutations {
 		for i := range spec.Table.Mutations {
 			if spec.Table.Mutations[i].GetColumn() != nil {
@@ -119,7 +120,7 @@ func initCRowFetcher(
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
-	scanVisibility ScanVisibility,
+	scanVisibility distsqlpb.ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
@@ -127,7 +128,7 @@ func initCRowFetcher(
 	}
 
 	cols := desc.Columns
-	if scanVisibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+	if scanVisibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
 		if len(desc.Mutations) > 0 {
 			cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 			cols = append(cols, desc.Columns...)

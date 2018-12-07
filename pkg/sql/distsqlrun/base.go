@@ -16,19 +16,18 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 const rowChannelBufSize = 16
@@ -375,7 +374,7 @@ type ProducerMetadata struct {
 	// RowNum corresponds to a row produced by a "source" processor that takes no
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.
-	RowNum *RemoteProducerMetadata_RowNum
+	RowNum *distsqlpb.RemoteProducerMetadata_RowNum
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
@@ -670,47 +669,4 @@ func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadat
 		row = r.alloc.CopyRow(row)
 	}
 	return r.RowReceiver.Push(row, meta)
-}
-
-// String implements fmt.Stringer.
-func (e *Error) String() string {
-	if err := e.ErrorDetail(); err != nil {
-		return err.Error()
-	}
-	return "<nil>"
-}
-
-// NewError creates an Error from an error, to be sent on the wire. It will
-// recognize certain errors and marshall them accordingly, and everything
-// unrecognized is turned into a PGError with code "internal".
-func NewError(err error) *Error {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
-		return &Error{
-			Detail: &Error_RetryableTxnError{
-				RetryableTxnError: retryErr,
-			}}
-	} else {
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.NewError(
-					pgerror.CodeInternalError, err.Error())}}
-	}
-}
-
-// ErrorDetail returns the payload as a Go error.
-func (e *Error) ErrorDetail() error {
-	if e == nil {
-		return nil
-	}
-	switch t := e.Detail.(type) {
-	case *Error_PGError:
-		return t.PGError
-	case *Error_RetryableTxnError:
-		return t.RetryableTxnError
-	default:
-		panic(fmt.Sprintf("bad error detail: %+v", t))
-	}
 }

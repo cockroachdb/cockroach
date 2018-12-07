@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,9 +31,9 @@ import (
 // the types as well because zero rows are allowed.
 func generateValuesSpec(
 	colTypes []sqlbase.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
-) (ValuesCoreSpec, error) {
-	var spec ValuesCoreSpec
-	spec.Columns = make([]DatumInfo, len(colTypes))
+) (distsqlpb.ValuesCoreSpec, error) {
+	var spec distsqlpb.ValuesCoreSpec
+	spec.Columns = make([]distsqlpb.DatumInfo, len(colTypes))
 	for i := range spec.Columns {
 		spec.Columns[i].Type = colTypes[i]
 		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
@@ -46,7 +47,7 @@ func generateValuesSpec(
 				var err error
 				buf, err = rows[i][j].Encode(&colTypes[j], &a, info.Encoding, buf)
 				if err != nil {
-					return ValuesCoreSpec{}, err
+					return distsqlpb.ValuesCoreSpec{}, err
 				}
 			}
 		}
@@ -78,7 +79,7 @@ func TestValuesProcessor(t *testing.T) {
 						EvalCtx:  evalCtx,
 					}
 
-					v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &PostProcessSpec{}, out)
+					v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &distsqlpb.PostProcessSpec{}, out)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -136,7 +137,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	post := PostProcessSpec{}
+	post := distsqlpb.PostProcessSpec{}
 	output := RowDisposer{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for _, rowsPerChunk := range []int{1, 4, 16} {

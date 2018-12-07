@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -66,11 +66,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	sketchSpecs := make([]distsqlrun.SketchSpec, len(stats))
+	sketchSpecs := make([]distsqlpb.SketchSpec, len(stats))
 	post := p.GetLastStagePost()
 	for i, s := range stats {
-		spec := distsqlrun.SketchSpec{
-			SketchType:          distsqlrun.SketchType_HLL_PLUS_PLUS_V1,
+		spec := distsqlpb.SketchSpec{
+			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: uint32(s.histogramMaxBuckets),
 			Columns:             make([]uint32, len(s.columns)),
@@ -104,7 +104,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Set up the samplers.
-	sampler := &distsqlrun.SamplerSpec{Sketches: sketchSpecs}
+	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range stats {
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
@@ -128,14 +128,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 
 	p.AddNoGroupingStage(
-		distsqlrun.ProcessorCoreUnion{Sampler: sampler},
-		distsqlrun.PostProcessSpec{},
+		distsqlpb.ProcessorCoreUnion{Sampler: sampler},
+		distsqlpb.PostProcessSpec{},
 		outTypes,
-		distsqlrun.Ordering{},
+		distsqlpb.Ordering{},
 	)
 
 	// Set up the final SampleAggregator stage.
-	agg := &distsqlrun.SampleAggregatorSpec{
+	agg := &distsqlpb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
@@ -148,8 +148,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	p.AddSingleGroupStage(
 		node,
-		distsqlrun.ProcessorCoreUnion{SampleAggregator: agg},
-		distsqlrun.PostProcessSpec{},
+		distsqlpb.ProcessorCoreUnion{SampleAggregator: agg},
+		distsqlpb.PostProcessSpec{},
 		[]sqlbase.ColumnType{},
 	)
 	return p, nil

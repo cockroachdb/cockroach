@@ -18,6 +18,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +37,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 }
 
 func newColOperator(
-	ctx context.Context, flowCtx *FlowCtx, spec *ProcessorSpec, inputs []exec.Operator,
+	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
 ) (exec.Operator, error) {
 	core := &spec.Core
 	post := &spec.Post
@@ -56,7 +57,7 @@ func newColOperator(
 			return nil, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
-		returnMutations := core.TableReader.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -66,7 +67,7 @@ func newColOperator(
 		if len(aggSpec.GroupCols) == 0 &&
 			len(aggSpec.Aggregations) == 1 &&
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
-			aggSpec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
 			return exec.NewCountOp(inputs[0]), nil
 		}
@@ -109,9 +110,9 @@ func newColOperator(
 			aggCols[i] = aggSpec.Aggregations[i].ColIdx
 
 			switch agg.Func {
-			case AggregatorSpec_AVG:
-			case AggregatorSpec_SUM_INT:
-			case AggregatorSpec_SUM:
+			case distsqlpb.AggregatorSpec_AVG:
+			case distsqlpb.AggregatorSpec_SUM_INT:
+			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0] {
 				case types.Int8, types.Int16, types.Int32, types.Int64:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
@@ -355,8 +356,8 @@ func planExpressionOperators(
 func (f *Flow) setupVectorized(ctx context.Context) error {
 	f.processors = make([]Processor, 1)
 
-	streamIDToInputOp := make(map[StreamID]exec.Operator)
-	streamIDToSpecIdx := make(map[StreamID]int)
+	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
+	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(f.spec.Processors))
@@ -368,7 +369,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		for j := range f.spec.Processors[i].Input {
 			input := &f.spec.Processors[i].Input[j]
 			for k := range input.Streams {
-				if input.Streams[k].Type == StreamEndpointSpec_LOCAL {
+				if input.Streams[k].Type == distsqlpb.StreamEndpointSpec_LOCAL {
 					id := input.Streams[k].StreamID
 					streamIDToSpecIdx[id] = i
 				} else {
@@ -386,7 +387,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
 		output := pspec.Output[0]
-		if output.Type != OutputRouterSpec_PASS_THROUGH {
+		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
 			return errors.Errorf("unsupported routed proc %s", output.Type)
 		}
 		if len(output.Streams) != 1 {
@@ -399,7 +400,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				return errors.Errorf("unsupported multi inputstream proc (%d streams)", len(input.Streams))
 			}
 			inputStream := &input.Streams[0]
-			if inputStream.Type != StreamEndpointSpec_LOCAL {
+			if inputStream.Type != distsqlpb.StreamEndpointSpec_LOCAL {
 				return errors.Errorf("unsupported input stream type %s", inputStream.Type)
 			}
 			inputs = append(inputs, streamIDToInputOp[inputStream.StreamID])
@@ -412,15 +413,15 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 
 		outputStream := output.Streams[0]
 		switch outputStream.Type {
-		case StreamEndpointSpec_LOCAL:
-		case StreamEndpointSpec_SYNC_RESPONSE:
+		case distsqlpb.StreamEndpointSpec_LOCAL:
+		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 			// Make the materializer, which will write to the given receiver.
 			columnTypes := f.syncFlowConsumer.Types()
 			outputToInputColIdx := make([]int, len(columnTypes))
 			for i := range outputToInputColIdx {
 				outputToInputColIdx[i] = i
 			}
-			proc, err := newMaterializer(&f.FlowCtx, pspec.ProcessorID, op, columnTypes, outputToInputColIdx, &PostProcessSpec{}, f.syncFlowConsumer)
+			proc, err := newMaterializer(&f.FlowCtx, pspec.ProcessorID, op, columnTypes, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, f.syncFlowConsumer)
 			if err != nil {
 				return err
 			}
@@ -437,7 +438,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		for i := range pspec.Output {
 			for j := range pspec.Output[i].Streams {
 				stream := &pspec.Output[i].Streams[j]
-				if stream.Type != StreamEndpointSpec_LOCAL {
+				if stream.Type != distsqlpb.StreamEndpointSpec_LOCAL {
 					continue
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]

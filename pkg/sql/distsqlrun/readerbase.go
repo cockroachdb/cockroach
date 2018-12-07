@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -28,7 +29,7 @@ const readerOverflowProtection = 1000000000000000 /* 10^15 */
 
 // limitHint returns the limit hint to set for a KVFetcher based on
 // the spec's limit hint and the PostProcessSpec.
-func limitHint(specLimitHint int64, post *PostProcessSpec) (limitHint int64) {
+func limitHint(specLimitHint int64, post *distsqlpb.PostProcessSpec) (limitHint int64) {
 	// We prioritize the post process's limit since ProcOutputHelper
 	// will tell us to stop once we emit enough rows.
 	if post.Limit != 0 && post.Limit <= readerOverflowProtection {

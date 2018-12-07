@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -270,8 +271,8 @@ var _ Processor = &interleavedReaderJoiner{}
 func newInterleavedReaderJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *InterleavedReaderJoinerSpec,
-	post *PostProcessSpec,
+	spec *distsqlpb.InterleavedReaderJoinerSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.nodeID == 0 {
@@ -326,7 +327,7 @@ func newInterleavedReaderJoiner(
 
 		tables[i].tableID = table.Desc.ID
 		tables[i].indexID = index.ID
-		tables[i].ordering = convertToColumnOrdering(table.Ordering)
+		tables[i].ordering = distsqlpb.ConvertToColumnOrdering(table.Ordering)
 		for _, trSpan := range table.Spans {
 			allSpans = append(allSpans, trSpan.Span)
 		}
@@ -387,7 +388,7 @@ func newInterleavedReaderJoiner(
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
-	tables []InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	tables []distsqlpb.InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *sqlbase.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))
 

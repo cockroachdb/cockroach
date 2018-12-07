@@ -20,6 +20,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -55,9 +56,9 @@ const sampleAggregatorProcName = "sample aggregator"
 func newSampleAggregator(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SampleAggregatorSpec,
+	spec *distsqlpb.SampleAggregatorSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*sampleAggregator, error) {
 	for _, s := range spec.Sketches {

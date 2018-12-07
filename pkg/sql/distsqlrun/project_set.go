@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,7 +29,7 @@ type projectSetProcessor struct {
 	ProcessorBase
 
 	input RowSource
-	spec  *ProjectSetSpec
+	spec  *distsqlpb.ProjectSetSpec
 
 	// exprHelpers are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
@@ -70,9 +71,9 @@ const projectSetProcName = "projectSet"
 func newProjectSetProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *ProjectSetSpec,
+	spec *distsqlpb.ProjectSetSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)

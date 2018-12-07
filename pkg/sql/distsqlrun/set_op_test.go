@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -29,15 +30,15 @@ type setOpTestCase struct {
 }
 
 func setOpTestCaseToMergeJoinerTestCase(tc setOpTestCase) mergeJoinerTestCase {
-	spec := MergeJoinerSpec{Type: tc.setOpType}
+	spec := distsqlpb.MergeJoinerSpec{Type: tc.setOpType}
 	ordering := make(sqlbase.ColumnOrdering, 0, len(tc.columnTypes))
 	outCols := make([]uint32, 0, len(tc.columnTypes))
 	for i := range tc.columnTypes {
 		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		outCols = append(outCols, uint32(i))
 	}
-	spec.LeftOrdering = convertToSpecOrdering(ordering)
-	spec.RightOrdering = convertToSpecOrdering(ordering)
+	spec.LeftOrdering = distsqlpb.ConvertToSpecOrdering(ordering)
+	spec.RightOrdering = distsqlpb.ConvertToSpecOrdering(ordering)
 
 	return mergeJoinerTestCase{
 		spec:          spec,

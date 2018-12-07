@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // Distinct is the physical processor implementation of the DISTINCT relational operator.
@@ -66,9 +67,9 @@ const sortedDistinctProcName = "sorted distinct"
 func NewDistinct(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *DistinctSpec,
+	spec *distsqlpb.DistinctSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
@@ -318,7 +319,7 @@ func (d *Distinct) ConsumerClosed() {
 	d.close()
 }
 
-var _ DistSQLSpanStats = &DistinctStats{}
+var _ distsqlpb.DistSQLSpanStats = &DistinctStats{}
 
 const distinctTagPrefix = "distinct."
 

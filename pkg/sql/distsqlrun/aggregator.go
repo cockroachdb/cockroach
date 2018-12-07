@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -29,20 +30,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
-	if fn == AggregatorSpec_ANY_NOT_NULL {
+	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -128,7 +129,7 @@ type aggregatorBase struct {
 	isScalar         bool
 	groupCols        columns
 	orderedGroupCols columns
-	aggregations     []AggregatorSpec_Aggregation
+	aggregations     []distsqlpb.AggregatorSpec_Aggregation
 
 	lastOrdGroupCols sqlbase.EncDatumRow
 	arena            stringarena.Arena
@@ -146,9 +147,9 @@ func (ag *aggregatorBase) init(
 	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *AggregatorSpec,
+	spec *distsqlpb.AggregatorSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	trailingMetaCallback func(context.Context) []ProducerMetadata,
 ) error {
@@ -160,9 +161,9 @@ func (ag *aggregatorBase) init(
 	}
 	ag.input = input
 	switch spec.Type {
-	case AggregatorSpec_SCALAR:
+	case distsqlpb.AggregatorSpec_SCALAR:
 		ag.isScalar = true
-	case AggregatorSpec_NON_SCALAR:
+	case distsqlpb.AggregatorSpec_NON_SCALAR:
 		ag.isScalar = false
 	default:
 		// This case exists for backward compatibility.
@@ -241,7 +242,7 @@ func (ag *aggregatorBase) init(
 	)
 }
 
-var _ DistSQLSpanStats = &AggregatorStats{}
+var _ distsqlpb.DistSQLSpanStats = &AggregatorStats{}
 
 const aggregatorTagPrefix = "aggregator."
 
@@ -323,15 +324,15 @@ const (
 func newAggregator(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *AggregatorSpec,
+	spec *distsqlpb.AggregatorSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
 	if len(spec.GroupCols) == 0 &&
 		len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
-		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		spec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 		!spec.Aggregations[0].Distinct {
 		return newCountAggregator(flowCtx, processorID, input, post, output)
 	}
@@ -363,9 +364,9 @@ func newAggregator(
 func newOrderedAggregator(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *AggregatorSpec,
+	spec *distsqlpb.AggregatorSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}

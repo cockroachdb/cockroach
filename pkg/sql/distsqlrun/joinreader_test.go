@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -89,11 +90,11 @@ func TestJoinReader(t *testing.T) {
 	testCases := []struct {
 		description     string
 		indexIdx        uint32
-		post            PostProcessSpec
+		post            distsqlpb.PostProcessSpec
 		onExpr          string
 		input           [][]tree.Datum
 		lookupCols      columns
-		indexFilterExpr Expression
+		indexFilterExpr distsqlpb.Expression
 		joinType        sqlbase.JoinType
 		inputTypes      []sqlbase.ColumnType
 		outputTypes     []sqlbase.ColumnType
@@ -101,7 +102,7 @@ func TestJoinReader(t *testing.T) {
 	}{
 		{
 			description: "Test selecting columns from second table",
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -118,7 +119,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test duplicates in the input of lookup joins",
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 3},
 			},
@@ -136,7 +137,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test lookup join with onExpr",
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -155,7 +156,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on covering secondary index",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{5},
 			},
@@ -163,7 +164,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2)},
 			},
 			lookupCols:      []uint32{1},
-			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{strType},
 			expected:        "[['one-two']]",
@@ -171,7 +172,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on non-covering secondary index",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{4},
 			},
@@ -179,14 +180,14 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2)},
 			},
 			lookupCols:      []uint32{1},
-			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      twoIntCols,
 			outputTypes:     oneIntCol,
 			expected:        "[[3]]",
 		},
 		{
 			description: "Test left outer lookup join on primary index",
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -203,7 +204,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left outer lookup join on covering secondary index",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 5},
 			},
@@ -212,7 +213,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(2), tree.DNull},
 			},
 			lookupCols:      []uint32{0},
-			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{intType, strType},
@@ -221,7 +222,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left outer lookup join on non-covering secondary index",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 4},
 			},
@@ -230,7 +231,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(2), tree.DNull},
 			},
 			lookupCols:      []uint32{0},
-			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{intType, intType},
@@ -239,7 +240,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -254,7 +255,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left outer lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -270,7 +271,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on secondary index with an implicit key column",
 			indexIdx:    1,
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{2},
 			},
@@ -309,11 +310,11 @@ func TestJoinReader(t *testing.T) {
 				jr, err := newJoinReader(
 					&flowCtx,
 					0, /* processorID */
-					&JoinReaderSpec{
+					&distsqlpb.JoinReaderSpec{
 						Table:           *td,
 						IndexIdx:        c.indexIdx,
 						LookupColumns:   c.lookupCols,
-						OnExpr:          Expression{Expr: c.onExpr},
+						OnExpr:          distsqlpb.Expression{Expr: c.onExpr},
 						IndexFilterExpr: c.indexFilterExpr,
 						Type:            c.joinType,
 					},
@@ -426,7 +427,7 @@ INSERT INTO test.t VALUES
 			}
 			lookupCols := []uint32{0}
 			in := NewRowBuffer(oneIntCol, genEncDatumRowsInt([][]int{{6}, {10}}), RowBufferArgs{})
-			post := PostProcessSpec{
+			post := distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{4}, // the 'd' column
 			}
@@ -436,7 +437,7 @@ INSERT INTO test.t VALUES
 			jr, err := newJoinReader(
 				&flowCtx,
 				0, /* processorID */
-				&JoinReaderSpec{Table: *td, IndexIdx: indexIdx, LookupColumns: lookupCols},
+				&distsqlpb.JoinReaderSpec{Table: *td, IndexIdx: indexIdx, LookupColumns: lookupCols},
 				in,
 				&post,
 				out,
@@ -518,7 +519,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out,
+			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -539,7 +540,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &RowBuffer{}
 		out.ConsumerDone()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out,
+			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -608,9 +609,9 @@ func BenchmarkJoinReader(b *testing.B) {
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
-		spec := JoinReaderSpec{Table: *tableDesc}
+		spec := distsqlpb.JoinReaderSpec{Table: *tableDesc}
 		input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numInputCols))
-		post := PostProcessSpec{}
+		post := distsqlpb.PostProcessSpec{}
 		output := RowDisposer{}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
