@@ -7,8 +7,10 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-import context "context"
-import grpc "google.golang.org/grpc"
+import (
+	context "context"
+	grpc "google.golang.org/grpc"
+)
 
 import io "io"
 
@@ -17,48 +19,158 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // UserLoginRequest contains credentials a user must provide to log in.
 type UserLoginRequest struct {
 	// A username which must correspond to a database user on the cluster.
 	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
 	// A password for the provided username.
-	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Password             string   `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UserLoginRequest) Reset()                    { *m = UserLoginRequest{} }
-func (m *UserLoginRequest) String() string            { return proto.CompactTextString(m) }
-func (*UserLoginRequest) ProtoMessage()               {}
-func (*UserLoginRequest) Descriptor() ([]byte, []int) { return fileDescriptorAuthentication, []int{0} }
+func (m *UserLoginRequest) Reset()         { *m = UserLoginRequest{} }
+func (m *UserLoginRequest) String() string { return proto.CompactTextString(m) }
+func (*UserLoginRequest) ProtoMessage()    {}
+func (*UserLoginRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{0}
+}
+func (m *UserLoginRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserLoginRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UserLoginRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserLoginRequest.Merge(dst, src)
+}
+func (m *UserLoginRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserLoginRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserLoginRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserLoginRequest proto.InternalMessageInfo
 
 // UserLoginResponse is currently empty. If a login is successful, an HTTP
 // Set-Cookie header will be added to the response with a session
 // cookie identifying the created session.
 type UserLoginResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UserLoginResponse) Reset()                    { *m = UserLoginResponse{} }
-func (m *UserLoginResponse) String() string            { return proto.CompactTextString(m) }
-func (*UserLoginResponse) ProtoMessage()               {}
-func (*UserLoginResponse) Descriptor() ([]byte, []int) { return fileDescriptorAuthentication, []int{1} }
+func (m *UserLoginResponse) Reset()         { *m = UserLoginResponse{} }
+func (m *UserLoginResponse) String() string { return proto.CompactTextString(m) }
+func (*UserLoginResponse) ProtoMessage()    {}
+func (*UserLoginResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{1}
+}
+func (m *UserLoginResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserLoginResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UserLoginResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserLoginResponse.Merge(dst, src)
+}
+func (m *UserLoginResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserLoginResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserLoginResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserLoginResponse proto.InternalMessageInfo
 
 // UserLogoutRequest will terminate the current session in use. The request
 // is empty because the current session is identified by an HTTP cookie on the
 // incoming request.
 type UserLogoutRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UserLogoutRequest) Reset()                    { *m = UserLogoutRequest{} }
-func (m *UserLogoutRequest) String() string            { return proto.CompactTextString(m) }
-func (*UserLogoutRequest) ProtoMessage()               {}
-func (*UserLogoutRequest) Descriptor() ([]byte, []int) { return fileDescriptorAuthentication, []int{2} }
+func (m *UserLogoutRequest) Reset()         { *m = UserLogoutRequest{} }
+func (m *UserLogoutRequest) String() string { return proto.CompactTextString(m) }
+func (*UserLogoutRequest) ProtoMessage()    {}
+func (*UserLogoutRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{2}
+}
+func (m *UserLogoutRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserLogoutRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UserLogoutRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserLogoutRequest.Merge(dst, src)
+}
+func (m *UserLogoutRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserLogoutRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserLogoutRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserLogoutRequest proto.InternalMessageInfo
 
 type UserLogoutResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *UserLogoutResponse) Reset()                    { *m = UserLogoutResponse{} }
-func (m *UserLogoutResponse) String() string            { return proto.CompactTextString(m) }
-func (*UserLogoutResponse) ProtoMessage()               {}
-func (*UserLogoutResponse) Descriptor() ([]byte, []int) { return fileDescriptorAuthentication, []int{3} }
+func (m *UserLogoutResponse) Reset()         { *m = UserLogoutResponse{} }
+func (m *UserLogoutResponse) String() string { return proto.CompactTextString(m) }
+func (*UserLogoutResponse) ProtoMessage()    {}
+func (*UserLogoutResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{3}
+}
+func (m *UserLogoutResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserLogoutResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *UserLogoutResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserLogoutResponse.Merge(dst, src)
+}
+func (m *UserLogoutResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserLogoutResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserLogoutResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserLogoutResponse proto.InternalMessageInfo
 
 // SessionCookie is a message used to encode the authentication cookie returned
 // from successful login requests.
@@ -66,13 +178,39 @@ type SessionCookie struct {
 	// The unique ID of the session.
 	ID int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// The secret needed to verify ownership of a session.
-	Secret []byte `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	Secret               []byte   `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SessionCookie) Reset()                    { *m = SessionCookie{} }
-func (m *SessionCookie) String() string            { return proto.CompactTextString(m) }
-func (*SessionCookie) ProtoMessage()               {}
-func (*SessionCookie) Descriptor() ([]byte, []int) { return fileDescriptorAuthentication, []int{4} }
+func (m *SessionCookie) Reset()         { *m = SessionCookie{} }
+func (m *SessionCookie) String() string { return proto.CompactTextString(m) }
+func (*SessionCookie) ProtoMessage()    {}
+func (*SessionCookie) Descriptor() ([]byte, []int) {
+	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{4}
+}
+func (m *SessionCookie) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SessionCookie) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SessionCookie) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SessionCookie.Merge(dst, src)
+}
+func (m *SessionCookie) XXX_Size() int {
+	return m.Size()
+}
+func (m *SessionCookie) XXX_DiscardUnknown() {
+	xxx_messageInfo_SessionCookie.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SessionCookie proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*UserLoginRequest)(nil), "cockroach.server.serverpb.UserLoginRequest")
@@ -90,8 +228,9 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for LogIn service
-
+// LogInClient is the client API for LogIn service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LogInClient interface {
 	// UserLogin is used to create a web authentication session.
 	UserLogin(ctx context.Context, in *UserLoginRequest, opts ...grpc.CallOption) (*UserLoginResponse, error)
@@ -107,15 +246,14 @@ func NewLogInClient(cc *grpc.ClientConn) LogInClient {
 
 func (c *logInClient) UserLogin(ctx context.Context, in *UserLoginRequest, opts ...grpc.CallOption) (*UserLoginResponse, error) {
 	out := new(UserLoginResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.LogIn/UserLogin", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.LogIn/UserLogin", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for LogIn service
-
+// LogInServer is the server API for LogIn service.
 type LogInServer interface {
 	// UserLogin is used to create a web authentication session.
 	UserLogin(context.Context, *UserLoginRequest) (*UserLoginResponse, error)
@@ -156,8 +294,9 @@ var _LogIn_serviceDesc = grpc.ServiceDesc{
 	Metadata: "server/serverpb/authentication.proto",
 }
 
-// Client API for LogOut service
-
+// LogOutClient is the client API for LogOut service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LogOutClient interface {
 	// UserLogout terminates an active authentication session.
 	UserLogout(ctx context.Context, in *UserLogoutRequest, opts ...grpc.CallOption) (*UserLogoutResponse, error)
@@ -173,15 +312,14 @@ func NewLogOutClient(cc *grpc.ClientConn) LogOutClient {
 
 func (c *logOutClient) UserLogout(ctx context.Context, in *UserLogoutRequest, opts ...grpc.CallOption) (*UserLogoutResponse, error) {
 	out := new(UserLogoutResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.LogOut/UserLogout", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.LogOut/UserLogout", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for LogOut service
-
+// LogOutServer is the server API for LogOut service.
 type LogOutServer interface {
 	// UserLogout terminates an active authentication session.
 	UserLogout(context.Context, *UserLogoutRequest) (*UserLogoutResponse, error)
@@ -345,6 +483,9 @@ func encodeVarintAuthentication(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *UserLoginRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Username)
@@ -359,24 +500,36 @@ func (m *UserLoginRequest) Size() (n int) {
 }
 
 func (m *UserLoginResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *UserLogoutRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *UserLogoutResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *SessionCookie) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ID != 0 {
@@ -865,9 +1018,11 @@ var (
 	ErrIntOverflowAuthentication   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/authentication.proto", fileDescriptorAuthentication) }
+func init() {
+	proto.RegisterFile("server/serverpb/authentication.proto", fileDescriptor_authentication_a7ea30ecf9a74aa6)
+}
 
-var fileDescriptorAuthentication = []byte{
+var fileDescriptor_authentication_a7ea30ecf9a74aa6 = []byte{
 	// 368 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4d, 0x4b, 0xeb, 0x40,
 	0x14, 0x86, 0x3b, 0xb9, 0xdc, 0xdc, 0x76, 0xee, 0xbd, 0x68, 0xc7, 0x52, 0x6a, 0x90, 0x28, 0xc1,

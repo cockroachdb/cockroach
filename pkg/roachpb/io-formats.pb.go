@@ -14,6 +14,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 type IOFileFormat_FileFormat int32
 
 const (
@@ -59,7 +65,7 @@ func (x *IOFileFormat_FileFormat) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_FileFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorIoFormats, []int{0, 0}
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{0, 0}
 }
 
 type IOFileFormat_Compression int32
@@ -101,7 +107,7 @@ func (x *IOFileFormat_Compression) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_Compression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorIoFormats, []int{0, 1}
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{0, 1}
 }
 
 type MySQLOutfileOptions_Enclose int32
@@ -140,22 +146,48 @@ func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (MySQLOutfileOptions_Enclose) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorIoFormats, []int{2, 0}
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{2, 0}
 }
 
 type IOFileFormat struct {
-	Format      IOFileFormat_FileFormat  `protobuf:"varint,1,opt,name=format,enum=cockroach.roachpb.IOFileFormat_FileFormat" json:"format"`
-	Csv         CSVOptions               `protobuf:"bytes,2,opt,name=csv" json:"csv"`
-	MysqlOut    MySQLOutfileOptions      `protobuf:"bytes,3,opt,name=mysql_out,json=mysqlOut" json:"mysql_out"`
-	PgCopy      PgCopyOptions            `protobuf:"bytes,4,opt,name=pg_copy,json=pgCopy" json:"pg_copy"`
-	PgDump      PgDumpOptions            `protobuf:"bytes,6,opt,name=pg_dump,json=pgDump" json:"pg_dump"`
-	Compression IOFileFormat_Compression `protobuf:"varint,5,opt,name=compression,enum=cockroach.roachpb.IOFileFormat_Compression" json:"compression"`
+	Format               IOFileFormat_FileFormat  `protobuf:"varint,1,opt,name=format,enum=cockroach.roachpb.IOFileFormat_FileFormat" json:"format"`
+	Csv                  CSVOptions               `protobuf:"bytes,2,opt,name=csv" json:"csv"`
+	MysqlOut             MySQLOutfileOptions      `protobuf:"bytes,3,opt,name=mysql_out,json=mysqlOut" json:"mysql_out"`
+	PgCopy               PgCopyOptions            `protobuf:"bytes,4,opt,name=pg_copy,json=pgCopy" json:"pg_copy"`
+	PgDump               PgDumpOptions            `protobuf:"bytes,6,opt,name=pg_dump,json=pgDump" json:"pg_dump"`
+	Compression          IOFileFormat_Compression `protobuf:"varint,5,opt,name=compression,enum=cockroach.roachpb.IOFileFormat_Compression" json:"compression"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *IOFileFormat) Reset()                    { *m = IOFileFormat{} }
-func (m *IOFileFormat) String() string            { return proto.CompactTextString(m) }
-func (*IOFileFormat) ProtoMessage()               {}
-func (*IOFileFormat) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{0} }
+func (m *IOFileFormat) Reset()         { *m = IOFileFormat{} }
+func (m *IOFileFormat) String() string { return proto.CompactTextString(m) }
+func (*IOFileFormat) ProtoMessage()    {}
+func (*IOFileFormat) Descriptor() ([]byte, []int) {
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{0}
+}
+func (m *IOFileFormat) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IOFileFormat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *IOFileFormat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IOFileFormat.Merge(dst, src)
+}
+func (m *IOFileFormat) XXX_Size() int {
+	return m.Size()
+}
+func (m *IOFileFormat) XXX_DiscardUnknown() {
+	xxx_messageInfo_IOFileFormat.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IOFileFormat proto.InternalMessageInfo
 
 // CSVOptions describe the format of csv data (delimiter, comment, etc).
 type CSVOptions struct {
@@ -166,13 +198,39 @@ type CSVOptions struct {
 	// null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
 	NullEncoding *string `protobuf:"bytes,3,opt,name=null_encoding,json=nullEncoding" json:"null_encoding,omitempty"`
 	// skip the first N lines of the input (e.g. to ignore column headers) when reading.
-	Skip uint32 `protobuf:"varint,4,opt,name=skip" json:"skip"`
+	Skip                 uint32   `protobuf:"varint,4,opt,name=skip" json:"skip"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CSVOptions) Reset()                    { *m = CSVOptions{} }
-func (m *CSVOptions) String() string            { return proto.CompactTextString(m) }
-func (*CSVOptions) ProtoMessage()               {}
-func (*CSVOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{1} }
+func (m *CSVOptions) Reset()         { *m = CSVOptions{} }
+func (m *CSVOptions) String() string { return proto.CompactTextString(m) }
+func (*CSVOptions) ProtoMessage()    {}
+func (*CSVOptions) Descriptor() ([]byte, []int) {
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{1}
+}
+func (m *CSVOptions) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CSVOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CSVOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CSVOptions.Merge(dst, src)
+}
+func (m *CSVOptions) XXX_Size() int {
+	return m.Size()
+}
+func (m *CSVOptions) XXX_DiscardUnknown() {
+	xxx_messageInfo_CSVOptions.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CSVOptions proto.InternalMessageInfo
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
 type MySQLOutfileOptions struct {
@@ -187,13 +245,39 @@ type MySQLOutfileOptions struct {
 	// has_escape indicates that an escape character is set (mysql's default is not).
 	HasEscape bool `protobuf:"varint,5,opt,name=has_escape,json=hasEscape" json:"has_escape"`
 	// escape is the character used to prefix the other delimiters (--fields-escaped-by)
-	Escape int32 `protobuf:"varint,6,opt,name=escape" json:"escape"`
+	Escape               int32    `protobuf:"varint,6,opt,name=escape" json:"escape"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MySQLOutfileOptions) Reset()                    { *m = MySQLOutfileOptions{} }
-func (m *MySQLOutfileOptions) String() string            { return proto.CompactTextString(m) }
-func (*MySQLOutfileOptions) ProtoMessage()               {}
-func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{2} }
+func (m *MySQLOutfileOptions) Reset()         { *m = MySQLOutfileOptions{} }
+func (m *MySQLOutfileOptions) String() string { return proto.CompactTextString(m) }
+func (*MySQLOutfileOptions) ProtoMessage()    {}
+func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) {
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{2}
+}
+func (m *MySQLOutfileOptions) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MySQLOutfileOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MySQLOutfileOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MySQLOutfileOptions.Merge(dst, src)
+}
+func (m *MySQLOutfileOptions) XXX_Size() int {
+	return m.Size()
+}
+func (m *MySQLOutfileOptions) XXX_DiscardUnknown() {
+	xxx_messageInfo_MySQLOutfileOptions.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MySQLOutfileOptions proto.InternalMessageInfo
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
 type PgCopyOptions struct {
@@ -202,24 +286,76 @@ type PgCopyOptions struct {
 	// null is the NULL value (NULL)
 	Null string `protobuf:"bytes,2,opt,name=null" json:"null"`
 	// maxRowSize is the maximum row size
-	MaxRowSize int32 `protobuf:"varint,3,opt,name=maxRowSize" json:"maxRowSize"`
+	MaxRowSize           int32    `protobuf:"varint,3,opt,name=maxRowSize" json:"maxRowSize"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *PgCopyOptions) Reset()                    { *m = PgCopyOptions{} }
-func (m *PgCopyOptions) String() string            { return proto.CompactTextString(m) }
-func (*PgCopyOptions) ProtoMessage()               {}
-func (*PgCopyOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{3} }
+func (m *PgCopyOptions) Reset()         { *m = PgCopyOptions{} }
+func (m *PgCopyOptions) String() string { return proto.CompactTextString(m) }
+func (*PgCopyOptions) ProtoMessage()    {}
+func (*PgCopyOptions) Descriptor() ([]byte, []int) {
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{3}
+}
+func (m *PgCopyOptions) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PgCopyOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PgCopyOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PgCopyOptions.Merge(dst, src)
+}
+func (m *PgCopyOptions) XXX_Size() int {
+	return m.Size()
+}
+func (m *PgCopyOptions) XXX_DiscardUnknown() {
+	xxx_messageInfo_PgCopyOptions.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PgCopyOptions proto.InternalMessageInfo
 
 // PgDumpOptions describe the format of postgresql's pg_dump.
 type PgDumpOptions struct {
 	// maxRowSize is the maximum row size
-	MaxRowSize int32 `protobuf:"varint,1,opt,name=maxRowSize" json:"maxRowSize"`
+	MaxRowSize           int32    `protobuf:"varint,1,opt,name=maxRowSize" json:"maxRowSize"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *PgDumpOptions) Reset()                    { *m = PgDumpOptions{} }
-func (m *PgDumpOptions) String() string            { return proto.CompactTextString(m) }
-func (*PgDumpOptions) ProtoMessage()               {}
-func (*PgDumpOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{4} }
+func (m *PgDumpOptions) Reset()         { *m = PgDumpOptions{} }
+func (m *PgDumpOptions) String() string { return proto.CompactTextString(m) }
+func (*PgDumpOptions) ProtoMessage()    {}
+func (*PgDumpOptions) Descriptor() ([]byte, []int) {
+	return fileDescriptor_io_formats_2eb6f547f3889c94, []int{4}
+}
+func (m *PgDumpOptions) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PgDumpOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PgDumpOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PgDumpOptions.Merge(dst, src)
+}
+func (m *PgDumpOptions) XXX_Size() int {
+	return m.Size()
+}
+func (m *PgDumpOptions) XXX_DiscardUnknown() {
+	xxx_messageInfo_PgDumpOptions.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PgDumpOptions proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*IOFileFormat)(nil), "cockroach.roachpb.IOFileFormat")
@@ -420,6 +556,9 @@ func encodeVarintIoFormats(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *IOFileFormat) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovIoFormats(uint64(m.Format))
@@ -436,6 +575,9 @@ func (m *IOFileFormat) Size() (n int) {
 }
 
 func (m *CSVOptions) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovIoFormats(uint64(m.Comma))
@@ -449,6 +591,9 @@ func (m *CSVOptions) Size() (n int) {
 }
 
 func (m *MySQLOutfileOptions) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovIoFormats(uint64(m.RowSeparator))
@@ -461,6 +606,9 @@ func (m *MySQLOutfileOptions) Size() (n int) {
 }
 
 func (m *PgCopyOptions) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovIoFormats(uint64(m.Delimiter))
@@ -471,6 +619,9 @@ func (m *PgCopyOptions) Size() (n int) {
 }
 
 func (m *PgDumpOptions) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovIoFormats(uint64(m.MaxRowSize))
@@ -1291,9 +1442,11 @@ var (
 	ErrIntOverflowIoFormats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/io-formats.proto", fileDescriptorIoFormats) }
+func init() {
+	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_2eb6f547f3889c94)
+}
 
-var fileDescriptorIoFormats = []byte{
+var fileDescriptor_io_formats_2eb6f547f3889c94 = []byte{
 	// 660 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0x4f, 0x6f, 0xd3, 0x4e,
 	0x10, 0xcd, 0xe6, 0xbf, 0x27, 0x49, 0x7f, 0xfb, 0x5b, 0x38, 0x58, 0x15, 0x98, 0x60, 0x10, 0x2a,

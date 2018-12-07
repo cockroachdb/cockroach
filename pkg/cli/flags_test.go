@@ -427,9 +427,21 @@ func TestServerConnSettings(t *testing.T) {
 				t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
 					i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
 			}
-			if td.expLocalityAdvertiseAddr != fmt.Sprintf("%s", serverCfg.LocalityAddresses) {
+			var locAddrStr strings.Builder
+			locAddrStr.WriteString("[")
+			for i, a := range serverCfg.LocalityAddresses {
+				if i > 0 {
+					locAddrStr.WriteString(" ")
+				}
+				fmt.Fprintf(
+					&locAddrStr, "{{%s %s} %s}",
+					a.Address.NetworkField, a.Address.AddressField, a.LocalityTier.String(),
+				)
+			}
+			locAddrStr.WriteString("]")
+			if td.expLocalityAdvertiseAddr != locAddrStr.String() {
 				t.Errorf("%d. serverCfg.expLocalityAdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
-					i, td.expLocalityAdvertiseAddr, serverCfg.LocalityAddresses, td.args)
+					i, td.expLocalityAdvertiseAddr, locAddrStr.String(), td.args)
 			}
 		})
 	}

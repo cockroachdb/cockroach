@@ -6,7 +6,7 @@ package storagepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -16,6 +16,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
 // liveness system.
@@ -58,7 +64,9 @@ var NodeLivenessStatus_value = map[string]int32{
 func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
-func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) { return fileDescriptorLiveness, []int{0} }
+func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_liveness_6f963fa8db838a98, []int{0}
+}
 
 // Liveness holds information about a node's latest heartbeat and epoch.
 //
@@ -71,15 +79,41 @@ type Liveness struct {
 	// is later than the expiration timestamp).
 	Epoch int64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	// The timestamp at which this liveness record expires.
-	Expiration      cockroach_util_hlc1.LegacyTimestamp `protobuf:"bytes,3,opt,name=expiration" json:"expiration"`
-	Draining        bool                                `protobuf:"varint,4,opt,name=draining,proto3" json:"draining,omitempty"`
-	Decommissioning bool                                `protobuf:"varint,5,opt,name=decommissioning,proto3" json:"decommissioning,omitempty"`
+	Expiration           hlc.LegacyTimestamp `protobuf:"bytes,3,opt,name=expiration,proto3" json:"expiration"`
+	Draining             bool                `protobuf:"varint,4,opt,name=draining,proto3" json:"draining,omitempty"`
+	Decommissioning      bool                `protobuf:"varint,5,opt,name=decommissioning,proto3" json:"decommissioning,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *Liveness) Reset()                    { *m = Liveness{} }
-func (m *Liveness) String() string            { return proto.CompactTextString(m) }
-func (*Liveness) ProtoMessage()               {}
-func (*Liveness) Descriptor() ([]byte, []int) { return fileDescriptorLiveness, []int{0} }
+func (m *Liveness) Reset()         { *m = Liveness{} }
+func (m *Liveness) String() string { return proto.CompactTextString(m) }
+func (*Liveness) ProtoMessage()    {}
+func (*Liveness) Descriptor() ([]byte, []int) {
+	return fileDescriptor_liveness_6f963fa8db838a98, []int{0}
+}
+func (m *Liveness) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Liveness) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Liveness) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Liveness.Merge(dst, src)
+}
+func (m *Liveness) XXX_Size() int {
+	return m.Size()
+}
+func (m *Liveness) XXX_DiscardUnknown() {
+	xxx_messageInfo_Liveness.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Liveness proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Liveness)(nil), "cockroach.storage.Liveness")
@@ -160,7 +194,7 @@ func NewPopulatedLiveness(r randyLiveness, easy bool) *Liveness {
 	if r.Intn(2) == 0 {
 		this.Epoch *= -1
 	}
-	v1 := cockroach_util_hlc1.NewPopulatedLegacyTimestamp(r, easy)
+	v1 := hlc.NewPopulatedLegacyTimestamp(r, easy)
 	this.Expiration = *v1
 	this.Draining = bool(bool(r.Intn(2) == 0))
 	this.Decommissioning = bool(bool(r.Intn(2) == 0))
@@ -242,6 +276,9 @@ func encodeVarintPopulateLiveness(dAtA []byte, v uint64) []byte {
 	return dAtA
 }
 func (m *Liveness) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -537,9 +574,11 @@ var (
 	ErrIntOverflowLiveness   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptorLiveness) }
+func init() {
+	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_6f963fa8db838a98)
+}
 
-var fileDescriptorLiveness = []byte{
+var fileDescriptor_liveness_6f963fa8db838a98 = []byte{
 	// 418 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x52, 0xc1, 0x8e, 0x93, 0x40,
 	0x18, 0xee, 0xb4, 0xb4, 0x5b, 0xa7, 0x89, 0xc5, 0x71, 0x0f, 0x4d, 0x0f, 0x40, 0xdc, 0x0b, 0xf1,

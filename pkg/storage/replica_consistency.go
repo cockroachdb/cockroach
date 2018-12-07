@@ -182,10 +182,10 @@ func (r *Replica) collectChecksumFromReplica(
 	}
 	client := NewPerReplicaClient(conn)
 	req := &CollectChecksumRequest{
-		StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
-		r.RangeID,
-		id,
-		checksum,
+		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
+		RangeID:            r.RangeID,
+		ChecksumID:         id,
+		Checksum:           checksum,
 	}
 	resp, err := client.CollectChecksum(ctx, req)
 	if err != nil {
