@@ -276,7 +276,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Reassign comment.
-	if err := reassignComment(p, ctx, id, newID); err != nil {
+	if err := reassignComment(ctx, p, id, newID); err != nil {
 		return err
 	}
 
@@ -384,7 +384,7 @@ func reassignReferencedTables(
 }
 
 // reassignComment reassign comment on table
-func reassignComment(p *planner, ctx context.Context, oldID, newID sqlbase.ID) error {
+func reassignComment(ctx context.Context, p *planner, oldID, newID sqlbase.ID) error {
 	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 		ctx,
 		"select-comment",
@@ -416,11 +416,7 @@ func reassignComment(p *planner, ctx context.Context, oldID, newID sqlbase.ID) e
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.TableCommentType,
 		oldID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
