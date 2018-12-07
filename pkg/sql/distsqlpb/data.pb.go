@@ -6,13 +6,10 @@ package distsqlpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_pgerror "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_sql_sqlbase2 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_util_tracing "github.com/cockroachdb/cockroach/pkg/util/tracing"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import pgerror "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+import sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import tracing "github.com/cockroachdb/cockroach/pkg/util/tracing"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -22,6 +19,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // The direction of the desired ordering for a column.
 type Ordering_Column_Direction int32
@@ -57,7 +60,7 @@ func (x *Ordering_Column_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Ordering_Column_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{2, 0, 0}
+	return fileDescriptor_data_f33d9406823eb329, []int{2, 0, 0}
 }
 
 type StreamEndpointSpec_Type int32
@@ -102,7 +105,7 @@ func (x *StreamEndpointSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (StreamEndpointSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{3, 0}
+	return fileDescriptor_data_f33d9406823eb329, []int{3, 0}
 }
 
 type InputSyncSpec_Type int32
@@ -141,7 +144,9 @@ func (x *InputSyncSpec_Type) UnmarshalJSON(data []byte) error {
 	*x = InputSyncSpec_Type(value)
 	return nil
 }
-func (InputSyncSpec_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorData, []int{4, 0} }
+func (InputSyncSpec_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{4, 0}
+}
 
 type OutputRouterSpec_Type int32
 
@@ -187,19 +192,47 @@ func (x *OutputRouterSpec_Type) UnmarshalJSON(data []byte) error {
 	*x = OutputRouterSpec_Type(value)
 	return nil
 }
-func (OutputRouterSpec_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorData, []int{5, 0} }
+func (OutputRouterSpec_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{5, 0}
+}
 
 // Error is a generic representation including a string message.
 type Error struct {
 	// Types that are valid to be assigned to Detail:
 	//	*Error_PGError
 	//	*Error_RetryableTxnError
-	Detail isError_Detail `protobuf_oneof:"detail"`
+	Detail               isError_Detail `protobuf_oneof:"detail"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *Error) Reset()                    { *m = Error{} }
-func (*Error) ProtoMessage()               {}
-func (*Error) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{0} }
+func (m *Error) Reset()      { *m = Error{} }
+func (*Error) ProtoMessage() {}
+func (*Error) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{0}
+}
+func (m *Error) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Error) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Error) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Error.Merge(dst, src)
+}
+func (m *Error) XXX_Size() int {
+	return m.Size()
+}
+func (m *Error) XXX_DiscardUnknown() {
+	xxx_messageInfo_Error.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Error proto.InternalMessageInfo
 
 type isError_Detail interface {
 	isError_Detail()
@@ -208,10 +241,10 @@ type isError_Detail interface {
 }
 
 type Error_PGError struct {
-	PGError *cockroach_pgerror.Error `protobuf:"bytes,1,opt,name=pg_error,json=pgError,oneof"`
+	PGError *pgerror.Error `protobuf:"bytes,1,opt,name=pg_error,json=pgError,oneof"`
 }
 type Error_RetryableTxnError struct {
-	RetryableTxnError *cockroach_roachpb2.UnhandledRetryableError `protobuf:"bytes,2,opt,name=retryableTxnError,oneof"`
+	RetryableTxnError *roachpb.UnhandledRetryableError `protobuf:"bytes,2,opt,name=retryableTxnError,oneof"`
 }
 
 func (*Error_PGError) isError_Detail()           {}
@@ -224,14 +257,14 @@ func (m *Error) GetDetail() isError_Detail {
 	return nil
 }
 
-func (m *Error) GetPGError() *cockroach_pgerror.Error {
+func (m *Error) GetPGError() *pgerror.Error {
 	if x, ok := m.GetDetail().(*Error_PGError); ok {
 		return x.PGError
 	}
 	return nil
 }
 
-func (m *Error) GetRetryableTxnError() *cockroach_roachpb2.UnhandledRetryableError {
+func (m *Error) GetRetryableTxnError() *roachpb.UnhandledRetryableError {
 	if x, ok := m.GetDetail().(*Error_RetryableTxnError); ok {
 		return x.RetryableTxnError
 	}
@@ -274,7 +307,7 @@ func _Error_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(cockroach_pgerror.Error)
+		msg := new(pgerror.Error)
 		err := b.DecodeMessage(msg)
 		m.Detail = &Error_PGError{msg}
 		return true, err
@@ -282,7 +315,7 @@ func _Error_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(cockroach_roachpb2.UnhandledRetryableError)
+		msg := new(roachpb.UnhandledRetryableError)
 		err := b.DecodeMessage(msg)
 		m.Detail = &Error_RetryableTxnError{msg}
 		return true, err
@@ -297,12 +330,12 @@ func _Error_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Detail.(type) {
 	case *Error_PGError:
 		s := proto.Size(x.PGError)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *Error_RetryableTxnError:
 		s := proto.Size(x.RetryableTxnError)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -312,30 +345,106 @@ func _Error_OneofSizer(msg proto.Message) (n int) {
 	return n
 }
 
-func (m *Expression) Reset()                    { *m = Expression{} }
-func (*Expression) ProtoMessage()               {}
-func (*Expression) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{1} }
+func (m *Expression) Reset()      { *m = Expression{} }
+func (*Expression) ProtoMessage() {}
+func (*Expression) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{1}
+}
+func (m *Expression) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Expression) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Expression) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Expression.Merge(dst, src)
+}
+func (m *Expression) XXX_Size() int {
+	return m.Size()
+}
+func (m *Expression) XXX_DiscardUnknown() {
+	xxx_messageInfo_Expression.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Expression proto.InternalMessageInfo
 
 // Ordering defines an order - specifically a list of column indices and
 // directions. See sqlbase.ColumnOrdering.
 type Ordering struct {
-	Columns []Ordering_Column `protobuf:"bytes,1,rep,name=columns" json:"columns"`
+	Columns              []Ordering_Column `protobuf:"bytes,1,rep,name=columns" json:"columns"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *Ordering) Reset()                    { *m = Ordering{} }
-func (m *Ordering) String() string            { return proto.CompactTextString(m) }
-func (*Ordering) ProtoMessage()               {}
-func (*Ordering) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{2} }
+func (m *Ordering) Reset()         { *m = Ordering{} }
+func (m *Ordering) String() string { return proto.CompactTextString(m) }
+func (*Ordering) ProtoMessage()    {}
+func (*Ordering) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{2}
+}
+func (m *Ordering) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Ordering) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Ordering) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Ordering.Merge(dst, src)
+}
+func (m *Ordering) XXX_Size() int {
+	return m.Size()
+}
+func (m *Ordering) XXX_DiscardUnknown() {
+	xxx_messageInfo_Ordering.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Ordering proto.InternalMessageInfo
 
 type Ordering_Column struct {
-	ColIdx    uint32                    `protobuf:"varint,1,opt,name=col_idx,json=colIdx" json:"col_idx"`
-	Direction Ordering_Column_Direction `protobuf:"varint,2,opt,name=direction,enum=cockroach.sql.distsqlpb.Ordering_Column_Direction" json:"direction"`
+	ColIdx               uint32                    `protobuf:"varint,1,opt,name=col_idx,json=colIdx" json:"col_idx"`
+	Direction            Ordering_Column_Direction `protobuf:"varint,2,opt,name=direction,enum=cockroach.sql.distsqlpb.Ordering_Column_Direction" json:"direction"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
-func (m *Ordering_Column) Reset()                    { *m = Ordering_Column{} }
-func (m *Ordering_Column) String() string            { return proto.CompactTextString(m) }
-func (*Ordering_Column) ProtoMessage()               {}
-func (*Ordering_Column) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{2, 0} }
+func (m *Ordering_Column) Reset()         { *m = Ordering_Column{} }
+func (m *Ordering_Column) String() string { return proto.CompactTextString(m) }
+func (*Ordering_Column) ProtoMessage()    {}
+func (*Ordering_Column) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{2, 0}
+}
+func (m *Ordering_Column) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Ordering_Column) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Ordering_Column) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Ordering_Column.Merge(dst, src)
+}
+func (m *Ordering_Column) XXX_Size() int {
+	return m.Size()
+}
+func (m *Ordering_Column) XXX_DiscardUnknown() {
+	xxx_messageInfo_Ordering_Column.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Ordering_Column proto.InternalMessageInfo
 
 // StreamEndpointSpec describes one of the endpoints (input or output) of a physical
 // stream.
@@ -355,13 +464,39 @@ type StreamEndpointSpec struct {
 	TargetNodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,4,opt,name=target_node_id,json=targetNodeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"target_node_id"`
 	// Serving address for the target host. Used by 2.0 nodes instead of target_node_id.
 	// TODO(bdarnell): Remove after 2.1
-	DeprecatedTargetAddr string `protobuf:"bytes,3,opt,name=deprecated_target_addr,json=deprecatedTargetAddr" json:"deprecated_target_addr"`
+	DeprecatedTargetAddr string   `protobuf:"bytes,3,opt,name=deprecated_target_addr,json=deprecatedTargetAddr" json:"deprecated_target_addr"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StreamEndpointSpec) Reset()                    { *m = StreamEndpointSpec{} }
-func (m *StreamEndpointSpec) String() string            { return proto.CompactTextString(m) }
-func (*StreamEndpointSpec) ProtoMessage()               {}
-func (*StreamEndpointSpec) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{3} }
+func (m *StreamEndpointSpec) Reset()         { *m = StreamEndpointSpec{} }
+func (m *StreamEndpointSpec) String() string { return proto.CompactTextString(m) }
+func (*StreamEndpointSpec) ProtoMessage()    {}
+func (*StreamEndpointSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{3}
+}
+func (m *StreamEndpointSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamEndpointSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StreamEndpointSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamEndpointSpec.Merge(dst, src)
+}
+func (m *StreamEndpointSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamEndpointSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamEndpointSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamEndpointSpec proto.InternalMessageInfo
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how
 // to interleave rows from multiple input streams.
@@ -370,13 +505,39 @@ type InputSyncSpec struct {
 	Ordering Ordering             `protobuf:"bytes,2,opt,name=ordering" json:"ordering"`
 	Streams  []StreamEndpointSpec `protobuf:"bytes,3,rep,name=streams" json:"streams"`
 	// Schema for the streams entering this synchronizer.
-	ColumnTypes []cockroach_sql_sqlbase1.ColumnType `protobuf:"bytes,4,rep,name=column_types,json=columnTypes" json:"column_types"`
+	ColumnTypes          []sqlbase.ColumnType `protobuf:"bytes,4,rep,name=column_types,json=columnTypes" json:"column_types"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *InputSyncSpec) Reset()                    { *m = InputSyncSpec{} }
-func (m *InputSyncSpec) String() string            { return proto.CompactTextString(m) }
-func (*InputSyncSpec) ProtoMessage()               {}
-func (*InputSyncSpec) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{4} }
+func (m *InputSyncSpec) Reset()         { *m = InputSyncSpec{} }
+func (m *InputSyncSpec) String() string { return proto.CompactTextString(m) }
+func (*InputSyncSpec) ProtoMessage()    {}
+func (*InputSyncSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{4}
+}
+func (m *InputSyncSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InputSyncSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InputSyncSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InputSyncSpec.Merge(dst, src)
+}
+func (m *InputSyncSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *InputSyncSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_InputSyncSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InputSyncSpec proto.InternalMessageInfo
 
 // OutputRouterSpec is the specification for the output router of a processor;
 // it decides how to send results to multiple output streams.
@@ -390,13 +551,39 @@ type OutputRouterSpec struct {
 	// disable_buffering disables output buffering. Generally buffering should be
 	// enabled to prevent deadlocks. However some plans are known not to deadlock,
 	// and so can set this flag to prevent unbounded buffering causing OOMs.
-	DisableBuffering bool `protobuf:"varint,5,opt,name=disable_buffering,json=disableBuffering" json:"disable_buffering"`
+	DisableBuffering     bool     `protobuf:"varint,5,opt,name=disable_buffering,json=disableBuffering" json:"disable_buffering"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *OutputRouterSpec) Reset()                    { *m = OutputRouterSpec{} }
-func (m *OutputRouterSpec) String() string            { return proto.CompactTextString(m) }
-func (*OutputRouterSpec) ProtoMessage()               {}
-func (*OutputRouterSpec) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{5} }
+func (m *OutputRouterSpec) Reset()         { *m = OutputRouterSpec{} }
+func (m *OutputRouterSpec) String() string { return proto.CompactTextString(m) }
+func (*OutputRouterSpec) ProtoMessage()    {}
+func (*OutputRouterSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{5}
+}
+func (m *OutputRouterSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OutputRouterSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *OutputRouterSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutputRouterSpec.Merge(dst, src)
+}
+func (m *OutputRouterSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *OutputRouterSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_OutputRouterSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OutputRouterSpec proto.InternalMessageInfo
 
 type OutputRouterSpec_RangeRouterSpec struct {
 	// spans is a slice of Span. Input matching a span will be routed to its
@@ -409,15 +596,39 @@ type OutputRouterSpec_RangeRouterSpec struct {
 	// encodings is a slice of columns and encodings. Each will be appended to a
 	// []byte, which is used as input to the spans. Columns from the input rows
 	// potentially need to be recoded to match the encoding used for the spans.
-	Encodings []OutputRouterSpec_RangeRouterSpec_ColumnEncoding `protobuf:"bytes,3,rep,name=encodings" json:"encodings"`
+	Encodings            []OutputRouterSpec_RangeRouterSpec_ColumnEncoding `protobuf:"bytes,3,rep,name=encodings" json:"encodings"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec) Reset()         { *m = OutputRouterSpec_RangeRouterSpec{} }
 func (m *OutputRouterSpec_RangeRouterSpec) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{5, 0}
+	return fileDescriptor_data_f33d9406823eb329, []int{5, 0}
 }
+func (m *OutputRouterSpec_RangeRouterSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OutputRouterSpec_RangeRouterSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *OutputRouterSpec_RangeRouterSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec.Merge(dst, src)
+}
+func (m *OutputRouterSpec_RangeRouterSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *OutputRouterSpec_RangeRouterSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OutputRouterSpec_RangeRouterSpec proto.InternalMessageInfo
 
 type OutputRouterSpec_RangeRouterSpec_ColumnEncoding struct {
 	// column is the index of a column to encode.
@@ -425,7 +636,9 @@ type OutputRouterSpec_RangeRouterSpec_ColumnEncoding struct {
 	// encoding specifies how a particular column is to be encoded for
 	// generating the sort key for a row. This needs to correspond to the way
 	// the Span.{start,end} keys have been generated.
-	Encoding cockroach_sql_sqlbase2.DatumEncoding `protobuf:"varint,2,opt,name=encoding,enum=cockroach.sql.sqlbase.DatumEncoding" json:"encoding"`
+	Encoding             sqlbase.DatumEncoding `protobuf:"varint,2,opt,name=encoding,enum=cockroach.sql.sqlbase.DatumEncoding" json:"encoding"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Reset() {
@@ -436,44 +649,142 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) String() string {
 }
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) ProtoMessage() {}
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{5, 0, 0}
+	return fileDescriptor_data_f33d9406823eb329, []int{5, 0, 0}
 }
+func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_ColumnEncoding.Merge(dst, src)
+}
+func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Size() int {
+	return m.Size()
+}
+func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_DiscardUnknown() {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_ColumnEncoding.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_ColumnEncoding proto.InternalMessageInfo
 
 // Span matches bytes in [start, end).
 type OutputRouterSpec_RangeRouterSpec_Span struct {
 	Start []byte `protobuf:"bytes,1,opt,name=start" json:"start,omitempty"`
 	End   []byte `protobuf:"bytes,2,opt,name=end" json:"end,omitempty"`
 	// stream is the index of the destination stream.
-	Stream int32 `protobuf:"varint,3,opt,name=stream" json:"stream"`
+	Stream               int32    `protobuf:"varint,3,opt,name=stream" json:"stream"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec_Span) Reset()         { *m = OutputRouterSpec_RangeRouterSpec_Span{} }
 func (m *OutputRouterSpec_RangeRouterSpec_Span) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec_Span) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec_Span) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{5, 0, 1}
+	return fileDescriptor_data_f33d9406823eb329, []int{5, 0, 1}
 }
+func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *OutputRouterSpec_RangeRouterSpec_Span) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_Span.Merge(dst, src)
+}
+func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_Size() int {
+	return m.Size()
+}
+func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_DiscardUnknown() {
+	xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_Span.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OutputRouterSpec_RangeRouterSpec_Span proto.InternalMessageInfo
 
 type DatumInfo struct {
-	Encoding cockroach_sql_sqlbase2.DatumEncoding `protobuf:"varint,1,opt,name=encoding,enum=cockroach.sql.sqlbase.DatumEncoding" json:"encoding"`
-	Type     cockroach_sql_sqlbase1.ColumnType    `protobuf:"bytes,2,opt,name=type" json:"type"`
+	Encoding             sqlbase.DatumEncoding `protobuf:"varint,1,opt,name=encoding,enum=cockroach.sql.sqlbase.DatumEncoding" json:"encoding"`
+	Type                 sqlbase.ColumnType    `protobuf:"bytes,2,opt,name=type" json:"type"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
 }
 
-func (m *DatumInfo) Reset()                    { *m = DatumInfo{} }
-func (m *DatumInfo) String() string            { return proto.CompactTextString(m) }
-func (*DatumInfo) ProtoMessage()               {}
-func (*DatumInfo) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{6} }
+func (m *DatumInfo) Reset()         { *m = DatumInfo{} }
+func (m *DatumInfo) String() string { return proto.CompactTextString(m) }
+func (*DatumInfo) ProtoMessage()    {}
+func (*DatumInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{6}
+}
+func (m *DatumInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DatumInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DatumInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DatumInfo.Merge(dst, src)
+}
+func (m *DatumInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *DatumInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_DatumInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DatumInfo proto.InternalMessageInfo
 
 // ProducerHeader is a message that is sent once at the beginning of a stream.
 type ProducerHeader struct {
-	FlowID   FlowID   `protobuf:"bytes,1,opt,name=flow_id,json=flowId,customtype=FlowID" json:"flow_id"`
-	StreamID StreamID `protobuf:"varint,2,opt,name=stream_id,json=streamId,casttype=StreamID" json:"stream_id"`
+	FlowID               FlowID   `protobuf:"bytes,1,opt,name=flow_id,json=flowId,customtype=FlowID" json:"flow_id"`
+	StreamID             StreamID `protobuf:"varint,2,opt,name=stream_id,json=streamId,casttype=StreamID" json:"stream_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProducerHeader) Reset()                    { *m = ProducerHeader{} }
-func (m *ProducerHeader) String() string            { return proto.CompactTextString(m) }
-func (*ProducerHeader) ProtoMessage()               {}
-func (*ProducerHeader) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{7} }
+func (m *ProducerHeader) Reset()         { *m = ProducerHeader{} }
+func (m *ProducerHeader) String() string { return proto.CompactTextString(m) }
+func (*ProducerHeader) ProtoMessage()    {}
+func (*ProducerHeader) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{7}
+}
+func (m *ProducerHeader) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProducerHeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProducerHeader) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProducerHeader.Merge(dst, src)
+}
+func (m *ProducerHeader) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProducerHeader) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProducerHeader.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProducerHeader proto.InternalMessageInfo
 
 // ProducerData is a message that can be sent multiple times as part of a stream
 // from a producer to a consumer. It contains 0 or more rows and/or 0 or more
@@ -486,13 +797,39 @@ type ProducerData struct {
 	// passed instead.
 	NumEmptyRows int32 `protobuf:"varint,3,opt,name=num_empty_rows,json=numEmptyRows" json:"num_empty_rows"`
 	// A bunch of metadata messages.
-	Metadata []RemoteProducerMetadata `protobuf:"bytes,2,rep,name=metadata" json:"metadata"`
+	Metadata             []RemoteProducerMetadata `protobuf:"bytes,2,rep,name=metadata" json:"metadata"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *ProducerData) Reset()                    { *m = ProducerData{} }
-func (m *ProducerData) String() string            { return proto.CompactTextString(m) }
-func (*ProducerData) ProtoMessage()               {}
-func (*ProducerData) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{8} }
+func (m *ProducerData) Reset()         { *m = ProducerData{} }
+func (m *ProducerData) String() string { return proto.CompactTextString(m) }
+func (*ProducerData) ProtoMessage()    {}
+func (*ProducerData) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{8}
+}
+func (m *ProducerData) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProducerData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProducerData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProducerData.Merge(dst, src)
+}
+func (m *ProducerData) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProducerData) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProducerData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProducerData proto.InternalMessageInfo
 
 type ProducerMessage struct {
 	Header *ProducerHeader `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
@@ -503,14 +840,40 @@ type ProducerMessage struct {
 	// TODO(andrei): It'd be nice if the typing information for streams would be
 	// configured statically at plan creation time, instead of being discovered
 	// dynamically through the first rows that flow.
-	Typing []DatumInfo  `protobuf:"bytes,2,rep,name=typing" json:"typing"`
-	Data   ProducerData `protobuf:"bytes,3,opt,name=data" json:"data"`
+	Typing               []DatumInfo  `protobuf:"bytes,2,rep,name=typing" json:"typing"`
+	Data                 ProducerData `protobuf:"bytes,3,opt,name=data" json:"data"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *ProducerMessage) Reset()                    { *m = ProducerMessage{} }
-func (m *ProducerMessage) String() string            { return proto.CompactTextString(m) }
-func (*ProducerMessage) ProtoMessage()               {}
-func (*ProducerMessage) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{9} }
+func (m *ProducerMessage) Reset()         { *m = ProducerMessage{} }
+func (m *ProducerMessage) String() string { return proto.CompactTextString(m) }
+func (*ProducerMessage) ProtoMessage()    {}
+func (*ProducerMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{9}
+}
+func (m *ProducerMessage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProducerMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProducerMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProducerMessage.Merge(dst, src)
+}
+func (m *ProducerMessage) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProducerMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProducerMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProducerMessage proto.InternalMessageInfo
 
 // RemoteProducerMetadata represents records that a producer wants to pass to
 // a consumer, other than data rows. It's named RemoteProducerMetadata to not
@@ -523,13 +886,39 @@ type RemoteProducerMetadata struct {
 	//	*RemoteProducerMetadata_TraceData_
 	//	*RemoteProducerMetadata_TxnCoordMeta
 	//	*RemoteProducerMetadata_RowNum_
-	Value isRemoteProducerMetadata_Value `protobuf_oneof:"value"`
+	Value                isRemoteProducerMetadata_Value `protobuf_oneof:"value"`
+	XXX_NoUnkeyedLiteral struct{}                       `json:"-"`
+	XXX_sizecache        int32                          `json:"-"`
 }
 
-func (m *RemoteProducerMetadata) Reset()                    { *m = RemoteProducerMetadata{} }
-func (m *RemoteProducerMetadata) String() string            { return proto.CompactTextString(m) }
-func (*RemoteProducerMetadata) ProtoMessage()               {}
-func (*RemoteProducerMetadata) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{10} }
+func (m *RemoteProducerMetadata) Reset()         { *m = RemoteProducerMetadata{} }
+func (m *RemoteProducerMetadata) String() string { return proto.CompactTextString(m) }
+func (*RemoteProducerMetadata) ProtoMessage()    {}
+func (*RemoteProducerMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{10}
+}
+func (m *RemoteProducerMetadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoteProducerMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RemoteProducerMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoteProducerMetadata.Merge(dst, src)
+}
+func (m *RemoteProducerMetadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoteProducerMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoteProducerMetadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoteProducerMetadata proto.InternalMessageInfo
 
 type isRemoteProducerMetadata_Value interface {
 	isRemoteProducerMetadata_Value()
@@ -547,7 +936,7 @@ type RemoteProducerMetadata_TraceData_ struct {
 	TraceData *RemoteProducerMetadata_TraceData `protobuf:"bytes,3,opt,name=trace_data,json=traceData,oneof"`
 }
 type RemoteProducerMetadata_TxnCoordMeta struct {
-	TxnCoordMeta *cockroach_roachpb1.TxnCoordMeta `protobuf:"bytes,4,opt,name=txn_coord_meta,json=txnCoordMeta,oneof"`
+	TxnCoordMeta *roachpb.TxnCoordMeta `protobuf:"bytes,4,opt,name=txn_coord_meta,json=txnCoordMeta,oneof"`
 }
 type RemoteProducerMetadata_RowNum_ struct {
 	RowNum *RemoteProducerMetadata_RowNum `protobuf:"bytes,5,opt,name=row_num,json=rowNum,oneof"`
@@ -587,7 +976,7 @@ func (m *RemoteProducerMetadata) GetTraceData() *RemoteProducerMetadata_TraceDat
 	return nil
 }
 
-func (m *RemoteProducerMetadata) GetTxnCoordMeta() *cockroach_roachpb1.TxnCoordMeta {
+func (m *RemoteProducerMetadata) GetTxnCoordMeta() *roachpb.TxnCoordMeta {
 	if x, ok := m.GetValue().(*RemoteProducerMetadata_TxnCoordMeta); ok {
 		return x.TxnCoordMeta
 	}
@@ -679,7 +1068,7 @@ func _RemoteProducerMetadata_OneofUnmarshaler(msg proto.Message, tag, wire int, 
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(cockroach_roachpb1.TxnCoordMeta)
+		msg := new(roachpb.TxnCoordMeta)
 		err := b.DecodeMessage(msg)
 		m.Value = &RemoteProducerMetadata_TxnCoordMeta{msg}
 		return true, err
@@ -702,27 +1091,27 @@ func _RemoteProducerMetadata_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Value.(type) {
 	case *RemoteProducerMetadata_RangeInfo:
 		s := proto.Size(x.RangeInfo)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *RemoteProducerMetadata_Error:
 		s := proto.Size(x.Error)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *RemoteProducerMetadata_TraceData_:
 		s := proto.Size(x.TraceData)
-		n += proto.SizeVarint(3<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *RemoteProducerMetadata_TxnCoordMeta:
 		s := proto.Size(x.TxnCoordMeta)
-		n += proto.SizeVarint(4<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *RemoteProducerMetadata_RowNum_:
 		s := proto.Size(x.RowNum)
-		n += proto.SizeVarint(5<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -733,26 +1122,74 @@ func _RemoteProducerMetadata_OneofSizer(msg proto.Message) (n int) {
 }
 
 type RemoteProducerMetadata_RangeInfos struct {
-	RangeInfo []cockroach_roachpb3.RangeInfo `protobuf:"bytes,1,rep,name=range_info,json=rangeInfo" json:"range_info"`
+	RangeInfo            []roachpb.RangeInfo `protobuf:"bytes,1,rep,name=range_info,json=rangeInfo" json:"range_info"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
 func (m *RemoteProducerMetadata_RangeInfos) Reset()         { *m = RemoteProducerMetadata_RangeInfos{} }
 func (m *RemoteProducerMetadata_RangeInfos) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RangeInfos) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RangeInfos) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{10, 0}
+	return fileDescriptor_data_f33d9406823eb329, []int{10, 0}
+}
+func (m *RemoteProducerMetadata_RangeInfos) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoteProducerMetadata_RangeInfos) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RemoteProducerMetadata_RangeInfos) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoteProducerMetadata_RangeInfos.Merge(dst, src)
+}
+func (m *RemoteProducerMetadata_RangeInfos) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoteProducerMetadata_RangeInfos) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoteProducerMetadata_RangeInfos.DiscardUnknown(m)
 }
 
+var xxx_messageInfo_RemoteProducerMetadata_RangeInfos proto.InternalMessageInfo
+
 type RemoteProducerMetadata_TraceData struct {
-	CollectedSpans []cockroach_util_tracing.RecordedSpan `protobuf:"bytes,1,rep,name=collected_spans,json=collectedSpans" json:"collected_spans"`
+	CollectedSpans       []tracing.RecordedSpan `protobuf:"bytes,1,rep,name=collected_spans,json=collectedSpans" json:"collected_spans"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
 func (m *RemoteProducerMetadata_TraceData) Reset()         { *m = RemoteProducerMetadata_TraceData{} }
 func (m *RemoteProducerMetadata_TraceData) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_TraceData) ProtoMessage()    {}
 func (*RemoteProducerMetadata_TraceData) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{10, 1}
+	return fileDescriptor_data_f33d9406823eb329, []int{10, 1}
 }
+func (m *RemoteProducerMetadata_TraceData) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoteProducerMetadata_TraceData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RemoteProducerMetadata_TraceData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoteProducerMetadata_TraceData.Merge(dst, src)
+}
+func (m *RemoteProducerMetadata_TraceData) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoteProducerMetadata_TraceData) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoteProducerMetadata_TraceData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoteProducerMetadata_TraceData proto.InternalMessageInfo
 
 // RowNum is used to count the rows sent from a processor. It is used in tests
 // to check that metadata is propagated correctly.
@@ -763,15 +1200,39 @@ type RemoteProducerMetadata_RowNum struct {
 	RowNum int32 `protobuf:"varint,2,opt,name=row_num,json=rowNum" json:"row_num"`
 	// When set, indicates that the row count contains the expected number of
 	// RowNum messages with this ID.
-	LastMsg bool `protobuf:"varint,3,opt,name=last_msg,json=lastMsg" json:"last_msg"`
+	LastMsg              bool     `protobuf:"varint,3,opt,name=last_msg,json=lastMsg" json:"last_msg"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *RemoteProducerMetadata_RowNum) Reset()         { *m = RemoteProducerMetadata_RowNum{} }
 func (m *RemoteProducerMetadata_RowNum) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RowNum) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RowNum) Descriptor() ([]byte, []int) {
-	return fileDescriptorData, []int{10, 2}
+	return fileDescriptor_data_f33d9406823eb329, []int{10, 2}
 }
+func (m *RemoteProducerMetadata_RowNum) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoteProducerMetadata_RowNum) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RemoteProducerMetadata_RowNum) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoteProducerMetadata_RowNum.Merge(dst, src)
+}
+func (m *RemoteProducerMetadata_RowNum) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoteProducerMetadata_RowNum) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoteProducerMetadata_RowNum.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoteProducerMetadata_RowNum proto.InternalMessageInfo
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information
 // that gets gossiped for each node. This is used by planners to avoid planning
@@ -780,26 +1241,78 @@ func (*RemoteProducerMetadata_RowNum) Descriptor() ([]byte, []int) {
 // For the meaning of the fields, see the corresponding constants in
 // distsqlrun/server.go.
 type DistSQLVersionGossipInfo struct {
-	Version            DistSQLVersion `protobuf:"varint,1,opt,name=version,casttype=DistSQLVersion" json:"version"`
-	MinAcceptedVersion DistSQLVersion `protobuf:"varint,2,opt,name=min_accepted_version,json=minAcceptedVersion,casttype=DistSQLVersion" json:"min_accepted_version"`
+	Version              DistSQLVersion `protobuf:"varint,1,opt,name=version,casttype=DistSQLVersion" json:"version"`
+	MinAcceptedVersion   DistSQLVersion `protobuf:"varint,2,opt,name=min_accepted_version,json=minAcceptedVersion,casttype=DistSQLVersion" json:"min_accepted_version"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *DistSQLVersionGossipInfo) Reset()                    { *m = DistSQLVersionGossipInfo{} }
-func (m *DistSQLVersionGossipInfo) String() string            { return proto.CompactTextString(m) }
-func (*DistSQLVersionGossipInfo) ProtoMessage()               {}
-func (*DistSQLVersionGossipInfo) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{11} }
+func (m *DistSQLVersionGossipInfo) Reset()         { *m = DistSQLVersionGossipInfo{} }
+func (m *DistSQLVersionGossipInfo) String() string { return proto.CompactTextString(m) }
+func (*DistSQLVersionGossipInfo) ProtoMessage()    {}
+func (*DistSQLVersionGossipInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{11}
+}
+func (m *DistSQLVersionGossipInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DistSQLVersionGossipInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DistSQLVersionGossipInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DistSQLVersionGossipInfo.Merge(dst, src)
+}
+func (m *DistSQLVersionGossipInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *DistSQLVersionGossipInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_DistSQLVersionGossipInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DistSQLVersionGossipInfo proto.InternalMessageInfo
 
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped
 // for each node. This is used by planners to avoid planning on nodes that are
 // known to be draining.
 type DistSQLDrainingInfo struct {
-	Draining bool `protobuf:"varint,1,opt,name=draining" json:"draining"`
+	Draining             bool     `protobuf:"varint,1,opt,name=draining" json:"draining"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DistSQLDrainingInfo) Reset()                    { *m = DistSQLDrainingInfo{} }
-func (m *DistSQLDrainingInfo) String() string            { return proto.CompactTextString(m) }
-func (*DistSQLDrainingInfo) ProtoMessage()               {}
-func (*DistSQLDrainingInfo) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{12} }
+func (m *DistSQLDrainingInfo) Reset()         { *m = DistSQLDrainingInfo{} }
+func (m *DistSQLDrainingInfo) String() string { return proto.CompactTextString(m) }
+func (*DistSQLDrainingInfo) ProtoMessage()    {}
+func (*DistSQLDrainingInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_f33d9406823eb329, []int{12}
+}
+func (m *DistSQLDrainingInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DistSQLDrainingInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DistSQLDrainingInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DistSQLDrainingInfo.Merge(dst, src)
+}
+func (m *DistSQLDrainingInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *DistSQLDrainingInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_DistSQLDrainingInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DistSQLDrainingInfo proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Error)(nil), "cockroach.sql.distsqlpb.Error")
@@ -1653,6 +2166,9 @@ func encodeVarintData(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *Error) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Detail != nil {
@@ -1662,6 +2178,9 @@ func (m *Error) Size() (n int) {
 }
 
 func (m *Error_PGError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.PGError != nil {
@@ -1671,6 +2190,9 @@ func (m *Error_PGError) Size() (n int) {
 	return n
 }
 func (m *Error_RetryableTxnError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RetryableTxnError != nil {
@@ -1680,6 +2202,9 @@ func (m *Error_RetryableTxnError) Size() (n int) {
 	return n
 }
 func (m *Expression) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Version)
@@ -1690,6 +2215,9 @@ func (m *Expression) Size() (n int) {
 }
 
 func (m *Ordering) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
@@ -1702,6 +2230,9 @@ func (m *Ordering) Size() (n int) {
 }
 
 func (m *Ordering_Column) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.ColIdx))
@@ -1710,6 +2241,9 @@ func (m *Ordering_Column) Size() (n int) {
 }
 
 func (m *StreamEndpointSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Type))
@@ -1721,6 +2255,9 @@ func (m *StreamEndpointSpec) Size() (n int) {
 }
 
 func (m *InputSyncSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Type))
@@ -1742,6 +2279,9 @@ func (m *InputSyncSpec) Size() (n int) {
 }
 
 func (m *OutputRouterSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Type))
@@ -1763,6 +2303,9 @@ func (m *OutputRouterSpec) Size() (n int) {
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Spans) > 0 {
@@ -1784,6 +2327,9 @@ func (m *OutputRouterSpec_RangeRouterSpec) Size() (n int) {
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Column))
@@ -1792,6 +2338,9 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Size() (n int) {
 }
 
 func (m *OutputRouterSpec_RangeRouterSpec_Span) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Start != nil {
@@ -1807,6 +2356,9 @@ func (m *OutputRouterSpec_RangeRouterSpec_Span) Size() (n int) {
 }
 
 func (m *DatumInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Encoding))
@@ -1816,6 +2368,9 @@ func (m *DatumInfo) Size() (n int) {
 }
 
 func (m *ProducerHeader) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.FlowID.Size()
@@ -1825,6 +2380,9 @@ func (m *ProducerHeader) Size() (n int) {
 }
 
 func (m *ProducerData) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RawBytes != nil {
@@ -1842,6 +2400,9 @@ func (m *ProducerData) Size() (n int) {
 }
 
 func (m *ProducerMessage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Header != nil {
@@ -1860,6 +2421,9 @@ func (m *ProducerMessage) Size() (n int) {
 }
 
 func (m *RemoteProducerMetadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Value != nil {
@@ -1869,6 +2433,9 @@ func (m *RemoteProducerMetadata) Size() (n int) {
 }
 
 func (m *RemoteProducerMetadata_RangeInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeInfo != nil {
@@ -1878,6 +2445,9 @@ func (m *RemoteProducerMetadata_RangeInfo) Size() (n int) {
 	return n
 }
 func (m *RemoteProducerMetadata_Error) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Error != nil {
@@ -1887,6 +2457,9 @@ func (m *RemoteProducerMetadata_Error) Size() (n int) {
 	return n
 }
 func (m *RemoteProducerMetadata_TraceData_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TraceData != nil {
@@ -1896,6 +2469,9 @@ func (m *RemoteProducerMetadata_TraceData_) Size() (n int) {
 	return n
 }
 func (m *RemoteProducerMetadata_TxnCoordMeta) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.TxnCoordMeta != nil {
@@ -1905,6 +2481,9 @@ func (m *RemoteProducerMetadata_TxnCoordMeta) Size() (n int) {
 	return n
 }
 func (m *RemoteProducerMetadata_RowNum_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RowNum != nil {
@@ -1914,6 +2493,9 @@ func (m *RemoteProducerMetadata_RowNum_) Size() (n int) {
 	return n
 }
 func (m *RemoteProducerMetadata_RangeInfos) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.RangeInfo) > 0 {
@@ -1926,6 +2508,9 @@ func (m *RemoteProducerMetadata_RangeInfos) Size() (n int) {
 }
 
 func (m *RemoteProducerMetadata_TraceData) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.CollectedSpans) > 0 {
@@ -1938,6 +2523,9 @@ func (m *RemoteProducerMetadata_TraceData) Size() (n int) {
 }
 
 func (m *RemoteProducerMetadata_RowNum) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.SenderID)
@@ -1948,6 +2536,9 @@ func (m *RemoteProducerMetadata_RowNum) Size() (n int) {
 }
 
 func (m *DistSQLVersionGossipInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.Version))
@@ -1956,6 +2547,9 @@ func (m *DistSQLVersionGossipInfo) Size() (n int) {
 }
 
 func (m *DistSQLDrainingInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 2
@@ -2030,7 +2624,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &cockroach_pgerror.Error{}
+			v := &pgerror.Error{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2062,7 +2656,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &cockroach_roachpb2.UnhandledRetryableError{}
+			v := &roachpb.UnhandledRetryableError{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2637,7 +3231,7 @@ func (m *InputSyncSpec) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ColumnTypes = append(m.ColumnTypes, cockroach_sql_sqlbase1.ColumnType{})
+			m.ColumnTypes = append(m.ColumnTypes, sqlbase.ColumnType{})
 			if err := m.ColumnTypes[len(m.ColumnTypes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2782,6 +3376,17 @@ func (m *OutputRouterSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.HashColumns) == 0 {
+					m.HashColumns = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -3069,7 +3674,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Unmarshal(dAtA []byte)
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Encoding |= (cockroach_sql_sqlbase2.DatumEncoding(b) & 0x7F) << shift
+				m.Encoding |= (sqlbase.DatumEncoding(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3269,7 +3874,7 @@ func (m *DatumInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Encoding |= (cockroach_sql_sqlbase2.DatumEncoding(b) & 0x7F) << shift
+				m.Encoding |= (sqlbase.DatumEncoding(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3850,7 +4455,7 @@ func (m *RemoteProducerMetadata) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &cockroach_roachpb1.TxnCoordMeta{}
+			v := &roachpb.TxnCoordMeta{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3964,7 +4569,7 @@ func (m *RemoteProducerMetadata_RangeInfos) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RangeInfo = append(m.RangeInfo, cockroach_roachpb3.RangeInfo{})
+			m.RangeInfo = append(m.RangeInfo, roachpb.RangeInfo{})
 			if err := m.RangeInfo[len(m.RangeInfo)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -4045,7 +4650,7 @@ func (m *RemoteProducerMetadata_TraceData) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CollectedSpans = append(m.CollectedSpans, cockroach_util_tracing.RecordedSpan{})
+			m.CollectedSpans = append(m.CollectedSpans, tracing.RecordedSpan{})
 			if err := m.CollectedSpans[len(m.CollectedSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -4452,9 +5057,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/distsqlpb/data.proto", fileDescriptorData) }
+func init() { proto.RegisterFile("sql/distsqlpb/data.proto", fileDescriptor_data_f33d9406823eb329) }
 
-var fileDescriptorData = []byte{
+var fileDescriptor_data_f33d9406823eb329 = []byte{
 	// 1681 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x57, 0x4f, 0x6f, 0x1b, 0xb9,
 	0x15, 0xd7, 0xc8, 0xfa, 0xfb, 0x24, 0x2b, 0x32, 0x1b, 0xa4, 0x82, 0x9a, 0x4a, 0xde, 0x69, 0x8b,

@@ -7,7 +7,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-import binary "encoding/binary"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -15,6 +15,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // InternalTimeSeriesData is a collection of data samples for some
 // measurable value, where each sample is taken over a uniform time
@@ -61,7 +67,7 @@ type InternalTimeSeriesData struct {
 	SampleDurationNanos int64 `protobuf:"varint,2,opt,name=sample_duration_nanos,json=sampleDurationNanos" json:"sample_duration_nanos"`
 	// The data samples for this metric if this data was written in the old
 	// row format.
-	Samples []InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples"`
+	Samples []InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples"` // Deprecated: Do not use.
 	// Columnar array containing the ordered offsets of the samples in this
 	// data set.
 	Offset []int32 `protobuf:"varint,4,rep,packed,name=offset" json:"offset,omitempty"`
@@ -92,13 +98,39 @@ type InternalTimeSeriesData struct {
 	// Columnar array containing the variance of measurements that were taken
 	// during this sample period. If this column is elided, its value for all
 	// samples is zero.
-	Variance []float64 `protobuf:"fixed64,11,rep,packed,name=variance" json:"variance,omitempty"`
+	Variance             []float64 `protobuf:"fixed64,11,rep,packed,name=variance" json:"variance,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *InternalTimeSeriesData) Reset()                    { *m = InternalTimeSeriesData{} }
-func (m *InternalTimeSeriesData) String() string            { return proto.CompactTextString(m) }
-func (*InternalTimeSeriesData) ProtoMessage()               {}
-func (*InternalTimeSeriesData) Descriptor() ([]byte, []int) { return fileDescriptorInternal, []int{0} }
+func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{} }
+func (m *InternalTimeSeriesData) String() string { return proto.CompactTextString(m) }
+func (*InternalTimeSeriesData) ProtoMessage()    {}
+func (*InternalTimeSeriesData) Descriptor() ([]byte, []int) {
+	return fileDescriptor_internal_1f616e5f0cc948ec, []int{0}
+}
+func (m *InternalTimeSeriesData) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InternalTimeSeriesData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InternalTimeSeriesData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InternalTimeSeriesData.Merge(dst, src)
+}
+func (m *InternalTimeSeriesData) XXX_Size() int {
+	return m.Size()
+}
+func (m *InternalTimeSeriesData) XXX_DiscardUnknown() {
+	xxx_messageInfo_InternalTimeSeriesData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InternalTimeSeriesData proto.InternalMessageInfo
 
 // A InternalTimeSeriesSample represents data gathered from multiple
 // measurements of a variable value over a given period of time. The
@@ -132,13 +164,39 @@ type InternalTimeSeriesSample struct {
 	// Maximum encountered measurement in this sample.
 	Max *float64 `protobuf:"fixed64,8,opt,name=max" json:"max,omitempty"`
 	// Minimum encountered measurement in this sample.
-	Min *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
+	Min                  *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *InternalTimeSeriesSample) Reset()                    { *m = InternalTimeSeriesSample{} }
-func (m *InternalTimeSeriesSample) String() string            { return proto.CompactTextString(m) }
-func (*InternalTimeSeriesSample) ProtoMessage()               {}
-func (*InternalTimeSeriesSample) Descriptor() ([]byte, []int) { return fileDescriptorInternal, []int{1} }
+func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSample{} }
+func (m *InternalTimeSeriesSample) String() string { return proto.CompactTextString(m) }
+func (*InternalTimeSeriesSample) ProtoMessage()    {}
+func (*InternalTimeSeriesSample) Descriptor() ([]byte, []int) {
+	return fileDescriptor_internal_1f616e5f0cc948ec, []int{1}
+}
+func (m *InternalTimeSeriesSample) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InternalTimeSeriesSample) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InternalTimeSeriesSample) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InternalTimeSeriesSample.Merge(dst, src)
+}
+func (m *InternalTimeSeriesSample) XXX_Size() int {
+	return m.Size()
+}
+func (m *InternalTimeSeriesSample) XXX_DiscardUnknown() {
+	xxx_messageInfo_InternalTimeSeriesSample.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InternalTimeSeriesSample proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*InternalTimeSeriesData)(nil), "cockroach.roachpb.InternalTimeSeriesData")
@@ -201,7 +259,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.Last)*8))
 		for _, num := range m.Last {
 			f3 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f3))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f3))
 			i += 8
 		}
 	}
@@ -228,7 +286,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.Sum)*8))
 		for _, num := range m.Sum {
 			f6 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f6))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f6))
 			i += 8
 		}
 	}
@@ -238,7 +296,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.Max)*8))
 		for _, num := range m.Max {
 			f7 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f7))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f7))
 			i += 8
 		}
 	}
@@ -248,7 +306,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.Min)*8))
 		for _, num := range m.Min {
 			f8 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f8))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f8))
 			i += 8
 		}
 	}
@@ -258,7 +316,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.First)*8))
 		for _, num := range m.First {
 			f9 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f9))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f9))
 			i += 8
 		}
 	}
@@ -268,7 +326,7 @@ func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintInternal(dAtA, i, uint64(len(m.Variance)*8))
 		for _, num := range m.Variance {
 			f10 := math.Float64bits(float64(num))
-			binary.LittleEndian.PutUint64(dAtA[i:], uint64(f10))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f10))
 			i += 8
 		}
 	}
@@ -298,18 +356,18 @@ func (m *InternalTimeSeriesSample) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintInternal(dAtA, i, uint64(m.Count))
 	dAtA[i] = 0x39
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Sum))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Sum))))
 	i += 8
 	if m.Max != nil {
 		dAtA[i] = 0x41
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Max))))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Max))))
 		i += 8
 	}
 	if m.Min != nil {
 		dAtA[i] = 0x49
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Min))))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Min))))
 		i += 8
 	}
 	return i, nil
@@ -325,6 +383,9 @@ func encodeVarintInternal(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *InternalTimeSeriesData) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovInternal(uint64(m.StartTimestampNanos))
@@ -371,6 +432,9 @@ func (m *InternalTimeSeriesData) Size() (n int) {
 }
 
 func (m *InternalTimeSeriesSample) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovInternal(uint64(m.Offset))
@@ -537,6 +601,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Offset) == 0 {
+					m.Offset = make([]int32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v int32
 					for shift := uint(0); ; shift += 7 {
@@ -564,7 +639,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.Last = append(m.Last, v2)
@@ -591,12 +666,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Last) == 0 {
+					m.Last = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.Last = append(m.Last, v2)
@@ -645,6 +725,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Count) == 0 {
+					m.Count = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -672,7 +763,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.Sum = append(m.Sum, v2)
@@ -699,12 +790,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Sum) == 0 {
+					m.Sum = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.Sum = append(m.Sum, v2)
@@ -718,7 +814,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.Max = append(m.Max, v2)
@@ -745,12 +841,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Max) == 0 {
+					m.Max = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.Max = append(m.Max, v2)
@@ -764,7 +865,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.Min = append(m.Min, v2)
@@ -791,12 +892,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Min) == 0 {
+					m.Min = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.Min = append(m.Min, v2)
@@ -810,7 +916,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.First = append(m.First, v2)
@@ -837,12 +943,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.First) == 0 {
+					m.First = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.First = append(m.First, v2)
@@ -856,7 +967,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if (iNdEx + 8) > l {
 					return io.ErrUnexpectedEOF
 				}
-				v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 				iNdEx += 8
 				v2 := float64(math.Float64frombits(v))
 				m.Variance = append(m.Variance, v2)
@@ -883,12 +994,17 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Variance) == 0 {
+					m.Variance = make([]float64, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					v2 := float64(math.Float64frombits(v))
 					m.Variance = append(m.Variance, v2)
@@ -992,7 +1108,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.Sum = float64(math.Float64frombits(v))
 		case 8:
@@ -1003,7 +1119,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			v2 := float64(math.Float64frombits(v))
 			m.Max = &v2
@@ -1015,7 +1131,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			v2 := float64(math.Float64frombits(v))
 			m.Min = &v2
@@ -1145,9 +1261,9 @@ var (
 	ErrIntOverflowInternal   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptorInternal) }
+func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptor_internal_1f616e5f0cc948ec) }
 
-var fileDescriptorInternal = []byte{
+var fileDescriptor_internal_1f616e5f0cc948ec = []byte{
 	// 387 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xb1, 0x8e, 0xda, 0x30,
 	0x00, 0x86, 0x31, 0x26, 0x40, 0x8d, 0x90, 0xa8, 0x4b, 0x23, 0x0b, 0x55, 0x69, 0xca, 0x64, 0xa9,

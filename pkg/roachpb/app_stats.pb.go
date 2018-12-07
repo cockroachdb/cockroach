@@ -7,7 +7,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-import binary "encoding/binary"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -15,6 +15,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type StatementStatistics struct {
 	// Count is the total number of times this statement was executed
@@ -61,13 +67,39 @@ type StatementStatistics struct {
 	OverheadLat NumericStat `protobuf:"bytes,10,opt,name=overhead_lat,json=overheadLat" json:"overhead_lat"`
 	// SensitiveInfo is info that needs to be scrubbed or redacted before being
 	// sent to the reg cluster.
-	SensitiveInfo SensitiveInfo `protobuf:"bytes,12,opt,name=sensitive_info,json=sensitiveInfo" json:"sensitive_info"`
+	SensitiveInfo        SensitiveInfo `protobuf:"bytes,12,opt,name=sensitive_info,json=sensitiveInfo" json:"sensitive_info"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *StatementStatistics) Reset()                    { *m = StatementStatistics{} }
-func (m *StatementStatistics) String() string            { return proto.CompactTextString(m) }
-func (*StatementStatistics) ProtoMessage()               {}
-func (*StatementStatistics) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{0} }
+func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
+func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
+func (*StatementStatistics) ProtoMessage()    {}
+func (*StatementStatistics) Descriptor() ([]byte, []int) {
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{0}
+}
+func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementStatistics.Merge(dst, src)
+}
+func (m *StatementStatistics) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementStatistics) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementStatistics.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatementStatistics proto.InternalMessageInfo
 
 type SensitiveInfo struct {
 	// LastErr collects the last error encountered.
@@ -75,12 +107,38 @@ type SensitiveInfo struct {
 	LastErr string `protobuf:"bytes,1,opt,name=last_err,json=lastErr" json:"last_err"`
 	// MostRecentPlanDescription is a serialized representation of the logical plan most recently captured for this query.
 	MostRecentPlanDescription ExplainTreePlanNode `protobuf:"bytes,2,opt,name=most_recent_plan_description,json=mostRecentPlanDescription" json:"most_recent_plan_description"`
+	XXX_NoUnkeyedLiteral      struct{}            `json:"-"`
+	XXX_sizecache             int32               `json:"-"`
 }
 
-func (m *SensitiveInfo) Reset()                    { *m = SensitiveInfo{} }
-func (m *SensitiveInfo) String() string            { return proto.CompactTextString(m) }
-func (*SensitiveInfo) ProtoMessage()               {}
-func (*SensitiveInfo) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{1} }
+func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
+func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
+func (*SensitiveInfo) ProtoMessage()    {}
+func (*SensitiveInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{1}
+}
+func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SensitiveInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SensitiveInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SensitiveInfo.Merge(dst, src)
+}
+func (m *SensitiveInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *SensitiveInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_SensitiveInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SensitiveInfo proto.InternalMessageInfo
 
 type NumericStat struct {
 	// NumericStat keeps track of two running values --- the running mean and
@@ -89,40 +147,116 @@ type NumericStat struct {
 	// method. This is more reliable than keeping track of the sum of
 	// squared values, which is liable to overflow. See
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
-	Mean         float64 `protobuf:"fixed64,1,opt,name=mean" json:"mean"`
-	SquaredDiffs float64 `protobuf:"fixed64,2,opt,name=squared_diffs,json=squaredDiffs" json:"squared_diffs"`
+	Mean                 float64  `protobuf:"fixed64,1,opt,name=mean" json:"mean"`
+	SquaredDiffs         float64  `protobuf:"fixed64,2,opt,name=squared_diffs,json=squaredDiffs" json:"squared_diffs"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NumericStat) Reset()                    { *m = NumericStat{} }
-func (m *NumericStat) String() string            { return proto.CompactTextString(m) }
-func (*NumericStat) ProtoMessage()               {}
-func (*NumericStat) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{2} }
+func (m *NumericStat) Reset()         { *m = NumericStat{} }
+func (m *NumericStat) String() string { return proto.CompactTextString(m) }
+func (*NumericStat) ProtoMessage()    {}
+func (*NumericStat) Descriptor() ([]byte, []int) {
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{2}
+}
+func (m *NumericStat) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NumericStat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NumericStat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NumericStat.Merge(dst, src)
+}
+func (m *NumericStat) XXX_Size() int {
+	return m.Size()
+}
+func (m *NumericStat) XXX_DiscardUnknown() {
+	xxx_messageInfo_NumericStat.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NumericStat proto.InternalMessageInfo
 
 type StatementStatisticsKey struct {
-	Query   string `protobuf:"bytes,1,opt,name=query" json:"query"`
-	App     string `protobuf:"bytes,2,opt,name=app" json:"app"`
-	DistSQL bool   `protobuf:"varint,3,opt,name=distSQL" json:"distSQL"`
-	Failed  bool   `protobuf:"varint,4,opt,name=failed" json:"failed"`
-	Opt     bool   `protobuf:"varint,5,opt,name=opt" json:"opt"`
+	Query                string   `protobuf:"bytes,1,opt,name=query" json:"query"`
+	App                  string   `protobuf:"bytes,2,opt,name=app" json:"app"`
+	DistSQL              bool     `protobuf:"varint,3,opt,name=distSQL" json:"distSQL"`
+	Failed               bool     `protobuf:"varint,4,opt,name=failed" json:"failed"`
+	Opt                  bool     `protobuf:"varint,5,opt,name=opt" json:"opt"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StatementStatisticsKey) Reset()                    { *m = StatementStatisticsKey{} }
-func (m *StatementStatisticsKey) String() string            { return proto.CompactTextString(m) }
-func (*StatementStatisticsKey) ProtoMessage()               {}
-func (*StatementStatisticsKey) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{3} }
+func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{} }
+func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
+func (*StatementStatisticsKey) ProtoMessage()    {}
+func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{3}
+}
+func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementStatisticsKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementStatisticsKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementStatisticsKey.Merge(dst, src)
+}
+func (m *StatementStatisticsKey) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementStatisticsKey) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementStatisticsKey.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatementStatisticsKey proto.InternalMessageInfo
 
 // CollectedStats wraps collected timings and metadata for some query's execution.
 type CollectedStatementStatistics struct {
-	Key   StatementStatisticsKey `protobuf:"bytes,1,opt,name=key" json:"key"`
-	Stats StatementStatistics    `protobuf:"bytes,2,opt,name=stats" json:"stats"`
+	Key                  StatementStatisticsKey `protobuf:"bytes,1,opt,name=key" json:"key"`
+	Stats                StatementStatistics    `protobuf:"bytes,2,opt,name=stats" json:"stats"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
 func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatementStatistics{} }
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptorAppStats, []int{4}
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{4}
 }
+func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CollectedStatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CollectedStatementStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectedStatementStatistics.Merge(dst, src)
+}
+func (m *CollectedStatementStatistics) XXX_Size() int {
+	return m.Size()
+}
+func (m *CollectedStatementStatistics) XXX_DiscardUnknown() {
+	xxx_messageInfo_CollectedStatementStatistics.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CollectedStatementStatistics proto.InternalMessageInfo
 
 // ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
 type ExplainTreePlanNode struct {
@@ -132,25 +266,75 @@ type ExplainTreePlanNode struct {
 	// Often there are many attributes with the same key, e.g. "render".
 	Attrs []*ExplainTreePlanNode_Attr `protobuf:"bytes,2,rep,name=attrs" json:"attrs,omitempty"`
 	// Children are the nodes that feed into this one, e.g. two scans for a join.
-	Children []*ExplainTreePlanNode `protobuf:"bytes,3,rep,name=children" json:"children,omitempty"`
+	Children             []*ExplainTreePlanNode `protobuf:"bytes,3,rep,name=children" json:"children,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
-func (m *ExplainTreePlanNode) Reset()                    { *m = ExplainTreePlanNode{} }
-func (m *ExplainTreePlanNode) String() string            { return proto.CompactTextString(m) }
-func (*ExplainTreePlanNode) ProtoMessage()               {}
-func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{5} }
+func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
+func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
+func (*ExplainTreePlanNode) ProtoMessage()    {}
+func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{5}
+}
+func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ExplainTreePlanNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ExplainTreePlanNode) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExplainTreePlanNode.Merge(dst, src)
+}
+func (m *ExplainTreePlanNode) XXX_Size() int {
+	return m.Size()
+}
+func (m *ExplainTreePlanNode) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExplainTreePlanNode.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExplainTreePlanNode proto.InternalMessageInfo
 
 type ExplainTreePlanNode_Attr struct {
-	Key   string `protobuf:"bytes,1,opt,name=key" json:"key"`
-	Value string `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Key                  string   `protobuf:"bytes,1,opt,name=key" json:"key"`
+	Value                string   `protobuf:"bytes,2,opt,name=value" json:"value"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_Attr{} }
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptorAppStats, []int{5, 0}
+	return fileDescriptor_app_stats_0e394ba73b607eaf, []int{5, 0}
 }
+func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ExplainTreePlanNode_Attr) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ExplainTreePlanNode_Attr) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExplainTreePlanNode_Attr.Merge(dst, src)
+}
+func (m *ExplainTreePlanNode_Attr) XXX_Size() int {
+	return m.Size()
+}
+func (m *ExplainTreePlanNode_Attr) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExplainTreePlanNode_Attr.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExplainTreePlanNode_Attr proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*StatementStatistics)(nil), "cockroach.sql.StatementStatistics")
@@ -299,11 +483,11 @@ func (m *NumericStat) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0x9
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
 	i += 8
 	dAtA[i] = 0x11
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.SquaredDiffs))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.SquaredDiffs))))
 	i += 8
 	return i, nil
 }
@@ -474,6 +658,9 @@ func encodeVarintAppStats(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *StatementStatistics) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovAppStats(uint64(m.Count))
@@ -501,6 +688,9 @@ func (m *StatementStatistics) Size() (n int) {
 }
 
 func (m *SensitiveInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.LastErr)
@@ -511,6 +701,9 @@ func (m *SensitiveInfo) Size() (n int) {
 }
 
 func (m *NumericStat) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 9
@@ -519,6 +712,9 @@ func (m *NumericStat) Size() (n int) {
 }
 
 func (m *StatementStatisticsKey) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Query)
@@ -532,6 +728,9 @@ func (m *StatementStatisticsKey) Size() (n int) {
 }
 
 func (m *CollectedStatementStatistics) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Key.Size()
@@ -542,6 +741,9 @@ func (m *CollectedStatementStatistics) Size() (n int) {
 }
 
 func (m *ExplainTreePlanNode) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -562,6 +764,9 @@ func (m *ExplainTreePlanNode) Size() (n int) {
 }
 
 func (m *ExplainTreePlanNode_Attr) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Key)
@@ -1105,7 +1310,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.Mean = float64(math.Float64frombits(v))
 		case 2:
@@ -1116,7 +1321,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.SquaredDiffs = float64(math.Float64frombits(v))
 		default:
@@ -1772,9 +1977,9 @@ var (
 	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptorAppStats) }
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_0e394ba73b607eaf) }
 
-var fileDescriptorAppStats = []byte{
+var fileDescriptor_app_stats_0e394ba73b607eaf = []byte{
 	// 733 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0x4d, 0x6f, 0xd3, 0x4a,
 	0x14, 0xad, 0x5f, 0x92, 0x26, 0xb9, 0x6e, 0xde, 0xd3, 0x9b, 0xbe, 0xd7, 0xe7, 0x17, 0x45, 0x69,

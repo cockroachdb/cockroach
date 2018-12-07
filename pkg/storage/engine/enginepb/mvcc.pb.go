@@ -6,11 +6,11 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import bytes "bytes"
 
-import binary "encoding/binary"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -18,6 +18,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 // An MVCCMetadata is stored for a versioned key while there is an intent on
@@ -28,7 +34,7 @@ type MVCCMetadata struct {
 	// value that may have multiple versions. For values which may have
 	// only one version, the data is stored inline (via raw_bytes), and
 	// timestamp is set to zero.
-	Timestamp cockroach_util_hlc1.LegacyTimestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp hlc.LegacyTimestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Is the most recent value a deletion tombstone?
 	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
 	// The size in bytes of the most recent encoded key.
@@ -50,13 +56,39 @@ type MVCCMetadata struct {
 	IntentHistory []MVCCMetadata_SequencedIntent `protobuf:"bytes,8,rep,name=intent_history,json=intentHistory" json:"intent_history"`
 	// This provides a measure of protection against replays caused by
 	// Raft duplicating merge commands.
-	MergeTimestamp *cockroach_util_hlc1.LegacyTimestamp `protobuf:"bytes,7,opt,name=merge_timestamp,json=mergeTimestamp" json:"merge_timestamp,omitempty"`
+	MergeTimestamp       *hlc.LegacyTimestamp `protobuf:"bytes,7,opt,name=merge_timestamp,json=mergeTimestamp" json:"merge_timestamp,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *MVCCMetadata) Reset()                    { *m = MVCCMetadata{} }
-func (m *MVCCMetadata) String() string            { return proto.CompactTextString(m) }
-func (*MVCCMetadata) ProtoMessage()               {}
-func (*MVCCMetadata) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{0} }
+func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
+func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
+func (*MVCCMetadata) ProtoMessage()    {}
+func (*MVCCMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc_09e838457798996e, []int{0}
+}
+func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCMetadata.Merge(dst, src)
+}
+func (m *MVCCMetadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCMetadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCMetadata proto.InternalMessageInfo
 
 // SequencedIntent stores a value at a given key and the sequence number it was
 // written at - to be stored in an IntentHistory of a key during a transaction.
@@ -67,15 +99,39 @@ type MVCCMetadata_SequencedIntent struct {
 	Sequence int32 `protobuf:"varint,1,opt,name=sequence" json:"sequence"`
 	// Value is the value written to the key as part of the transaction at
 	// the above Sequence.
-	Value []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Value                []byte   `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MVCCMetadata_SequencedIntent) Reset()         { *m = MVCCMetadata_SequencedIntent{} }
 func (m *MVCCMetadata_SequencedIntent) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage()    {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptorMvcc, []int{0, 0}
+	return fileDescriptor_mvcc_09e838457798996e, []int{0, 0}
 }
+func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCMetadata_SequencedIntent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCMetadata_SequencedIntent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCMetadata_SequencedIntent.Merge(dst, src)
+}
+func (m *MVCCMetadata_SequencedIntent) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCMetadata_SequencedIntent) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCMetadata_SequencedIntent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCMetadata_SequencedIntent proto.InternalMessageInfo
 
 // MVCCStats tracks byte and instance counts for various groups of keys,
 // values, or key-value pairs; see the field comments for details.
@@ -159,13 +215,39 @@ type MVCCStats struct {
 	// and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
 	SysBytes int64 `protobuf:"fixed64,12,opt,name=sys_bytes,json=sysBytes" json:"sys_bytes"`
 	// sys_count is the number of meta keys tracked under sys_bytes.
-	SysCount int64 `protobuf:"fixed64,13,opt,name=sys_count,json=sysCount" json:"sys_count"`
+	SysCount             int64    `protobuf:"fixed64,13,opt,name=sys_count,json=sysCount" json:"sys_count"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MVCCStats) Reset()                    { *m = MVCCStats{} }
-func (m *MVCCStats) String() string            { return proto.CompactTextString(m) }
-func (*MVCCStats) ProtoMessage()               {}
-func (*MVCCStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{1} }
+func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
+func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
+func (*MVCCStats) ProtoMessage()    {}
+func (*MVCCStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc_09e838457798996e, []int{1}
+}
+func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCStats.Merge(dst, src)
+}
+func (m *MVCCStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCStats proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*MVCCMetadata)(nil), "cockroach.storage.engine.enginepb.MVCCMetadata")
@@ -434,55 +516,55 @@ func (m *MVCCStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0x9
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
 	i += 8
 	dAtA[i] = 0x11
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
 	i += 8
 	dAtA[i] = 0x19
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
 	i += 8
 	dAtA[i] = 0x21
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LiveBytes))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LiveBytes))
 	i += 8
 	dAtA[i] = 0x29
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LiveCount))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LiveCount))
 	i += 8
 	dAtA[i] = 0x31
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.KeyBytes))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.KeyBytes))
 	i += 8
 	dAtA[i] = 0x39
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.KeyCount))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.KeyCount))
 	i += 8
 	dAtA[i] = 0x41
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.ValBytes))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.ValBytes))
 	i += 8
 	dAtA[i] = 0x49
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.ValCount))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.ValCount))
 	i += 8
 	dAtA[i] = 0x51
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentBytes))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentBytes))
 	i += 8
 	dAtA[i] = 0x59
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentCount))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentCount))
 	i += 8
 	dAtA[i] = 0x61
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.SysBytes))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.SysBytes))
 	i += 8
 	dAtA[i] = 0x69
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.SysCount))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.SysCount))
 	i += 8
 	dAtA[i] = 0x70
 	i++
@@ -509,7 +591,7 @@ func NewPopulatedMVCCMetadata(r randyMvcc, easy bool) *MVCCMetadata {
 	if r.Intn(10) != 0 {
 		this.Txn = NewPopulatedTxnMeta(r, easy)
 	}
-	v1 := cockroach_util_hlc1.NewPopulatedLegacyTimestamp(r, easy)
+	v1 := hlc.NewPopulatedLegacyTimestamp(r, easy)
 	this.Timestamp = *v1
 	this.Deleted = bool(bool(r.Intn(2) == 0))
 	this.KeyBytes = int64(r.Int63())
@@ -528,7 +610,7 @@ func NewPopulatedMVCCMetadata(r randyMvcc, easy bool) *MVCCMetadata {
 		}
 	}
 	if r.Intn(10) != 0 {
-		this.MergeTimestamp = cockroach_util_hlc1.NewPopulatedLegacyTimestamp(r, easy)
+		this.MergeTimestamp = hlc.NewPopulatedLegacyTimestamp(r, easy)
 	}
 	if r.Intn(10) != 0 {
 		v3 := r.Intn(5)
@@ -694,6 +776,9 @@ func encodeVarintPopulateMvcc(dAtA []byte, v uint64) []byte {
 	return dAtA
 }
 func (m *MVCCMetadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Txn != nil {
@@ -723,6 +808,9 @@ func (m *MVCCMetadata) Size() (n int) {
 }
 
 func (m *MVCCMetadata_SequencedIntent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMvcc(uint64(m.Sequence))
@@ -734,6 +822,9 @@ func (m *MVCCMetadata_SequencedIntent) Size() (n int) {
 }
 
 func (m *MVCCStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 9
@@ -974,7 +1065,7 @@ func (m *MVCCMetadata) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.MergeTimestamp == nil {
-				m.MergeTimestamp = &cockroach_util_hlc1.LegacyTimestamp{}
+				m.MergeTimestamp = &hlc.LegacyTimestamp{}
 			}
 			if err := m.MergeTimestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1169,7 +1260,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastUpdateNanos = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LastUpdateNanos = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 2:
 			if wireType != 1 {
@@ -1179,7 +1270,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 3:
 			if wireType != 1 {
@@ -1189,7 +1280,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GCBytesAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.GCBytesAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 4:
 			if wireType != 1 {
@@ -1199,7 +1290,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LiveBytes = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LiveBytes = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 5:
 			if wireType != 1 {
@@ -1209,7 +1300,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LiveCount = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LiveCount = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 6:
 			if wireType != 1 {
@@ -1219,7 +1310,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.KeyBytes = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.KeyBytes = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 7:
 			if wireType != 1 {
@@ -1229,7 +1320,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.KeyCount = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.KeyCount = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 8:
 			if wireType != 1 {
@@ -1239,7 +1330,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ValBytes = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.ValBytes = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 9:
 			if wireType != 1 {
@@ -1249,7 +1340,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ValCount = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.ValCount = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 10:
 			if wireType != 1 {
@@ -1259,7 +1350,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentBytes = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentBytes = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 11:
 			if wireType != 1 {
@@ -1269,7 +1360,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentCount = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentCount = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 12:
 			if wireType != 1 {
@@ -1279,7 +1370,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SysBytes = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.SysBytes = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 13:
 			if wireType != 1 {
@@ -1289,7 +1380,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SysCount = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.SysCount = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 14:
 			if wireType != 0 {
@@ -1437,9 +1528,11 @@ var (
 	ErrIntOverflowMvcc   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptorMvcc) }
+func init() {
+	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_09e838457798996e)
+}
 
-var fileDescriptorMvcc = []byte{
+var fileDescriptor_mvcc_09e838457798996e = []byte{
 	// 632 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x4f, 0x4f, 0xd4, 0x40,
 	0x14, 0xc0, 0xa9, 0xbb, 0x40, 0x77, 0xb6, 0x80, 0x4c, 0x38, 0x34, 0x98, 0x74, 0xcb, 0x72, 0x70,

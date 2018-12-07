@@ -6,13 +6,13 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
 import bytes "bytes"
 
-import binary "encoding/binary"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -20,6 +20,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
@@ -88,20 +94,46 @@ type TxnMeta struct {
 	//       value will need to be rewritten at the forwarded timestamp if the
 	//       transaction commits.
 	//
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
-	Priority  int32                        `protobuf:"varint,6,opt,name=priority,proto3" json:"priority,omitempty"`
+	Timestamp hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp"`
+	Priority  int32         `protobuf:"varint,6,opt,name=priority,proto3" json:"priority,omitempty"`
 	// A one-indexed sequence number which is increased on each request
 	// sent as part of the transaction. When set in the header of a batch
 	// of requests, the value will correspond to the sequence number of the
 	// last request. Used to prevent replay and out-of-order application
 	// protection (by means of a transaction retry).
-	Sequence int32 `protobuf:"varint,7,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Sequence             int32    `protobuf:"varint,7,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *TxnMeta) Reset()                    { *m = TxnMeta{} }
-func (m *TxnMeta) String() string            { return proto.CompactTextString(m) }
-func (*TxnMeta) ProtoMessage()               {}
-func (*TxnMeta) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{0} }
+func (m *TxnMeta) Reset()         { *m = TxnMeta{} }
+func (m *TxnMeta) String() string { return proto.CompactTextString(m) }
+func (*TxnMeta) ProtoMessage()    {}
+func (*TxnMeta) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{0}
+}
+func (m *TxnMeta) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TxnMeta) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TxnMeta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnMeta.Merge(dst, src)
+}
+func (m *TxnMeta) XXX_Size() int {
+	return m.Size()
+}
+func (m *TxnMeta) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxnMeta.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxnMeta proto.InternalMessageInfo
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
 // encodings for most fields that make it more efficient to store negative
@@ -110,52 +142,104 @@ type MVCCStatsDelta struct {
 	// TODO(nvanbenschoten): now that we've split MVCCPersistentStats
 	// from this MVCCStatsDelta type, we can turn contains_estimates
 	// into a three-valued type ('UNCHANGED', 'NO', and 'YES').
-	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
-	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
-	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
-	GCBytesAge        int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
-	LiveBytes         int64 `protobuf:"zigzag64,4,opt,name=live_bytes,json=liveBytes,proto3" json:"live_bytes,omitempty"`
-	LiveCount         int64 `protobuf:"zigzag64,5,opt,name=live_count,json=liveCount,proto3" json:"live_count,omitempty"`
-	KeyBytes          int64 `protobuf:"zigzag64,6,opt,name=key_bytes,json=keyBytes,proto3" json:"key_bytes,omitempty"`
-	KeyCount          int64 `protobuf:"zigzag64,7,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
-	ValBytes          int64 `protobuf:"zigzag64,8,opt,name=val_bytes,json=valBytes,proto3" json:"val_bytes,omitempty"`
-	ValCount          int64 `protobuf:"zigzag64,9,opt,name=val_count,json=valCount,proto3" json:"val_count,omitempty"`
-	IntentBytes       int64 `protobuf:"zigzag64,10,opt,name=intent_bytes,json=intentBytes,proto3" json:"intent_bytes,omitempty"`
-	IntentCount       int64 `protobuf:"zigzag64,11,opt,name=intent_count,json=intentCount,proto3" json:"intent_count,omitempty"`
-	SysBytes          int64 `protobuf:"zigzag64,12,opt,name=sys_bytes,json=sysBytes,proto3" json:"sys_bytes,omitempty"`
-	SysCount          int64 `protobuf:"zigzag64,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
+	ContainsEstimates    bool     `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
+	LastUpdateNanos      int64    `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
+	IntentAge            int64    `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
+	GCBytesAge           int64    `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
+	LiveBytes            int64    `protobuf:"zigzag64,4,opt,name=live_bytes,json=liveBytes,proto3" json:"live_bytes,omitempty"`
+	LiveCount            int64    `protobuf:"zigzag64,5,opt,name=live_count,json=liveCount,proto3" json:"live_count,omitempty"`
+	KeyBytes             int64    `protobuf:"zigzag64,6,opt,name=key_bytes,json=keyBytes,proto3" json:"key_bytes,omitempty"`
+	KeyCount             int64    `protobuf:"zigzag64,7,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
+	ValBytes             int64    `protobuf:"zigzag64,8,opt,name=val_bytes,json=valBytes,proto3" json:"val_bytes,omitempty"`
+	ValCount             int64    `protobuf:"zigzag64,9,opt,name=val_count,json=valCount,proto3" json:"val_count,omitempty"`
+	IntentBytes          int64    `protobuf:"zigzag64,10,opt,name=intent_bytes,json=intentBytes,proto3" json:"intent_bytes,omitempty"`
+	IntentCount          int64    `protobuf:"zigzag64,11,opt,name=intent_count,json=intentCount,proto3" json:"intent_count,omitempty"`
+	SysBytes             int64    `protobuf:"zigzag64,12,opt,name=sys_bytes,json=sysBytes,proto3" json:"sys_bytes,omitempty"`
+	SysCount             int64    `protobuf:"zigzag64,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MVCCStatsDelta) Reset()                    { *m = MVCCStatsDelta{} }
-func (m *MVCCStatsDelta) String() string            { return proto.CompactTextString(m) }
-func (*MVCCStatsDelta) ProtoMessage()               {}
-func (*MVCCStatsDelta) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{1} }
+func (m *MVCCStatsDelta) Reset()         { *m = MVCCStatsDelta{} }
+func (m *MVCCStatsDelta) String() string { return proto.CompactTextString(m) }
+func (*MVCCStatsDelta) ProtoMessage()    {}
+func (*MVCCStatsDelta) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{1}
+}
+func (m *MVCCStatsDelta) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCStatsDelta) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCStatsDelta) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCStatsDelta.Merge(dst, src)
+}
+func (m *MVCCStatsDelta) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCStatsDelta) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCStatsDelta.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCStatsDelta proto.InternalMessageInfo
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
 // width encodings for most fields that make it efficient to store positive
 // values but inefficient to store negative values. This makes the encodings
 // incompatible.
 type MVCCPersistentStats struct {
-	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
-	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
-	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
-	GCBytesAge        int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
-	LiveBytes         int64 `protobuf:"varint,4,opt,name=live_bytes,json=liveBytes,proto3" json:"live_bytes,omitempty"`
-	LiveCount         int64 `protobuf:"varint,5,opt,name=live_count,json=liveCount,proto3" json:"live_count,omitempty"`
-	KeyBytes          int64 `protobuf:"varint,6,opt,name=key_bytes,json=keyBytes,proto3" json:"key_bytes,omitempty"`
-	KeyCount          int64 `protobuf:"varint,7,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
-	ValBytes          int64 `protobuf:"varint,8,opt,name=val_bytes,json=valBytes,proto3" json:"val_bytes,omitempty"`
-	ValCount          int64 `protobuf:"varint,9,opt,name=val_count,json=valCount,proto3" json:"val_count,omitempty"`
-	IntentBytes       int64 `protobuf:"varint,10,opt,name=intent_bytes,json=intentBytes,proto3" json:"intent_bytes,omitempty"`
-	IntentCount       int64 `protobuf:"varint,11,opt,name=intent_count,json=intentCount,proto3" json:"intent_count,omitempty"`
-	SysBytes          int64 `protobuf:"varint,12,opt,name=sys_bytes,json=sysBytes,proto3" json:"sys_bytes,omitempty"`
-	SysCount          int64 `protobuf:"varint,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
+	ContainsEstimates    bool     `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
+	LastUpdateNanos      int64    `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
+	IntentAge            int64    `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
+	GCBytesAge           int64    `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
+	LiveBytes            int64    `protobuf:"varint,4,opt,name=live_bytes,json=liveBytes,proto3" json:"live_bytes,omitempty"`
+	LiveCount            int64    `protobuf:"varint,5,opt,name=live_count,json=liveCount,proto3" json:"live_count,omitempty"`
+	KeyBytes             int64    `protobuf:"varint,6,opt,name=key_bytes,json=keyBytes,proto3" json:"key_bytes,omitempty"`
+	KeyCount             int64    `protobuf:"varint,7,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
+	ValBytes             int64    `protobuf:"varint,8,opt,name=val_bytes,json=valBytes,proto3" json:"val_bytes,omitempty"`
+	ValCount             int64    `protobuf:"varint,9,opt,name=val_count,json=valCount,proto3" json:"val_count,omitempty"`
+	IntentBytes          int64    `protobuf:"varint,10,opt,name=intent_bytes,json=intentBytes,proto3" json:"intent_bytes,omitempty"`
+	IntentCount          int64    `protobuf:"varint,11,opt,name=intent_count,json=intentCount,proto3" json:"intent_count,omitempty"`
+	SysBytes             int64    `protobuf:"varint,12,opt,name=sys_bytes,json=sysBytes,proto3" json:"sys_bytes,omitempty"`
+	SysCount             int64    `protobuf:"varint,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MVCCPersistentStats) Reset()                    { *m = MVCCPersistentStats{} }
-func (m *MVCCPersistentStats) String() string            { return proto.CompactTextString(m) }
-func (*MVCCPersistentStats) ProtoMessage()               {}
-func (*MVCCPersistentStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{2} }
+func (m *MVCCPersistentStats) Reset()         { *m = MVCCPersistentStats{} }
+func (m *MVCCPersistentStats) String() string { return proto.CompactTextString(m) }
+func (*MVCCPersistentStats) ProtoMessage()    {}
+func (*MVCCPersistentStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{2}
+}
+func (m *MVCCPersistentStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCPersistentStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCPersistentStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCPersistentStats.Merge(dst, src)
+}
+func (m *MVCCPersistentStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCPersistentStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCPersistentStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCPersistentStats proto.InternalMessageInfo
 
 // RangeAppliedState combines the raft and lease applied indices with
 // mvcc stats. These are all persisted on each transition of the Raft
@@ -170,90 +254,272 @@ type RangeAppliedState struct {
 	LeaseAppliedIndex uint64 `protobuf:"varint,2,opt,name=lease_applied_index,json=leaseAppliedIndex,proto3" json:"lease_applied_index,omitempty"`
 	// range_stats is the set of mvcc stats that accounts for the current value
 	// of the Raft state machine.
-	RangeStats MVCCPersistentStats `protobuf:"bytes,3,opt,name=range_stats,json=rangeStats" json:"range_stats"`
+	RangeStats           MVCCPersistentStats `protobuf:"bytes,3,opt,name=range_stats,json=rangeStats,proto3" json:"range_stats"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *RangeAppliedState) Reset()                    { *m = RangeAppliedState{} }
-func (m *RangeAppliedState) String() string            { return proto.CompactTextString(m) }
-func (*RangeAppliedState) ProtoMessage()               {}
-func (*RangeAppliedState) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{3} }
+func (m *RangeAppliedState) Reset()         { *m = RangeAppliedState{} }
+func (m *RangeAppliedState) String() string { return proto.CompactTextString(m) }
+func (*RangeAppliedState) ProtoMessage()    {}
+func (*RangeAppliedState) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{3}
+}
+func (m *RangeAppliedState) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeAppliedState) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeAppliedState) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeAppliedState.Merge(dst, src)
+}
+func (m *RangeAppliedState) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeAppliedState) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeAppliedState.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeAppliedState proto.InternalMessageInfo
 
 // MVCCWriteValueOp corresponds to a value being written outside of a
 // transaction.
 type MVCCWriteValueOp struct {
-	Key       []byte                       `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
-	Value     []byte                       `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Key                  []byte        `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Timestamp            hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp"`
+	Value                []byte        `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *MVCCWriteValueOp) Reset()                    { *m = MVCCWriteValueOp{} }
-func (m *MVCCWriteValueOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCWriteValueOp) ProtoMessage()               {}
-func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{4} }
+func (m *MVCCWriteValueOp) Reset()         { *m = MVCCWriteValueOp{} }
+func (m *MVCCWriteValueOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCWriteValueOp) ProtoMessage()    {}
+func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{4}
+}
+func (m *MVCCWriteValueOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCWriteValueOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCWriteValueOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCWriteValueOp.Merge(dst, src)
+}
+func (m *MVCCWriteValueOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCWriteValueOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCWriteValueOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCWriteValueOp proto.InternalMessageInfo
 
 // MVCCUpdateIntentOp corresponds to an intent being written for a given
 // transaction.
 type MVCCWriteIntentOp struct {
-	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
-	TxnKey    []byte                                              `protobuf:"bytes,2,opt,name=txn_key,json=txnKey,proto3" json:"txn_key,omitempty"`
-	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
+	TxnID                github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	TxnKey               []byte                                              `protobuf:"bytes,2,opt,name=txn_key,json=txnKey,proto3" json:"txn_key,omitempty"`
+	Timestamp            hlc.Timestamp                                       `protobuf:"bytes,3,opt,name=timestamp,proto3" json:"timestamp"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *MVCCWriteIntentOp) Reset()                    { *m = MVCCWriteIntentOp{} }
-func (m *MVCCWriteIntentOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCWriteIntentOp) ProtoMessage()               {}
-func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{5} }
+func (m *MVCCWriteIntentOp) Reset()         { *m = MVCCWriteIntentOp{} }
+func (m *MVCCWriteIntentOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCWriteIntentOp) ProtoMessage()    {}
+func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{5}
+}
+func (m *MVCCWriteIntentOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCWriteIntentOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCWriteIntentOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCWriteIntentOp.Merge(dst, src)
+}
+func (m *MVCCWriteIntentOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCWriteIntentOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCWriteIntentOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCWriteIntentOp proto.InternalMessageInfo
 
 // MVCCUpdateIntentOp corresponds to an intent being updates at a larger
 // timestamp for a given transaction.
 type MVCCUpdateIntentOp struct {
-	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
-	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	TxnID                github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	Timestamp            hlc.Timestamp                                       `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *MVCCUpdateIntentOp) Reset()                    { *m = MVCCUpdateIntentOp{} }
-func (m *MVCCUpdateIntentOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCUpdateIntentOp) ProtoMessage()               {}
-func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{6} }
+func (m *MVCCUpdateIntentOp) Reset()         { *m = MVCCUpdateIntentOp{} }
+func (m *MVCCUpdateIntentOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCUpdateIntentOp) ProtoMessage()    {}
+func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{6}
+}
+func (m *MVCCUpdateIntentOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCUpdateIntentOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCUpdateIntentOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCUpdateIntentOp.Merge(dst, src)
+}
+func (m *MVCCUpdateIntentOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCUpdateIntentOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCUpdateIntentOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCUpdateIntentOp proto.InternalMessageInfo
 
 // MVCCCommitIntentOp corresponds to an intent being committed for a given
 // transaction.
 type MVCCCommitIntentOp struct {
-	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
-	Key       []byte                                              `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
-	Value     []byte                                              `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	TxnID                github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	Key                  []byte                                              `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Timestamp            hlc.Timestamp                                       `protobuf:"bytes,3,opt,name=timestamp,proto3" json:"timestamp"`
+	Value                []byte                                              `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *MVCCCommitIntentOp) Reset()                    { *m = MVCCCommitIntentOp{} }
-func (m *MVCCCommitIntentOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCCommitIntentOp) ProtoMessage()               {}
-func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{7} }
+func (m *MVCCCommitIntentOp) Reset()         { *m = MVCCCommitIntentOp{} }
+func (m *MVCCCommitIntentOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCCommitIntentOp) ProtoMessage()    {}
+func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{7}
+}
+func (m *MVCCCommitIntentOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCCommitIntentOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCCommitIntentOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCCommitIntentOp.Merge(dst, src)
+}
+func (m *MVCCCommitIntentOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCCommitIntentOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCCommitIntentOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCCommitIntentOp proto.InternalMessageInfo
 
 // MVCCAbortIntentOp corresponds to an intent being aborted for a given
 // transaction.
 type MVCCAbortIntentOp struct {
-	TxnID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	TxnID                github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *MVCCAbortIntentOp) Reset()                    { *m = MVCCAbortIntentOp{} }
-func (m *MVCCAbortIntentOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCAbortIntentOp) ProtoMessage()               {}
-func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{8} }
+func (m *MVCCAbortIntentOp) Reset()         { *m = MVCCAbortIntentOp{} }
+func (m *MVCCAbortIntentOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCAbortIntentOp) ProtoMessage()    {}
+func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{8}
+}
+func (m *MVCCAbortIntentOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCAbortIntentOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCAbortIntentOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCAbortIntentOp.Merge(dst, src)
+}
+func (m *MVCCAbortIntentOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCAbortIntentOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCAbortIntentOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCAbortIntentOp proto.InternalMessageInfo
 
 // MVCCLogicalOp is a union of all logical MVCC operation types.
 type MVCCLogicalOp struct {
-	WriteValue   *MVCCWriteValueOp   `protobuf:"bytes,1,opt,name=write_value,json=writeValue" json:"write_value,omitempty"`
-	WriteIntent  *MVCCWriteIntentOp  `protobuf:"bytes,2,opt,name=write_intent,json=writeIntent" json:"write_intent,omitempty"`
-	UpdateIntent *MVCCUpdateIntentOp `protobuf:"bytes,3,opt,name=update_intent,json=updateIntent" json:"update_intent,omitempty"`
-	CommitIntent *MVCCCommitIntentOp `protobuf:"bytes,4,opt,name=commit_intent,json=commitIntent" json:"commit_intent,omitempty"`
-	AbortIntent  *MVCCAbortIntentOp  `protobuf:"bytes,5,opt,name=abort_intent,json=abortIntent" json:"abort_intent,omitempty"`
+	WriteValue           *MVCCWriteValueOp   `protobuf:"bytes,1,opt,name=write_value,json=writeValue,proto3" json:"write_value,omitempty"`
+	WriteIntent          *MVCCWriteIntentOp  `protobuf:"bytes,2,opt,name=write_intent,json=writeIntent,proto3" json:"write_intent,omitempty"`
+	UpdateIntent         *MVCCUpdateIntentOp `protobuf:"bytes,3,opt,name=update_intent,json=updateIntent,proto3" json:"update_intent,omitempty"`
+	CommitIntent         *MVCCCommitIntentOp `protobuf:"bytes,4,opt,name=commit_intent,json=commitIntent,proto3" json:"commit_intent,omitempty"`
+	AbortIntent          *MVCCAbortIntentOp  `protobuf:"bytes,5,opt,name=abort_intent,json=abortIntent,proto3" json:"abort_intent,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *MVCCLogicalOp) Reset()                    { *m = MVCCLogicalOp{} }
-func (m *MVCCLogicalOp) String() string            { return proto.CompactTextString(m) }
-func (*MVCCLogicalOp) ProtoMessage()               {}
-func (*MVCCLogicalOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{9} }
+func (m *MVCCLogicalOp) Reset()         { *m = MVCCLogicalOp{} }
+func (m *MVCCLogicalOp) String() string { return proto.CompactTextString(m) }
+func (*MVCCLogicalOp) ProtoMessage()    {}
+func (*MVCCLogicalOp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_mvcc3_e549160c12464c1c, []int{9}
+}
+func (m *MVCCLogicalOp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MVCCLogicalOp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MVCCLogicalOp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MVCCLogicalOp.Merge(dst, src)
+}
+func (m *MVCCLogicalOp) XXX_Size() int {
+	return m.Size()
+}
+func (m *MVCCLogicalOp) XXX_DiscardUnknown() {
+	xxx_messageInfo_MVCCLogicalOp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MVCCLogicalOp proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*TxnMeta)(nil), "cockroach.storage.engine.enginepb.TxnMeta")
@@ -535,19 +801,19 @@ func (m *MVCCStatsDelta) MarshalTo(dAtA []byte) (int, error) {
 	if m.LastUpdateNanos != 0 {
 		dAtA[i] = 0x9
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
 		i += 8
 	}
 	if m.IntentAge != 0 {
 		dAtA[i] = 0x11
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
 		i += 8
 	}
 	if m.GCBytesAge != 0 {
 		dAtA[i] = 0x19
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
 		i += 8
 	}
 	if m.LiveBytes != 0 {
@@ -631,19 +897,19 @@ func (m *MVCCPersistentStats) MarshalTo(dAtA []byte) (int, error) {
 	if m.LastUpdateNanos != 0 {
 		dAtA[i] = 0x9
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
 		i += 8
 	}
 	if m.IntentAge != 0 {
 		dAtA[i] = 0x11
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
 		i += 8
 	}
 	if m.GCBytesAge != 0 {
 		dAtA[i] = 0x19
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
 		i += 8
 	}
 	if m.LiveBytes != 0 {
@@ -1016,7 +1282,7 @@ func NewPopulatedTxnMeta(r randyMvcc3, easy bool) *TxnMeta {
 		this.Key[i] = byte(r.Intn(256))
 	}
 	this.Epoch = uint32(r.Uint32())
-	v3 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v3 := hlc.NewPopulatedTimestamp(r, easy)
 	this.Timestamp = *v3
 	this.Priority = int32(r.Int31())
 	if r.Intn(2) == 0 {
@@ -1175,6 +1441,9 @@ func encodeVarintPopulateMvcc3(dAtA []byte, v uint64) []byte {
 	return dAtA
 }
 func (m *TxnMeta) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ID.Size()
@@ -1198,6 +1467,9 @@ func (m *TxnMeta) Size() (n int) {
 }
 
 func (m *MVCCStatsDelta) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.LastUpdateNanos != 0 {
@@ -1246,6 +1518,9 @@ func (m *MVCCStatsDelta) Size() (n int) {
 }
 
 func (m *MVCCPersistentStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.LastUpdateNanos != 0 {
@@ -1294,6 +1569,9 @@ func (m *MVCCPersistentStats) Size() (n int) {
 }
 
 func (m *RangeAppliedState) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RaftAppliedIndex != 0 {
@@ -1308,6 +1586,9 @@ func (m *RangeAppliedState) Size() (n int) {
 }
 
 func (m *MVCCWriteValueOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Key)
@@ -1324,6 +1605,9 @@ func (m *MVCCWriteValueOp) Size() (n int) {
 }
 
 func (m *MVCCWriteIntentOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.TxnID.Size()
@@ -1338,6 +1622,9 @@ func (m *MVCCWriteIntentOp) Size() (n int) {
 }
 
 func (m *MVCCUpdateIntentOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.TxnID.Size()
@@ -1348,6 +1635,9 @@ func (m *MVCCUpdateIntentOp) Size() (n int) {
 }
 
 func (m *MVCCCommitIntentOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.TxnID.Size()
@@ -1366,6 +1656,9 @@ func (m *MVCCCommitIntentOp) Size() (n int) {
 }
 
 func (m *MVCCAbortIntentOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.TxnID.Size()
@@ -1374,6 +1667,9 @@ func (m *MVCCAbortIntentOp) Size() (n int) {
 }
 
 func (m *MVCCLogicalOp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.WriteValue != nil {
@@ -1683,7 +1979,7 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastUpdateNanos = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LastUpdateNanos = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 2:
 			if wireType != 1 {
@@ -1693,7 +1989,7 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 3:
 			if wireType != 1 {
@@ -1703,7 +1999,7 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GCBytesAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.GCBytesAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 4:
 			if wireType != 0 {
@@ -1993,7 +2289,7 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastUpdateNanos = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LastUpdateNanos = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 2:
 			if wireType != 1 {
@@ -2003,7 +2299,7 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 3:
 			if wireType != 1 {
@@ -2013,7 +2309,7 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GCBytesAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.GCBytesAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 4:
 			if wireType != 0 {
@@ -3329,9 +3625,11 @@ var (
 	ErrIntOverflowMvcc3   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptorMvcc3) }
+func init() {
+	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_e549160c12464c1c)
+}
 
-var fileDescriptorMvcc3 = []byte{
+var fileDescriptor_mvcc3_e549160c12464c1c = []byte{
 	// 990 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0x4f, 0x6f, 0xe3, 0x44,
 	0x14, 0xef, 0x78, 0x92, 0x36, 0x99, 0xa4, 0x25, 0x9d, 0xad, 0x84, 0x55, 0xb4, 0x49, 0x36, 0x5c,
