@@ -28,7 +28,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -64,37 +64,45 @@ func _ASSIGN_LT(_, _, _ string) bool {
 
 // */}}
 
-func newSingleSorter(t types.T) (colSorter, error) {
+func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSorter, error) {
 	switch t {
-	// {{range .}}
+	// {{range .}} {{/* for each type */}}
 	case _TYPES_T:
-		return &sort_TYPEOp{}, nil
+		switch dir {
+		// {{range .Overloads}} {{/* for each direction */}}
+		case _DIR_ENUM:
+			return &sort_TYPE_DIROp{}, nil
+		// {{end}}
+		default:
+			return nil, errors.Errorf("unsupported sort dir %s", dir)
+		}
 	// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported sort type %s", t)
 	}
 }
 
-// {{range .}}
+// {{range .}} {{/* for each type */}}
+// {{range .Overloads}} {{/* for each direction */}}
 
-type sort_TYPEOp struct {
+type sort_TYPE_DIROp struct {
 	sortCol      []_GOTYPE
 	order        []uint64
 	workingSpace []uint64
 }
 
-func (s *sort_TYPEOp) init(col ColVec, order []uint64, workingSpace []uint64) {
+func (s *sort_TYPE_DIROp) init(col ColVec, order []uint64, workingSpace []uint64) {
 	s.sortCol = col._TemplateType()
 	s.order = order
 	s.workingSpace = workingSpace
 }
 
-func (s *sort_TYPEOp) sort() {
+func (s *sort_TYPE_DIROp) sort() {
 	n := len(s.sortCol)
 	s.quickSort(0, n, maxDepth(n))
 }
 
-func (s *sort_TYPEOp) reorder() {
+func (s *sort_TYPE_DIROp) reorder() {
 	// Initialize our index vector to the inverse of the order vector. This
 	// creates what is known as a permutation. Position i in the permutation has
 	// the output index for the value at position i in the original ordering of
@@ -117,7 +125,7 @@ func (s *sort_TYPEOp) reorder() {
 	}
 }
 
-func (s *sort_TYPEOp) sortPartitions(partitions []uint64) {
+func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64) {
 	if len(partitions) < 1 {
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
@@ -137,13 +145,13 @@ func (s *sort_TYPEOp) sortPartitions(partitions []uint64) {
 	}
 }
 
-func (s *sort_TYPEOp) Less(i, j int) bool {
+func (s *sort_TYPE_DIROp) Less(i, j int) bool {
 	var lt bool
 	_ASSIGN_LT("lt", "s.sortCol[i]", "s.sortCol[j]")
 	return lt
 }
 
-func (s *sort_TYPEOp) Swap(i, j int) {
+func (s *sort_TYPE_DIROp) Swap(i, j int) {
 	// Swap needs to swap the values in the column being sorted, as otherwise
 	// subsequent calls to Less would be incorrect.
 	// We also store the swap order in s.order to swap all the other columns.
@@ -151,8 +159,9 @@ func (s *sort_TYPEOp) Swap(i, j int) {
 	s.order[i], s.order[j] = s.order[j], s.order[i]
 }
 
-func (s *sort_TYPEOp) Len() int {
+func (s *sort_TYPE_DIROp) Len() int {
 	return len(s.order)
 }
 
+// {{end}}
 // {{end}}
