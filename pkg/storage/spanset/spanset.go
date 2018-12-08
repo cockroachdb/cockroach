@@ -73,7 +73,7 @@ func (a SpanScope) String() string {
 // SpanSet tracks the set of key spans touched by a command. The set
 // is divided into subsets for access type (read-only or read/write)
 // and key scope (local or global; used to facilitate use by the
-// separate local and global command queues).
+// separate local and global latches).
 type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]roachpb.Span
 }
@@ -116,6 +116,15 @@ func (ss *SpanSet) Add(access SpanAccess, span roachpb.Span) {
 		scope = SpanLocal
 	}
 	ss.spans[access][scope] = append(ss.spans[access][scope], span)
+}
+
+// SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
+func (ss *SpanSet) SortAndDedup() {
+	for i := SpanAccess(0); i < NumSpanAccess; i++ {
+		for j := SpanScope(0); j < NumSpanScope; j++ {
+			ss.spans[i][j], _ /* distinct */ = roachpb.MergeSpans(ss.spans[i][j])
+		}
+	}
 }
 
 // GetSpans returns a slice of spans with the given parameters.

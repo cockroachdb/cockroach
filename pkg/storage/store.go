@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -4210,74 +4209,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	return nil
 }
 
-// updateCommandQueueGauges updates a number of simple statistics for
-// the CommandQueues of each replica in this store.
-func (s *Store) updateCommandQueueGauges() error {
-	var (
-		maxCommandQueueSize       int64
-		maxCommandQueueWriteCount int64
-		maxCommandQueueReadCount  int64
-		maxCommandQueueTreeSize   int64
-		maxCommandQueueOverlaps   int64
-		combinedCommandQueueSize  int64
-		combinedCommandWriteCount int64
-		combinedCommandReadCount  int64
-	)
-	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		rep.cmdQMu.Lock()
-
-		writes := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.writeCommands
-		writes += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.writeCommands
-
-		reads := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.readCommands
-		reads += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.readCommands
-
-		treeSize := int64(rep.cmdQMu.queues[spanset.SpanGlobal].treeSize())
-		treeSize += int64(rep.cmdQMu.queues[spanset.SpanLocal].treeSize())
-
-		maxOverlaps := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen
-		if locMax := rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
-			maxOverlaps = locMax
-		}
-		rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen = 0
-		rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen = 0
-		rep.cmdQMu.Unlock()
-
-		cqSize := writes + reads
-		if cqSize > maxCommandQueueSize {
-			maxCommandQueueSize = cqSize
-		}
-		if writes > maxCommandQueueWriteCount {
-			maxCommandQueueWriteCount = writes
-		}
-		if reads > maxCommandQueueReadCount {
-			maxCommandQueueReadCount = reads
-		}
-		if treeSize > maxCommandQueueTreeSize {
-			maxCommandQueueTreeSize = treeSize
-		}
-		if maxOverlaps > maxCommandQueueOverlaps {
-			maxCommandQueueOverlaps = maxOverlaps
-		}
-
-		combinedCommandQueueSize += cqSize
-		combinedCommandWriteCount += writes
-		combinedCommandReadCount += reads
-		return true // more
-	})
-
-	s.metrics.MaxCommandQueueSize.Update(maxCommandQueueSize)
-	s.metrics.MaxCommandQueueWriteCount.Update(maxCommandQueueWriteCount)
-	s.metrics.MaxCommandQueueReadCount.Update(maxCommandQueueReadCount)
-	s.metrics.MaxCommandQueueTreeSize.Update(maxCommandQueueTreeSize)
-	s.metrics.MaxCommandQueueOverlaps.Update(maxCommandQueueOverlaps)
-	s.metrics.CombinedCommandQueueSize.Update(combinedCommandQueueSize)
-	s.metrics.CombinedCommandWriteCount.Update(combinedCommandWriteCount)
-	s.metrics.CombinedCommandReadCount.Update(combinedCommandReadCount)
-
-	return nil
-}
-
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
@@ -4287,9 +4218,6 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		return err
 	}
 	if err := s.updateReplicationGauges(ctx); err != nil {
-		return err
-	}
-	if err := s.updateCommandQueueGauges(); err != nil {
 		return err
 	}
 
