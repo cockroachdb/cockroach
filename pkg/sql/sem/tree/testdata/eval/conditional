@@ -36,6 +36,11 @@ ISERROR(2)
 false
 
 eval
+(ISERROR((1/0)::STRING, '22012'), IFERROR((1/0)::STRING, '22012'))
+----
+(true, '22012')
+
+eval
 ISERROR(1/0)
 ----
 true

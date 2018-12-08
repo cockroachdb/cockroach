@@ -469,6 +469,21 @@ func NewTypedArrayFlattenExpr(input Expr) *ArrayFlatten {
 	return node
 }
 
+// NewTypedIfErrExpr returns a new IfErrExpr that is verified to be well-typed.
+func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
+	node := &IfErrExpr{
+		Cond:    cond,
+		Else:    orElse,
+		ErrCode: errCode,
+	}
+	if orElse == nil {
+		node.typ = types.Bool
+	} else {
+		node.typ = cond.ResolvedType()
+	}
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
