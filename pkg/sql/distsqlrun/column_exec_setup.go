@@ -213,15 +213,9 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		sortColIdxs := make([]uint32, len(core.Sorter.OutputOrdering.Columns))
-		for i, col := range core.Sorter.OutputOrdering.Columns {
-			if col.Direction != Ordering_Column_ASC {
-				return nil, errors.New("desc order not supported")
-			}
-			sortColIdxs[i] = col.ColIdx
-		}
-
-		op, err = exec.NewSorter(inputs[0], types.FromColumnTypes(spec.Input[0].ColumnTypes), sortColIdxs)
+		op, err = exec.NewSorter(inputs[0],
+			types.FromColumnTypes(spec.Input[0].ColumnTypes),
+			core.Sorter.OutputOrdering.Columns)
 
 	default:
 		return nil, errors.Errorf("unsupported processor core %s", core)

@@ -24,10 +24,11 @@ func maxDepth(n int) int {
 	return depth * 2
 }
 
-// {{range .}}
+// {{range .}} {{/* for each type */}}
+// {{range .Overloads}} {{/* for each direction */}}
 
 // Insertion sort
-func (p *sort_TYPEOp) insertionSort(a, b int) {
+func (p *sort_TYPE_DIROp) insertionSort(a, b int) {
 	for i := a + 1; i < b; i++ {
 		for j := i; j > a && p.Less(j, j-1); j-- {
 			p.Swap(j, j-1)
@@ -37,7 +38,7 @@ func (p *sort_TYPEOp) insertionSort(a, b int) {
 
 // siftDown implements the heap property on data[lo, hi).
 // first is an offset into the array where the root of the heap lies.
-func (p *sort_TYPEOp) siftDown(lo, hi, first int) {
+func (p *sort_TYPE_DIROp) siftDown(lo, hi, first int) {
 	root := lo
 	for {
 		child := 2*root + 1
@@ -55,7 +56,7 @@ func (p *sort_TYPEOp) siftDown(lo, hi, first int) {
 	}
 }
 
-func (p *sort_TYPEOp) heapSort(a, b int) {
+func (p *sort_TYPE_DIROp) heapSort(a, b int) {
 	first := a
 	lo := 0
 	hi := b - a
@@ -76,7 +77,7 @@ func (p *sort_TYPEOp) heapSort(a, b int) {
 // ``Engineering a Sort Function,'' SP&E November 1993.
 
 // medianOfThree moves the median of the three values data[m0], data[m1], data[m2] into data[m1].
-func (p *sort_TYPEOp) medianOfThree(m1, m0, m2 int) {
+func (p *sort_TYPE_DIROp) medianOfThree(m1, m0, m2 int) {
 	// sort 3 elements
 	if p.Less(m1, m0) {
 		p.Swap(m1, m0)
@@ -92,13 +93,13 @@ func (p *sort_TYPEOp) medianOfThree(m1, m0, m2 int) {
 	// now data[m0] <= data[m1] <= data[m2]
 }
 
-func (p *sort_TYPEOp) swapRange(a, b, n int) {
+func (p *sort_TYPE_DIROp) swapRange(a, b, n int) {
 	for i := 0; i < n; i++ {
 		p.Swap(a+i, b+i)
 	}
 }
 
-func (p *sort_TYPEOp) doPivot(lo, hi int) (midlo, midhi int) {
+func (p *sort_TYPE_DIROp) doPivot(lo, hi int) (midlo, midhi int) {
 	m := int(uint(lo+hi) >> 1) // Written like this to avoid integer overflow.
 	if hi-lo > 40 {
 		// Tukey's ``Ninther,'' median of three medians of three.
@@ -185,7 +186,7 @@ func (p *sort_TYPEOp) doPivot(lo, hi int) (midlo, midhi int) {
 	return b - 1, c
 }
 
-func (p *sort_TYPEOp) quickSort(a, b, maxDepth int) {
+func (p *sort_TYPE_DIROp) quickSort(a, b, maxDepth int) {
 	for b-a > 12 { // Use ShellSort for slices <= 12 elements
 		if maxDepth == 0 {
 			p.heapSort(a, b)
@@ -215,4 +216,5 @@ func (p *sort_TYPEOp) quickSort(a, b, maxDepth int) {
 	}
 }
 
+// {{end}}
 // {{end}}

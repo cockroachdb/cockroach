@@ -19,10 +19,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSort(t *testing.T) {
@@ -31,63 +31,63 @@ func TestSort(t *testing.T) {
 	tcs := []struct {
 		tuples   tuples
 		expected tuples
-		sortCols []uint32
+		ordCols  []distsqlpb.Ordering_Column
 		typ      []types.T
 	}{
 		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			typ:      []types.T{types.Int64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			typ:      []types.T{types.Int64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			expected: tuples{{1, 1}, {2, 3}, {3, 2}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			typ:      []types.T{types.Int64, types.Int64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
 			expected: tuples{{1, 1}, {2, 5}, {3, 3}, {4, 7}, {5, 2}, {6, 6}, {7, 4}},
 			typ:      []types.T{types.Int64, types.Int64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
 			expected: tuples{{1}, {2}, {3}, {3}, {4}, {5}, {6}},
 			typ:      []types.T{types.Int64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{false}, {true}},
 			expected: tuples{{false}, {true}},
 			typ:      []types.T{types.Bool},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{true}, {false}},
 			expected: tuples{{false}, {true}},
 			typ:      []types.T{types.Bool},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}},
 			expected: tuples{{2.0}, {2.4}, {3.2}},
 			typ:      []types.T{types.Float64},
-			sortCols: []uint32{0},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 
 		{
 			tuples:   tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
 			expected: tuples{{0, 1, 0}, {1, 2, 0}, {3, 7, 1}, {4, 2, 2}, {2, 3, 2}},
 			typ:      []types.T{types.Int64, types.Int64, types.Int64},
-			sortCols: []uint32{2, 1},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
 		},
 
 		{
@@ -108,13 +108,13 @@ func TestSort(t *testing.T) {
 				{0, 1, 0},
 				{0, 1, 1},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
-			sortCols: []uint32{0, 1, 2},
+			typ:     []types.T{types.Int64, types.Int64, types.Int64},
+			ordCols: []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
-			sort, err := NewSorter(input[0], tc.typ, tc.sortCols)
+			sort, err := NewSorter(input[0], tc.typ, tc.ordCols)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -136,9 +136,10 @@ func TestSortRandomized(t *testing.T) {
 	nCols := 2
 	nTups := 8
 	typs := make([]types.T, nCols)
-	sortCols := make([]uint32, nCols)
+	ordCols := make([]distsqlpb.Ordering_Column, nCols)
 	for i := range typs {
-		sortCols[i] = uint32(i)
+		ordCols[i].ColIdx = uint32(i)
+		ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 		typs[i] = types.Int64
 	}
 	tups := make(tuples, nTups)
@@ -154,18 +155,18 @@ func TestSortRandomized(t *testing.T) {
 	copy(expected, tups)
 	sort.Slice(expected, func(i, j int) bool {
 		for k := 0; k < nCols; k++ {
-			l := sortCols[k]
+			l := ordCols[k].ColIdx
 			if expected[i][l].(int64) < expected[j][l].(int64) {
-				return true
+				return ordCols[k].Direction == distsqlpb.Ordering_Column_ASC
 			} else if expected[i][l].(int64) > expected[j][l].(int64) {
-				return false
+				return ordCols[k].Direction == distsqlpb.Ordering_Column_DESC
 			}
 		}
 		return false
 	})
 
 	runTests(t, []tuples{tups}, []types.T{}, func(t *testing.T, input []Operator) {
-		sorter, err := NewSorter(input[0], typs, sortCols)
+		sorter, err := NewSorter(input[0], typs, ordCols)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -196,9 +197,10 @@ func BenchmarkSort(b *testing.B) {
 				}
 				batch := NewMemBatch(typs)
 				batch.SetLength(ColBatchSize)
-				sortCols := make([]uint32, nCols)
-				for i := range sortCols {
-					sortCols[i] = uint32(i)
+				ordCols := make([]distsqlpb.Ordering_Column, nCols)
+				for i := range ordCols {
+					ordCols[i].ColIdx = uint32(i)
+					ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 
 					col := batch.ColVec(i).Int64()
 					for j := 0; i < ColBatchSize; i++ {
@@ -208,7 +210,7 @@ func BenchmarkSort(b *testing.B) {
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					source := newFiniteBatchSource(batch, nBatches)
-					sort, err := NewSorter(source, typs, sortCols)
+					sort, err := NewSorter(source, typs, ordCols)
 					if err != nil {
 						b.Fatal(err)
 					}
