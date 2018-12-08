@@ -17,25 +17,28 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // NewSorter returns a new sort operator, which sorts its input on the columns
 // given in sortColIdxs. The inputTypes must correspond 1-1 with the columns in
 // the input operator.
-func NewSorter(input Operator, inputTypes []types.T, sortColIdxs []uint32) (Operator, error) {
-	sorters := make([]colSorter, len(sortColIdxs))
-	partitioners := make([]partitioner, len(sortColIdxs)-1)
+func NewSorter(
+	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column,
+) (Operator, error) {
+	sorters := make([]colSorter, len(orderingCols))
+	partitioners := make([]partitioner, len(orderingCols)-1)
 	colWasSorted := make([]bool, len(inputTypes))
 
 	var err error
-	for i, idx := range sortColIdxs {
-		sorters[i], err = newSingleSorter(inputTypes[idx])
+	for i, ord := range orderingCols {
+		sorters[i], err = newSingleSorter(inputTypes[ord.ColIdx], ord.Direction)
 		if err != nil {
 			return nil, err
 		}
-		if i < len(sortColIdxs)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[idx])
+		if i < len(orderingCols)-1 {
+			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
 			if err != nil {
 				return nil, err
 			}
@@ -43,7 +46,7 @@ func NewSorter(input Operator, inputTypes []types.T, sortColIdxs []uint32) (Oper
 		// All ordering columns will have been sorted properly by the time the spool
 		// phase is over - only the columns that weren't sort columns will need to
 		// be reordered.
-		colWasSorted[idx] = true
+		colWasSorted[ord.ColIdx] = true
 	}
 
 	return &sortOp{
@@ -51,7 +54,7 @@ func NewSorter(input Operator, inputTypes []types.T, sortColIdxs []uint32) (Oper
 		inputTypes:   inputTypes,
 		sorters:      sorters,
 		partitioners: partitioners,
-		sortColIdxs:  sortColIdxs,
+		orderingCols: orderingCols,
 		colWasSorted: colWasSorted,
 		state:        sortSpooling,
 	}, nil
@@ -62,9 +65,9 @@ type sortOp struct {
 
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []types.T
-	// sortColIdxs is the ordered lists of column ordinals that the sorter should
+	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
-	sortColIdxs []uint32
+	orderingCols []distsqlpb.Ordering_Column
 	// colWasSorted is set to true for every column that will have been pre-sorted
 	// by the time the spool phase is finished. This will be true for all of the
 	// sort columns except for the final one. The rest of the columns will not be
@@ -196,7 +199,7 @@ func (p *sortOp) spoolAndSort() {
 
 	workingSpace := make([]uint64, nTuples)
 	for i := range p.orderingCols {
-		p.sorters[i].init(p.values[p.orderingCols[i]], p.order, workingSpace)
+		p.sorters[i].init(p.values[p.orderingCols[i].ColIdx], p.order, workingSpace)
 	}
 
 	// Now, sort each column in turn. The first column is doesn't need special
@@ -237,7 +240,7 @@ func (p *sortOp) spoolAndSort() {
 		// on it, ORing the results together with each subsequent column. This
 		// produces a distinct vector (a boolean vector that has true in each
 		// position that is different from the last position).
-		p.partitioners[i].partition(p.values[p.sortColIdxs[i]], outputCol, nTuples)
+		p.partitioners[i].partition(p.values[p.orderingCols[i].ColIdx], outputCol, nTuples)
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
 		partitions = boolVecToSel64(outputCol, partitions[:0])
