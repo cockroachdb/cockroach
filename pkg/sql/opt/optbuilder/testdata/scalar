@@ -1123,3 +1123,55 @@ build
 SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
 ----
 error: can't execute a correlated ARRAY(...) over int[]
+
+build-scalar
+ISERROR(1/0)
+----
+if-err [type=bool]
+ └── div [type=decimal]
+      ├── const: 1 [type=int]
+      └── const: 0 [type=int]
+
+build-scalar
+ISERROR(1/0, '22012')
+----
+if-err [type=bool]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── err-code
+      └── const: '22012' [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── else
+      └── variable: @1 [type=decimal]
+
+build-scalar vars=(decimal, string)
+IFERROR(1/0, @1, @2)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: @1 [type=decimal]
+ └── err-code
+      └── variable: @2 [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1, '10000')
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: @1 [type=decimal]
+ └── err-code
+      └── const: '10000' [type=string]
