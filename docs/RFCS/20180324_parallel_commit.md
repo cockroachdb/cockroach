@@ -389,7 +389,7 @@ After #26599, when the transaction tries to commit, there may be outstanding in-
 - in the likely case, none of the intents will be prevented (and they are found at the right timestamps), as they have been dispatched earlier; the `QueryIntent`s succeed, as does the rest of the batch, and `DistSender` announces success to the client.
 - an intent is prevented or found at the wrong timestamp. This is treated like a write having failed or having pushed the transaction, respectively.
 
-Care will need to be paid to splitting batches with `EndTransaction(status=STAGING)` requests from `QueryIntent` requests for pipelined writes to the same range as the txn record. If care is not taken, the `EndTransaction` request will be blocked in the `CommandQueue` with the rest of its batch and no speedup will be observed by the client. In fact, in conjunction with the [Replica-level detection](#replica), this will behave almost identically to how the case would behave today.
+Care will need to be paid to splitting batches with `EndTransaction(status=STAGING)` requests from `QueryIntent` requests for pipelined writes to the same range as the txn record. If care is not taken, the `EndTransaction` request will be blocked by the `spanlatch.Manager` with the rest of its batch and no speedup will be observed by the client. In fact, in conjunction with the [Replica-level detection](#replica), this will behave almost identically to how the case would behave today.
 
 This will require that we allow multiple batches to the same range be sent in parallel.
 

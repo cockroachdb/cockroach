@@ -104,7 +104,7 @@ func (m *Manager) MustAcquireChCtx(
 	ch := make(chan *Guard)
 	lg, snap := m.sequence(spans, ts)
 	go func() {
-		err := m.wait(ctx, lg, ts, snap)
+		err := m.wait(ctx, lg, snap)
 		if err != nil {
 			m.Release(lg)
 			lg = nil
@@ -118,7 +118,7 @@ func TestLatchManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var m Manager
 
-	// Try latch with no overlapping already-acquired lathes.
+	// Try latches with no overlapping already-acquired lathes.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
 	m.Release(lg1)
 

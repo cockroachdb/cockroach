@@ -164,13 +164,6 @@ message PrettySpan {
   string end_key = 2;
 }
 
-message CommandQueueMetrics {
-  int64 write_commands = 1;
-  int64 read_commands = 2;
-  int64 max_overlaps_seen = 3;
-  int32 tree_size = 4;
-}
-
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
@@ -189,8 +182,8 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  CommandQueueMetrics cmd_q_local = 11 [ (gogoproto.nullable) = false ];
-  CommandQueueMetrics cmd_q_global = 12 [ (gogoproto.nullable) = false ];
+  storage.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
+  storage.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
   storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
@@ -611,13 +604,6 @@ message RangeResponse {
   reserved 4; // Previously used.
 }
 
-message CommandQueueRequest { int64 range_id = 1; }
-
-message CommandQueueResponse {
-  storage.storagepb.CommandQueuesSnapshot snapshot = 1
-      [ (gogoproto.nullable) = false ];
-}
-
 // DiagnosticsRequest requests a diagnostics report.
 message DiagnosticsRequest {
   // node_id is a string so that "local" can be used to specify that no
@@ -803,11 +789,6 @@ service Status {
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get : "/_status/range/{range_id}"
-    };
-  }
-  rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
-    option (google.api.http) = {
-      get : "/_status/range/{range_id}/cmdqueue"
     };
   }
   rpc Diagnostics(DiagnosticsRequest)

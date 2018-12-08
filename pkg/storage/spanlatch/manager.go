@@ -16,12 +16,18 @@ package spanlatch
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
@@ -53,9 +59,10 @@ import (
 //
 // Manager's zero value can be used directly.
 type Manager struct {
-	mu      syncutil.Mutex
-	idAlloc uint64
-	scopes  [spanset.NumSpanScope]scopedManager
+	mu       syncutil.Mutex
+	idAlloc  uint64
+	scopes   [spanset.NumSpanScope]scopedManager
+	slowReqs *metric.Gauge
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -63,6 +70,12 @@ type Manager struct {
 type scopedManager struct {
 	readSet latchList
 	trees   [spanset.NumSpanAccess]btree
+}
+
+// Init initializes the Manager. Calling the method is optional as the type's
+// zero value is valid to use directly.
+func (m *Manager) Init(slowReqs *metric.Gauge) {
+	m.slowReqs = slowReqs
 }
 
 // latches are stored in the Manager's btrees. They represent the latching
@@ -73,6 +86,10 @@ type latch struct {
 	ts         hlc.Timestamp
 	done       *signal
 	next, prev *latch // readSet linked-list.
+}
+
+func (la *latch) String() string {
+	return fmt.Sprintf("%s@%s", la.span, la.ts)
 }
 
 func (la *latch) inReadSet() bool {
@@ -185,7 +202,7 @@ func (m *Manager) Acquire(
 	lg, snap := m.sequence(spans, ts)
 	defer snap.close()
 
-	err := m.wait(ctx, lg, ts, snap)
+	err := m.wait(ctx, lg, snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -259,7 +276,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 			latches := lg.latches(s, a)
 			for i := range latches {
 				latch := &latches[i]
-				latch.id = m.nextID()
+				latch.id = m.nextIDLocked()
 				switch a {
 				case spanset.SpanReadOnly:
 					// Add reads to the readSet. They only need to enter
@@ -277,7 +294,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 	}
 }
 
-func (m *Manager) nextID() uint64 {
+func (m *Manager) nextIDLocked() uint64 {
 	m.idAlloc++
 	return m.idAlloc
 }
@@ -312,7 +329,11 @@ func ifGlobal(ts hlc.Timestamp, s spanset.SpanScope) hlc.Timestamp {
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
-func (m *Manager) wait(ctx context.Context, lg *Guard, ts hlc.Timestamp, snap snapshot) error {
+func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
+	timer := timeutil.NewTimer()
+	timer.Reset(base.SlowRequestThreshold)
+	defer timer.Stop()
+
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		tr := &snap.trees[s]
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
@@ -323,7 +344,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, ts hlc.Timestamp, snap sn
 				case spanset.SpanReadOnly:
 					// Wait for writes at equal or lower timestamps.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := iterAndWait(ctx, &it, latch, ts, ignoreLater); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -334,12 +355,12 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, ts hlc.Timestamp, snap sn
 					// latches first. We expect writes to take longer than reads
 					// to release their latches, so we wait on them first.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := iterAndWait(ctx, &it, latch, ts, ignoreNothing); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
 					it = tr[spanset.SpanReadOnly].MakeIter()
-					if err := iterAndWait(ctx, &it, latch, ts, ignoreEarlier); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -354,25 +375,44 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, ts hlc.Timestamp, snap sn
 // iterAndWait uses the provided iterator to wait on all latches that overlap
 // with the search latch and which should not be ignored given their timestamp
 // and the supplied ignoreFn.
-func iterAndWait(
-	ctx context.Context, it *iterator, search *latch, ts hlc.Timestamp, ignore ignoreFn,
+func (m *Manager) iterAndWait(
+	ctx context.Context, t *timeutil.Timer, it *iterator, wait *latch, ignore ignoreFn,
 ) error {
-	done := ctx.Done()
-	for it.FirstOverlap(search); it.Valid(); it.NextOverlap() {
-		latch := it.Cur()
-		if latch.done.signaled() {
+	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap() {
+		held := it.Cur()
+		if held.done.signaled() {
 			continue
 		}
-		if ignore(ts, latch.ts) {
+		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		select {
-		case <-latch.done.signalChan():
-		case <-done:
-			return ctx.Err()
+		if err := m.waitForSignal(ctx, t, wait, held); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// waitForSignal waits for the latch that is currently held to be signaled.
+func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, held *latch) error {
+	for {
+		select {
+		case <-held.done.signalChan():
+			return nil
+		case <-t.C:
+			t.Read = true
+			defer t.Reset(base.SlowRequestThreshold)
+
+			log.Warningf(ctx, "have been waiting %s to acquire latch %s, held by %s",
+				base.SlowRequestThreshold, wait, held)
+			if m.slowReqs != nil {
+				m.slowReqs.Inc(1)
+				defer m.slowReqs.Dec(1)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // Release releases the latches held by the provided Guard. After being called,
@@ -403,4 +443,20 @@ func (m *Manager) removeLocked(lg *Guard) {
 			}
 		}
 	}
+}
+
+// Info returns information about the state of the Manager.
+func (m *Manager) Info() (global, local storagepb.LatchManagerInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	global = m.scopes[spanset.SpanGlobal].infoLocked()
+	local = m.scopes[spanset.SpanLocal].infoLocked()
+	return global, local
+}
+
+func (sm *scopedManager) infoLocked() storagepb.LatchManagerInfo {
+	var info storagepb.LatchManagerInfo
+	info.ReadCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
+	info.WriteCount = int64(sm.trees[spanset.SpanReadWrite].Len())
+	return info
 }

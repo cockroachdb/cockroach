@@ -93,9 +93,6 @@ export type RangeLogRequestMessage =
 export type RangeLogResponseMessage =
   protos.cockroach.server.serverpb.RangeLogResponse;
 
-export type CommandQueueRequestMessage = protos.cockroach.server.serverpb.CommandQueueRequest;
-export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.CommandQueueResponse;
-
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
 
@@ -326,11 +323,6 @@ export function getRangeLog(
     null,
     timeout,
   );
-}
-
-// getCommandQueue returns a representation of the command queue for a given range id
-export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: moment.Duration): Promise<CommandQueueResponseMessage> {
-  return timeoutFetch(serverpb.CommandQueueResponse, `${STATUS_PREFIX}/range/${req.range_id}/cmdqueue`, null, timeout);
 }
 
 // getSettings gets all cluster settings

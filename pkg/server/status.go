@@ -1214,11 +1214,11 @@ func (s *statusServer) Ranges(
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 			},
-			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
-			CmdQGlobal:  serverpb.CommandQueueMetrics(metrics.CmdQMetricsGlobal),
-			LeaseStatus: metrics.LeaseStatus,
-			Quiescent:   metrics.Quiescent,
-			Ticking:     metrics.Ticking,
+			LatchesLocal:  metrics.LatchInfoLocal,
+			LatchesGlobal: metrics.LatchInfoGlobal,
+			LeaseStatus:   metrics.LeaseStatus,
+			Quiescent:     metrics.Quiescent,
+			Ticking:       metrics.Ticking,
 		}
 	}
 
@@ -1319,26 +1319,6 @@ func (s *statusServer) Range(
 		return nil, err
 	}
 	return response, nil
-}
-
-// CommandQueue returns a snapshot of the command queue state for the
-// specified range.
-func (s *statusServer) CommandQueue(
-	ctx context.Context, req *serverpb.CommandQueueRequest,
-) (*serverpb.CommandQueueResponse, error) {
-	rangeID := roachpb.RangeID(req.RangeId)
-	replica, err := s.stores.GetReplicaForRangeID(rangeID)
-	if err != nil {
-		return nil, err
-	}
-
-	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
-	}
-
-	return &serverpb.CommandQueueResponse{
-		Snapshot: replica.GetCommandQueueSnapshot(),
-	}, nil
 }
 
 // ListLocalSessions returns a list of SQL sessions on this node.
