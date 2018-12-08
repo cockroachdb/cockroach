@@ -58,6 +58,7 @@ func init() {
 		opt.IndirectionOp:     (*Builder).buildIndirection,
 		opt.CollateOp:         (*Builder).buildCollate,
 		opt.ArrayFlattenOp:    (*Builder).buildArrayFlatten,
+		opt.IfErrOp:           (*Builder).buildIfErr,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Item operators.
@@ -433,6 +434,32 @@ func (b *Builder) buildArrayFlatten(
 	e := b.addSubquery(exec.SubqueryAllRows, typ, root.root, af.OriginalExpr)
 
 	return tree.NewTypedArrayFlattenExpr(e), nil
+}
+
+func (b *Builder) buildIfErr(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	ifErr := scalar.(*memo.IfErrExpr)
+	cond, err := b.buildScalar(ctx, ifErr.Cond.(opt.ScalarExpr))
+	if err != nil {
+		return nil, err
+	}
+
+	var orElse tree.TypedExpr
+	if ifErr.OrElse.ChildCount() > 0 {
+		orElse, err = b.buildScalar(ctx, ifErr.OrElse.Child(0).(opt.ScalarExpr))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var errCode tree.TypedExpr
+	if ifErr.ErrCode.ChildCount() > 0 {
+		errCode, err = b.buildScalar(ctx, ifErr.ErrCode.Child(0).(opt.ScalarExpr))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return tree.NewTypedIfErrExpr(cond, orElse, errCode), nil
 }
 
 func (b *Builder) buildUnsupportedExpr(
