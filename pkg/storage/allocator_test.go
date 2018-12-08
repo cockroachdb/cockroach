@@ -331,7 +331,11 @@ func createTestAllocator(
 // ranges in deadReplicas.
 func mockStorePool(
 	storePool *StorePool,
-	aliveStoreIDs, deadStoreIDs, decommissioningStoreIDs, decommissionedStoreIDs []roachpb.StoreID,
+	aliveStoreIDs []roachpb.StoreID,
+	unavailableStoreIDs []roachpb.StoreID,
+	deadStoreIDs []roachpb.StoreID,
+	decommissioningStoreIDs []roachpb.StoreID,
+	decommissionedStoreIDs []roachpb.StoreID,
 	deadReplicas []roachpb.ReplicaIdent,
 ) {
 	storePool.detailsMu.Lock()
@@ -341,6 +345,14 @@ func mockStorePool(
 	storePool.detailsMu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = storagepb.NodeLivenessStatus_LIVE
+		detail := storePool.getStoreDetailLocked(storeID)
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
+	}
+	for _, storeID := range unavailableStoreIDs {
+		liveNodeSet[roachpb.NodeID(storeID)] = storagepb.NodeLivenessStatus_UNAVAILABLE
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -926,6 +938,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	mockStorePool(
 		sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
+		nil,
 		[]roachpb.StoreID{7, 8},
 		nil,
 		nil,
@@ -4463,6 +4476,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 	// is dead.
 	mockStorePool(sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
+		nil,
 		[]roachpb.StoreID{6, 7},
 		nil,
 		nil,
@@ -4572,7 +4586,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, tcase.dead, nil, nil, nil)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil, nil)
 
 		action, _ := a.ComputeAction(ctx, &zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
@@ -4793,7 +4807,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
 
 		action, _ := a.ComputeAction(ctx, &tcase.zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
@@ -4810,6 +4824,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		storeList       []roachpb.StoreID
 		expectedAction  AllocatorAction
 		live            []roachpb.StoreID
+		unavailable     []roachpb.StoreID
 		dead            []roachpb.StoreID
 		decommissioning []roachpb.StoreID
 	}{
@@ -4817,6 +4832,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3, 4},
 			expectedAction:  AllocatorRemoveDecommissioning,
 			live:            []roachpb.StoreID{4},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
 		},
@@ -4824,6 +4840,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3},
 			expectedAction:  AllocatorAdd,
 			live:            []roachpb.StoreID{4, 5},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
 		},
@@ -4831,6 +4848,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3, 4},
 			expectedAction:  AllocatorRemoveDead,
 			live:            []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:     nil,
 			dead:            []roachpb.StoreID{4},
 			decommissioning: nil,
 		},
@@ -4838,6 +4856,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 4},
 			expectedAction:  AllocatorAdd,
 			live:            []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:     nil,
 			dead:            []roachpb.StoreID{4},
 			decommissioning: nil,
 		},
@@ -4845,6 +4864,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3},
 			expectedAction:  AllocatorConsiderRebalance,
 			live:            []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: nil,
 		},
@@ -4852,6 +4872,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2},
 			expectedAction:  AllocatorAdd,
 			live:            []roachpb.StoreID{1, 2},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: nil,
 		},
@@ -4859,6 +4880,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3},
 			expectedAction:  AllocatorConsiderRebalance,
 			live:            []roachpb.StoreID{1, 2, 3},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: nil,
 		},
@@ -4866,8 +4888,57 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			storeList:       []roachpb.StoreID{1, 2, 3, 4},
 			expectedAction:  AllocatorRemove,
 			live:            []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:     nil,
 			dead:            nil,
 			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorConsiderRebalance,
+			live:            []roachpb.StoreID{1, 2, 3, 4, 5},
+			unavailable:     nil,
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorConsiderRebalance,
+			live:            []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:     []roachpb.StoreID{5},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorConsiderRebalance,
+			live:            []roachpb.StoreID{1, 2, 3},
+			unavailable:     []roachpb.StoreID{4, 5},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorNoop,
+			live:            []roachpb.StoreID{1, 2},
+			unavailable:     []roachpb.StoreID{3, 4, 5},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorRemoveDead,
+			live:            []roachpb.StoreID{1, 2, 3},
+			unavailable:     []roachpb.StoreID{4},
+			dead:            []roachpb.StoreID{5},
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedAction:  AllocatorRemoveDecommissioning,
+			live:            []roachpb.StoreID{1, 2, 3},
+			unavailable:     []roachpb.StoreID{4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{5},
 		},
 	}
 
@@ -4880,12 +4951,13 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 
 	for _, prefixKey := range []roachpb.RKey{roachpb.RKey(keys.NodeLivenessPrefix), roachpb.RKey(keys.SystemPrefix)} {
 		for i, tcase := range testCases {
-			mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, []roachpb.StoreID{}, nil)
+			mockStorePool(sp, tcase.live, tcase.unavailable, tcase.dead, tcase.decommissioning, []roachpb.StoreID{}, nil)
 			desc := makeDescriptor(tcase.storeList)
 			desc.EndKey = prefixKey
 			action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &desc})
 			if tcase.expectedAction != action {
-				t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+				t.Errorf("test case %d expected action %q, got action %q",
+					i, allocatorActionNames[tcase.expectedAction], allocatorActionNames[action])
 				continue
 			}
 		}
