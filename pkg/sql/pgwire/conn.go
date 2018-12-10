@@ -157,7 +157,7 @@ func serveConn(
 
 	c := newConn(netConn, sArgs, metrics)
 
-	if err := c.handleAuthentication(ctx, insecure, ie, auth); err != nil {
+	if err := c.handleAuthentication(ctx, insecure, ie, auth, sqlServer.GetExecutorConfig()); err != nil {
 		_ = c.conn.Close()
 		reserved.Close(ctx)
 		return err
@@ -1299,7 +1299,11 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
 func (c *conn) handleAuthentication(
-	ctx context.Context, insecure bool, ie *sql.InternalExecutor, auth *hba.Conf,
+	ctx context.Context,
+	insecure bool,
+	ie *sql.InternalExecutor,
+	auth *hba.Conf,
+	execCfg *sql.ExecutorConfig,
 ) error {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
@@ -1321,6 +1325,7 @@ func (c *conn) handleAuthentication(
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
 		var methodFn AuthMethod
+		var hbaEntry *hba.Entry
 
 		if auth == nil {
 			methodFn = authCertPassword
@@ -1367,6 +1372,7 @@ func (c *conn) handleAuthentication(
 				if methodFn == nil {
 					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
 				}
+				hbaEntry = &entry
 				break
 			}
 			if methodFn == nil {
@@ -1374,7 +1380,7 @@ func (c *conn) handleAuthentication(
 			}
 		}
 
-		authenticationHook, err := methodFn(c, tlsState, insecure, hashedPassword)
+		authenticationHook, err := methodFn(c, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
 		if err != nil {
 			return sendError(err)
 		}
@@ -1414,6 +1420,11 @@ var connAuthConf = settings.RegisterValidatedStringSetting(
 			if hbaAuthMethods[entry.Method] == nil {
 				return errors.Errorf("unknown auth method %q", entry.Method)
 			}
+			if check := hbaCheckHBAEntries[entry.Method]; check != nil {
+				if err := check(entry); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	},
@@ -1421,23 +1432,44 @@ var connAuthConf = settings.RegisterValidatedStringSetting(
 
 // AuthConn defines exported methods of a conn needed for pgwire authentication.
 type AuthConn interface {
-	SendAuthPasswordRequest() (string, error)
+	SendAuthRequest(authType int32, data []byte) error
+	ReadPasswordString() (string, error)
+	ReadPasswordBytes() ([]byte, error)
 }
 
-// AuthMethod defines a method for authentication of a connection.
-type AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte) (security.UserAuthHook, error)
+type (
+	// AuthMethod defines a method for authentication of a connection.
+	AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte, execCfg *sql.ExecutorConfig, entry *hba.Entry) (security.UserAuthHook, error)
 
-var hbaAuthMethods = map[string]AuthMethod{}
+	// CheckHBAEntry defines a method for error checking an hba Entry.
+	CheckHBAEntry func(hba.Entry) error
+)
+
+var (
+	hbaAuthMethods     = map[string]AuthMethod{}
+	hbaCheckHBAEntries = map[string]CheckHBAEntry{}
+)
 
 // RegisterAuthMethod registers an AuthMethod for pgwire authentication.
-func RegisterAuthMethod(method string, fn AuthMethod) {
+func RegisterAuthMethod(method string, fn AuthMethod, checkEntry CheckHBAEntry) {
 	hbaAuthMethods[method] = fn
+	if checkEntry != nil {
+		hbaCheckHBAEntries[method] = checkEntry
+	}
 }
 
 func authPassword(
-	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+	c AuthConn,
+	tlsState tls.ConnectionState,
+	insecure bool,
+	hashedPassword []byte,
+	execCfg *sql.ExecutorConfig,
+	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	password, err := c.SendAuthPasswordRequest()
+	if err := c.SendAuthRequest(authCleartextPassword, nil); err != nil {
+		return nil, err
+	}
+	password, err := c.ReadPasswordString()
 	if err != nil {
 		return nil, err
 	}
@@ -1447,7 +1479,12 @@ func authPassword(
 }
 
 func authCert(
-	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+	c AuthConn,
+	tlsState tls.ConnectionState,
+	insecure bool,
+	hashedPassword []byte,
+	execCfg *sql.ExecutorConfig,
+	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
 	if len(tlsState.PeerCertificates) == 0 {
 		return nil, errors.New("no TLS peer certificates, but required for auth")
@@ -1460,7 +1497,12 @@ func authCert(
 }
 
 func authCertPassword(
-	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+	c AuthConn,
+	tlsState tls.ConnectionState,
+	insecure bool,
+	hashedPassword []byte,
+	execCfg *sql.ExecutorConfig,
+	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
@@ -1468,35 +1510,44 @@ func authCertPassword(
 	} else {
 		fn = authCert
 	}
-	return fn(c, tlsState, insecure, hashedPassword)
+	return fn(c, tlsState, insecure, hashedPassword, execCfg, entry)
 }
 
 func init() {
-	RegisterAuthMethod("password", authPassword)
-	RegisterAuthMethod("cert", authCert)
-	RegisterAuthMethod("cert-password", authCertPassword)
+	RegisterAuthMethod("password", authPassword, nil)
+	RegisterAuthMethod("cert", authCert, nil)
+	RegisterAuthMethod("cert-password", authCertPassword, nil)
 }
 
-// SendAuthPasswordRequest requests a cleartext password from the client and
-// returns it.
-func (c *conn) SendAuthPasswordRequest() (string, error) {
+func (c *conn) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
-	c.msgBuilder.putInt32(authCleartextPassword)
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
-		return "", err
-	}
+	c.msgBuilder.putInt32(authType)
+	c.msgBuilder.write(data)
+	return c.msgBuilder.finishMsg(c.conn)
+}
 
+func (c *conn) ReadPasswordString() (string, error) {
 	typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 	c.metrics.BytesInCount.Inc(int64(n))
 	if err != nil {
 		return "", err
 	}
-
 	if typ != pgwirebase.ClientMsgPassword {
 		return "", errors.Errorf("invalid response to authentication request: %s", typ)
 	}
-
 	return c.readBuf.GetString()
+}
+
+func (c *conn) ReadPasswordBytes() ([]byte, error) {
+	typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return nil, err
+	}
+	if typ != pgwirebase.ClientMsgPassword {
+		return nil, errors.Errorf("invalid response to authentication request: %s", typ)
+	}
+	return c.readBuf.GetBytes(n - 4)
 }
 
 // statusReportParams is a list of session variables that are also
