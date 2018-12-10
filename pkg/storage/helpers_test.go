@@ -79,6 +79,13 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 }
 
 func forceScanAndProcess(s *Store, q *baseQueue) {
+	// Check that the system config is available. It is needed by many queues. If
+	// it's not available, some queues silently fail to process any replicas,
+	// which is undesirable for this method.
+	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
+		log.Fatalf(context.TODO(), "system config not available in gossip")
+	}
+
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		q.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true
