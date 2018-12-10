@@ -1306,6 +1306,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
+	startAssertEngineHealth(ctx, s.stopper, s.engines)
+
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
 		advertise: s.cfg.AdvertiseAddr,

@@ -768,18 +768,13 @@ func (nl *NodeLiveness) updateLiveness(
 			return err
 		}
 		for _, eng := range nl.engines {
-			// Synchronously writing to all disks before updating node liveness because
-			// we don't want any excessively slow disks to prevent the lease from
-			// shifting to other nodes. If the disk is slow, batch.Commit() will block.
-			batch := eng.NewBatch()
-			defer batch.Close()
-
-			if err := batch.LogData(nil); err != nil {
-				return errors.Wrapf(err, "couldn't update node liveness because LogData to disk fails")
-			}
-
-			if err := batch.Commit(true /* sync */); err != nil {
-				return errors.Wrapf(err, "couldn't update node liveness because Commit to disk fails")
+			// Synchronously write to all disks before updating node liveness.
+			// If this node's disk is stalled for whatever reason, we don't want
+			// it to be able to heartbeat its liveness record (which may not
+			// require participation of the local storage in order to succeed).
+			// Instead, leases should shift away from this node.
+			if err := engine.WriteSyncNoop(ctx, eng); err != nil {
+				errors.Wrapf(err, "unable to update node liveness")
 			}
 		}
 		if err := nl.updateLivenessAttempt(ctx, update, oldLiveness, handleCondFailed); err != nil {
