@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
@@ -117,7 +118,7 @@ func NewOrderedAggregator(
 	input Operator,
 	groupCols []uint32,
 	groupTyps []types.T,
-	aggFns []int,
+	aggFns []distsqlpb.AggregatorSpec_Func,
 	aggCols [][]uint32,
 	aggTyps [][]types.T,
 ) (Operator, error) {
@@ -164,19 +165,11 @@ func NewOrderedAggregator(
 	}
 	a.aggregateFuncs = make([]aggregateFunc, len(aggCols))
 	for i := range aggFns {
-		if len(aggCols[i]) != 1 {
-			return nil, errors.Errorf(
-				"malformed input columns at index %d, expected 1 col got %d",
-				i, len(aggCols[i]),
-			)
-		}
 		var err error
 		switch aggFns[i] {
-		// AVG.
-		case 1:
+		case distsqlpb.AggregatorSpec_AVG:
 			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
-		// SUM, SUM_INT.
-		case 10, 11:
+		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
 			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
