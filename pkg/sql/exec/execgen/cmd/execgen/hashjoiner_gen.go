@@ -22,6 +22,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 func genHashJoiner(wr io.Writer) error {
@@ -35,25 +36,42 @@ func genHashJoiner(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_SEL_CLAUSE_BEGIN()", `
-		{{range $sel := $sels}}
-		{{.ClauseBegin}}
-	`, -1)
-	s = strings.Replace(s, "_SEL_CLAUSE_END()", `
-		{{.ClauseEnd}}
-		{{end}}
-	`, -1)
+	s = strings.Replace(s, "_SEL_IND", "{{.SelInd}}", -1)
 
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, "{{$$neType.Assign $1 $2 $3}}")
+	s = assignNeRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
 
 	assignHash := regexp.MustCompile(`_ASSIGN_HASH\((.*),(.*)\)`)
-	s = assignHash.ReplaceAllString(s, "{{$$hashType.UnaryAssign $1 $2}}")
+	s = assignHash.ReplaceAllString(s, "{{.Global.UnaryAssign $1 $2}}")
 
-	wrapSel := regexp.MustCompile(`_WRAP_SEL\((.*?)\)`)
-	s = wrapSel.ReplaceAllString(s, `{{call .WrapSel $1}}`)
+	rehash := regexp.MustCompile(`_REHASH_BODY\((.*)\)`)
+	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" "$1"}}`)
 
-	tmpl, err := template.New("hashjoiner_op").Parse(s)
+	checkCol := regexp.MustCompile(`_CHECK_COL_WITH_NULLS\((.*)\)`)
+	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" "$1"}}`)
+
+	checkColMain := regexp.MustCompile(`_CHECK_COL_MAIN\((.*\))`)
+	s = checkColMain.ReplaceAllString(s, `{{template "checkColMain" .}}`)
+
+	checkColBody := regexp.MustCompile(`_CHECK_COL_BODY\((.*),(.*),(.*)\)`)
+	s = checkColBody.ReplaceAllString(s, `{{template "checkColBody" buildDict "Global" .Global "SelInd" .SelInd "ProbeHasNulls" $2 "BuildHasNulls" $3}}`)
+
+	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{
+		"buildDict": func(values ...interface{}) (map[string]interface{}, error) {
+			if len(values)%2 != 0 {
+				return nil, errors.New("invalid call to buildDict")
+			}
+			dict := make(map[string]interface{}, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil, errors.New("buildDict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict, nil
+		},
+	}).Parse(s)
 
 	if err != nil {
 		return err
@@ -66,7 +84,6 @@ func genHashJoiner(wr io.Writer) error {
 	}{
 		NETemplate:   comparisonOpToOverloads[tree.NE],
 		HashTemplate: hashOverloads,
-		SelTemplate:  selOverloads,
 	})
 }
 

@@ -49,18 +49,78 @@ func _ASSIGN_HASH(_, _ string) uint64 {
 	panic("")
 }
 
-// _WRAP_SEL is the template funcion for obtaining the next index of the
-// selection vector if it is non-nil.
-func _WRAP_SEL(_ string) uint64 {
-	panic("")
+func _CHECK_COL_MAIN(_SEL_IND uin64) { // */}}
+	// {{define "checkColMain"}}
+	buildVal := buildKeys[keyID-1]
+	probeVal := probeKeys[_SEL_IND]
+	var unique bool
+	_ASSIGN_NE("unique", "buildVal", "probeVal")
+
+	if unique {
+		prober.differs[prober.toCheck[i]] = true
+	}
+	// {{end}}
+
+	// {{/*
 }
 
-func _SEL_CLAUSE_BEGIN() {}
-func _SEL_CLAUSE_END()   {}
+func _CHECK_COL_BODY(_SEL_IND uint64, _PROBE_HAS_NULLS bool, BUILD_HAS_NULLS bool) { // */}}
+	// {{define "checkColBody"}}
+	for i := uint16(0); i < nToCheck; i++ {
+		// keyID of 0 is reserved to represent the end of the next chain.
+
+		if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+			// the build table key (calculated using keys[keyID - 1] = key) is
+			// compared to the corresponding probe table to determine if a match is
+			// found.
+
+			/* {{if .ProbeHasNulls }} */
+			if probeVec.NullAt(_SEL_IND) {
+				prober.groupID[prober.toCheck[i]] = 0
+			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.NullAt64(keyID - 1) {
+				prober.differs[prober.toCheck[i]] = true
+			} else /*{{end}} */ {
+				_CHECK_COL_MAIN(_SEL_IND)
+			}
+		}
+	}
+	// {{end}}
+	// {{/*
+}
+
+func _CHECK_COL_WITH_NULLS(_SEL_IND uint64) { // */}}
+	// {{define "checkColWithNulls"}}
+	if probeVec.HasNulls() {
+		if buildVec.HasNulls() {
+			_CHECK_COL_BODY(_SEL_IND, true, true)
+		} else {
+			_CHECK_COL_BODY(_SEL_IND, true, false)
+		}
+	} else {
+		if buildVec.HasNulls() {
+			_CHECK_COL_BODY(_SEL_IND, false, true)
+		} else {
+			_CHECK_COL_BODY(_SEL_IND, false, false)
+		}
+	}
+	// {{end}}
+	// {{/*
+}
+
+func _REHASH_BODY(_ string) { // */}}
+	// {{define "rehashBody"}}
+	for i := uint64(0); i < nKeys; i++ {
+		v := keys[_SEL_IND]
+		var hash uint64
+		_ASSIGN_HASH("hash", "v")
+		buckets[i] = buckets[i]*31 + hash
+	}
+	// {{end}}
+
+	// {{/*
+}
 
 // */}}
-
-// {{ $sels := .SelTemplate }}
 
 // rehash takes a element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
@@ -72,15 +132,12 @@ func (ht *hashTable) rehash(
 	// {{range $hashType := .HashTemplate}}
 	case _TYPES_T:
 		keys := col._TemplateType()
-
-		_SEL_CLAUSE_BEGIN()
-		for i := uint64(0); i < nKeys; i++ {
-			v := keys[_WRAP_SEL("i")]
-			var hash uint64
-			_ASSIGN_HASH("hash", "v")
-			buckets[i] = buckets[i]*31 + hash
+		if sel != nil {
+			_REHASH_BODY(sel[i])
+		} else {
+			_REHASH_BODY(i)
 		}
-		_SEL_CLAUSE_END()
+
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
@@ -101,90 +158,10 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 		buildKeys := buildVec._TemplateType()
 		probeKeys := probeVec._TemplateType()
 
-		if probeVec.HasNulls() {
-			if buildVec.HasNulls() {
-				_SEL_CLAUSE_BEGIN()
-				for i := uint16(0); i < nToCheck; i++ {
-					// keyID of 0 is reserved to represent the end of the next chain.
-
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-						// the build table key (calculated using keys[keyID - 1] = key) is
-						// compared to the corresponding probe table to determine if a match is
-						// found.
-
-						if probeVec.NullAt(_WRAP_SEL("prober.toCheck[i]")) {
-							prober.groupID[prober.toCheck[i]] = 0
-						} else if buildVec.NullAt64(keyID - 1) {
-							prober.differs[prober.toCheck[i]] = true
-						} else {
-							buildVal := buildKeys[keyID-1]
-							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
-							var unique bool
-							_ASSIGN_NE("unique", "buildVal", "probeVal")
-
-							if unique {
-								prober.differs[prober.toCheck[i]] = true
-							}
-						}
-					}
-				}
-				_SEL_CLAUSE_END()
-			} else {
-				_SEL_CLAUSE_BEGIN()
-				for i := uint16(0); i < nToCheck; i++ {
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-						if probeVec.NullAt(_WRAP_SEL("prober.toCheck[i]")) {
-							prober.groupID[prober.toCheck[i]] = 0
-						} else {
-							buildVal := buildKeys[keyID-1]
-							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
-							var unique bool
-							_ASSIGN_NE("unique", "buildVal", "probeVal")
-
-							if unique {
-								prober.differs[prober.toCheck[i]] = true
-							}
-						}
-					}
-				}
-				_SEL_CLAUSE_END()
-			}
+		if sel != nil {
+			_CHECK_COL_WITH_NULLS(sel[prober.toCheck[i]])
 		} else {
-			if buildVec.HasNulls() {
-				_SEL_CLAUSE_BEGIN()
-				for i := uint16(0); i < nToCheck; i++ {
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-						if buildVec.NullAt64(keyID - 1) {
-							prober.differs[prober.toCheck[i]] = true
-						} else {
-							buildVal := buildKeys[keyID-1]
-							probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
-							var unique bool
-							_ASSIGN_NE("unique", "buildVal", "probeVal")
-
-							if unique {
-								prober.differs[prober.toCheck[i]] = true
-							}
-						}
-					}
-				}
-				_SEL_CLAUSE_END()
-			} else {
-				_SEL_CLAUSE_BEGIN()
-				for i := uint16(0); i < nToCheck; i++ {
-					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
-						buildVal := buildKeys[keyID-1]
-						probeVal := probeKeys[_WRAP_SEL("prober.toCheck[i]")]
-						var unique bool
-						_ASSIGN_NE("unique", "buildVal", "probeVal")
-
-						if unique {
-							prober.differs[prober.toCheck[i]] = true
-						}
-					}
-				}
-				_SEL_CLAUSE_END()
-			}
+			_CHECK_COL_WITH_NULLS(prober.toCheck[i])
 		}
 		// {{end}}
 	default:
