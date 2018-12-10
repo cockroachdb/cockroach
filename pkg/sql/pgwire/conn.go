@@ -50,8 +50,10 @@ import (
 )
 
 const (
-	authOK                int32 = 0
-	authCleartextPassword int32 = 3
+	authOK                    int32 = 0
+	AuthTypeCleartextPassword int32 = 3
+	AuthTypeGSS               int32 = 7
+	AuthTypeGSSContinue       int32 = 8
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -1396,7 +1398,9 @@ var connAuthConf = settings.RegisterValidatedStringSetting(
 
 // AuthConn defines exported methods of a conn needed for pgwire authentication.
 type AuthConn interface {
-	SendAuthPasswordRequest() (string, error)
+	SendAuthRequest(authType int32, data []byte) error
+	ReadPasswordMsg() (string, error)
+	ReadGSSResponse() ([]byte, error)
 }
 
 // AuthMethod defines a method for authentication of a connection.
@@ -1412,7 +1416,10 @@ func RegisterAuthMethod(method string, fn AuthMethod) {
 func authPassword(
 	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
 ) (security.UserAuthHook, error) {
-	password, err := c.SendAuthPasswordRequest()
+	if err := c.SendAuthRequest(AuthTypeCleartextPassword, nil); err != nil {
+		return nil, err
+	}
+	password, err := c.ReadPasswordMsg()
 	if err != nil {
 		return nil, err
 	}
@@ -1452,26 +1459,35 @@ func init() {
 	RegisterAuthMethod("cert-password", authCertPassword)
 }
 
-// SendAuthPasswordRequest requests a cleartext password from the client and
-// returns it.
-func (c *conn) SendAuthPasswordRequest() (string, error) {
+func (c *conn) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
-	c.msgBuilder.putInt32(authCleartextPassword)
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
-		return "", err
-	}
+	c.msgBuilder.putInt32(authType)
+	c.msgBuilder.write(data)
+	return c.msgBuilder.finishMsg(c.conn)
+}
 
+func (c *conn) ReadPasswordMsg() (string, error) {
 	typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 	c.metrics.BytesInCount.Inc(int64(n))
 	if err != nil {
 		return "", err
 	}
-
 	if typ != pgwirebase.ClientMsgPassword {
 		return "", errors.Errorf("invalid response to authentication request: %s", typ)
 	}
-
 	return c.readBuf.GetString()
+}
+
+func (c *conn) ReadGSSResponse() ([]byte, error) {
+	typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return nil, err
+	}
+	if typ != pgwirebase.ClientMsgPassword {
+		return nil, errors.Errorf("invalid response to authentication request: %s", typ)
+	}
+	return c.readBuf.GetBytes(n - 4)
 }
 
 // statusReportParams is a list of session variables that are also

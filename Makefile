@@ -399,6 +399,7 @@ PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
+KRB5_SRC_DIR     := $(C_DEPS_DIR)/krb5/src
 
 # Derived build variants.
 use-stdmalloc          := $(findstring stdmalloc,$(TAGS))
@@ -424,6 +425,7 @@ PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(use-msan),_msan)
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(use-msan),_msan)$(if $(use-stdmalloc),_stdmalloc)$(if $(USE_ROCKSDB_ASSERTIONS),_assert)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy$(if $(use-msan),_msan)
 LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(use-msan),_msan)
+KRB5_DIR     := $(BUILD_DIR)/krb5$(if $(use-msan),_msan)
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 
@@ -434,11 +436,12 @@ LIBROCKSDB  := $(ROCKSDB_DIR)/librocksdb.a
 LIBSNAPPY   := $(SNAPPY_DIR)/libsnappy.a
 LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBROACHCCL := $(LIBROACH_DIR)/libroachccl.a
+LIBKRB5     := $(KRB5_DIR)/lib/libgssapi_krb5.a
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
 C_LIBS_COMMON = $(if $(use-stdmalloc),,$(LIBJEMALLOC)) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
-C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
+C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL) $(LIBKRB5)
 
 # Go does not permit dashes in build tags. This is undocumented.
 native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)$(if $(use-msan),_msan)
@@ -476,7 +479,7 @@ $(CGO_FLAGS_FILES): Makefile
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB5_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
@@ -525,6 +528,19 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 	@# jemalloc profiling deadlocks when built against musl. See
 	@# https://github.com/jemalloc/jemalloc/issues/585.
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
+
+$(KRB5_SRC_DIR)/configure.ac: | bin/.submodules-initialized
+
+$(KRB5_SRC_DIR)/configure: $(KRB5_SRC_DIR)/configure.ac
+	cd $(KRB5_SRC_DIR) && autoreconf
+
+$(KRB5_DIR)/Makefile: $(C_DEPS_DIR)/krb5-rebuild $(KRB5_SRC_DIR)/configure
+	rm -rf $(KRB5_DIR)
+	mkdir -p $(KRB5_DIR)
+	@# NOTE: If you change the configure flags below, bump the version in
+	@# $(C_DEPS_DIR)/krb5-rebuild. See above for rationale.
+	# If CFLAGS is set to -g1 then make will fail. Use "env -" to clear the environment.
+	cd $(KRB5_DIR) && env - PATH="$$PATH" $(KRB5_SRC_DIR)/configure $(xconfigure-flags) --enable-static --disable-shared
 
 $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initialized
 	rm -rf $(PROTOBUF_DIR)
@@ -634,8 +650,11 @@ $(LIBROACH): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBROACHCCL): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(libroach-inputs) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
+$(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(KRB5_SRC_DIR) || $(MAKE) --no-print-directory -C $(KRB5_DIR)
+
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy librocksdb libroach libroachccl
+.PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy librocksdb libroach libroachccl libkrb5
 protoc:      $(PROTOC)
 libcryptopp: $(LIBCRYPTOPP)
 libjemalloc: $(LIBJEMALLOC)
@@ -644,6 +663,7 @@ libsnappy:   $(LIBSNAPPY)
 librocksdb:  $(LIBROCKSDB)
 libroach:    $(LIBROACH)
 libroachccl: $(LIBROACHCCL)
+libkrb5:     $(LIBKRB5)
 
 PHONY: check-libroach
 check-libroach: ## Run libroach tests.
@@ -1385,6 +1405,7 @@ clean-c-deps:
 	rm -rf $(ROCKSDB_DIR)
 	rm -rf $(SNAPPY_DIR)
 	rm -rf $(LIBROACH_DIR)
+	rm -rf $(KRB5_DIR)
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
@@ -1394,6 +1415,7 @@ unsafe-clean-c-deps:
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
+	git -C $(KRB5_SRC_DIR)     clean -dxf
 
 .PHONY: clean
 clean: ## Remove build artifacts.

@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     autoconf \
     bison \
+    byacc \
     bzip2 \
     ca-certificates \
     curl \

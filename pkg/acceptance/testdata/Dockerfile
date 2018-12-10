@@ -54,6 +54,8 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
  && apt-get install --yes --no-install-recommends \
     dotnet-sdk-2.0.0 \
     expect \
+    krb5-admin-server \
+    krb5-kdc \
     libc6-dev \
     libpq-dev \
     libpqtypes-dev \
@@ -74,6 +76,23 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.0.0/autouseradd-1.0.0-amd64.tar.gz \
     | tar xz -C /usr --strip-components 1
+
+RUN kdb5_util create -s -P kpass \
+# && kadmin.local -q "addprinc -randkey postgres/admin" \
+ && kadmin.local -q "addprinc -randkey postgres/localhost@MY.EX" \
+ && mkdir /krb5 \
+ && kadmin.local -q "ktadd -k /krb5/postgres.keytab postgres/localhost@MY.EX" \
+ && chmod +r /krb5/postgres.keytab \
+ && echo 127.0.0.1 my.ex >> /etc/hosts \
+ && echo $'\n\
+[realms]\n\
+    MY.EX = {\n\
+        kdc = localhost:88\n\
+    }\n\
+\n\
+[domain_realm]\n\
+    localhost = MY.EX\n\
+' > /krb5/krb5.conf
 
 # When system packages are not available for a language's PostgreSQL driver,
 # fall back to using that language's package manager. The high-level process
