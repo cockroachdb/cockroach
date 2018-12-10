@@ -393,7 +393,7 @@ func request_Status_SpanStats_0(ctx context.Context, marshaler runtime.Marshaler
 	var protoReq SpanStatsRequest
 	var metadata runtime.ServerMetadata
 
-	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil {
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && err != io.EOF {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
