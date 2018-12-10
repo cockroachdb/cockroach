@@ -18,6 +18,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"runtime"
@@ -343,6 +344,57 @@ func runBenchmarkInsertSecondaryIndex(b *testing.B, db *gosql.DB, count int) {
 	b.StopTimer()
 }
 
+// runBenchmarkInsertComputedColumns benchmarks inserting count rows into a table with
+// computed columns over multiple statements.
+func runBenchmarkInsertComputedColumns(b *testing.B, db *gosql.DB, count int) {
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS bench.insert`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	if _, err := db.Exec(`CREATE TABLE bench.insert (k INT PRIMARY KEY, v INT)`); err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < 10; i++ {
+		if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE bench.insert ADD k%d INT AS (k*3+%d*10-v) STORED`, i, i)); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	var buf bytes.Buffer
+	val := 0
+	sqrt := int(math.Floor(math.Sqrt(float64(count))))
+
+	dbInsert := func(rows int) {
+		if rows <= 0 {
+			return
+		}
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.insert VALUES `)
+		for i := 0; i < rows; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d, %d)", val, val)
+			val++
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < sqrt; j++ {
+			dbInsert(sqrt)
+		}
+		dbInsert(count - (sqrt * sqrt))
+	}
+	b.StopTimer()
+}
+
 func BenchmarkSQL(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
@@ -355,6 +407,7 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
+			runBenchmarkInsertComputedColumns,
 			runBenchmarkInterleavedSelect,
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
