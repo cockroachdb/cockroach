@@ -57,7 +57,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	if err := conn.requireServerVersion(">v2.1.0-alpha.20180416"); err != nil {
+	if err := conn.requireServerVersion("> 2.1.0-alpha.20180416"); err != nil {
 		return err
 	}
 

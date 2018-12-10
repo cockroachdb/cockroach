@@ -320,7 +320,7 @@ tar cvf certs.tar certs
 		}
 		args = append(args, "--log-dir="+logDir)
 		args = append(args, "--background")
-		if VersionSatifies(vers, ">=1.1") {
+		if VersionSatifies(vers, ">=1.1.0") {
 			cache := 25
 			if c.IsLocal() {
 				cache /= len(nodes)
@@ -333,7 +333,7 @@ tar cvf certs.tar certs
 		}
 		if c.IsLocal() {
 			// This avoids annoying firewall prompts on Mac OS X.
-			if VersionSatifies(vers, ">=2.1") {
+			if VersionSatifies(vers, ">=2.1.0") {
 				args = append(args, "--listen-addr=127.0.0.1")
 			} else {
 				args = append(args, "--host=127.0.0.1")

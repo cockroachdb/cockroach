@@ -45,7 +45,7 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v2.0-alpha.20180116"); err != nil {
+	if err := conn.requireServerVersion(">= 2.0.0-alpha.20180116"); err != nil {
 		return err
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
@@ -97,7 +97,7 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.1-alpha.20170622"); err != nil {
+	if err := conn.requireServerVersion(">= 1.1.0-alpha.20170622"); err != nil {
 		return err
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
@@ -143,7 +143,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171113"); err != nil {
+	if err := conn.requireServerVersion(">= 1.2.0-alpha.20171113"); err != nil {
 		return err
 	}
 

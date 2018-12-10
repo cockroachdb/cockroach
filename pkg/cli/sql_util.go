@@ -257,7 +257,7 @@ func (c *sqlConn) requireServerVersion(constraintString string) error {
 	}
 	vers, err := version.NewVersion(versionString)
 	if err != nil {
-		return fmt.Errorf("unable to parse server version %q", c.serverVersion)
+		return fmt.Errorf("unable to parse server version %q", versionString)
 	}
 	if !constraints.Check(vers) {
 		return fmt.Errorf("incompatible client and server versions (detected server version: %s, required: %s)",
