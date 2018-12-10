@@ -89,7 +89,7 @@ func (s *scanner) finishString(buf []byte) string {
 
 func (s *scanner) scan(lval *sqlSymType) {
 	lval.id = 0
-	lval.pos = s.pos
+	lval.pos = int32(s.pos)
 	lval.str = "EOF"
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
@@ -98,12 +98,12 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	ch := s.next()
 	if ch == eof {
-		lval.pos = s.pos
+		lval.pos = int32(s.pos)
 		return
 	}
 
-	lval.id = ch
-	lval.pos = s.pos - 1
+	lval.id = int32(ch)
+	lval.pos = int32(s.pos - 1)
 	lval.str = s.in[lval.pos:s.pos]
 
 	switch ch {
@@ -465,7 +465,7 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 
 			case eof:
 				lval.id = ERROR
-				lval.pos = start
+				lval.pos = int32(start)
 				lval.str = "unterminated comment"
 				return false, false
 			}
@@ -539,7 +539,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
 	if id, ok := lex.Keywords[lval.str]; ok {
-		lval.id = id.Tok
+		lval.id = int32(id.Tok)
 	} else {
 		lval.id = IDENT
 	}
@@ -884,7 +884,7 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 			return ERROR, true
 		}
 		if lval.id == 0 {
-			return last, last != 0
+			return int(last), last != 0
 		}
 	}
 }
