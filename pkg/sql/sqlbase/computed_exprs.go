@@ -103,15 +103,48 @@ func ProcessComputedColumns(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
-	computedCols := processColumnSet(nil, tableDesc, func(col ColumnDescriptor) bool {
-		return col.IsComputed()
-	})
+	computedCols, computedExprs, err := memoComputedColumns(tableDesc, tn, txCtx, evalCtx)
 	cols = append(cols, computedCols...)
 
-	// TODO(justin): it's unfortunate that this parses and typechecks the
-	// ComputeExprs on every query.
-	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx, false /* addingCols */)
 	return cols, computedCols, computedExprs, err
+}
+
+func memoComputedColumns(
+	desc *ImmutableTableDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]ColumnDescriptor, []tree.TypedExpr, error) {
+	desc.mu.Lock()
+	defer desc.mu.Unlock()
+
+	if desc.mu.computedExprs == nil || desc.mu.computedColumns == nil {
+		desc.mu.computedColumns = processColumnSet(nil, desc, func(col ColumnDescriptor) bool {
+			return col.IsComputed()
+		})
+
+		if desc.mu.computedColumns == nil {
+			desc.mu.computedColumns = make([]ColumnDescriptor, 0)
+			desc.mu.computedExprs = make([]tree.TypedExpr, 0)
+		} else {
+
+			computedExprs, err := MakeComputedExprs(
+				desc.mu.computedColumns,
+				desc,
+				tn,
+				txCtx,
+				evalCtx,
+				false, /* addingCols */
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			desc.mu.computedExprs = computedExprs
+		}
+	}
+
+	return desc.mu.computedColumns, desc.mu.computedExprs, nil
 }
 
 // MakeComputedExprs returns a slice of the computed expressions for the
