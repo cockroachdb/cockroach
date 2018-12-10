@@ -271,17 +271,17 @@ root
 testuser
 
 
-query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
-query TTITI colnames
-CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
+query TTTI colnames
+CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0

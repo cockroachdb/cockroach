@@ -213,11 +213,11 @@ distinct                  ·            ·                                    (n
 ·                         spans        ALL                                  ·                                         ·
 
 # Verify data placement.
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE books
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE books]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     10        {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {5}       5
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
