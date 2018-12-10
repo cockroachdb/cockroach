@@ -22,9 +22,9 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
-a            INT        false        NULL            ·                      {primary,t_f_idx}  false
-f            INT        true         NULL            ·                      {t_f_idx}          false
-b            INT        true         NULL            ·                      {}                 false
+a            INT8       false        NULL            ·                      {primary,t_f_idx}  false
+f            INT8       true         NULL            ·                      {t_f_idx}          false
+b            INT8       true         NULL            ·                      {}                 false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -405,7 +405,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM tt
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
-a            INT        false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
+a            INT8       false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
 q            DECIMAL    false        NULL            ·                      {}                           false
 r            DECIMAL    true         NULL            ·                      {}                           false
 s            DECIMAL    false        NULL            ·                      {tt_s_key}                   false
@@ -599,8 +599,8 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT        false        NULL            ·                      {primary}  false
-b            INT        true         NULL            ·                      {}         false
+a            INT8       false        NULL            ·                      {primary}  false
+b            INT8       true         NULL            ·                      {}         false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -617,9 +617,9 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
-a            INT        false        NULL            ·                      {primary,foo}  false
-b            INT        true         NULL            ·                      {foo}          false
-c            INT        true         NULL            ·                      {}             false
+a            INT8       false        NULL            ·                      {primary,foo}  false
+b            INT8       true         NULL            ·                      {foo}          false
+c            INT8       true         NULL            ·                      {}             false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -711,8 +711,8 @@ query TT
 show create table decomputed_column
 ----
 decomputed_column  CREATE TABLE decomputed_column (
-                   a INT NOT NULL,
-                   b INT NULL,
+                   a INT8 NOT NULL,
+                   b INT8 NULL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
                    FAMILY "primary" (a, b)
 )

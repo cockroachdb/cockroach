@@ -85,7 +85,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── random()::INT > (i + i) [type=bool, outer=(2), side-effects]
+      └── random()::INT8 > (i + i) [type=bool, outer=(2), side-effects]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst

@@ -29,17 +29,17 @@ func TestParseArray(t *testing.T) {
 		typ      coltypes.T
 		expected Datums
 	}{
-		{`{}`, coltypes.Int, Datums{}},
-		{`{1}`, coltypes.Int, Datums{NewDInt(1)}},
-		{`{1,2}`, coltypes.Int, Datums{NewDInt(1), NewDInt(2)}},
-		{`   { 1    ,  2  }  `, coltypes.Int, Datums{NewDInt(1), NewDInt(2)}},
+		{`{}`, coltypes.Int8, Datums{}},
+		{`{1}`, coltypes.Int8, Datums{NewDInt(1)}},
+		{`{1,2}`, coltypes.Int8, Datums{NewDInt(1), NewDInt(2)}},
+		{`   { 1    ,  2  }  `, coltypes.Int8, Datums{NewDInt(1), NewDInt(2)}},
 		{`   { 1    ,
-			"2"  }  `, coltypes.Int, Datums{NewDInt(1), NewDInt(2)}},
-		{`{1,2,3}`, coltypes.Int, Datums{NewDInt(1), NewDInt(2), NewDInt(3)}},
-		{`{"1"}`, coltypes.Int, Datums{NewDInt(1)}},
-		{` { "1" , "2"}`, coltypes.Int, Datums{NewDInt(1), NewDInt(2)}},
-		{` { "1" , 2}`, coltypes.Int, Datums{NewDInt(1), NewDInt(2)}},
-		{`{1,NULL}`, coltypes.Int, Datums{NewDInt(1), DNull}},
+			"2"  }  `, coltypes.Int8, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,2,3}`, coltypes.Int8, Datums{NewDInt(1), NewDInt(2), NewDInt(3)}},
+		{`{"1"}`, coltypes.Int8, Datums{NewDInt(1)}},
+		{` { "1" , "2"}`, coltypes.Int8, Datums{NewDInt(1), NewDInt(2)}},
+		{` { "1" , 2}`, coltypes.Int8, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,NULL}`, coltypes.Int8, Datums{NewDInt(1), DNull}},
 
 		{`{hello}`, coltypes.String, Datums{NewDString(`hello`)}},
 		{`{hel
@@ -159,18 +159,18 @@ func TestParseArrayError(t *testing.T) {
 		typ           coltypes.T
 		expectedError string
 	}{
-		{``, coltypes.Int, "array must be enclosed in { and }"},
-		{`1`, coltypes.Int, "array must be enclosed in { and }"},
-		{`1,2`, coltypes.Int, "array must be enclosed in { and }"},
-		{`{1,2`, coltypes.Int, "malformed array"},
-		{`{1,2,`, coltypes.Int, "malformed array"},
-		{`{`, coltypes.Int, "malformed array"},
-		{`{,}`, coltypes.Int, "malformed array"},
-		{`{}{}`, coltypes.Int, "extra text after closing right brace"},
-		{`{} {}`, coltypes.Int, "extra text after closing right brace"},
-		{`{{}}`, coltypes.Int, "nested arrays not supported"},
-		{`{1, {1}}`, coltypes.Int, "nested arrays not supported"},
-		{`{hello}`, coltypes.Int, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
+		{``, coltypes.Int8, "array must be enclosed in { and }"},
+		{`1`, coltypes.Int8, "array must be enclosed in { and }"},
+		{`1,2`, coltypes.Int8, "array must be enclosed in { and }"},
+		{`{1,2`, coltypes.Int8, "malformed array"},
+		{`{1,2,`, coltypes.Int8, "malformed array"},
+		{`{`, coltypes.Int8, "malformed array"},
+		{`{,}`, coltypes.Int8, "malformed array"},
+		{`{}{}`, coltypes.Int8, "extra text after closing right brace"},
+		{`{} {}`, coltypes.Int8, "extra text after closing right brace"},
+		{`{{}}`, coltypes.Int8, "nested arrays not supported"},
+		{`{1, {1}}`, coltypes.Int8, "nested arrays not supported"},
+		{`{hello}`, coltypes.Int8, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
 		{`{"hello}`, coltypes.String, `malformed array`},
 		// It might be unnecessary to disallow this, but Postgres does.
 		{`{he"lo}`, coltypes.String, "malformed array"},

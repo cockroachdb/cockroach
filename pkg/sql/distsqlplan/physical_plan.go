@@ -900,11 +900,23 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 
 // equivalentType checks whether a column type is equivalent to
 // another for the purpose of UNION. This excludes its VisibleType
-// type alias, which doesn't effect the merging of values.
+// type alias, which doesn't effect the merging of values. There is
+// also special handling for "naked" int types of no defined size.
 func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	// Convert a "naked" INT type to INT8. The 64-bit value is for
+	// historical compatibility before all INTs were assigned an
+	// explicit width at parse time.
+	lhs := *c
+	if lhs.SemanticType == sqlbase.ColumnType_INT && lhs.Width == 0 {
+		lhs.Width = 64
+	}
+
 	rhs := *other
+	if rhs.SemanticType == sqlbase.ColumnType_INT && rhs.Width == 0 {
+		rhs.Width = 64
+	}
 	rhs.VisibleType = c.VisibleType
-	return c.Equal(rhs)
+	return lhs.Equal(rhs)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires

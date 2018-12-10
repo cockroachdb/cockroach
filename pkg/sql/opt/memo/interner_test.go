@@ -219,12 +219,12 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashColType, eqFn: in.hasher.IsColTypeEqual, variations: []testVariation{
-			{val1: coltypes.Int, val2: coltypes.Int, equal: true},
-			{val1: coltypes.Int, val2: coltypes.Int2, equal: false},
+			{val1: coltypes.Int8, val2: coltypes.Int8, equal: true},
+			{val1: coltypes.Int8, val2: coltypes.Int2, equal: false},
 			{val1: coltypes.Float4, val2: coltypes.Float8, equal: false},
 			{val1: coltypes.VarChar, val2: coltypes.String, equal: false},
 			{val1: &coltypes.TDecimal{Prec: 19}, val2: &coltypes.TDecimal{Prec: 19, Scale: 2}, equal: false},
-			{val1: coltypes.TTuple{coltypes.String, coltypes.Int}, val2: coltypes.TTuple{coltypes.Int, coltypes.String}, equal: false},
+			{val1: coltypes.TTuple{coltypes.String, coltypes.Int8}, val2: coltypes.TTuple{coltypes.Int8, coltypes.String}, equal: false},
 			{val1: coltypes.Int2vector, val2: coltypes.OidVector, equal: false},
 		}},
 

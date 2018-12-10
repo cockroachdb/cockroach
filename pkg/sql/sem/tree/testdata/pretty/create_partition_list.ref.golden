@@ -4,7 +4,7 @@
 -
 CREATE TABLE students_by_list (
 	id
-		SERIAL,
+		SERIAL8,
 	name
 		STRING,
 	email
@@ -31,10 +31,10 @@ PARTITION BY LIST (
 	)
 )
 
-14:
---------------
+15:
+---------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name
 		STRING,
 	email
@@ -64,7 +64,7 @@ PARTITION BY LIST (
 16:
 ----------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email
 		STRING,
@@ -93,7 +93,7 @@ PARTITION BY LIST (
 17:
 -----------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country
@@ -121,7 +121,7 @@ PARTITION BY LIST (
 19:
 -------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -148,7 +148,7 @@ PARTITION BY LIST (
 29:
 -----------------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -173,7 +173,7 @@ PARTITION BY LIST (country) (
 34:
 ----------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -197,7 +197,7 @@ PARTITION BY LIST (country) (
 41:
 -----------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -219,7 +219,7 @@ PARTITION BY LIST (country) (
 47:
 -----------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -238,7 +238,7 @@ PARTITION BY LIST (country) (
 51:
 ---------------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL,
+	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
@@ -251,9 +251,9 @@ PARTITION BY LIST (country) (
 	PARTITION default VALUES IN (DEFAULT)
 )
 
-142:
-----------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id))
+143:
+-----------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id))
 PARTITION BY LIST (country) (
 	PARTITION north_america VALUES IN ('CA', 'US'),
 	PARTITION australia VALUES IN ('AU', 'NZ'),
@@ -262,11 +262,11 @@ PARTITION BY LIST (country) (
 
 159:
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id))
+CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id))
 PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION default VALUES IN (DEFAULT))
 
-302:
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION default VALUES IN (DEFAULT))
+303:
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION default VALUES IN (DEFAULT))
 
 

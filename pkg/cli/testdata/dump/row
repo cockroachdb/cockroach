@@ -59,7 +59,7 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	i INT NULL,
+	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
 	b BYTES NULL,

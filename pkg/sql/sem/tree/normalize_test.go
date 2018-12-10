@@ -41,7 +41,13 @@ func TestNormalizeExpr(t *testing.T) {
 	}{
 		{`(a)`, `a`},
 		{`((((a))))`, `a`},
-		{`CAST(NULL AS INTEGER)`, `CAST(NULL AS INT)`},
+		// This loss of type information occurs because we wind up trying
+		// to reconstitute a data from from a datum. Ideally, this would
+		// be addressed by future work on
+		// https://github.com/cockroachdb/cockroach/issues/32639
+		{`CAST(NULL AS INT2)`, `CAST(NULL AS INT8)`},
+		{`CAST(NULL AS INT4)`, `CAST(NULL AS INT8)`},
+		{`CAST(NULL AS INT8)`, `CAST(NULL AS INT8)`},
 		{`+a`, `a`},
 		{`-(-a)`, `a`},
 		{`-+-a`, `a`},
@@ -212,10 +218,10 @@ func TestNormalizeExpr(t *testing.T) {
 		{`NULL IS NOT DISTINCT FROM d`, `d IS NULL`},
 		{`NULL IS DISTINCT FROM d`, `d IS NOT NULL`},
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
-		{`(random() + 1.0)::INT`, `(random() + 1.0)::INT`},
-		{`('a' || left('b', random()::INT)) COLLATE en`, `('a' || left('b', random()::INT)) COLLATE en`},
+		{`(random() + 1.0)::INT8`, `(random() + 1.0)::INT8`},
+		{`('a' || left('b', random()::INT8)) COLLATE en`, `('a' || left('b', random()::INT8)) COLLATE en`},
 		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE en`},
-		{`(1.0 + random()) IS OF (INT)`, `(1.0 + random()) IS OF (INT)`},
+		{`(1.0 + random()) IS OF (INT8)`, `(1.0 + random()) IS OF (INT8)`},
 		// #14687: ensure that negative divisors flip the inequality when rotating.
 		{`1 < a / -2`, `a < -2`},
 		{`1 <= a / -2`, `a <= -2`},

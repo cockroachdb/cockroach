@@ -59,7 +59,7 @@ func TestPostgreStreamCopy(t *testing.T) {
 
 	const sql = `
 CREATE TABLE public.second (
-    i integer NOT NULL,
+    i int8 NOT NULL,
     s text
 );
 
@@ -123,7 +123,7 @@ COPY public.t (s) FROM stdin;
 		}
 		fmt.Fprintf(&sb, "%s;\n", s)
 	}
-	const expect = `CREATE TABLE public.second (i INT NOT NULL, s STRING);
+	const expect = `CREATE TABLE public.second (i INT8 NOT NULL, s STRING);
 COPY public.second (i, s) FROM STDIN;
 "0"	"0";
 "1"	"1";

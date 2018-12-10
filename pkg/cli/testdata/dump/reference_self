@@ -21,8 +21,8 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	id INT NOT NULL,
-	next_id INT NULL,
+	id INT8 NOT NULL,
+	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
@@ -49,8 +49,8 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	id INT NOT NULL,
-	next_id INT NULL,
+	id INT8 NOT NULL,
+	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
@@ -78,8 +78,8 @@ dump d table
 ----
 ----
 CREATE TABLE "table" (
-	id INT NOT NULL,
-	"'" INT NULL,
+	id INT8 NOT NULL,
+	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")
@@ -101,8 +101,8 @@ dump d --dump-mode=schema
 ----
 ----
 CREATE TABLE "table" (
-	id INT NOT NULL,
-	"'" INT NULL,
+	id INT8 NOT NULL,
+	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")

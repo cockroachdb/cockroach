@@ -248,7 +248,7 @@ SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 table_name                create_statement
 system.public.descriptor  CREATE TABLE descriptor (
-                          id INT NOT NULL,
+                          id INT8 NOT NULL,
                           descriptor BYTES NULL,
                           CONSTRAINT "primary" PRIMARY KEY (id ASC),
                           FAMILY "primary" (id),

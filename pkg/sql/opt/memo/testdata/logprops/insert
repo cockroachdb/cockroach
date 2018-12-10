@@ -181,23 +181,23 @@ project
  ├── fd: ()-->(8,11)
  ├── prune: (8,11)
  └── insert abcde
-      ├── columns: y:8(int!null) int:10(int) column11:11(int!null) column12:12(int!null) column14:14(int)
+      ├── columns: y:8(int!null) int8:10(int) column11:11(int!null) column12:12(int!null) column14:14(int)
       ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int) "e:mutation":6(int)
-      ├── input columns: y:8(int!null) int:10(int) column11:11(int!null) column14:14(int) column12:12(int!null) column13:13(unknown)
+      ├── input columns: y:8(int!null) int8:10(int) column11:11(int!null) column14:14(int) column12:12(int!null) column13:13(unknown)
       ├── side-effects, mutations
       ├── fd: ()-->(8,11), (10)-->(14)
       └── project
-           ├── columns: column14:14(int) y:8(int!null) int:10(int) column11:11(int!null) column12:12(int) column13:13(unknown)
+           ├── columns: column14:14(int) y:8(int!null) int8:10(int) column11:11(int!null) column12:12(int) column13:13(unknown)
            ├── side-effects
            ├── fd: ()-->(8,11,13), (10)-->(14)
            ├── prune: (8,10-14)
            ├── project
-           │    ├── columns: column11:11(int!null) column12:12(int) column13:13(unknown) y:8(int!null) int:10(int)
+           │    ├── columns: column11:11(int!null) column12:12(int) column13:13(unknown) y:8(int!null) int8:10(int)
            │    ├── side-effects
            │    ├── fd: ()-->(8,11,13)
            │    ├── prune: (8,10-13)
            │    ├── project
-           │    │    ├── columns: int:10(int) y:8(int!null)
+           │    │    ├── columns: int8:10(int) y:8(int!null)
            │    │    ├── fd: ()-->(8)
            │    │    ├── prune: (8,10)
            │    │    ├── select
@@ -217,7 +217,7 @@ project
            │    │    │              ├── variable: y [type=int]
            │    │    │              └── const: 1 [type=int]
            │    │    └── projections
-           │    │         └── cast: INT [type=int, outer=(9)]
+           │    │         └── cast: INT8 [type=int, outer=(9)]
            │    │              └── plus [type=float]
            │    │                   ├── variable: z [type=float]
            │    │                   └── const: 1.0 [type=float]
@@ -228,6 +228,6 @@ project
            └── projections
                 └── plus [type=int, outer=(10,11)]
                      ├── plus [type=int]
-                     │    ├── variable: int [type=int]
+                     │    ├── variable: int8 [type=int]
                      │    └── variable: column11 [type=int]
                      └── const: 1 [type=int]

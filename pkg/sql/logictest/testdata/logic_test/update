@@ -6,16 +6,16 @@ CREATE TABLE kv (
   v INT
 )
 
-statement error value type tuple{int, int} doesn't match type INT of column "v"
+statement error value type tuple{int, int} doesn't match type INT8 of column "v"
 UPDATE kv SET v = (SELECT (10, 11))
 
-statement error value type decimal doesn't match type INT of column "v"
+statement error value type decimal doesn't match type INT8 of column "v"
 UPDATE kv SET v = 3.2
 
-statement error value type decimal doesn't match type INT of column "v"
+statement error value type decimal doesn't match type INT8 of column "v"
 UPDATE kv SET (k, v) = (3, 3.2)
 
-statement error value type decimal doesn't match type INT of column "v"
+statement error value type decimal doesn't match type INT8 of column "v"
 UPDATE kv SET (k, v) = (SELECT 3, 3.2)
 
 statement count 4
@@ -449,7 +449,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NOT NULL,
+   x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
    FAMILY "primary" (x)
 )

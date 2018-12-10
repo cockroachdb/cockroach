@@ -219,16 +219,16 @@ query TT
 SHOW CREATE TABLE t7
 ----
 t7  CREATE TABLE t7 (
-      x INT NULL,
-      y INT NULL,
-      z INT NULL,
-      FAMILY "primary" (x, y, z, rowid),
-      CONSTRAINT check_x CHECK (x > 0),
-      CONSTRAINT check_x_y CHECK ((x + y) > 0),
-      CONSTRAINT check_y_z CHECK ((y + z) > 0),
-      CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
-      CONSTRAINT named_constraint CHECK (z = 1)
-    )
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    FAMILY "primary" (x, y, z, rowid),
+    CONSTRAINT check_x CHECK (x > 0),
+    CONSTRAINT check_x_y CHECK ((x + y) > 0),
+    CONSTRAINT check_y_z CHECK ((y + z) > 0),
+    CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
+    CONSTRAINT named_constraint CHECK (z = 1)
+)
 
 # Check that table references are dequalified in their stored representation.
 
@@ -256,12 +256,12 @@ query TT
 SHOW CREATE TABLE t8
 ----
 t8  CREATE TABLE t8 (
-      a INT NULL,
-      FAMILY "primary" (a, rowid),
-      CONSTRAINT check_a CHECK (a > 0),
-      CONSTRAINT check_a1 CHECK (a > 0),
-      CONSTRAINT check_a2 CHECK (a > 0)
-    )
+    a INT8 NULL,
+    FAMILY "primary" (a, rowid),
+    CONSTRAINT check_a CHECK (a > 0),
+    CONSTRAINT check_a1 CHECK (a > 0),
+    CONSTRAINT check_a2 CHECK (a > 0)
+)
 
 statement ok
 CREATE DATABASE test2

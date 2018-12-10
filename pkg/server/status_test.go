@@ -943,7 +943,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	}{
 		{stmt: `CREATE DATABASE roachblog`},
 		{stmt: `SET database = roachblog`},
-		{stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body STRING)`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,

@@ -263,13 +263,13 @@ query TT
 SHOW CREATE TABLE b
 ----
 b  CREATE TABLE b (
-    parent_id INT NULL,
-    d INT NULL DEFAULT 23:::INT,
-    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent (id),
-    INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
-    INDEX foo (parent_id ASC),
-    UNIQUE INDEX bar (parent_id ASC),
-    FAMILY "primary" (parent_id, rowid, d)
+   parent_id INT8 NULL,
+   d INT8 NULL DEFAULT 23:::INT8,
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent (id),
+   INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
+   INDEX foo (parent_id ASC),
+   UNIQUE INDEX bar (parent_id ASC),
+   FAMILY "primary" (parent_id, rowid, d)
 )
 
 # table b is not visible to the transaction #17949
@@ -721,7 +721,7 @@ SELECT status,
   FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 2
 ----
 running  waiting for GC TTL  ROLL BACK JOB
-failed   NULL                ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT DEFAULT 4;ALTER TABLE test.public.customers ADD COLUMN l INT DEFAULT 3;ALTER TABLE test.public.customers ADD COLUMN m CHAR;ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a';CREATE INDEX j_idx ON test.public.customers (j);CREATE INDEX l_idx ON test.public.customers (l);CREATE INDEX m_idx ON test.public.customers (m);CREATE UNIQUE INDEX i_idx ON test.public.customers (i);CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
+failed   NULL                ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4;ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3;ALTER TABLE test.public.customers ADD COLUMN m CHAR;ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a';CREATE INDEX j_idx ON test.public.customers (j);CREATE INDEX l_idx ON test.public.customers (l);CREATE INDEX m_idx ON test.public.customers (m);CREATE UNIQUE INDEX i_idx ON test.public.customers (i);CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
 subtest add_multiple_computed_elements
 
@@ -750,7 +750,7 @@ z  5  4  15  19
 query TT
 SELECT status, description FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 1
 ----
-succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED
+succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT8 DEFAULT 15, ADD COLUMN e INT8 AS (d + j) STORED
 
 # VALIDATE CONSTRAINT will not hang when executed in the same txn as
 # a schema change in the same txn #32118
@@ -761,7 +761,7 @@ CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
 
 statement ok
 CREATE TABLE orders2 (
-  id INT PRIMARY KEY,
+  id INT8 PRIMARY KEY,
   product STRING DEFAULT 'sprockets',
   INDEX (product)
 )

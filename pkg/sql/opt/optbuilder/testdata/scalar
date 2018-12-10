@@ -307,7 +307,7 @@ cast: FLOAT8 [type=float]
 build-scalar
 1.1::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── const: 1.1 [type=decimal]
 
 build-scalar
@@ -318,7 +318,7 @@ const: '2010-05-12 00:00:00+00:00' [type=timestamp]
 build-scalar
 '123'::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── const: 123 [type=int]
 
 build-scalar vars=(int, int)
@@ -607,7 +607,7 @@ null [type=unknown]
 build-scalar
 NULL::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int[])
@@ -720,14 +720,14 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: INT[] [type=int[]]
+ └── cast: INT8[] [type=int[]]
       └── null [type=unknown]
 
 build-scalar
 NULL || ARRAY[1, 2]
 ----
 concat [type=int[]]
- ├── cast: INT[] [type=int[]]
+ ├── cast: INT8[] [type=int[]]
  │    └── null [type=unknown]
  └── array: [type=int[]]
       ├── const: 1 [type=int]

@@ -40,8 +40,8 @@ func TestFormatStatement(t *testing.T) {
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
-		{`CREATE TABLE foo (x INT)`, tree.FmtAnonymize,
-			`CREATE TABLE _ (_ INT)`},
+		{`CREATE TABLE foo (x INT8)`, tree.FmtAnonymize,
+			`CREATE TABLE _ (_ INT8)`},
 		{`INSERT INTO foo(x) TABLE bar`, tree.FmtAnonymize,
 			`INSERT INTO _(_) TABLE _`},
 		{`UPDATE foo SET x = y`, tree.FmtAnonymize,
@@ -120,8 +120,8 @@ func TestFormatTableName(t *testing.T) {
 		stmt     string
 		expected string
 	}{
-		{`CREATE TABLE foo (x INT)`,
-			`CREATE TABLE xoxoxo (x INT)`},
+		{`CREATE TABLE foo (x INT8)`,
+			`CREATE TABLE xoxoxo (x INT8)`},
 		{`INSERT INTO foo(x) TABLE bar`,
 			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
 		{`UPDATE foo SET x = y`,
@@ -217,11 +217,13 @@ func TestFormatExpr(t *testing.T) {
 		{`3.00:::DECIMAL`, tree.FmtParsableNumerics, "3.00"},
 		{`(-3.00):::DECIMAL`, tree.FmtParsableNumerics, "(-3.00)"},
 
-		{`1`, tree.FmtParsable, "1:::INT"},
-		{`9223372036854775807`, tree.FmtParsable, "9223372036854775807:::INT"},
+		{`1`, tree.FmtParsable, "1:::INT8"},
+		{`1:::INT`, tree.FmtParsable, "1:::INT8"},
+		{`9223372036854775807`, tree.FmtParsable, "9223372036854775807:::INT8"},
 		{`9223372036854775808`, tree.FmtParsable, "9223372036854775808:::DECIMAL"},
-		{`-1`, tree.FmtParsable, "(-1):::INT"},
-		{`-9223372036854775808`, tree.FmtParsable, "(-9223372036854775808):::INT"},
+		{`-1`, tree.FmtParsable, "(-1):::INT8"},
+		{`(-1):::INT`, tree.FmtParsable, "(-1):::INT8"},
+		{`-9223372036854775808`, tree.FmtParsable, "(-9223372036854775808):::INT8"},
 		{`-9223372036854775809`, tree.FmtParsable, "(-9223372036854775809):::DECIMAL"},
 		{`(-92233.1):::FLOAT`, tree.FmtParsable, "(-92233.1):::FLOAT8"},
 		{`92233.00:::DECIMAL`, tree.FmtParsable, "92233.00:::DECIMAL"},
@@ -229,7 +231,7 @@ func TestFormatExpr(t *testing.T) {
 		{`B'00100'`, tree.FmtParsable, "B'00100'"},
 
 		{`unique_rowid() + 123`, tree.FmtParsable,
-			`unique_rowid() + 123:::INT`},
+			`unique_rowid() + 123:::INT8`},
 		{`sqrt(123.0) + 456`, tree.FmtParsable,
 			`sqrt(123.0:::DECIMAL) + 456:::DECIMAL`},
 		{`ROW()`, tree.FmtParsable, `()`},
@@ -255,7 +257,7 @@ func TestFormatExpr(t *testing.T) {
 			`'63616665-6630-3064-6465-616462656562':::UUID`},
 
 		{`(123:::INT, 123:::DECIMAL)`, tree.FmtCheckEquivalence,
-			`(123:::INT, 123:::DECIMAL)`},
+			`(123:::INT8, 123:::DECIMAL)`},
 
 		{`(1, COALESCE(NULL, 123), ARRAY[45.6])`, tree.FmtHideConstants,
 			`(_, COALESCE(_, _), ARRAY[_])`},
@@ -307,7 +309,7 @@ func TestFormatExpr2(t *testing.T) {
 				},
 			}, tree.DNull, tree.NewDString("foo")),
 			tree.FmtParsable,
-			`(NULL::INT, 'foo':::STRING)`,
+			`(NULL::INT8, 'foo':::STRING)`,
 		},
 		{tree.NewDTuple(
 			types.TTuple{

@@ -799,7 +799,7 @@ project
       │    │    ├── scan t
       │    │    │    └── columns: a:1(string) t.rowid:2(int!null)
       │    │    └── projections
-      │    │         └── cast: INT [type=int]
+      │    │         └── cast: INT8 [type=int]
       │    │              └── variable: a [type=string]
       │    └── aggregations
       │         ├── max [type=string]
@@ -823,7 +823,7 @@ project
                                │         └── zip
                                │              └── function: generate_series [type=int]
                                │                   ├── const: 0 [type=int]
-                               │                   └── cast: INT [type=int]
+                               │                   └── cast: INT8 [type=int]
                                │                        └── variable: b [type=string]
                                └── const: 1 [type=int]
 

@@ -1702,7 +1702,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1722,12 +1722,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// Create a column that is not NULL. This schema change doesn't return an
 		// error only because we've turned off the synchronous execution path; it
 		// will eventually fail when run by the asynchronous path.
-		{`ALTER TABLE t.public.test ADD COLUMN a INT UNIQUE DEFAULT 0, ADD COLUMN c INT`,
+		{`ALTER TABLE t.public.test ADD COLUMN a INT8 UNIQUE DEFAULT 0, ADD COLUMN c INT8`,
 			jobs.StatusFailed},
 		// Add an index over a column that will be purged. This index will
 		// eventually not get added. The column aa will also be dropped as
 		// a result.
-		{`ALTER TABLE t.public.test ADD COLUMN aa INT, ADD CONSTRAINT foo UNIQUE (a)`,
+		{`ALTER TABLE t.public.test ADD COLUMN aa INT8, ADD CONSTRAINT foo UNIQUE (a)`,
 			jobs.StatusFailed},
 
 		// The purge of column 'a' doesn't influence these schema changes.
@@ -1737,7 +1737,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			jobs.StatusSucceeded},
 		// Add unique column 'b' moves along creating column b and the index on
 		// it.
-		{`ALTER TABLE t.public.test ADD COLUMN b INT UNIQUE`,
+		{`ALTER TABLE t.public.test ADD COLUMN b INT8 UNIQUE`,
 			jobs.StatusSucceeded},
 		// #27033: Add a column followed by an index on the column.
 		{`ALTER TABLE t.public.test ADD COLUMN d STRING NOT NULL DEFAULT 'something'`,
@@ -1749,7 +1749,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// Add an index over a column 'c' that will be purged. This index will
 		// eventually not get added. The column bb will also be dropped as
 		// a result.
-		{`ALTER TABLE t.public.test ADD COLUMN bb INT, ADD CONSTRAINT bar UNIQUE (c)`,
+		{`ALTER TABLE t.public.test ADD COLUMN bb INT8, ADD CONSTRAINT bar UNIQUE (c)`,
 			jobs.StatusFailed},
 		// Cascading of purges. column 'c' -> column 'bb' -> constraint 'idx_bb'.
 		{`ALTER TABLE t.public.test ADD CONSTRAINT idx_bb UNIQUE (bb)`,
@@ -2234,9 +2234,9 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (
-    k INT NOT NULL,
-    v INT,
-    length INT NOT NULL,
+    k INT8 NOT NULL,
+    v INT8,
+    length INT8 NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (k),
     INDEX v_idx (v),
     FAMILY "primary" (k, v, length)
@@ -2254,7 +2254,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT NOT NULL DEFAULT 2, ADD u INT NOT NULL AS (v+1) STORED;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT8 NOT NULL DEFAULT 2, ADD u INT8 NOT NULL AS (v+1) STORED;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2266,7 +2266,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 
 	go func() {
 		// Create a column that uses the above column in an expression.
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD z INT AS (k + id) STORED;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2359,9 +2359,9 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 		t.Fatalf("expected table name %s, got %s", `test`, scanName)
 	}
 	expect := `CREATE TABLE test (
-	k INT NOT NULL,
-	v INT NULL,
-	length INT NOT NULL,
+	k INT8 NOT NULL,
+	v INT8 NULL,
+	length INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX v_idx (v ASC),
 	FAMILY "primary" (k, v, length)
@@ -2461,7 +2461,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
- CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+ CREATE TABLE t.test (k INT8 PRIMARY KEY, v INT8, pi DECIMAL DEFAULT (DECIMAL '3.14'));
  CREATE UNIQUE INDEX vidx ON t.test (v);
  `); err != nil {
 		t.Fatal(err)

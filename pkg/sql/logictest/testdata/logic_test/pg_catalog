@@ -509,7 +509,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 oid         relname  adrelid     adnum  adbin           adsrc
-1371742922  t1       4183203597  4      12:::INT        12:::INT
+1371742922  t1       4183203597  4      12:::INT8       12:::INT8
 3294137148  t2       192646233   2      unique_rowid()  unique_rowid()
 1821466931  t3       226054345   3      'FOO':::STRING  'FOO':::STRING
 437430594   t3       226054345   4      unique_rowid()  unique_rowid()
@@ -1294,13 +1294,13 @@ SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 column_name       data_type    is_nullable  column_default  generation_expression  indices  is_hidden
 datid             OID          true         NULL            ·                      {}       false
 datname           NAME         true         NULL            ·                      {}       false
-pid               INT          true         NULL            ·                      {}       false
+pid               INT8         true         NULL            ·                      {}       false
 usesysid          OID          true         NULL            ·                      {}       false
 username          NAME         true         NULL            ·                      {}       false
 application_name  STRING       true         NULL            ·                      {}       false
 client_addr       INET         true         NULL            ·                      {}       false
 client_hostname   STRING       true         NULL            ·                      {}       false
-client_port       INT          true         NULL            ·                      {}       false
+client_port       INT8         true         NULL            ·                      {}       false
 backend_start     TIMESTAMPTZ  true         NULL            ·                      {}       false
 xact_start        TIMESTAMPTZ  true         NULL            ·                      {}       false
 query_start       TIMESTAMPTZ  true         NULL            ·                      {}       false
@@ -1308,8 +1308,8 @@ state_change      TIMESTAMPTZ  true         NULL            ·                  
 wait_event_type   STRING       true         NULL            ·                      {}       false
 wait_event        STRING       true         NULL            ·                      {}       false
 state             STRING       true         NULL            ·                      {}       false
-backend_xid       INT          true         NULL            ·                      {}       false
-backend_xmin      INT          true         NULL            ·                      {}       false
+backend_xid       INT8         true         NULL            ·                      {}       false
+backend_xmin      INT8         true         NULL            ·                      {}       false
 query             STRING       true         NULL            ·                      {}       false
 
 
@@ -1512,7 +1512,7 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-1371742922  t1  12:::INT
+1371742922  t1  12:::INT8
 3294137148  t2  unique_rowid()
 1821466931  t3  'FOO':::STRING
 437430594   t3  unique_rowid()
