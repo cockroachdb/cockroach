@@ -57,7 +57,7 @@ const (
 
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
-	checkpointInterval = 10 * time.Second
+	checkpointInterval = 2 * time.Minute
 )
 
 var _ sort.Interface = columnsByID{}
