@@ -538,6 +538,14 @@
   revision = "78e682abcae4f96ac7ddbe39912967a5f7cbbaa6"
 
 [[projects]]
+  digest = "1:2cd7915ab26ede7d95b8749e6b1f933f1c6d5398030684e6505940a10f31cfda"
+  name = "github.com/ghodss/yaml"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "0ca9ea5df5451ffdf184b4428c902747c2c11cd7"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:31a18dae27a29aa074515e43a443abfd2ba6deb6d69309d8d7ce789c45f34659"
   name = "github.com/go-logfmt/logfmt"
   packages = ["."]
@@ -764,9 +772,10 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:7be12e5a5a28050be157797b1139715ce6a00c88a32ea0dd8cd26d218ce9bcd8"
+  digest = "1:69cd81163a00bb8405194d47b8be19283744779b6104f2d6b3735e2a01cdb6fa"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = [
+    "codegenerator",
     "protoc-gen-grpc-gateway",
     "protoc-gen-grpc-gateway/descriptor",
     "protoc-gen-grpc-gateway/generator",
@@ -777,16 +786,16 @@
     "utilities",
   ]
   pruneopts = "T"
-  revision = "07f5e79768022f9a3265235f0db4ac8c3f675fec"
-  version = "v1.3.1"
+  revision = "92583770e3f01b09a0d3e9bdf64321d8bebd48f2"
+  version = "v1.4.1"
 
 [[projects]]
   branch = "master"
-  digest = "1:a9038c7f193bc1ec81ecd0ddb8536d833d5043d87a61b38187826311b0d62fa4"
+  digest = "1:1a1206efd03a54d336dce7bb8719e74f2f8932f661cb9f57d5813a1d99c083d8"
   name = "github.com/grpc-ecosystem/grpc-opentracing"
   packages = ["go/otgrpc"]
   pruneopts = "UT"
-  revision = "a570af39704b9f3d4bb530d83192a99ea6337d5a"
+  revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
 
 [[projects]]
   branch = "master"
@@ -1560,24 +1569,24 @@
   revision = "f676e0f3ac6395ff1a529ae59a6670878a8371a6"
 
 [[projects]]
-  branch = "master"
-  digest = "1:d7b518c4058354dc5bb3f1dff2b818c2e173954dc4692735b3d1a764e6ba8328"
+  digest = "1:3a98314fd2e43bbd905b33125dad80b10111ba6e5e541db8ed2a953fe01fbb31"
   name = "google.golang.org/grpc"
   packages = [
     ".",
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
-    "channelz",
     "codes",
     "connectivity",
     "credentials",
     "encoding",
     "encoding/proto",
-    "grpclb/grpc_lb_v1/messages",
     "grpclog",
     "health/grpc_health_v1",
     "internal",
+    "internal/backoff",
+    "internal/channelz",
+    "internal/grpcrand",
     "keepalive",
     "metadata",
     "naming",
@@ -1591,7 +1600,8 @@
     "transport",
   ]
   pruneopts = "UT"
-  revision = "8f06f82ca394b1ac837d4b0c0cfa07188b0e9dee"
+  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
+  version = "v1.13.0"
 
 [[projects]]
   branch = "v2-encoding-style"
