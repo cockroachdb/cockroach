@@ -64,7 +64,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	// adjusted to reflect the lookahead (LA) that occurred.
 	if l.lastPos >= len(l.tokens) {
 		lval.id = 0
-		lval.pos = len(l.in)
+		lval.pos = int32(len(l.in))
 		lval.str = "EOF"
 		return 0
 	}
@@ -72,7 +72,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 
 	switch lval.id {
 	case NOT, WITH, AS:
-		nextID := 0
+		nextID := int32(0)
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
 		}
@@ -98,7 +98,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 		}
 	}
 
-	return lval.id
+	return int(lval.id)
 }
 
 func (l *lexer) lastToken() sqlSymType {
@@ -109,7 +109,7 @@ func (l *lexer) lastToken() sqlSymType {
 	if l.lastPos >= len(l.tokens) {
 		return sqlSymType{
 			id:  0,
-			pos: len(l.in),
+			pos: int32(len(l.in)),
 			str: "EOF",
 		}
 	}
@@ -168,7 +168,7 @@ func (l *lexer) Error(e string) {
 	if i == -1 {
 		i = len(l.in)
 	} else {
-		i += lastTok.pos
+		i += int(lastTok.pos)
 	}
 	// Find the beginning of the line containing the last token. Note that
 	// LastIndexByte returns -1 if '\n' could not be found.
@@ -177,7 +177,7 @@ func (l *lexer) Error(e string) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "source SQL:\n%s\n", l.in[:i])
 	// Output a caret indicating where the last token starts.
-	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", lastTok.pos-j))
+	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTok.pos)-j))
 	l.lastError.detail = buf.String()
 	l.lastError.unimplementedFeature = ""
 	l.lastError.hint = ""

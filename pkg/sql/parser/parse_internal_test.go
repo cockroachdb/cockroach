@@ -132,7 +132,7 @@ func TestScanOneStmt(t *testing.T) {
 			}
 			s := stmt{sql: sql}
 			for _, t := range tokens {
-				s.tok = append(s.tok, t.id)
+				s.tok = append(s.tok, int(t.id))
 			}
 			result = append(result, s)
 			if done {

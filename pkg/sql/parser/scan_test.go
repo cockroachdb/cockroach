@@ -111,7 +111,7 @@ func TestScanner(t *testing.T) {
 			if lval.id == 0 {
 				break
 			}
-			tokens = append(tokens, lval.id)
+			tokens = append(tokens, int(lval.id))
 		}
 
 		if !reflect.DeepEqual(d.expected, tokens) {
@@ -159,7 +159,7 @@ func TestScanKeyword(t *testing.T) {
 		s := makeScanner(kwName)
 		var lval sqlSymType
 		s.scan(&lval)
-		if kwID.Tok != lval.id {
+		if int32(kwID.Tok) != lval.id {
 			t.Errorf("%s: expected %d, but found %d", kwName, kwID.Tok, lval.id)
 		}
 	}
@@ -199,7 +199,7 @@ func TestScanNumber(t *testing.T) {
 		s := makeScanner(d.sql)
 		var lval sqlSymType
 		s.scan(&lval)
-		if d.id != lval.id {
+		if d.id != int(lval.id) {
 			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.id)
 		}
 		if d.expected != lval.str {

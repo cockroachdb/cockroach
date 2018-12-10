@@ -565,8 +565,8 @@ func newNameFromStr(s string) *tree.Name {
 %token NOT_LA WITH_LA AS_LA
 
 %union {
-  id    int
-  pos   int
+  id    int32
+  pos   int32
   str   string
   union sqlSymUnion
 }
