@@ -279,7 +279,7 @@ project
                 ├── fd: ()-->(12)
                 ├── prune: (12)
                 ├── scan xysd
-                │    ├── columns: xysd.x:4(int!null) xysd.y:5(int) xysd.s:6(string) xysd.d:7(decimal!null)
+                │    ├── columns: x:4(int!null) y:5(int) s:6(string) d:7(decimal!null)
                 │    ├── key: (4)
                 │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                 │    ├── prune: (4-7)
@@ -287,14 +287,14 @@ project
                 └── projections
                      └── exists [type=bool, outer=(1)]
                           └── project
-                               ├── columns: xysd.y:9(int)
+                               ├── columns: y:9(int)
                                ├── outer: (1)
                                ├── cardinality: [0 - 1]
                                ├── key: ()
                                ├── fd: ()-->(9)
                                ├── prune: (9)
                                └── select
-                                    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    ├── columns: x:8(int!null) y:9(int) s:10(string) d:11(decimal!null)
                                     ├── outer: (1)
                                     ├── cardinality: [0 - 1]
                                     ├── key: ()
@@ -302,14 +302,14 @@ project
                                     ├── prune: (9-11)
                                     ├── interesting orderings: (+8) (-10,+11,+8)
                                     ├── scan xysd
-                                    │    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    │    ├── columns: x:8(int!null) y:9(int) s:10(string) d:11(decimal!null)
                                     │    ├── key: (8)
                                     │    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
                                     │    ├── prune: (8-11)
                                     │    └── interesting orderings: (+8) (-10,+11,+8)
                                     └── filters
                                          └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-                                              ├── variable: xysd.x [type=int]
+                                              ├── variable: x [type=int]
                                               └── variable: k [type=int]
 
 # We have the FD: y --> y::TEXT.

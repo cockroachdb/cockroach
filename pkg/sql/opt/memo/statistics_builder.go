@@ -331,8 +331,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
-	case opt.InsertOp:
-		return sb.colStatInsert(colSet, e.(*InsertExpr))
+	case opt.InsertOp, opt.UpdateOp:
+		return sb.colStatMutation(colSet, e)
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
@@ -1839,27 +1839,27 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	return colStat
 }
 
-// +--------+
-// | Insert |
-// +--------+
+// +----------------+
+// | Insert, Update |
+// +----------------+
 
-func (sb *statisticsBuilder) buildInsert(ins *InsertExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Relational) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 
-	inputStats := &ins.Input.Relational().Stats
+	inputStats := &mutation.Child(0).(RelExpr).Relational().Stats
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatInsert(
-	colSet opt.ColSet, ins *InsertExpr,
+func (sb *statisticsBuilder) colStatMutation(
+	colSet opt.ColSet, mutation RelExpr,
 ) *props.ColumnStatistic {
-	return sb.colStat(colSet, ins.Input)
+	return sb.colStat(colSet, mutation.Child(0).(RelExpr))
 }
 
 /////////////////////////////////////////////////

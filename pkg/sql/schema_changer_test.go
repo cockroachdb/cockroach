@@ -2318,11 +2318,11 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 
 	// Ensure that the newly added column cannot be supplied with any values.
 	if _, err := sqlDB.Exec(`UPDATE t.test SET id = 27000 WHERE k = 2`); !testutils.IsError(err,
-		`column "id" does not exist`) {
+		`column "id" does not exist`) && !testutils.IsError(err, `column "id" is being backfilled`) {
 		t.Errorf("err = %+v", err)
 	}
 	if _, err := sqlDB.Exec(`UPDATE t.test SET id = NULL WHERE k = 2`); !testutils.IsError(err,
-		`column "id" does not exist`) {
+		`column "id" does not exist`) && !testutils.IsError(err, `column "id" is being backfilled`) {
 		t.Errorf("err = %+v", err)
 	}
 	if _, err := sqlDB.Exec(`UPSERT INTO t.test(k, v, id) VALUES (2, 3, 234)`); !testutils.IsError(
@@ -2334,11 +2334,13 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 		t.Errorf("err = %+v", err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, id) VALUES (4, 5, 270)`); !testutils.IsError(
-		err, `column "id" does not exist`) {
+		err, `column "id" does not exist`) && !testutils.IsError(
+		err, `column "id" is being backfilled`) {
 		t.Errorf("err = %+v", err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO t.test(k, v, id) VALUES (4, 5, NULL)`); !testutils.IsError(
-		err, `column "id" does not exist`) {
+		err, `column "id" does not exist`) && !testutils.IsError(
+		err, `column "id" is being backfilled`) {
 		t.Errorf("err = %+v", err)
 	}
 

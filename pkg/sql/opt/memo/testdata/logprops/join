@@ -360,13 +360,13 @@ right-join
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
+ │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
  │         ├── key: (1)
  │         ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── prune: (2-4)
  │         ├── interesting orderings: (+1) (-3,+4,+1)
  │         ├── left-join-apply
- │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
+ │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
  │         │    ├── prune: (2-4)
@@ -379,34 +379,34 @@ right-join
  │         │    │    ├── prune: (1-4)
  │         │    │    └── interesting orderings: (+1) (-3,+4,+1)
  │         │    ├── max1-row
- │         │    │    ├── columns: uv.u:8(int!null)
+ │         │    │    ├── columns: u:8(int!null)
  │         │    │    ├── outer: (1)
  │         │    │    ├── cardinality: [0 - 1]
  │         │    │    ├── key: ()
  │         │    │    ├── fd: ()-->(8)
  │         │    │    └── offset
- │         │    │         ├── columns: uv.u:8(int!null)
+ │         │    │         ├── columns: u:8(int!null)
  │         │    │         ├── outer: (1)
  │         │    │         ├── fd: ()-->(8)
  │         │    │         ├── select
- │         │    │         │    ├── columns: uv.u:8(int!null)
+ │         │    │         │    ├── columns: u:8(int!null)
  │         │    │         │    ├── outer: (1)
  │         │    │         │    ├── fd: ()-->(8)
  │         │    │         │    ├── scan uv
- │         │    │         │    │    ├── columns: uv.u:8(int)
+ │         │    │         │    │    ├── columns: u:8(int)
  │         │    │         │    │    └── prune: (8)
  │         │    │         │    └── filters
  │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │    │         │              ├── variable: uv.u [type=int]
+ │         │    │         │              ├── variable: u [type=int]
  │         │    │         │              └── variable: x [type=int]
  │         │    │         └── const: 1 [type=int]
  │         │    └── filters (true)
  │         └── filters
  │              └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
- │                   ├── variable: uv.u [type=int]
+ │                   ├── variable: u [type=int]
  │                   └── null [type=unknown]
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: u:5(int) v:6(int!null)
  │    └── prune: (5,6)
  └── filters (true)
 
@@ -448,7 +448,7 @@ project
  ├── prune: (1-6)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── full-join-apply
-      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) u:8(int)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (2-6)
       ├── reject-nulls: (1-6,8)
@@ -460,40 +460,40 @@ project
       │    ├── prune: (1-4)
       │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── left-join
-      │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
+      │    ├── columns: u:5(int) v:6(int!null) u:8(int)
       │    ├── outer: (1)
       │    ├── fd: ()~~>(8)
       │    ├── prune: (5,6)
       │    ├── reject-nulls: (8)
       │    ├── scan uv
-      │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+      │    │    ├── columns: u:5(int) v:6(int!null)
       │    │    └── prune: (5,6)
       │    ├── max1-row
-      │    │    ├── columns: uv.u:8(int!null)
+      │    │    ├── columns: u:8(int!null)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(8)
       │    │    └── offset
-      │    │         ├── columns: uv.u:8(int!null)
+      │    │         ├── columns: u:8(int!null)
       │    │         ├── outer: (1)
       │    │         ├── fd: ()-->(8)
       │    │         ├── select
-      │    │         │    ├── columns: uv.u:8(int!null)
+      │    │         │    ├── columns: u:8(int!null)
       │    │         │    ├── outer: (1)
       │    │         │    ├── fd: ()-->(8)
       │    │         │    ├── scan uv
-      │    │         │    │    ├── columns: uv.u:8(int)
+      │    │         │    │    ├── columns: u:8(int)
       │    │         │    │    └── prune: (8)
       │    │         │    └── filters
       │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │         │              ├── variable: uv.u [type=int]
+      │    │         │              ├── variable: u [type=int]
       │    │         │              └── variable: x [type=int]
       │    │         └── const: 1 [type=int]
       │    └── filters (true)
       └── filters
            └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
-                ├── variable: uv.u [type=int]
+                ├── variable: u [type=int]
                 └── null [type=unknown]
 
 # Semi-join.
@@ -695,13 +695,13 @@ inner-join
  ├── prune: (1-8)
  ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
- │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
@@ -1102,28 +1102,28 @@ full-join
  ├── reject-nulls: (1-8)
  ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
  ├── limit
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
  │    ├── scan xysd
- │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    ├── prune: (1-4)
  │    │    └── interesting orderings: (+1) (-3,+4,+1)
  │    └── const: 1 [type=int]
  ├── limit
- │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(5-8)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
  │    ├── scan xysd
- │    │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
+ │    │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    │    ├── prune: (5-8)

@@ -947,3 +947,38 @@ SELECT
   c_id,
   ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
 FROM c ORDER BY c_id
+
+# ------------------------------------------------------------------------------
+# Regression test cases.
+# ------------------------------------------------------------------------------
+
+# Regression for issue 32786.
+
+statement ok
+CREATE TABLE t32786 (id UUID PRIMARY KEY, parent_id UUID, parent_path text)
+
+statement ok
+INSERT INTO t32786 VALUES ('3AAA2577-DBC3-47E7-9E85-9CC7E19CF48A', null)
+
+statement ok
+UPDATE t32786 as node
+SET parent_path=concat((SELECT parent.parent_path
+  FROM t32786 parent
+  WHERE parent.id=node.parent_id),
+  node.id::varchar, '/')
+
+statement ok
+INSERT INTO t32786 VALUES ('5AE7EAFD-8277-4F41-83DE-0FD4B4482169', '3AAA2577-DBC3-47E7-9E85-9CC7E19CF48A')
+
+statement ok
+UPDATE t32786 as node
+SET parent_path=concat((SELECT parent.parent_path
+  FROM t32786 parent
+  WHERE parent.id=node.parent_id),
+  node.id::varchar, '/')
+
+query T
+SELECT parent_path FROM t32786 ORDER BY id
+----
+3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/
+3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/5ae7eafd-8277-4f41-83de-0fd4b4482169/

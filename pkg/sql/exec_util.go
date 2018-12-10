@@ -113,6 +113,14 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 	},
 )
 
+// OptimizerUpdatesClusterMode controls the cluster default for when the cost-
+// based optimizer is planning UPDATE statements.
+var OptimizerUpdatesClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_optimizer_updates",
+	"default experimental_optimizer_updates mode",
+	false,
+)
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterBoolSetting(
@@ -1634,6 +1642,10 @@ func (m *sessionDataMutator) SetVectorize(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
 	m.data.OptimizerMode = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUpdates(val bool) {
+	m.data.OptimizerUpdates = val
 }
 
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {

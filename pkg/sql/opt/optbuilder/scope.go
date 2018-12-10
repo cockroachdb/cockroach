@@ -573,27 +573,39 @@ func (s *scope) FindSourceProvidingColumn(
 	// due to ambiguity. If no columns match in the current scope, we
 	// search the parent scope. If the column is not found in any of the
 	// ancestor scopes, we return an error.
+	reportBackfillError := false
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.name == colName {
-				if col.table.TableName == "" && !col.hidden {
-					if candidateFromAnonSource != nil {
-						moreThanOneCandidateFromAnonSource = true
-						break
-					}
-					candidateFromAnonSource = col
-				} else if !col.hidden {
-					if candidateWithPrefix != nil {
-						moreThanOneCandidateWithPrefix = true
-					}
-					candidateWithPrefix = col
-				} else if allowHidden {
-					if hiddenCandidate != nil {
-						moreThanOneHiddenCandidate = true
-					}
-					hiddenCandidate = col
+			if col.name != colName {
+				continue
+			}
+
+			// If the matching column is a mutation column, then act as if it's not
+			// present so that matches in higher scopes can be found. However, if
+			// no match is found in higher scopes, report a backfill error rather
+			// than a "not found" error.
+			if col.mutation {
+				reportBackfillError = true
+				continue
+			}
+
+			if col.table.TableName == "" && !col.hidden {
+				if candidateFromAnonSource != nil {
+					moreThanOneCandidateFromAnonSource = true
+					break
 				}
+				candidateFromAnonSource = col
+			} else if !col.hidden {
+				if candidateWithPrefix != nil {
+					moreThanOneCandidateWithPrefix = true
+				}
+				candidateWithPrefix = col
+			} else if allowHidden {
+				if hiddenCandidate != nil {
+					moreThanOneHiddenCandidate = true
+				}
+				hiddenCandidate = col
 			}
 		}
 
@@ -630,6 +642,9 @@ func (s *scope) FindSourceProvidingColumn(
 	// not cause colName to be allocated on the heap in the happy (no error) path
 	// above.
 	tmpName := colName
+	if reportBackfillError {
+		return nil, nil, -1, makeBackfillError(tmpName)
+	}
 	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&tmpName))
 }
 

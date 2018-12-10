@@ -162,21 +162,35 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		if len(t.InputCols) != tab.ColumnCount()+tab.MutationColumnCount() {
-			panic("values not provided for all table columns")
+		if len(t.InsertCols) != tab.ColumnCount() {
+			panic("count of insert columns does not match count of table columns")
 		}
 
-		// Output and ordering columns should never include mutation columns.
-		var mutationCols opt.ColSet
-		for i, n := tab.ColumnCount(), tab.MutationColumnCount(); i < n; i++ {
-			mutationCols.Add(int(t.InputCols[i]))
+		// Ensure that insert columns include all columns except for delete-only
+		// mutation columns (which do not need to be part of INSERT).
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			mut, ok := tab.Column(i).(*opt.MutationColumn)
+			if !ok || !mut.IsDeleteOnly {
+				if t.InsertCols[i] == 0 {
+					panic("insert values not provided for all table columns")
+				}
+			}
 		}
-		if t.Relational().OutputCols.Intersects(mutationCols) {
-			panic("output columns cannot include mutation columns")
+
+		m.checkMutationExpr(t, &t.MutationPrivate)
+
+	case *UpdateExpr:
+		tab := m.Metadata().Table(t.Table)
+		if len(t.FetchCols) != tab.ColumnCount() {
+			panic("count of fetch columns does not match count of table columns")
 		}
-		if t.Ordering.ColSet().Intersects(mutationCols) {
-			panic("ordering columns cannot include mutation columns")
+		if len(t.UpdateCols) != tab.ColumnCount() {
+			panic("count of update columns does not match count of table columns")
 		}
+		if t.InsertCols != nil {
+			panic("Update operator cannot have insert columns")
+		}
+		m.checkMutationExpr(t, &t.MutationPrivate)
 
 	case *ZigzagJoinExpr:
 		if len(t.LeftEqCols) != len(t.RightEqCols) {
@@ -200,6 +214,32 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	// Check orderings within operators.
 	checkExprOrdering(e)
+}
+
+func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
+	tab := m.Metadata().Table(private.Table)
+	var mutCols opt.ColSet
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		if _, ok := tab.Column(i).(*opt.MutationColumn); ok {
+			if len(private.InsertCols) > 0 {
+				mutCols.Add(int(private.InsertCols[i]))
+			}
+			if len(private.FetchCols) > 0 {
+				mutCols.Add(int(private.FetchCols[i]))
+			}
+			if len(private.UpdateCols) > 0 {
+				mutCols.Add(int(private.UpdateCols[i]))
+			}
+		}
+	}
+
+	// Output and ordering columns should never include mutation columns.
+	if rel.Relational().OutputCols.Intersects(mutCols) {
+		panic("output columns cannot include mutation columns")
+	}
+	if private.Ordering.ColSet().Intersects(mutCols) {
+		panic("ordering columns cannot include mutation columns")
+	}
 }
 
 // checkExprOrdering runs checks on orderings stored inside operators.

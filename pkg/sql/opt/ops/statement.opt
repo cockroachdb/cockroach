@@ -24,22 +24,70 @@
 define Insert {
     Input RelExpr
 
-    _ InsertPrivate
+    _ MutationPrivate
 }
 
 [Private]
-define InsertPrivate {
-    # Table identifies the table into which to insert. It is an id that can be
+define MutationPrivate {
+    # Table identifies the table which is being mutated. It is an id that can be
     # passed to the Metadata.Table method in order to fetch opt.Table metadata.
     Table TableID
 
-    # InputCols are columns from the Input expression that will be inserted into
+    # InsertCols are columns from the Input expression that will be inserted into
     # the target table. They must be a subset of the Input expression's output
-    # columns, but otherwise can be in any order. The count and order of columns
-    # corresponds to the count and order of the target table's columns; column
-    # values are read from the specified input columns and are then inserted into
-    # the corresponding table columns.
-    InputCols ColList
+    # columns. The count and order of columns corresponds to the count and order
+    # of the target table's columns, including in-progress schema mutation
+    # columns. If any column ID is zero, then that column will not be part of
+    # the insert operation (e.g. delete-only mutation column). Column values are
+    # read from the input columns and are then inserted into the corresponding
+    # table columns. For example:
+    #
+    #   INSERT INTO ab VALUES (1, 2)
+    #
+    # If there is a delete-only mutation column "c", then InsertCols would contain
+    # [id-a, id-b, 0].
+    InsertCols ColList
+
+    # FetchCols are columns from the Input expression that will be fetched from
+    # the target table. They must be a subset of the Input expression's output
+    # columns. The count and order of columns corresponds to the count and order
+    # of the target table's columns, including in-progress schema mutation
+    # columns. If any column ID is zero, then that column will not take part in
+    # the update operation (e.g. columns in unreferenced column family).
+    #
+    # Fetch columns are referenced by update, computed, and constraint
+    # expressions. They're also needed to formulate the final key/value pairs;
+    # updating even one column in a family requires the entire value to be
+    # reformulated. For example:
+    #
+    #   CREATE TABLE abcd (
+    #     a INT PRIMARY KEY, b INT, c INT, d INT, e INT,
+    #     FAMILY (a, b), FAMILY (c, d), FAMILY (e))
+    #   UPDATE ab SET c=c+1
+    #
+    # The (a, c, d) columns need to be fetched from the store in order to satisfy
+    # the UPDATE query. The "a" column is needed because it's in the primary key.
+    # The "c" column is needed because its value is used as part of computing an
+    # updated value, and the "d" column is needed because it's in the same family
+    # as "c". Taking all this into account, FetchCols would contain this list:
+    # [id-a, 0, id-c, id-d, 0].
+    FetchCols ColList
+
+    # UpdateCols are columns from the Input expression that contain updated values
+    # for columns of the target table. They must be a subset of the Input
+    # expression's output columns. The count and order of columns corresponds to
+    # the count and order of the target table's columns, including in-progress
+    # schema mutation columns. If any column ID is zero, then that column will not
+    # take part in the update operation (e.g. columns that are not updated).
+    # Updated column values are read from the input columns and are then inserted
+    # into the corresponding table columns. For example:
+    #
+    #   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT AS (b+1) AS STORED)
+    #   UPDATE abc SET b=1
+    #
+    # Since column "b" is updated, and "c" is a computed column dependent on "b",
+    # then UpdateCols would contain [0, id-b, id-c].
+    UpdateCols ColList
 
     # Ordering is the ordering required of the input expression. Rows will be
     # inserted into the target table in this order.
@@ -51,4 +99,22 @@ define InsertPrivate {
     # columns that are undergoing mutation (being added or dropped as part of
     # online schema change).
     NeedResults bool
+}
+
+# Update evaluates a relational input expression that fetches existing rows from
+# a target table and computes new values for one or more columns. The Update
+# operator uses the existing and new values from the input to update indexes,
+# evaluate check constraints and foreign keys, and update computed columns.
+# Arbitrary subsets of rows can be selected from the target table and processed
+# in order, as with this example:
+#
+#   UPDATE abc SET b=10 WHERE a>0 ORDER BY b+c LIMIT 10
+#
+# The Update operator will also update any computed columns, including mutation
+# columns that are computed.
+[Relational, Mutation]
+define Update {
+    Input RelExpr
+
+    _ MutationPrivate
 }
