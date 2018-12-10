@@ -69,7 +69,7 @@ func TestUnimplementedCounts(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	if _, err := db.Exec("CREATE TABLE t(x INT)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE t(x INT8)"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,7 +77,7 @@ func TestUnimplementedCounts(t *testing.T) {
 		t.Fatal("expected error, got no error")
 	}
 
-	if telemetry.GetFeatureCounts()["unimplemented.#9851.INT->STRING"] == 0 {
+	if telemetry.GetFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
 		t.Fatal("expected unimplemented telemetry, got nothing")
 	}
 }

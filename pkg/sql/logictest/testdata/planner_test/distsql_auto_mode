@@ -12,8 +12,8 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 query BT colnames
 EXPLAIN (DISTSQL) SELECT 1
 ----
-automatic url
-false     https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLBDEUhHt_xTKVQsBs-0q7bU45xEZSLMlwLq7JkpeAcOx_l00KsRCunJnk-3hXxBR4mr-okHeMcAZbTp6qKR9VfzCFb4g1WOJWy1E7A58yIVeUpayE4G1eK_XRwiCwzMvaiHZ4Gu7t4D9q_NQHGJwZA7MMo4hMp1e43SDV8svVMl8Isbu53X2mbikq_7j_JzsDhgv7fZpq9nzJyTdNj8_tXysCtfR17GGKfdrdfvcTAAD__5-jaAo= 
+automatic  url
+false      https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLxTAUhXd_RTmTQsB0kzu6dXnKQ1wkQ0kOz2JNSm4CwqP_XZoM4iA4nnOS7-NeEVPgaf6kQt4wwhlsOXmqpnxU_cEUviDWYIlbLUftDHzKhFxRlrISgtd5rdR7C4PAMi9rI9rhcbi1g3-v8UPvYHBmDMwyjCIynV4e4HaDVMsPWMt8IcTu5v_yM3VLUflL_jfZGTBc2A_UVLPnc06-aXp8av9aEailr2MPU-zT7vab7wAAAP__8hZoQg==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames

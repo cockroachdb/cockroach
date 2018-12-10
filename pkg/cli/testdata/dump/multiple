@@ -11,14 +11,14 @@ dump t f g
 ----
 ----
 CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
 CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
@@ -34,14 +34,14 @@ dump t
 ----
 ----
 CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
 CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
+	x INT8 NULL,
+	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 

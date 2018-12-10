@@ -4,11 +4,11 @@
 -
 CREATE TABLE t (
 	a
-		INT,
+		INT8,
 	b
-		INT,
+		INT8,
 	c
-		INT,
+		INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (
@@ -25,12 +25,12 @@ PARTITION BY LIST (
 	)
 )
 
-10:
-----------
+11:
+-----------
 CREATE TABLE t (
-	a INT,
-	b INT,
-	c INT,
+	a INT8,
+	b INT8,
+	c INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (
@@ -50,9 +50,9 @@ PARTITION BY LIST (
 23:
 -----------------------
 CREATE TABLE t (
-	a INT,
-	b INT,
-	c INT,
+	a INT8,
+	b INT8,
+	c INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (
@@ -70,9 +70,9 @@ PARTITION BY LIST (a) (
 27:
 ---------------------------
 CREATE TABLE t (
-	a INT,
-	b INT,
-	c INT,
+	a INT8,
+	b INT8,
+	c INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (i)
@@ -88,9 +88,9 @@ PARTITION BY LIST (a) (
 30:
 ------------------------------
 CREATE TABLE t (
-	a INT,
-	b INT,
-	c INT,
+	a INT8,
+	b INT8,
+	c INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (i)
@@ -104,9 +104,9 @@ PARTITION BY LIST (a) (
 31:
 -------------------------------
 CREATE TABLE t (
-	a INT,
-	b INT,
-	c INT,
+	a INT8,
+	b INT8,
+	c INT8,
 	PRIMARY KEY (a, b)
 )
 INTERLEAVE IN PARENT p2 (i)
@@ -115,9 +115,9 @@ PARTITION BY LIST (a) (
 	PARTITION p2 VALUES IN (2)
 )
 
-56:
---------------------------------------------------------
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b))
+59:
+-----------------------------------------------------------
+CREATE TABLE t (a INT8, b INT8, c INT8, PRIMARY KEY (a, b))
 INTERLEAVE IN PARENT p2 (i)
 PARTITION BY LIST (a) (
 	PARTITION p1 VALUES IN (1),
@@ -126,12 +126,12 @@ PARTITION BY LIST (a) (
 
 78:
 ------------------------------------------------------------------------------
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b))
+CREATE TABLE t (a INT8, b INT8, c INT8, PRIMARY KEY (a, b))
 INTERLEAVE IN PARENT p2 (i)
 PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
 
-163:
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT p2 (i) PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
+166:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE t (a INT8, b INT8, c INT8, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT p2 (i) PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
 
 

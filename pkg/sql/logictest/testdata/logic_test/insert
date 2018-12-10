@@ -535,7 +535,7 @@ subtest regression_26742
 statement ok
 CREATE TABLE ct(x INT, derived INT AS (x+1) STORED)
 
-statement error value type string doesn't match type INT of column "x"
+statement error value type string doesn't match type INT8 of column "x"
 INSERT INTO ct(x) SELECT c FROM sw
 
 subtest contraint_check_validation_ordering
@@ -598,7 +598,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE t29494 (
-   x INT NULL,
+   x INT8 NULL,
    FAMILY "primary" (x, rowid)
 )
 
