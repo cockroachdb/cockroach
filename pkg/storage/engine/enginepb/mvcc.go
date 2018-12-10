@@ -14,6 +14,8 @@
 
 package enginepb
 
+import "sort"
+
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
 	return t.ID.Short()
@@ -134,4 +136,28 @@ func (meta MVCCMetadata) IsInline() bool {
 func (meta *MVCCMetadata) AddToIntentHistory(seq int32, val []byte) {
 	meta.IntentHistory = append(meta.IntentHistory,
 		MVCCMetadata_SequencedIntent{Sequence: seq, Value: val})
+}
+
+// GetPrevIntentSeq goes through the intent history and finds the previous
+// intent's sequence number given the current sequence.
+func (meta *MVCCMetadata) GetPrevIntentSeq(seq int32) (int32, bool) {
+	index := sort.Search(len(meta.IntentHistory), func(i int) bool {
+		return meta.IntentHistory[i].Sequence >= seq
+	})
+	if index > 0 && index < len(meta.IntentHistory) {
+		return meta.IntentHistory[index-1].Sequence, true
+	}
+	return 0, false
+}
+
+// GetIntentValue goes through the intent history and finds the value
+// written at the sequence number.
+func (meta *MVCCMetadata) GetIntentValue(seq int32) ([]byte, bool) {
+	index := sort.Search(len(meta.IntentHistory), func(i int) bool {
+		return meta.IntentHistory[i].Sequence >= seq
+	})
+	if index < len(meta.IntentHistory) && meta.IntentHistory[index].Sequence == seq {
+		return meta.IntentHistory[index].Value, true
+	}
+	return nil, false
 }

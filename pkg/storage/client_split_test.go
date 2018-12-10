@@ -674,8 +674,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	_, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		Txn: &lTxn,
 	}, lIncArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected idempotency failure: %v", pErr)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Send out the same increment copied from above (same txn/sequence), but
@@ -684,8 +684,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		RangeID: newRng.RangeID,
 		Txn:     &rTxn,
 	}, rIncArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected idempotency failure: %v", pErr)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Compare stats of split ranges to ensure they are non zero and
