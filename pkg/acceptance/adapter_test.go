@@ -112,3 +112,11 @@ func TestDockerRuby(t *testing.T) {
 	testDockerSuccess(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 3"})
 	testDockerFail(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 1"})
 }
+
+func TestDockerGSS(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testDockerSuccess(ctx, t, "gss", []string{"/mnt/data/psql/test-gss.sh"})
+}

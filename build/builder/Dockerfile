@@ -260,7 +260,6 @@ RUN apt-get purge -y \
     apt-transport-https \
     automake \
     autopoint \
-    bison \
     bzip2 \
     file \
     flex \
