@@ -72,7 +72,6 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
 	descs   []metadataDescriptor
-	configs int
 	otherKV []roachpb.KeyValue
 }
 
@@ -101,13 +100,6 @@ func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 		}
 	}
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
-}
-
-// AddConfigDescriptor adds a new descriptor to the system schema. Used only for
-// SystemConfig tables and databases.
-func (ms *MetadataSchema) AddConfigDescriptor(parentID ID, desc DescriptorProto) {
-	ms.AddDescriptor(parentID, desc)
-	ms.configs++
 }
 
 // SystemDescriptorCount returns the number of descriptors that will be created by
