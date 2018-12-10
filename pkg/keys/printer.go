@@ -692,27 +692,28 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 	var r string
 	colIdx := -1
 	for i := 0; i < len(span); i++ {
-		d := -789
-		fmt.Sscanf(span[i:], "%d", &d)
-		if (dirs != nil) && (d != -789) {
-			// We've managed to consume an int.
-			dir := dirs[colIdx]
-			i += len(strconv.Itoa(d)) - 1
-			x := d
-			if dir == encoding.Descending {
-				x = ^x
+		if dirs != nil {
+			var d int
+			if _, err := fmt.Sscanf(span[i:], "%d", &d); err != nil {
+				// We've managed to consume an int.
+				dir := dirs[colIdx]
+				i += len(strconv.Itoa(d)) - 1
+				x := d
+				if dir == encoding.Descending {
+					x = ^x
+				}
+				r += strconv.Itoa(x)
+				continue
 			}
-			r += strconv.Itoa(x)
-		} else {
-			r += string(span[i])
-			switch span[i] {
-			case '/':
-				colIdx++
-			case '-', ' ':
-				// We're switching from the start constraints to the end constraints,
-				// or starting another span.
-				colIdx = -1
-			}
+		}
+		r += string(span[i])
+		switch span[i] {
+		case '/':
+			colIdx++
+		case '-', ' ':
+			// We're switching from the start constraints to the end constraints,
+			// or starting another span.
+			colIdx = -1
 		}
 	}
 	return r
