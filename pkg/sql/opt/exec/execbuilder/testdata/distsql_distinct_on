@@ -47,26 +47,26 @@ ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[4], '2', '3', '4'),
   (ARRAY[5], '3', '4', '5')
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /2       1         {1}       1
-/2         /4       2         {2}       2
-/4         /6       3         {3}       3
-/6         /7       4         {4}       4
-/7         NULL     5         {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /4       {2}       2
+/4         /6       {3}       3
+/6         /7       {4}       4
+/7         NULL     {5}       5
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE abc
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
 ----
-start_key        end_key          range_id  replicas  lease_holder
-NULL             /NULL/NULL/NULL  5         {5}       5
-/NULL/NULL/NULL  /"1"/"1"/"2"     21        {1}       1
-/"1"/"1"/"2"     /"1"/"2"/"2"     22        {2}       2
-/"1"/"2"/"2"     /"2"/"3"/"4"     23        {3}       3
-/"2"/"3"/"4"     /"3"/"4"/"5"     24        {4}       4
-/"3"/"4"/"5"     NULL             25        {5}       5
+start_key        end_key          replicas  lease_holder
+NULL             /NULL/NULL/NULL  {5}       5
+/NULL/NULL/NULL  /"1"/"1"/"2"     {1}       1
+/"1"/"1"/"2"     /"1"/"2"/"2"     {2}       2
+/"1"/"2"/"2"     /"2"/"3"/"4"     {3}       3
+/"2"/"3"/"4"     /"3"/"4"/"5"     {4}       4
+/"3"/"4"/"5"     NULL             {5}       5
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz

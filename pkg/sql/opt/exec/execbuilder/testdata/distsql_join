@@ -17,20 +17,20 @@ ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Verify data placement.
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE data
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /1       1         {1}       1
-/1         /2       2         {2}       2
-/2         /3       3         {3}       3
-/3         /4       4         {4}       4
-/4         /5       5         {5}       5
-/5         /6       6         {1}       1
-/6         /7       7         {2}       2
-/7         /8       8         {3}       3
-/8         /9       9         {4}       4
-/9         NULL     10        {5}       5
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
 
 # ensure merge joins are planned when there's orderings.
 query TTTTT
