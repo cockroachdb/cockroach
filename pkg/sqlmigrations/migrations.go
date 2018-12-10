@@ -190,8 +190,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addJobsProgress,
 	},
 	{
-		// Introduced in v2.1.
-		// TODO(hueypark): bake this migration into v2.2.
+		// Introduced in v2.2.
+		// TODO(knz): bake this migration into v2.3.
 		name:             "create system.comment table",
 		workFn:           createCommentTable,
 		newDescriptorIDs: staticIDs(keys.CommentsTableID),
