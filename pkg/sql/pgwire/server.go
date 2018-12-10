@@ -234,6 +234,28 @@ func MakeServer(
 			log.Warningf(ambientCtx.AnnotateCtx(context.Background()), "invalid %s: %v", serverHBAConfSetting, err)
 			conf = nil
 		}
+		// Usernames are normalized during session init. Normalize the HBA usernames
+		// in the same way.
+		for ie, entry := range conf.Entries {
+			// Check for an invalid conf method (for instance one that require an //
+			// enterprise license but there isn't one). If present, replace it with a //
+			// method that always returns the error. This is fairly hackey, but since
+			// we can't return an error message here and we don't have access to the
+			// executor config during setting validation, this may currently be the only
+			// way to do this.
+			if canFn := hbaCanAuthMethods[entry.Method]; canFn != nil {
+				fmt.Println("YES CANFN", entry.Method)
+				if canErr := canFn(executorConfig); canErr != nil {
+					name := fmt.Sprintf("err-%s", canErr.Error())
+					RegisterAuthMethod(name, authError(canErr), nil)
+					conf.Entries[ie].Method = name
+				}
+			}
+			for iu := range entry.User {
+				user := &entry.User[iu]
+				user.Value = tree.Name(user.Value).Normalize()
+			}
+		}
 		server.auth.conf = conf
 	})
 
