@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -59,9 +60,11 @@ import (
 //
 // Manager's zero value can be used directly.
 type Manager struct {
-	mu       syncutil.Mutex
-	idAlloc  uint64
-	scopes   [spanset.NumSpanScope]scopedManager
+	mu      syncutil.Mutex
+	idAlloc uint64
+	scopes  [spanset.NumSpanScope]scopedManager
+
+	stopper  *stop.Stopper
 	slowReqs *metric.Gauge
 }
 
@@ -72,10 +75,13 @@ type scopedManager struct {
 	trees   [spanset.NumSpanAccess]btree
 }
 
-// Init initializes the Manager. Calling the method is optional as the type's
-// zero value is valid to use directly.
-func (m *Manager) Init(slowReqs *metric.Gauge) {
-	m.slowReqs = slowReqs
+// Make returns an initialized Manager. Using this constructor is optional as
+// the type's zero value is valid to use directly.
+func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+	return Manager{
+		stopper:  stopper,
+		slowReqs: slowReqs,
+	}
 }
 
 // latches are stored in the Manager's btrees. They represent the latching
@@ -410,7 +416,12 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 				defer m.slowReqs.Dec(1)
 			}
 		case <-ctx.Done():
+			log.VEventf(ctx, 2, "%s while acquiring latches", ctx.Err())
 			return ctx.Err()
+		case <-m.stopper.ShouldQuiesce():
+			// While shutting down, requests may acquire
+			// latches and never release them.
+			return &roachpb.NodeUnavailableError{}
 		}
 	}
 }
