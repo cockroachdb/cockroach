@@ -234,6 +234,14 @@ func MakeServer(
 			log.Warningf(ambientCtx.AnnotateCtx(context.Background()), "invalid %s: %v", serverHBAConfSetting, err)
 			conf = nil
 		}
+		// Usernames are normalized during session init. Normalize the HBA usernames
+		// in the same way.
+		for _, entry := range conf.Entries {
+			for iu := range entry.User {
+				user := &entry.User[iu]
+				user.Value = tree.Name(user.Value).Normalize()
+			}
+		}
 		server.auth.conf = conf
 	})
 
