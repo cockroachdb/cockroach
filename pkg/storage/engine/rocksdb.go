@@ -1935,7 +1935,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.count == 0
+	return r.flushes == 0 && r.builder.count == 0 && !r.builder.logData
 }
 
 func (r *rocksDBBatch) Len() int {
