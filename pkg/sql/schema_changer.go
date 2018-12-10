@@ -58,7 +58,7 @@ var schemaChangeLeaseDuration = settings.RegisterNonNegativeDurationSetting(
 var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
 	"schemachanger.lease.renew_fraction",
 	"the fraction of schemachanger.lease_duration remaining to trigger a renew of the lease",
-	0.4,
+	0.5,
 )
 
 // This is a delay [0.9 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
