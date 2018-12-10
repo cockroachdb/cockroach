@@ -2891,9 +2891,10 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	}
 }
 
-// TestReplicaAbortSpanStoredTxnRetryError verifies that if a cached
-// entry is present, a transaction restart error is returned.
-func TestReplicaAbortSpanStoredTxnRetryError(t *testing.T) {
+// TestReplicaAbortSpanTxnIdempotency verifies that a TransactionAbortedError is
+// found when a put is tried on an aborted txn. It further verifies transactions
+// run successfully and in an idempotent manner when replaying the same requests.
+func TestReplicaAbortSpanTxnIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -2940,11 +2941,8 @@ func TestReplicaAbortSpanStoredTxnRetryError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
-	{
-		pErr := try()
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-			t.Fatal(pErr)
-		}
+	if pErr := try(); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Pretend we restarted by increasing the epoch. That's all that's needed.

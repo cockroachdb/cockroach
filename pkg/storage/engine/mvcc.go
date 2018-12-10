@@ -1236,14 +1236,91 @@ func mvccPutInternal(
 				(txn.Sequence < meta.Txn.Sequence ||
 					(txn.Sequence == meta.Txn.Sequence &&
 						txn.DeprecatedBatchIndex <= meta.Txn.DeprecatedBatchIndex)) {
-				// Replay error if we encounter an older sequence number or
-				// the same (or earlier) batch index for the same sequence.
-				// TODO(ridwanmsharif, nvanbenschoten): Use the IntentHistory here
-				// to figure out what should happen here.
-				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+				// Since transactions should be idempotent, we must be particularly careful
+				// about writing an intent if it was already written. If the sequence of the
+				// transaction is at or below one found in `meta.Txn` then we should
+				// simply assert the value we're trying to add against the value that was
+				// previously written at that sequence.
+				//
+				// 1) Firstly, we find the value previously written as part of the same sequence.
+				// 2) We then figure out the value the transaction is trying to write (either the
+				// value itself or the valueFn applied to the right previous value).
+				// 3) We assert that the transactional write is idempotent.
+				//
+				// Ensure all intents are found and that the values are always accurate for
+				// transactional idempotency.
+				writtenValue, found := meta.GetIntentValue(txn.Sequence)
+				if txn.Sequence == meta.Txn.Sequence {
+					// This is a special case. This is when the intent hasn't made it
+					// to the intent history yet. We must now assert the value written
+					// in the intent to the value we're trying to write.
+					getBuf := newGetBuffer()
+					defer getBuf.release()
+					getBuf.meta = buf.meta
+					var exVal *roachpb.Value
+					var err error
+					if exVal, _, _, err = mvccGetInternal(
+						ctx, iter, metaKey, timestamp, true /* consistent */, unsafeValue, txn, getBuf); err != nil {
+						return err
+					}
+					writtenValue = exVal.RawBytes
+					found = true
+				}
+				if !found {
+					return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
+						txn.ID, meta.Txn.Sequence, txn.Sequence)
+				}
+
+				// If the valueFn is specified, we must apply it to the would-be value at the key.
+				if valueFn != nil {
+					prevSeq, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence)
+					if prevValueWritten {
+						// If the previous value was found in the IntentHistory,
+						// simply apply the value function to the historic value
+						// to get the would-be value.
+						prevVal, _ := meta.GetIntentValue(prevSeq)
+						// TODO(ridwanmsharif): Confirm the timestamp is correct.
+						value, err = valueFn(&roachpb.Value{RawBytes: prevVal, Timestamp: txn.Timestamp})
+						if err != nil {
+							return err
+						}
+					} else {
+						// If the previous value at the key wasn't written by this transaction,
+						// we must apply the value function to the last committed value on the key.
+						getBuf := newGetBuffer()
+						defer getBuf.release()
+						getBuf.meta = buf.meta
+						var exVal *roachpb.Value
+						var err error
+
+						// Since we want the last committed value on the key, we must make
+						// an inconsistent read so we ignore our previous intents here.
+						// TODO(ridwanmsharif): txn is nil here so we don't get the
+						// "cannot allow inconsistent reads within a transaction" error.
+						// Confirm if this is okay!
+						if exVal, _, _, err = mvccGetInternal(
+							ctx, iter, metaKey, timestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf); err != nil {
+							return err
+						}
+						value, err = valueFn(exVal)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				// To ensure the transaction is idempotent, we must assert that the
+				// calculated value on this replay is the same as the one we've previously
+				// written.
+				if !bytes.Equal(value, writtenValue) {
+					return errors.Errorf("transaction %s has a different value %+v after recomputing from what was written: %+v",
+						txn.ID, value, writtenValue)
+				}
+				return nil
 			}
 
-			// We need the previous value written here for the intent history.
+			// We're overwriting the intent that was present at this key, before we do
+			// that though - we must record the older intent in the IntentHistory.
 			var prevIntentValBytes []byte
 			getBuf := newGetBuffer()
 			// Release the buffer after using the existing value.
