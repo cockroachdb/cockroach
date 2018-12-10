@@ -558,11 +558,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d90f0d96ae6a00bf358b7a987906738be420387492172deecdaa9f76f21e229c"
+  digest = "1:b57b31665db80eb5a00c672458ab53b1bec0bea386a247368f59ec9b522af120"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
   pruneopts = "UT"
-  revision = "fade21009797158e7b79e04c340118a9220c6f9e"
+  revision = "60d456a402782453be397030407e34decaf04d73"
 
 [[projects]]
   digest = "1:aba848b77ff362b03db51ac06379c36a120bc05b4cc6c5c74f6e6fa310454fa5"
@@ -821,7 +821,7 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:8dfbec76b4834d96c37ba4c4969fc47c9a15e67c5a7eecfa031fbe67dab50429"
+  digest = "1:6a5edb6e9ad91f22d33e01739bbabea324fed674c40bc4f7d60adb48235e8b48"
   name = "github.com/jackc/pgx"
   packages = [
     ".",
@@ -832,8 +832,8 @@
     "pgtype",
   ]
   pruneopts = "UT"
-  revision = "89f1e6ac7276b61d885db5e5aed6fcbedd1c7e31"
-  version = "v3.2.0"
+  revision = "c59c9cac59ab95eceb0c12ff338923c62f411ea2"
+  version = "v3.3.0"
 
 [[projects]]
   digest = "1:dcb3e2ad17349c0cc89ffc16692d05195e6a67b4924fe81760fba9a307a7271d"
@@ -931,15 +931,15 @@
   revision = "7cafcd837844e784b526369c9bce262804aebc60"
 
 [[projects]]
-  branch = "master"
-  digest = "1:199cbb6d6ddde69edc554fd60a3b572f38935e4e07bde559ca1b822fa590282e"
+  digest = "1:8ef506fc2bb9ced9b151dafa592d4046063d744c646c1bbe801982ce87e4bc24"
   name = "github.com/lib/pq"
   packages = [
     ".",
     "oid",
   ]
   pruneopts = "UT"
-  revision = "27ea5d92de30060e7121ddd543fe14e9a327e0cc"
+  revision = "4ded0e9383f75c197b3a2aaa6d590ac52df6fd79"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:5564b3c197ed2d0da59e49e95d950c2ae0640dc5902cdf14204f342a817c9ec2"
@@ -1527,10 +1527,11 @@
   revision = "9c79deebf7496e355d7e95d82d4af1fe4e769b2f"
 
 [[projects]]
-  digest = "1:a48f97fb737d5d61cf13e81cfef040942d217d086766b823757d39d4f6a4c547"
+  digest = "1:8c82ef9b816279a63d490dcdc37218c496923596e8d246c018ded6a0d3f8b59b"
   name = "google.golang.org/appengine"
   packages = [
     ".",
+    "cloudsql",
     "internal",
     "internal/app_identity",
     "internal/base",

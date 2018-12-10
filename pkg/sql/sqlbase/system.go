@@ -889,13 +889,13 @@ func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyVal
 // descriptors to the cockroach store.
 func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddConfigDescriptor(keys.RootNamespaceID, &SystemDB)
+	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &NamespaceTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &UsersTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
