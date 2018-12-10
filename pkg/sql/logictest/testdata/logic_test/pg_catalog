@@ -591,6 +591,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  ind
 633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
 633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
 961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1112802205  3710069875  3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                  0 0 0     0 0 0      NULL      NULL
 1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
 1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
 1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      1661428263 0           0 0       0 0        NULL      NULL
@@ -623,6 +624,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 633004885   0                           1
 633004886   0                           1
 961325075   0                           1
+1112802205  0                           1
+1112802205  0                           2
+1112802205  0                           3
 1168848597  0                           1
 1168848597  0                           2
 1849259112  0                           1

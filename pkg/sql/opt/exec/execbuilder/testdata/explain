@@ -156,6 +156,30 @@ sort                   ·       ·
 ·                      size    6 columns, 92 rows
 
 query TTT
+EXPLAIN SHOW TABLES WITH COMMENT
+----
+sort                                  ·         ·
+ │                                    order     +table_schema,+table_name
+ └── render                           ·         ·
+      └── join                        ·         ·
+           │                          type      left outer
+           │                          equality  (table_id) = (object_id)
+           ├── filter                 ·         ·
+           │    │                     filter    ((state = 'PUBLIC') OR (state IS NULL)) AND ((database_name = 'test') OR (database_name IS NULL))
+           │    └── join              ·         ·
+           │         │                type      left outer
+           │         │                equality  (table_name, table_catalog) = (name, database_name)
+           │         ├── filter       ·         ·
+           │         │    │           filter    table_schema = 'public'
+           │         │    └── values  ·         ·
+           │         │                size      6 columns, 92 rows
+           │         └── values       ·         ·
+           │                          size      13 columns, 16 rows
+           └── scan                   ·         ·
+·                                     table     comments@primary
+·                                     spans     ALL
+
+query TTT
 EXPLAIN SHOW DATABASE
 ----
 render            ·       ·
@@ -240,8 +264,7 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
            └── values  ·       ·
-·                      size    8 columns, 585 rows
-
+·                      size    8 columns, 600 rows
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo
