@@ -41,11 +41,15 @@ type Parser struct {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
-	return p.parseWithDepth(1, sql)
+	return p.parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
 }
 
-func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList, err error) {
+func (p *Parser) parseWithDepth(
+	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
+) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
+	p.scanner.nakedIntType = nakedIntType
+	p.scanner.nakedSerialType = nakedSerialType
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		var err *pgerror.Error
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
@@ -84,18 +88,34 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (tree.StatementList, error) {
-	return parseWithDepth(1, sql)
+	return parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
 }
 
-func parseWithDepth(depth int, sql string) (tree.StatementList, error) {
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, error) {
+	nakedSerialType := coltypes.Serial8
+	if nakedIntType == coltypes.Int4 {
+		nakedSerialType = coltypes.Serial4
+	}
+	return parseWithDepth(1, sql, nakedIntType, nakedSerialType)
+}
+
+func parseWithDepth(
+	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
+) (tree.StatementList, error) {
 	var p Parser
-	return p.parseWithDepth(depth+1, sql)
+	return p.parseWithDepth(depth+1, sql, nakedIntType, nakedSerialType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
-// single statement, and returns that Statement.
+// single statement, and returns that Statement. ParseOne will always
+// interpret the INT and SERIAL types as 64-bit types, since this is
+// used in various internal-execution paths where we might receive
+// bits of SQL from other nodes. In general, we expect that all
+// user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (tree.Statement, error) {
-	stmts, err := parseWithDepth(1, sql)
+	stmts, err := parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
 	if err != nil {
 		return nil, err
 	}
