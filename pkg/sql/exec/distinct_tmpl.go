@@ -82,7 +82,7 @@ type _GOTYPE interface{}
 
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
-const _TYPES_T = Unhandled
+const _TYPES_T = types.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
@@ -171,26 +171,14 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 		// Bounds check elimination.
 		sel = sel[startIdx:n]
 		for _, i := range sel {
-			v := col[i]
-			// Note that not inlining this unique var actually makes a non-trivial
-			// performance difference.
-			var unique bool
-			_ASSIGN_NE("unique", "v", "lastVal")
-			outputCol[i] = outputCol[i] || unique
-			lastVal = v
+			_INNER_LOOP(int(i), lastVal, col, outputCol)
 		}
 	} else {
 		// Bounds check elimination.
 		col = col[startIdx:n]
 		outputCol = outputCol[startIdx:n]
 		for i := range col {
-			v := col[i]
-			// Note that not inlining this unique var actually makes a non-trivial
-			// performance difference.
-			var unique bool
-			_ASSIGN_NE("unique", "v", "lastVal")
-			outputCol[i] = outputCol[i] || unique
-			lastVal = v
+			_INNER_LOOP(i, lastVal, col, outputCol)
 		}
 	}
 
@@ -201,3 +189,19 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 }
 
 // {{end}}
+
+// {{/*
+func _INNER_LOOP(i int, lastVal _GOTYPE, col []interface{}, outputCol []bool) { // */}}
+
+	// {{define "innerLoop"}}
+	v := col[i]
+	// Note that not inlining this unique var actually makes a non-trivial
+	// performance difference.
+	var unique bool
+	_ASSIGN_NE("unique", "v", "lastVal")
+	outputCol[i] = outputCol[i] || unique
+	lastVal = v
+	// {{end}}
+
+	// {{/*
+} // */}}
