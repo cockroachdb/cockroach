@@ -167,6 +167,8 @@ func NewOrderedAggregator(
 	for i := range aggFns {
 		var err error
 		switch aggFns[i] {
+		case distsqlpb.AggregatorSpec_ANY_NOT_NULL:
+			a.aggregateFuncs[i], err = newAnyNotNullAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_AVG:
 			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
