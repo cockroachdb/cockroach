@@ -27,9 +27,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,11 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
 )
 
@@ -358,7 +358,7 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.ReplicaID) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isFollowerActiveLocked(ctx, followerID)
+	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now())
 }
 
 func (r *Replica) CommandSizesLen() int {

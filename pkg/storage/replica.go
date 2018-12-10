@@ -245,6 +245,33 @@ func (s *destroyStatus) Reset() {
 	s.Set(nil, destroyReasonAlive)
 }
 
+// a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
+// last communication received from followers, which in turn informs the quota
+// pool and log truncations.
+type lastUpdateTimesMap map[roachpb.ReplicaID]time.Time
+
+func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
+	if m == nil {
+		return
+	}
+	m[replicaID] = now
+}
+
+// isFollowerActive returns whether the specified follower has made
+// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
+func (m lastUpdateTimesMap) isFollowerActive(
+	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time,
+) bool {
+	lastUpdateTime, ok := m[replicaID]
+	if !ok {
+		// If the follower has no entry in lastUpdateTimes, it has not been
+		// updated since r became the leader (at which point all then-existing
+		// replicas were updated).
+		return false
+	}
+	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -340,10 +367,19 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// The raft log index of a pending preemptive snapshot. Used to prohibit
-		// raft log truncation while a preemptive snapshot is in flight. A value of
-		// 0 indicates that there is no pending snapshot.
-		pendingSnapshotIndex uint64
+		// A map of raft log index of pending preemptive snapshots to deadlines.
+		// Used to prohibit raft log truncations that would leave a gap between
+		// the snapshot and the new first index. The map entry has a zero
+		// deadline while the snapshot is being sent and turns nonzero when the
+		// snapshot has completed, preventing truncation for a grace period
+		// (since there is a race between the snapshot completing and its being
+		// reflected in the raft status used to make truncation decisions).
+		//
+		// NB: If we kept only one value, we could end up in situations in which
+		// we're either giving some snapshots no grace period, or keep an
+		// already finished snapshot "pending" for extended periods of time
+		// (preventing log truncation).
+		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
 		// raftLogSize is the approximate size in bytes of the persisted raft log.
 		// On server restart, this value is assumed to be zero to avoid costly scans
 		// of the raft log. This will be correct when all log entries predating this
@@ -404,8 +440,21 @@ type Replica struct {
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
 
-		// The most recently updated time for each follower of this range.
-		lastUpdateTimes map[roachpb.ReplicaID]time.Time
+		// The most recently updated time for each follower of this range. This is updated
+		// every time a Raft message is received from a peer.
+		// Note that superficially it seems that similar information is contained in the
+		// Progress of a RaftStatus, which has a RecentActive field. However, that field
+		// is always true unless CheckQuorum is active, which at the time of writing in
+		// CockroachDB is not the case.
+		//
+		// TODO(tschottdorf): keeping a map on each replica seems to be
+		// overdoing it. We should map the replicaID to a NodeID and then use
+		// node liveness (or any sensible measure of the peer being around).
+		// The danger in doing so is that a single stuck replica on an otherwise
+		// functioning node could fill up the quota pool. We are already taking
+		// this kind of risk though: a replica that gets stuck on an otherwise
+		// live node will not lose leaseholdership.
+		lastUpdateTimes lastUpdateTimesMap
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -1115,6 +1164,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
+			now := timeutil.Now()
+			for _, desc := range r.mu.state.Desc.Replicas {
+				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+			}
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
@@ -1148,6 +1201,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 
 	// Find the minimum index that active followers have acknowledged.
+	now := timeutil.Now()
 	minIndex := status.Commit
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
@@ -1157,7 +1211,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that are active.
-		if !r.isFollowerActiveLocked(ctx, rep.ReplicaID) {
+		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
 			continue
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
@@ -1827,37 +1881,6 @@ func (r *Replica) setQueueLastProcessed(
 ) error {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	return r.store.DB().PutInline(ctx, key, &timestamp)
-}
-
-func (r *Replica) refreshLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) {
-	if r.mu.lastUpdateTimes != nil {
-		r.mu.lastUpdateTimes[replicaID] = r.store.Clock().PhysicalTime()
-	}
-}
-
-func (r *Replica) refreshLastUpdateTimeForAllReplicasLocked() {
-	if r.mu.lastUpdateTimes != nil {
-		now := r.store.Clock().PhysicalTime()
-		for _, rep := range r.mu.state.Desc.Replicas {
-			r.mu.lastUpdateTimes[rep.ReplicaID] = now
-		}
-	}
-}
-
-// isFollowerActiveLocked returns whether the specified follower has made
-// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
-func (r *Replica) isFollowerActiveLocked(ctx context.Context, followerID roachpb.ReplicaID) bool {
-	if r.mu.lastUpdateTimes == nil {
-		log.Fatalf(ctx, "replica %d has uninitialized lastUpdateTimes map", r.mu.replicaID)
-	}
-	lastUpdateTime, ok := r.mu.lastUpdateTimes[followerID]
-	if !ok {
-		// If the follower has no entry in lastUpdateTimes, it has not been
-		// updated since r became the leader.
-		return false
-	}
-	now := r.store.Clock().PhysicalTime()
-	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
@@ -3929,7 +3952,10 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		if campaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
-		r.refreshLastUpdateTimeForAllReplicasLocked()
+		now := timeutil.Now()
+		for _, desc := range r.mu.state.Desc.Replicas {
+			r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+		}
 	}
 }
 
@@ -3962,7 +3988,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// Note that we avoid campaigning when receiving raft messages, because
 		// we expect the originator to campaign instead.
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
-		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
+		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		err := raftGroup.Step(req.Message)
 		if err == raft.ErrProposalDropped {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -4975,6 +5001,16 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	if msg.Type == raftpb.MsgHeartbeat {
+		if r.mu.replicaID == 0 {
+			log.Fatalf(ctx, "preemptive snapshot attempted to send a heartbeat: %+v", msg)
+		}
+		// For followers, we update lastUpdateTimes when we step a message from
+		// them into the local Raft group. The leader won't hit that path, so we
+		// update it whenever it sends a heartbeat. In effect, this makes sure
+		// it always sees itself as alive.
+		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
+	}
 	r.mu.Unlock()
 
 	if fromErr != nil {
@@ -6725,26 +6761,67 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
-func (r *Replica) setPendingSnapshotIndex(index uint64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// We allow the pendingSnapshotIndex to change from 0 to 1 and then from 1 to
-	// a value greater than 1. Any other change indicates 2 current preemptive
-	// snapshots on the same replica which is disallowed.
-	if (index == 1 && r.mu.pendingSnapshotIndex != 0) ||
-		(index > 1 && r.mu.pendingSnapshotIndex != 1) {
-		return errors.Errorf(
-			"%s: can't set pending snapshot index to %d; pending snapshot already present: %d",
-			r, index, r.mu.pendingSnapshotIndex)
-	}
-	r.mu.pendingSnapshotIndex = index
-	return nil
+type snapTruncationInfo struct {
+	index    uint64
+	deadline time.Time
 }
 
-func (r *Replica) clearPendingSnapshotIndex() {
+func (r *Replica) addSnapshotLogTruncationConstraintLocked(
+	ctx context.Context, snapUUID uuid.UUID, index uint64,
+) {
+	if r.mu.snapshotLogTruncationConstraints == nil {
+		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
+	}
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if ok {
+		// Uh-oh, there's either a programming error (resulting in the same snapshot
+		// fed into this method twice) or a UUID collision. We discard the update
+		// (which is benign) but log it loudly. If the index is the same, it's
+		// likely the former, otherwise the latter.
+		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, index)
+		return
+	}
+
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{index: index}
+}
+
+func (r *Replica) completeSnapshotLogTruncationConstraint(
+	ctx context.Context, snapUUID uuid.UUID, now time.Time,
+) {
+	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
+
 	r.mu.Lock()
-	r.mu.pendingSnapshotIndex = 0
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	if !ok {
+		// UUID collision while adding the snapshot in originally. Nothing
+		// else to do.
+		return
+	}
+
+	item.deadline = deadline
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
+}
+
+func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
+	now time.Time,
+) (minSnapIndex uint64) {
+	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
+		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
+			// The snapshot has finished and its grace period has passed.
+			// Ignore it when making truncation decisions.
+			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+			continue
+		}
+		if minSnapIndex == 0 || minSnapIndex > item.index {
+			minSnapIndex = item.index
+		}
+	}
+	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
+		// Save a little bit of memory.
+		r.mu.snapshotLogTruncationConstraints = nil
+	}
+	return minSnapIndex
 }
 
 func (r *Replica) startKey() roachpb.RKey {
@@ -6834,7 +6911,7 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 
 func calcReplicaMetrics(
 	ctx context.Context,
-	now hlc.Timestamp,
+	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,

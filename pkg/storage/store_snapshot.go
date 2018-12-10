@@ -616,7 +616,7 @@ func sendSnapshot(
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)
+			return &benignError{errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)}
 		}
 		storePool.throttle(throttleFailed, to.StoreID)
 		return errors.Errorf("%s: programming error: remote declined required %s: %s",
