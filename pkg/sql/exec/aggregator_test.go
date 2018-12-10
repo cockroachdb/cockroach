@@ -19,15 +19,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-)
-
-// Mirrors AggregatorSpec_Func until we can import without a distsqlrun
-// dependency.
-const (
-	AVG = 1
-	SUM = 10
 )
 
 var (
@@ -35,7 +29,7 @@ var (
 	defaultGroupTypes = []types.T{types.Int64}
 	defaultAggCols    = [][]uint32{{1}}
 	defaultAggTypes   = [][]types.T{{types.Int64}}
-	defaultAggFns     = []int{SUM}
+	defaultAggFns     = []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM}
 )
 
 type aggregatorTestCase struct {
@@ -43,7 +37,7 @@ type aggregatorTestCase struct {
 	// before running a test if nil.
 	groupCols  []uint32
 	groupTypes []types.T
-	aggFns     []int
+	aggFns     []distsqlpb.AggregatorSpec_Func
 	aggCols    [][]uint32
 	aggTypes   [][]types.T
 	input      tuples
@@ -273,7 +267,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 func TestAggregatorMultiFunc(t *testing.T) {
 	testCases := []aggregatorTestCase{
 		{
-			aggFns: []int{SUM, SUM},
+			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -290,7 +284,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			name: "OutputOrder",
 		},
 		{
-			aggFns: []int{SUM, SUM},
+			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -311,7 +305,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			convToDecimal: true,
 		},
 		{
-			aggFns: []int{AVG, SUM},
+			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_AVG, distsqlpb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{1}, {1},
 			},
@@ -358,14 +352,8 @@ func TestAggregatorMultiFunc(t *testing.T) {
 func BenchmarkAggregator(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	for _, aggFn := range []int{SUM, AVG} {
-		fName := ""
-		switch aggFn {
-		case AVG:
-			fName = "AVG"
-		case SUM:
-			fName = "SUM"
-		}
+	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_AVG} {
+		fName := string(distsqlpb.AggregatorSpec_Func_name[int32(aggFn)])
 		b.Run(fName, func(b *testing.B) {
 			for _, groupSize := range []int{1, 2, ColBatchSize / 2, ColBatchSize} {
 				for _, numInputBatches := range []int{1, 2, 32, 64} {
@@ -386,7 +374,7 @@ func BenchmarkAggregator(b *testing.B) {
 						source,
 						[]uint32{0},
 						[]types.T{types.Int64},
-						[]int{aggFn},
+						[]distsqlpb.AggregatorSpec_Func{aggFn},
 						[][]uint32{{1}},
 						[][]types.T{{types.Decimal}},
 					)
