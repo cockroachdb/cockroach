@@ -699,14 +699,15 @@ PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_p
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
 EXECGEN_TARGETS = \
-	pkg/sql/exec/avg_agg.eg.go \
-  pkg/sql/exec/sum_agg.eg.go \
+  pkg/sql/exec/any_not_null_agg.eg.go \
+  pkg/sql/exec/avg_agg.eg.go \
+  pkg/sql/exec/colvec.eg.go \
   pkg/sql/exec/distinct.eg.go \
+  pkg/sql/exec/hashjoiner.eg.go \
   pkg/sql/exec/projection_ops.eg.go \
   pkg/sql/exec/rowstovec.eg.go \
   pkg/sql/exec/selection_ops.eg.go \
-  pkg/sql/exec/colvec.eg.go \
-  pkg/sql/exec/hashjoiner.eg.go
+  pkg/sql/exec/sum_agg.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1328,6 +1329,7 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
+pkg/sql/exec/any_not_null_agg.eg.go: pkg/sql/exec/any_not_null_agg_tmpl.go
 pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
 pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go

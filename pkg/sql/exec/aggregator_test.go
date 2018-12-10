@@ -349,14 +349,58 @@ func TestAggregatorMultiFunc(t *testing.T) {
 	}
 }
 
+func TestAggregatorAnyNotNull(t *testing.T) {
+	testCases := []aggregatorTestCase{
+		{
+			aggFns:   []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			aggCols:  [][]uint32{{2}, {1}},
+			aggTypes: [][]types.T{{types.Int64}, {types.Int64}},
+			input: tuples{
+				{0, 3, 2},
+				{0, 1, 3},
+				{1, 1, 1},
+				{1, 4, 0},
+			},
+			expected: tuples{
+				{5, 3},
+				{1, 1},
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			if err := tc.init(); err != nil {
+				t.Fatal(err)
+			}
+			runTests(t, []tuples{tc.input}, nil, func(t *testing.T, input []Operator) {
+				a, err := NewOrderedAggregator(
+					input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out := newOpTestOutput(a, []int{0, 1}, tc.expected)
+				if err := out.Verify(); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
 func BenchmarkAggregator(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_AVG} {
+	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{
+		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+		distsqlpb.AggregatorSpec_AVG,
+		distsqlpb.AggregatorSpec_SUM,
+	} {
 		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
-			for _, groupSize := range []int{1, 2, ColBatchSize / 2, ColBatchSize} {
-				for _, numInputBatches := range []int{1, 2, 32, 64} {
+			for _, groupSize := range []int{1, ColBatchSize / 2, ColBatchSize} {
+				for _, numInputBatches := range []int{1, 2, 64} {
 					batch := NewMemBatch([]types.T{types.Int64, types.Decimal})
 					groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
 					curGroup := 0
