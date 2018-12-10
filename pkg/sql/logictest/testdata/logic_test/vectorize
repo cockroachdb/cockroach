@@ -6,10 +6,6 @@ CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))
 statement ok
 INSERT INTO a SELECT g//2, g FROM generate_series(0,2000) g(g)
 
-# TODO(jordan): remove once #30000 is fixed.
-statement ok
-SET optimizer=off
-
 query I
 SELECT count(*) FROM a
 ----
@@ -119,3 +115,19 @@ SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
 ----
 0  1
 1  2
+
+statement ok
+CREATE TABLE b (a INT, b STRING, PRIMARY KEY (b,a))
+
+statement ok
+INSERT INTO b VALUES
+  (0, 'a'),
+  (1, 'a'),
+  (0, 'b'),
+  (1, 'b')
+
+query IT
+SELECT sum_int(a), b from b group by b
+----
+1 a
+1 b
