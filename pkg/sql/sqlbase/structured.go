@@ -117,6 +117,29 @@ type MutableTableDescriptor struct {
 // should be const.
 type ImmutableTableDescriptor struct {
 	TableDescriptor
+
+	// WritableColumns is a list of columns which are public or in the
+	// DELETE_AND_WRITE_ONLY state.
+	WritableColumns []ColumnDescriptor
+
+	// WritableIndexes is a list of indexes which are public or in the
+	// DELETE_AND_WRITE_ONLY state.
+	WritableIndexes []IndexDescriptor
+
+	// DeletableColumns is a list of public and non-public columns.
+	DeletableColumns []ColumnDescriptor
+
+	// DeletableIndexes is a list of public and non-public indexes.
+	DeletableIndexes []IndexDescriptor
+
+	// ReadableColumns is a list of columns (including those undergoing a schema change)
+	// which can be scanned. Columns in the process of a schema change
+	// are all set to nullable while column backfilling is still in
+	// progress, as mutation columns may have NULL values.
+	ReadableColumns []ColumnDescriptor
+
+	// DeleteOnlyIndexes is a list of indexes in the DELETE_ONLY state.
+	DeleteOnlyIndexes []IndexDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -179,7 +202,70 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	return &ImmutableTableDescriptor{TableDescriptor: tbl}
+	writableCols, deletableCols := tbl.Columns, tbl.Columns
+	writableIndexes, deletableIndexes := tbl.Indexes, tbl.Indexes
+
+	readableCols := tbl.Columns
+	var deleteOnlyIndexes []IndexDescriptor
+
+	if len(tbl.Mutations) > 0 {
+		deletableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
+		deletableIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
+		readableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
+
+		deletableCols = append(deletableCols, tbl.Columns...)
+		deletableIndexes = append(deletableIndexes, tbl.Indexes...)
+		readableCols = append(readableCols, tbl.Columns...)
+
+		// Fill up mutations into the column/index lists by placing the writable columns/indexes
+		// before the delete only columns/indexes.
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_AND_WRITE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					deletableIndexes = append(deletableIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					deletableCols = append(deletableCols, *col)
+				}
+			}
+		}
+
+		// Number of write-only indexes and columns.
+		numWriteIndexes, numWriteCols := len(deletableIndexes), len(deletableCols)
+
+		for _, m := range tbl.Mutations {
+			switch m.State {
+			case DescriptorMutation_DELETE_ONLY:
+				if idx := m.GetIndex(); idx != nil {
+					deletableIndexes = append(deletableIndexes, *idx)
+				} else if col := m.GetColumn(); col != nil {
+					deletableCols = append(deletableCols, *col)
+				}
+			}
+		}
+
+		// Iterate through all mutation columns.
+		for _, c := range deletableCols[len(tbl.Columns):] {
+			// Mutation column may need to be fetched, but may not be completely backfilled
+			// and have be null values (even though they may be configured as NOT NULL).
+			c.Nullable = true
+			readableCols = append(readableCols, c)
+		}
+
+		writableCols = deletableCols[:numWriteCols]
+
+		writableIndexes = deletableIndexes[:numWriteIndexes]
+		deleteOnlyIndexes = deletableIndexes[numWriteIndexes:]
+	}
+	return &ImmutableTableDescriptor{
+		TableDescriptor:   tbl,
+		WritableColumns:   writableCols,
+		WritableIndexes:   writableIndexes,
+		DeletableColumns:  deletableCols,
+		DeletableIndexes:  deletableIndexes,
+		ReadableColumns:   readableCols,
+		DeleteOnlyIndexes: deleteOnlyIndexes,
+	}
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
@@ -1931,16 +2017,19 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
-// FindInactiveColumnByID finds the inactive column with specified ID.
-func (desc *TableDescriptor) FindInactiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
-	for _, m := range desc.Mutations {
-		if c := m.GetColumn(); c != nil {
-			if c.ID == id {
-				return c, nil
-			}
+// FindReadableColumnByID finds the readable column with specified ID. The
+// column may be undergoing a schema change and is marked nullable regardless
+// of its configuration. It returns true if the column is undergoing a
+// schema change.
+func (desc *ImmutableTableDescriptor) FindReadableColumnByID(
+	id ColumnID,
+) (*ColumnDescriptor, bool, error) {
+	for i, c := range desc.ReadableColumns {
+		if c.ID == id {
+			return &desc.ReadableColumns[i], i >= len(desc.Columns), nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+	return nil, false, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // FindFamilyByID finds the family with specified ID.

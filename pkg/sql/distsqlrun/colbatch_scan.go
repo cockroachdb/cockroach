@@ -122,29 +122,18 @@ func initCRowFetcher(
 	isCheck bool,
 	scanVisibility distsqlpb.ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
+	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	cols := desc.Columns
+	cols := immutDesc.Columns
 	if scanVisibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		if len(desc.Mutations) > 0 {
-			cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-			cols = append(cols, desc.Columns...)
-			for _, mutation := range desc.Mutations {
-				if c := mutation.GetColumn(); c != nil {
-					col := *c
-					// Even if the column is non-nullable it can be null in the
-					// middle of a schema change.
-					col.Nullable = true
-					cols = append(cols, col)
-				}
-			}
-		}
+		cols = immutDesc.ReadableColumns
 	}
 	tableArgs := row.FetcherTableArgs{
-		Desc:             sqlbase.NewImmutableTableDescriptor(*desc),
+		Desc:             immutDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
