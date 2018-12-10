@@ -165,7 +165,7 @@ func CreateDocker(
 		log.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
 	}
 
-	cli, err := client.NewEnvClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	maybePanic(err)
 
 	cli.NegotiateAPIVersion(ctx)
