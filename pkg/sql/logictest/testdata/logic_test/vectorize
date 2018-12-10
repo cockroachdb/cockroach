@@ -92,6 +92,14 @@ SELECT (a + 1.0::DECIMAL)::INT FROM a LIMIT 1
 ----
 1
 
+# Operations with constants on the left work.
+query I
+SELECT 5 - a FROM a LIMIT 3
+----
+5
+5
+4
+
 # Mismatched column types in projection. Not handled yet but should fall back
 # gracefully.
 statement ok

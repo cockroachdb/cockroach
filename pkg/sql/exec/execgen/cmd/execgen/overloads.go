@@ -70,6 +70,7 @@ type overload struct {
 	OpStr   string
 	LTyp    types.T
 	RTyp    types.T
+	LGoType string
 	RGoType string
 	RetTyp  types.T
 
@@ -133,6 +134,7 @@ func init() {
 				OpStr:   binaryOpInfix[op],
 				LTyp:    t,
 				RTyp:    t,
+				LGoType: t.GoTypeName(),
 				RGoType: t.GoTypeName(),
 				RetTyp:  t,
 			}
@@ -153,6 +155,7 @@ func init() {
 				OpStr:   opStr,
 				LTyp:    t,
 				RTyp:    t,
+				LGoType: t.GoTypeName(),
 				RGoType: t.GoTypeName(),
 				RetTyp:  types.Bool,
 			}
