@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
       - name: cluster-init
-        image: cockroachdb/cockroach:v2.1.1
+        image: cockroachdb/cockroach:v2.1.2
         imagePullPolicy: IfNotPresent
         command:
           - "/cockroach/cockroach"
