@@ -328,7 +328,7 @@ create_ddl_stmt ::=
 	| create_sequence_stmt
 
 create_stats_stmt ::=
-	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name opt_as_of_clause
+	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_as_of_clause
 
 opt_with_clause ::=
 	with_clause
@@ -947,6 +947,13 @@ create_sequence_stmt ::=
 
 statistics_name ::=
 	name
+
+opt_stats_columns ::=
+	'ON' name_list
+	| 
+
+create_stats_target ::=
+	table_name
 
 with_clause ::=
 	'WITH' cte_list
