@@ -135,3 +135,30 @@ func (meta *MVCCMetadata) AddToIntentHistory(seq int32, val []byte) {
 	meta.IntentHistory = append(meta.IntentHistory,
 		MVCCMetadata_SequencedIntent{Sequence: seq, Value: val})
 }
+
+// GetPrevIntentSeq goes through the intent history and finds the previous
+// intents sequence number given the current sequence
+func (meta *MVCCMetadata) GetPrevIntentSeq(seq int32) (prevSeq int32, found bool) {
+	for i := len(meta.IntentHistory) - 1; i > 0; i-- {
+		intent := meta.IntentHistory[i]
+		if seq == intent.Sequence {
+			prevSeq = meta.IntentHistory[i-1].Sequence
+			found = true
+			break
+		}
+	}
+	return prevSeq, found
+}
+
+// GetIntentValue goes through the intent history and finds the value
+// written at the sequence number.
+func (meta *MVCCMetadata) GetIntentValue(seq int32) (val []byte, found bool) {
+	for _, intent := range meta.IntentHistory {
+		if seq == intent.Sequence {
+			found = true
+			val = intent.Value
+			break
+		}
+	}
+	return val, found
+}

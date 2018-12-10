@@ -1236,11 +1236,50 @@ func mvccPutInternal(
 				(txn.Sequence < meta.Txn.Sequence ||
 					(txn.Sequence == meta.Txn.Sequence &&
 						txn.DeprecatedBatchIndex <= meta.Txn.DeprecatedBatchIndex)) {
-				// Replay error if we encounter an older sequence number or
-				// the same (or earlier) batch index for the same sequence.
-				// TODO(ridwanmsharif, nvanbenschoten): Use the IntentHistory here
-				// to figure out what should happen here.
-				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+				// Find the previous value at this key so the current value can be computed.
+				// If a previous intent value doesn't exist, get the last versioned value
+				// and apply the valueFn where necessary.
+				prevSeq, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence)
+				if prevValueWritten {
+					prevVal, _ := meta.GetIntentValue(prevSeq)
+					// If valueFn is specified, apply valueFn to previously written value.
+					if valueFn != nil {
+						// TODO(ridwanmsharif): Confirm the timestamp is correct.
+						value, err = valueFn(&roachpb.Value{RawBytes: prevVal, Timestamp: txn.Timestamp})
+						if err != nil {
+							return err
+						}
+					}
+				} else {
+					// if valueFn is specified, apply valueFn to previously written value.
+					if valueFn != nil {
+						// Since the previous value isn't stored in the intent history, we
+						// get the value ourselves before we apply valueFn.
+						getBuf := newGetBuffer()
+						defer getBuf.release()
+						getBuf.meta = buf.meta // initialize get metadata from what we've already read
+						var exVal *roachpb.Value
+						var err error
+						if exVal, _, _, err = mvccGetInternal(
+							ctx, iter, metaKey, timestamp, false /* consistent */, safeValue, txn, getBuf); err != nil {
+							return err
+						}
+						value, err = valueFn(exVal)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				// Assert that the value computed is the same as the value written previously.
+				writtenValue, found := meta.GetIntentValue(txn.Sequence)
+				if !found {
+					return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
+						txn.ID, meta.Txn.Sequence, txn.Sequence)
+				} else if !bytes.Equal(value, writtenValue) {
+					return errors.Errorf("transaction %s has a different value %+v after recomputing from what was written: %+v",
+						txn.ID, value, writtenValue)
+				}
+				return nil
 			}
 
 			// We need the previous value written here for the intent history.

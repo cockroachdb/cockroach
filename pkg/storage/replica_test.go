@@ -2940,11 +2940,8 @@ func TestReplicaAbortSpanStoredTxnRetryError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
-	{
-		pErr := try()
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-			t.Fatal(pErr)
-		}
+	if pErr := try(); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Pretend we restarted by increasing the epoch. That's all that's needed.

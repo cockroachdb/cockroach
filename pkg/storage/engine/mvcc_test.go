@@ -3302,11 +3302,11 @@ func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
 		batchIndex int32
 		expRetry   bool
 	}{
-		{1, 0, true},  // old sequence old batch index
-		{1, 1, true},  // old sequence, same batch index
-		{1, 2, true},  // old sequence, new batch index
-		{2, 0, true},  // same sequence, old batch index
-		{2, 1, true},  // same sequence, same batch index
+		{1, 0, false}, // old sequence old batch index
+		{1, 1, false}, // old sequence, same batch index
+		{1, 2, false}, // old sequence, new batch index
+		{2, 0, false}, // same sequence, old batch index
+		{2, 1, false}, // same sequence, same batch index
 		{2, 2, false}, // same sequence, new batch index
 		{3, 0, false}, // new sequence, old batch index
 		{3, 1, false}, // new sequence, same batch index
