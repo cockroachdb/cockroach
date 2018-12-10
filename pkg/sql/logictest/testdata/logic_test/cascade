@@ -3272,30 +3272,19 @@ statement ok
 INSERT INTO a VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
 INSERT INTO b VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
 
-# Note that these match our current incorrect style of MATCH FULL and allow
-# matching of NULLs if one exists in the referencing table.
+# Note that these matches use MATCH SIMPLE.
 
-statement ok
-DELETE FROM a WHERE y = 1;
-
+# What we start with.
 query II colnames
 SELECT * FROM b ORDER BY x, y;
 ----
 x    y
 NULL NULL
+NULL 1
 2    NULL
 3    3
 
-statement ok
-DELETE FROM a WHERE x = 2;
-
-query II colnames
-SELECT * FROM b ORDER BY x, y;
-----
-x    y
-NULL NULL
-3    3
-
+# Remove everything from a. x=3,y=3 should be the only cascading values.
 statement ok
 DELETE FROM a;
 
@@ -3305,7 +3294,10 @@ SELECT * FROM b ORDER BY x, y;
 ----
 x    y
 NULL NULL
+NULL 1
+2    NULL
 
+# Make sure that a is now empty.
 query II colnames
 SELECT * FROM a ORDER BY x;
 ----
@@ -3317,6 +3309,7 @@ TRUNCATE b, a;
 INSERT INTO a VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
 INSERT INTO b VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
 
+# For this, only x=6,y=6 should cascade.
 statement ok
 UPDATE a SET y = y*10 WHERE y > 0;
 UPDATE a SET x = x*10 WHERE x > 0;
@@ -3326,44 +3319,9 @@ SELECT * FROM b ORDER BY x, y;
 ----
 x    y
 NULL  NULL
-NULL  40
-50    NULL
+NULL  4
+5     NULL
 60    60
-
-statement ok
-UPDATE a SET y = 100 WHERE y IS NULL;
-UPDATE a SET x = 100 WHERE x IS NULL;
-
-query II colnames
-SELECT * FROM b ORDER BY x, y;
-----
-x    y
-NULL NULL
-50   100
-60   60
-100  40
-
-# Note that the double NULL should not get cascaded.
-statement ok
-UPDATE a SET (x,y) = (100, 100) WHERE y IS NULL AND x IS NULL;
-
-query II colnames
-SELECT * FROM b ORDER BY x, y;
-----
-x    y
-NULL NULL
-50   100
-60   60
-100  40
-
-query II colnames
-SELECT * FROM a ORDER BY x, y;
-----
-x    y
-50   100
-60   60
-100  40
-100  100
 
 # Clean up after the test.
 statement ok

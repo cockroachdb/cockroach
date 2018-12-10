@@ -198,17 +198,13 @@ func spanForIndexValues(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (roachpb.Span, error) {
-	// Currently, we only offer MATCH FULL, so this checks to ensure that if a
-	// reference is composed of all NULLs, then we don't cascade it.
-	nulls := true
+	// This implements the check for MATCH SIMPLE.
+	// See https://github.com/cockroachdb/cockroach/issues/20305 or
+	// https://www.postgresql.org/docs/11/sql-createtable.html.
 	for _, rowIndex := range indexColIDs {
-		if values[rowIndex] != tree.DNull {
-			nulls = false
-			break
+		if values[rowIndex] == tree.DNull {
+			return roachpb.Span{}, nil
 		}
-	}
-	if nulls {
-		return roachpb.Span{}, nil
 	}
 	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {

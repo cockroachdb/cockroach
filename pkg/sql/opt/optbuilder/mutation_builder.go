@@ -16,7 +16,6 @@ package optbuilder
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -133,9 +132,11 @@ func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	// they have default values.
 	mb.checkPrimaryKeyForInsert()
 
-	// Ensure that foreign keys columns are in the target column list, or that
-	// they have default values.
-	mb.checkForeignKeysForInsert()
+	// Here, there was previously was a check to ensure that all columns needed
+	// for a composite foreign key were present. Since we've moved to MATCH SIMPLE
+	// instead of MATCH FULL, performing this check is not needed.
+	// TODO(bram): Bring this check back once MATCH FULL is implemented
+	// correctly. See #20305.
 }
 
 // checkPrimaryKeyForInsert ensures that the columns of the primary key are
@@ -159,71 +160,6 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 
 		panic(builderError{fmt.Errorf(
 			"missing %q primary key column", col.Column.ColName())})
-	}
-}
-
-// checkForeignKeysForInsert ensures that all foreign key columns are either
-// assigned values by the INSERT statement, or else have default/computed
-// values.  Alternatively, all columns can be unspecified. If neither condition
-// is true, checkForeignKeysForInsert raises an error. Here is an example:
-//
-//   CREATE TABLE orders (
-//     id INT,
-//     cust_id INT,
-//     state STRING,
-//     FOREIGN KEY (cust_id, state) REFERENCES customers (id, state)
-//   )
-//
-//   INSERT INTO orders (cust_id) VALUES (1)
-//
-// This INSERT statement would trigger a static error, because only cust_id is
-// specified in the INSERT statement. Either the state column must be specified
-// as well, or else neither column can be specified.
-//
-// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
-func (mb *mutationBuilder) checkForeignKeysForInsert() {
-	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
-		idx := mb.tab.Index(i)
-		fkey, ok := idx.ForeignKey()
-		if !ok {
-			continue
-		}
-
-		var missingCols []string
-		allMissing := true
-		for j := 0; j < int(fkey.PrefixLen); j++ {
-			indexCol := idx.Column(j)
-			if indexCol.Column.HasDefault() || indexCol.Column.IsComputed() {
-				// The column has a default value.
-				allMissing = false
-				continue
-			}
-
-			colID := mb.tabID.ColumnID(indexCol.Ordinal)
-			if mb.targetColSet.Contains(int(colID)) {
-				// The column is explicitly specified in the target name list.
-				allMissing = false
-				continue
-			}
-
-			missingCols = append(missingCols, string(indexCol.Column.ColName()))
-		}
-		if allMissing {
-			continue
-		}
-
-		switch len(missingCols) {
-		case 0:
-			// Do nothing.
-
-		case 1:
-			panic(builderError{errors.Errorf(
-				"missing value for column %q in multi-part foreign key", missingCols[0])})
-		default:
-			sort.Strings(missingCols)
-			panic(builderError{errors.Errorf(
-				"missing values for columns %q in multi-part foreign key", missingCols)})
-		}
 	}
 }
 
