@@ -99,25 +99,14 @@ func processColumnSet(
 		colIDSet[col.ID] = struct{}{}
 	}
 
-	addIf := func(col ColumnDescriptor) {
+	// Add all public or columns in DELETE_AND_WRITE_ONLY state
+	// that satisfy the condition.
+	for _, col := range tableDesc.WritableColumns {
 		if inSet(col) {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}
 				cols = append(cols, col)
 			}
-		}
-	}
-
-	// Add all public columns that satisfy the condition.
-	for _, col := range tableDesc.Columns {
-		addIf(col)
-	}
-	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY that also
-	// satisfies the condition.
-	for _, m := range tableDesc.Mutations {
-		if col := m.GetColumn(); col != nil &&
-			m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			addIf(*col)
 		}
 	}
 	return cols

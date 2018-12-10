@@ -359,56 +359,51 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 // initCols initializes n.cols and n.numBackfillColumns according to n.desc and n.colCfg.
 func (n *scanNode) initCols() error {
 	n.numBackfillColumns = 0
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+
 	if n.colCfg.wantedColumns == nil {
-		// Add all active and mutation columns.
-		n.cols = append(n.cols, n.desc.Columns...)
-		if n.colCfg.visibility == publicAndNonPublicColumns {
-			for _, mutation := range n.desc.Mutations {
-				if c := mutation.GetColumn(); c != nil {
-					n.addMutationCol(c)
-				}
-			}
+		// Add all active and maybe mutation columns.
+		if n.colCfg.visibility == publicColumns {
+			n.cols = n.desc.Columns
+		} else {
+			n.cols = n.desc.ReadableColumns
+			n.numBackfillColumns = len(n.desc.ReadableColumns) - len(n.desc.Columns)
 		}
-	} else {
-		for _, wc := range n.colCfg.wantedColumns {
+		return nil
+	}
+
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.ReadableColumns))
+	for _, wc := range n.colCfg.wantedColumns {
+		var c *sqlbase.ColumnDescriptor
+		var err error
+		isBackfillCol := false
+		if id := sqlbase.ColumnID(wc); n.colCfg.visibility == publicColumns {
+			c, err = n.desc.FindActiveColumnByID(id)
+		} else {
+			c, isBackfillCol, err = n.desc.FindReadableColumnByID(id)
+		}
+		if err != nil {
+			return err
+		}
+
+		n.cols = append(n.cols, *c)
+		if isBackfillCol {
+			n.numBackfillColumns++
+		}
+	}
+
+	if n.colCfg.addUnwantedAsHidden {
+		for _, c := range n.desc.Columns {
 			found := false
-			for i := range n.desc.Columns {
-				c := &n.desc.Columns[i]
-				if c.ID == sqlbase.ColumnID(wc) {
-					n.cols = append(n.cols, *c)
+			for _, wc := range n.colCfg.wantedColumns {
+				if sqlbase.ColumnID(wc) == c.ID {
 					found = true
 					break
 				}
 			}
-			if !found && n.colCfg.visibility == publicAndNonPublicColumns {
-				for _, mutation := range n.desc.Mutations {
-					if c := mutation.GetColumn(); c != nil && c.ID == sqlbase.ColumnID(wc) {
-						n.addMutationCol(c)
-						found = true
-						break
-					}
-				}
-			}
 			if !found {
-				return errors.Errorf("column [%d] does not exist", wc)
-			}
-		}
-
-		if n.colCfg.addUnwantedAsHidden {
-			for _, c := range n.desc.Columns {
-				found := false
-				for _, wc := range n.colCfg.wantedColumns {
-					if sqlbase.ColumnID(wc) == c.ID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					col := c
-					col.Hidden = true
-					n.cols = append(n.cols, col)
-				}
+				col := c
+				col.Hidden = true
+				n.cols = append(n.cols, col)
 			}
 		}
 	}
@@ -509,13 +504,4 @@ func (n *scanNode) computePhysicalProps(
 	pp.addWeakKey(keySet)
 	pp.applyExpr(evalCtx, n.origFilter)
 	return pp
-}
-
-// addMutationCol adds a column that is in process of being backfilled.
-func (n *scanNode) addMutationCol(col *sqlbase.ColumnDescriptor) {
-	// Even if the column is non-nullable it can be null in the
-	// middle of a schema change.
-	n.cols = append(n.cols, *col)
-	n.cols[len(n.cols)-1].Nullable = true
-	n.numBackfillColumns++
 }
