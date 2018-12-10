@@ -1930,6 +1930,168 @@ func TestPGWireAuth(t *testing.T) {
 	})
 }
 
+func TestHBA(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	db := sqlutils.MakeSQLRunner(conn)
+
+	const (
+		user = "passworduser"
+		pass = "pass"
+	)
+
+	db.Exec(t, fmt.Sprintf(`CREATE USER %s`, server.TestUser))
+	db.Exec(t, fmt.Sprintf(`CREATE USER %s WITH PASSWORD '%s'`, user, pass))
+
+	tests := []struct {
+		// The hba.conf file/setting.
+		conf string
+		// Error message when setting the config.
+		confErr string
+		// Error message of password login.
+		passErr string
+		// Error message of cert login.
+		certErr string
+	}{
+		{
+			conf:    `bad`,
+			confErr: "entry 1 invalid",
+		},
+		{
+			conf:    `#empty`,
+			confErr: "no entries",
+		},
+		{
+			conf:    `host all all 1.1.1/0 cert`,
+			confErr: "invalid CIDR address",
+		},
+		{
+			conf:    `host all all 0.0.0.0/0 invalid`,
+			confErr: "unknown auth method",
+		},
+		{
+			conf:    `host db all 0.0.0.0/0 cert`,
+			confErr: "database must be specified as all",
+		},
+		{
+			// quoted all isn't ok since it strips the special meaning
+			conf:    `host "all" all 0.0.0.0/0 cert`,
+			confErr: "database must be specified as all",
+		},
+		{
+			// only the all hostname is supported
+			conf:    `host all all hostname cert`,
+			confErr: "host addresses not supported",
+		},
+		{
+			// valid for both specified users
+			conf: `
+				host all testuser 0.0.0.0/0 cert
+				host all passworduser 0.0.0.0/0 password
+			`,
+		},
+		{
+			// valid for both specified users
+			conf: `
+				host all testuser,passworduser all cert-password
+			`,
+		},
+		{
+			// the "all" user means password never is checked
+			conf: `
+				host all testuser,all 0.0.0.0/0 cert
+				host all passworduser 0.0.0.0/0 password
+			`,
+			passErr: "no TLS peer certificates",
+		},
+		{
+			// but double quoting removes special meaning
+			conf: `
+				host all testuser,"all" 0.0.0.0/0 cert
+				host all passworduser 0.0.0.0/0 password
+			`,
+		},
+		{
+			// disallow passwords
+			conf:    "host all all 0.0.0.0/0 cert",
+			passErr: "no TLS peer certificates",
+		},
+		{
+			// disallow certs
+			conf:    "host all all 0.0.0.0/0 password",
+			certErr: "password authentication failed for user testuser",
+		},
+		{
+			// invalid user name
+			conf:    "host all invalid 0.0.0.0/0 cert",
+			certErr: "no .* entry",
+			passErr: "no .* entry",
+		},
+		{
+			// invalid IP
+			conf:    "host all all 0.0.0.0/32 cert",
+			certErr: "no .* entry",
+			passErr: "no .* entry",
+		},
+		{
+			// allow certs from 127.*.*.*
+			conf:    "host all all 127.0.0.0/8 cert",
+			passErr: "no TLS peer certificates",
+		},
+		{
+			// allow certs from 128.*.*.*, but connect from 127.0.0.0
+			conf:    "host all all 128.0.0.0/8 cert",
+			certErr: "no .* entry",
+			passErr: "no .* entry",
+		},
+	}
+	for i, tc := range tests {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			t.Log(tc.conf)
+			db.ExpectErr(t, tc.confErr, `SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, tc.conf)
+
+			t.Run("root", func(t *testing.T) {
+				// Authenticate as root with certificate and expect success.
+				rootPgURL, cleanupFn := sqlutils.PGUrl(
+					t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+				defer cleanupFn()
+				if err := trivialQuery(rootPgURL); err != nil {
+					t.Fatalf("could not auth as root: %v", err)
+				}
+			})
+
+			t.Run("cert", func(t *testing.T) {
+				testUserPgURL, cleanupFn := sqlutils.PGUrl(
+					t, s.ServingAddr(), t.Name(), url.User(server.TestUser))
+				defer cleanupFn()
+				err := trivialQuery(testUserPgURL)
+				if !testutils.IsError(err, tc.certErr) {
+					t.Errorf("expected err %v, got %v", tc.certErr, err)
+				}
+			})
+
+			t.Run("password", func(t *testing.T) {
+				host, port, err := net.SplitHostPort(s.ServingAddr())
+				if err != nil {
+					t.Fatal(err)
+				}
+				testURL := url.URL{
+					Scheme:   "postgres",
+					User:     url.UserPassword(user, pass),
+					Host:     net.JoinHostPort(host, port),
+					RawQuery: "sslmode=require",
+				}
+				err = trivialQuery(testURL)
+				if !testutils.IsError(err, tc.passErr) {
+					t.Errorf("expected err %v, got %v", tc.passErr, err)
+				}
+			})
+		})
+	}
+}
+
 func TestPGWireResultChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})

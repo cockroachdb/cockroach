@@ -29,8 +29,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -143,6 +145,7 @@ func serveConn(
 	ie *sql.InternalExecutor,
 	stopper *stop.Stopper,
 	insecure bool,
+	auth *hba.Conf,
 ) error {
 	sArgs.RemoteAddr = netConn.RemoteAddr()
 
@@ -152,7 +155,7 @@ func serveConn(
 
 	c := newConn(netConn, sArgs, metrics, resultsBufferBytes)
 
-	if err := c.handleAuthentication(ctx, insecure, ie); err != nil {
+	if err := c.handleAuthentication(ctx, insecure, ie, auth); err != nil {
 		_ = c.conn.Close()
 		reserved.Close(ctx)
 		return err
@@ -1280,7 +1283,7 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
 func (c *conn) handleAuthentication(
-	ctx context.Context, insecure bool, ie *sql.InternalExecutor,
+	ctx context.Context, insecure bool, ie *sql.InternalExecutor, auth *hba.Conf,
 ) error {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
@@ -1300,31 +1303,65 @@ func (c *conn) handleAuthentication(
 	}
 
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
-		var authenticationHook security.UserAuthHook
-
 		tlsState := tlsConn.ConnectionState()
-		// If no certificates are provided, default to password
-		// authentication.
-		if len(tlsState.PeerCertificates) == 0 {
-			password, err := c.sendAuthPasswordRequest()
+		var methodFn AuthMethod
+
+		if auth == nil {
+			methodFn = authCertPassword
+		} else if c.sessionArgs.User == security.RootUser {
+			// If a hba.conf file is specified, hard code the root user to always use
+			// cert auth. This prevents users from shooting themselves in the foot and
+			// making root not able to login, thus disallowing anyone from fixing the
+			// hba.conf file.
+			methodFn = authCert
+		} else {
+			addr, _, err := net.SplitHostPort(c.conn.RemoteAddr().String())
 			if err != nil {
 				return sendError(err)
 			}
-			authenticationHook = security.UserAuthPasswordHook(
-				insecure, password, hashedPassword,
-			)
-		} else {
-			// Normalize the username contained in the certificate.
-			tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
-				tlsState.PeerCertificates[0].Subject.CommonName,
-			).Normalize()
-			var err error
-			authenticationHook, err = security.UserAuthCertHook(insecure, &tlsState)
-			if err != nil {
-				return sendError(err)
+			ip := net.ParseIP(addr)
+			for _, entry := range auth.Entries {
+				switch a := entry.Address.(type) {
+				case *net.IPNet:
+					if !a.Contains(ip) {
+						continue
+					}
+				case hba.String:
+					if !a.IsSpecial("all") {
+						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
+					}
+				default:
+					return sendError(errors.Errorf("unexpected address type %T", a))
+				}
+				match := false
+				for _, u := range entry.User {
+					if u.IsSpecial("all") {
+						match = true
+						break
+					}
+					if u.Value == c.sessionArgs.User {
+						match = true
+						break
+					}
+				}
+				if !match {
+					continue
+				}
+				methodFn = hbaAuthMethods[entry.Method]
+				if methodFn == nil {
+					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
+				}
+				break
+			}
+			if methodFn == nil {
+				return sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
 			}
 		}
 
+		authenticationHook, err := methodFn(c, tlsState, insecure, hashedPassword)
+		if err != nil {
+			return sendError(err)
+		}
 		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
 			return sendError(err)
 		}
@@ -1335,9 +1372,98 @@ func (c *conn) handleAuthentication(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// sendAuthPasswordRequest requests a cleartext password from the client and
+const serverHBAConfSetting = "server.host_based_authentication.configuration"
+
+var connAuthConf = settings.RegisterValidatedStringSetting(
+	serverHBAConfSetting,
+	"host-based authentication configuration to use during connection authentication",
+	"",
+	func(values *settings.Values, s string) error {
+		if s == "" {
+			return nil
+		}
+		conf, err := hba.Parse(s)
+		if err != nil {
+			return err
+		}
+		for _, entry := range conf.Entries {
+			for _, db := range entry.Database {
+				if !db.IsSpecial("all") {
+					return errors.New("database must be specified as all")
+				}
+			}
+			if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
+				return errors.New("host addresses not supported")
+			}
+			if hbaAuthMethods[entry.Method] == nil {
+				return errors.Errorf("unknown auth method %q", entry.Method)
+			}
+		}
+		return nil
+	},
+)
+
+// AuthConn defines exported methods of a conn needed for pgwire authentication.
+type AuthConn interface {
+	SendAuthPasswordRequest() (string, error)
+}
+
+// AuthMethod defines a method for authentication of a connection.
+type AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte) (security.UserAuthHook, error)
+
+var hbaAuthMethods = map[string]AuthMethod{}
+
+// RegisterAuthMethod registers an AuthMethod for pgwire authentication.
+func RegisterAuthMethod(method string, fn AuthMethod) {
+	hbaAuthMethods[method] = fn
+}
+
+func authPassword(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	password, err := c.SendAuthPasswordRequest()
+	if err != nil {
+		return nil, err
+	}
+	return security.UserAuthPasswordHook(
+		insecure, password, hashedPassword,
+	), nil
+}
+
+func authCert(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	if len(tlsState.PeerCertificates) == 0 {
+		return nil, errors.New("no TLS peer certificates, but required for auth")
+	}
+	// Normalize the username contained in the certificate.
+	tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
+		tlsState.PeerCertificates[0].Subject.CommonName,
+	).Normalize()
+	return security.UserAuthCertHook(insecure, &tlsState)
+}
+
+func authCertPassword(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	var fn AuthMethod
+	if len(tlsState.PeerCertificates) == 0 {
+		fn = authPassword
+	} else {
+		fn = authCert
+	}
+	return fn(c, tlsState, insecure, hashedPassword)
+}
+
+func init() {
+	RegisterAuthMethod("password", authPassword)
+	RegisterAuthMethod("cert", authCert)
+	RegisterAuthMethod("cert-password", authCertPassword)
+}
+
+// SendAuthPasswordRequest requests a cleartext password from the client and
 // returns it.
-func (c *conn) sendAuthPasswordRequest() (string, error) {
+func (c *conn) SendAuthPasswordRequest() (string, error) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authCleartextPassword)
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
