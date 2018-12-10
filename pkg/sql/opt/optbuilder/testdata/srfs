@@ -833,9 +833,9 @@ SELECT generate_series((SELECT generate_subscripts(ARRAY[a, a||b]) FROM t, u), 1
 project
  ├── columns: generate_series:8(int)
  └── project-set
-      ├── columns: t.a:1(string) t.rowid:2(int!null) generate_series:8(int)
+      ├── columns: a:1(string) t.rowid:2(int!null) generate_series:8(int)
       ├── scan t
-      │    └── columns: t.a:1(string) t.rowid:2(int!null)
+      │    └── columns: a:1(string) t.rowid:2(int!null)
       └── zip
            └── function: generate_series [type=int]
                 ├── subquery [type=int]
@@ -844,20 +844,20 @@ project
                 │         └── project
                 │              ├── columns: generate_subscripts:7(int)
                 │              └── project-set
-                │                   ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
+                │                   ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
                 │                   ├── inner-join
-                │                   │    ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
+                │                   │    ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
                 │                   │    ├── scan t
-                │                   │    │    └── columns: t.a:3(string) t.rowid:4(int!null)
+                │                   │    │    └── columns: a:3(string) t.rowid:4(int!null)
                 │                   │    ├── scan u
                 │                   │    │    └── columns: b:5(string) u.rowid:6(int!null)
                 │                   │    └── filters (true)
                 │                   └── zip
                 │                        └── function: generate_subscripts [type=int]
                 │                             └── array: [type=string[]]
-                │                                  ├── variable: t.a [type=string]
+                │                                  ├── variable: a [type=string]
                 │                                  └── concat [type=string]
-                │                                       ├── variable: t.a [type=string]
+                │                                       ├── variable: a [type=string]
                 │                                       └── variable: b [type=string]
                 └── const: 100 [type=int]
 
@@ -884,12 +884,12 @@ FROM a
 project
  ├── columns: json_array_elements:6(jsonb) jsonb_each:19(tuple{string AS key, jsonb AS value}) jsonb_object_keys:20(string) generate_series:21(int)
  ├── project-set
- │    ├── columns: a.x:1(int!null) a.j:2(jsonb) a.k:3(jsonb) a.m:4(jsonb) a.n:5(jsonb) json_array_elements:6(jsonb)
+ │    ├── columns: x:1(int!null) j:2(jsonb) k:3(jsonb) m:4(jsonb) n:5(jsonb) json_array_elements:6(jsonb)
  │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.j:2(jsonb) a.k:3(jsonb) a.m:4(jsonb) a.n:5(jsonb)
+ │    │    └── columns: x:1(int!null) j:2(jsonb) k:3(jsonb) m:4(jsonb) n:5(jsonb)
  │    └── zip
  │         └── function: json_array_elements [type=jsonb]
- │              └── variable: a.j [type=jsonb]
+ │              └── variable: j [type=jsonb]
  └── projections
       ├── subquery [type=tuple{string AS key, jsonb AS value}]
       │    └── max1-row
@@ -902,7 +902,7 @@ project
       │              │    │    └── tuple [type=tuple]
       │              │    └── zip
       │              │         └── function: jsonb_each [type=tuple{string AS key, jsonb AS value}]
-      │              │              └── variable: a.k [type=jsonb]
+      │              │              └── variable: k [type=jsonb]
       │              └── projections
       │                   └── tuple [type=tuple{string AS key, jsonb AS value}]
       │                        ├── variable: key [type=string]
@@ -913,12 +913,12 @@ project
       │         └── project
       │              ├── columns: jsonb_object_keys:15(string)
       │              └── project-set
-      │                   ├── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb) jsonb_object_keys:15(string)
+      │                   ├── columns: x:10(int!null) j:11(jsonb) k:12(jsonb) m:13(jsonb) n:14(jsonb) jsonb_object_keys:15(string)
       │                   ├── scan a
-      │                   │    └── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb)
+      │                   │    └── columns: x:10(int!null) j:11(jsonb) k:12(jsonb) m:13(jsonb) n:14(jsonb)
       │                   └── zip
       │                        └── function: jsonb_object_keys [type=string]
-      │                             └── variable: a.m [type=jsonb]
+      │                             └── variable: m [type=jsonb]
       └── subquery [type=int]
            └── max1-row
                 ├── columns: generate_series:18(int)
@@ -941,10 +941,10 @@ project
                                │                   │    │    └── tuple [type=tuple]
                                │                   │    └── zip
                                │                   │         └── function: jsonb_array_elements_text [type=string]
-                               │                   │              └── variable: a.n [type=jsonb]
+                               │                   │              └── variable: n [type=jsonb]
                                │                   └── zip
                                │                        └── function: generate_series [type=int]
-                               │                             ├── variable: a.x [type=int]
+                               │                             ├── variable: x [type=int]
                                │                             └── const: 100 [type=int]
                                └── const: 1000 [type=int]
 

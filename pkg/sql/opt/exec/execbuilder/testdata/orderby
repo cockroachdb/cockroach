@@ -508,20 +508,20 @@ render               ·         ·                (b)        key()
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-render                    ·         ·                (b)              ·
- │                        render 0  test.public.t.b  ·                ·
- └── run                  ·         ·                (a, b, c)        ·
-      └── update          ·         ·                (a, b, c)        ·
-           │              table     t                ·                ·
-           │              set       c                ·                ·
-           └── render     ·         ·                (a, b, c, bool)  bool=CONST; a!=NULL; key(a)
-                │         render 0  test.public.t.a  ·                ·
-                │         render 1  test.public.t.b  ·                ·
-                │         render 2  test.public.t.c  ·                ·
-                │         render 3  true             ·                ·
-                └── scan  ·         ·                (a, b, c)        a!=NULL; key(a)
-·                         table     t@primary        ·                ·
-·                         spans     ALL              ·                ·
+render                    ·         ·          (b)                 ·
+ │                        render 0  b          ·                   ·
+ └── run                  ·         ·          (a, b, c)           ·
+      └── update          ·         ·          (a, b, c)           ·
+           │              table     t          ·                   ·
+           │              set       c          ·                   ·
+           └── render     ·         ·          (a, b, c, column7)  ·
+                │         render 0  a          ·                   ·
+                │         render 1  b          ·                   ·
+                │         render 2  c          ·                   ·
+                │         render 3  true       ·                   ·
+                └── scan  ·         ·          (a, b, c)           ·
+·                         table     t@primary  ·                   ·
+·                         spans     ALL        ·                   ·
 
 statement ok
 CREATE TABLE uvwxyz (

@@ -1326,7 +1326,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'experimental_optimizer_updates'
 ----
 name                               setting       category  short_desc  extra_desc  vartype
 application_name                   ·             NULL      NULL        NULL        string
@@ -1370,7 +1370,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'experimental_optimizer_updates'
 ----
 name                               setting       unit  context  enumvals  boot_val      reset_val
 application_name                   ·             NULL  user     NULL      ·             ·
@@ -1425,6 +1425,7 @@ distsql                            NULL    NULL     NULL     NULL        NULL
 experimental_enable_zigzag_join    NULL    NULL     NULL     NULL        NULL
 experimental_force_lookup_join     NULL    NULL     NULL     NULL        NULL
 experimental_force_split_at        NULL    NULL     NULL     NULL        NULL
+experimental_optimizer_updates     NULL    NULL     NULL     NULL        NULL
 experimental_serial_normalization  NULL    NULL     NULL     NULL        NULL
 experimental_vectorize             NULL    NULL     NULL     NULL        NULL
 extra_float_digits                 NULL    NULL     NULL     NULL        NULL

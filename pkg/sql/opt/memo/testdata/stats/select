@@ -237,32 +237,32 @@ project
  ├── stats: [rows=1.1]
  ├── key: (1)
  └── select
-      ├── columns: tab0.pk:1(int!null) tab0.col0:2(int!null)
+      ├── columns: pk:1(int!null) col0:2(int!null)
       ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, distinct(2)=1, null(2)=0]
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── scan tab0
-      │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
+      │    ├── columns: pk:1(int!null) col0:2(int)
       │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters
-           ├── tab0.col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           ├── tab0.col0 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           ├── col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+           ├── col0 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
            ├── or [type=bool, outer=(2)]
-           │    ├── tab0.col0 = 1 [type=bool]
+           │    ├── col0 = 1 [type=bool]
            │    └── any: eq [type=bool]
            │         ├── scan tab0
-           │         │    ├── columns: tab0.col3:12(int)
+           │         │    ├── columns: col3:12(int)
            │         │    └── stats: [rows=1000]
-           │         └── variable: tab0.col0 [type=int]
+           │         └── variable: col0 [type=int]
            └── or [type=bool, outer=(2)]
-                ├── tab0.col0 = 1 [type=bool]
+                ├── col0 = 1 [type=bool]
                 └── any: eq [type=bool]
                      ├── scan tab0
-                     │    ├── columns: tab0.col3:19(int)
+                     │    ├── columns: col3:19(int)
                      │    └── stats: [rows=1000]
-                     └── variable: tab0.col0 [type=int]
+                     └── variable: col0 [type=int]
 
 
 exec-ddl

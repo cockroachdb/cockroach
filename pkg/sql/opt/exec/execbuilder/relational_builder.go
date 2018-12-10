@@ -184,6 +184,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.InsertExpr:
 		ep, err = b.buildInsert(t)
 
+	case *memo.UpdateExpr:
+		ep, err = b.buildUpdate(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)
@@ -1052,14 +1055,20 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	input, err = b.ensureColumns(input, ins.InputCols, nil, ins.ProvidedPhysical().Ordering)
+
+	// Construct list of columns that only contains columns that need to be
+	// inserted (e.g. delete-only mutation columns don't need to be inserted).
+	colList := make(opt.ColList, 0, len(ins.InsertCols))
+	colList = appendColsWhenPresent(colList, ins.InsertCols)
+	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the Insert node.
 	tab := b.mem.Metadata().Table(ins.Table)
-	node, err := b.factory.ConstructInsert(input.root, tab, ins.NeedResults)
+	insertOrds := ordinalSetFromColList(ins.InsertCols)
+	node, err := b.factory.ConstructInsert(input.root, tab, insertOrds, ins.NeedResults)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1069,7 +1078,64 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	ep := execPlan{root: node}
 	if ins.NeedResults {
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			ep.outputCols.Set(int(ins.InputCols[i]), i)
+			if !opt.IsMutationColumn(tab, i) {
+				ep.outputCols.Set(int(ins.InsertCols[i]), i)
+			}
+		}
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
+	// Build the input query and ensure that the fetch and update columns are
+	// projected.
+	input, err := b.buildRelational(upd.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Currently, the execution engine requires one input column for each fetch
+	// and update expression, so use ensureColumns to map and reorder colums so
+	// that they correspond to target table columns. For example:
+	//
+	//   UPDATE xyz SET x=1, y=1
+	//
+	// Here, the input has just one column (because the constant is shared), and
+	// so must be mapped to two separate update columns.
+	//
+	// TODO(andyk): Using ensureColumns here can result in an extra Render.
+	// Upgrade execution engine to not require this.
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols))
+	colList = appendColsWhenPresent(colList, upd.FetchCols)
+	colList = appendColsWhenPresent(colList, upd.UpdateCols)
+	input, err = b.ensureColumns(input, colList, nil, upd.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the Update node.
+	md := b.mem.Metadata()
+	tab := md.Table(upd.Table)
+	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
+	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
+	node, err := b.factory.ConstructUpdate(input.root, tab, fetchColOrds, updateColOrds, upd.NeedResults)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// If UPDATE returns rows, they contain all non-mutation columns from the
+	// table, in the same order they're defined in the table. If a column was
+	// updated, it should "shadow" the original value fetched from the table.
+	ep := execPlan{root: node}
+	if upd.NeedResults {
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			// Use the update column if it's present, otherwise fall back to the
+			// fetched column.
+			if upd.UpdateCols[i] != 0 {
+				ep.outputCols.Set(int(upd.UpdateCols[i]), i)
+			} else if upd.FetchCols[i] != 0 {
+				ep.outputCols.Set(int(upd.FetchCols[i]), i)
+			}
 		}
 	}
 	return ep, nil
@@ -1200,4 +1266,29 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// appendColsWhenPresent appends non-zero column IDs from the src list into the
+// dst list, and returns the possibly grown list.
+func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
+	for _, col := range src {
+		if col != 0 {
+			dst = append(dst, col)
+		}
+	}
+	return dst
+}
+
+// ordinalSetFromColList returns the set of ordinal positions of each non-zero
+// column ID in the given list. This is used with mutation operators, which
+// maintain lists that correspond to the target table, with zero column IDs
+// indicating columns that are not involved in the mutation.
+func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
+	var res opt.ColSet
+	for i, col := range colList {
+		if col != 0 {
+			res.Add(i)
+		}
+	}
+	return res
 }

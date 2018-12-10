@@ -16,6 +16,7 @@ package testcat
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -234,6 +235,16 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	typ := coltypes.CastTargetToDatumType(def.Type)
 	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
 
+	// Look for name suffixes indicating this is a mutation column.
+	var mutCol *opt.MutationColumn
+	if strings.HasSuffix(string(def.Name), ":write-only") {
+		col.Name = strings.TrimSuffix(col.Name, ":write-only")
+		mutCol = &opt.MutationColumn{Column: col, IsDeleteOnly: false}
+	} else if strings.HasSuffix(string(def.Name), ":delete-only") {
+		col.Name = strings.TrimSuffix(col.Name, ":delete-only")
+		mutCol = &opt.MutationColumn{Column: col, IsDeleteOnly: true}
+	}
+
 	if def.DefaultExpr.Expr != nil {
 		s := tree.Serialize(def.DefaultExpr.Expr)
 		col.DefaultExpr = &s
@@ -245,8 +256,8 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	// Add mutation columns to the Mutations list.
-	if col.IsMutation() {
-		tt.Mutations = append(tt.Mutations, col)
+	if mutCol != nil {
+		tt.Mutations = append(tt.Mutations, *mutCol)
 	} else {
 		tt.Columns = append(tt.Columns, col)
 	}

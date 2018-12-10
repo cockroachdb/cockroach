@@ -28,6 +28,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	excludeMutations = false
+	includeMutations = true
+)
+
 // buildDataSource builds a set of memo groups that represent the given table
 // expression. For example, if the tree.TableExpr consists of a single table,
 // the resulting set of memo groups will consist of a single group with a
@@ -83,7 +88,7 @@ func (b *Builder) buildDataSource(
 		ds := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case opt.Table:
-			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
+			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case opt.View:
 			return b.buildView(t, inScope)
 		default:
@@ -256,7 +261,7 @@ func (b *Builder) buildScanFromTableRef(
 			ordinals[i] = ord
 		}
 	}
-	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, inScope)
+	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, excludeMutations, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -267,7 +272,12 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tab opt.Table, tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
+	tab opt.Table,
+	tn *tree.TableName,
+	ordinals []int,
+	indexFlags *tree.IndexFlags,
+	scanMutationCols bool,
+	inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab)
@@ -279,24 +289,31 @@ func (b *Builder) buildScan(
 
 	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, colCount)
+	outScope.cols = make([]scopeColumn, 0, colCount)
 	for i := 0; i < colCount; i++ {
 		ord := i
 		if ordinals != nil {
 			ord = ordinals[i]
 		}
 
+		// Exclude any mutation columns if they were not requested.
+		isMutation := opt.IsMutationColumn(tab, ord)
+		if !scanMutationCols && isMutation {
+			continue
+		}
+
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
 		name := col.ColName()
-		outScope.cols[i] = scopeColumn{
-			id:     colID,
-			name:   name,
-			table:  *tn,
-			typ:    col.DatumType(),
-			hidden: col.IsHidden(),
-		}
+		outScope.cols = append(outScope.cols, scopeColumn{
+			id:       colID,
+			name:     name,
+			table:    *tn,
+			typ:      col.DatumType(),
+			hidden:   col.IsHidden() || isMutation,
+			mutation: isMutation,
+		})
 	}
 
 	if tab.IsVirtualTable() {
@@ -420,8 +437,35 @@ func (b *Builder) checkCTEUsage(inScope *scope) {
 	}
 }
 
-// buildSelect builds a set of memo groups that represent the given select
+// buildSelectStmt builds a set of memo groups that represent the given select
 // statement.
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildSelectStmt(
+	stmt tree.SelectStatement, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
+	// NB: The case statements are sorted lexicographically.
+	switch stmt := stmt.(type) {
+	case *tree.ParenSelect:
+		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+
+	case *tree.SelectClause:
+		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
+
+	case *tree.UnionClause:
+		return b.buildUnion(stmt, desiredTypes, inScope)
+
+	case *tree.ValuesClause:
+		return b.buildValuesClause(stmt, desiredTypes, inScope)
+
+	default:
+		panic(unimplementedf("unsupported select statement: %T", stmt))
+	}
+}
+
+// buildSelect builds a set of memo groups that represent the given select
+// expression.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
@@ -517,7 +561,9 @@ func (b *Builder) buildSelect(
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []types.T, inScope *scope,
 ) (outScope *scope) {
-	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
+	fromScope := b.buildFrom(sel.From, inScope)
+	b.buildWhere(sel.Where, fromScope)
+
 	projectionsScope := fromScope.replace()
 
 	// This is where the magic happens. When this call reaches an aggregate
@@ -560,12 +606,11 @@ func (b *Builder) buildSelectClause(
 	return outScope
 }
 
-// buildFrom builds a set of memo groups that represent the given FROM statement
-// and WHERE clause.
+// buildFrom builds a set of memo groups that represent the given FROM clause.
 //
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
-func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) (outScope *scope) {
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) buildFrom(from *tree.From, inScope *scope) (outScope *scope) {
 	// The root AS OF clause is recognized and handled by the executor. The only
 	// thing that must be done at this point is to ensure that if any timestamps
 	// are specified, the root SELECT was an AS OF SYSTEM TIME and that the time
@@ -581,27 +626,35 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
 	}
 
-	if where != nil {
-		// We need to save and restore the previous value of the field in
-		// semaCtx in case we are recursively called within a subquery
-		// context.
-		defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-		b.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
-		outScope.context = "WHERE"
+	return outScope
+}
 
-		// All "from" columns are visible to the filter expression.
-		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool)
-
-		filter := b.buildScalar(texpr, outScope, nil, nil, nil)
-
-		// Wrap the filter in a FiltersOp.
-		outScope.expr = b.factory.ConstructSelect(
-			outScope.expr.(memo.RelExpr),
-			memo.FiltersExpr{{Condition: filter}},
-		)
+// buildWhere builds a set of memo groups that represent the given WHERE clause.
+//
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
+	if where == nil {
+		return
 	}
 
-	return outScope
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
+	inScope.context = "WHERE"
+
+	// All "from" columns are visible to the filter expression.
+	texpr := inScope.resolveAndRequireType(where.Expr, types.Bool)
+
+	filter := b.buildScalar(texpr, inScope, nil, nil, nil)
+
+	// Wrap the filter in a FiltersOp.
+	inScope.expr = b.factory.ConstructSelect(
+		inScope.expr.(memo.RelExpr),
+		memo.FiltersExpr{{Condition: filter}},
+	)
 }
 
 // buildFromTables recursively builds a series of InnerJoin expressions that

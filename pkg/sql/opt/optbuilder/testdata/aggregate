@@ -886,11 +886,11 @@ scalar-group-by
  ├── columns: count:9(int)
  ├── project
  │    └── inner-join
- │         ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) kv.k:5(int!null) kv.v:6(int) kv.w:7(int) kv.s:8(string)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) k:5(int!null) v:6(int) w:7(int) s:8(string)
  │         ├── scan kv
- │         │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         ├── scan kv
- │         │    └── columns: kv.k:5(int!null) kv.v:6(int) kv.w:7(int) kv.s:8(string)
+ │         │    └── columns: k:5(int!null) v:6(int) w:7(int) s:8(string)
  │         └── filters (true)
  └── aggregations
       └── count-rows [type=int]
@@ -1774,22 +1774,22 @@ limit
  ├── project
  │    ├── columns: r:8(bool)
  │    ├── scan xyz
- │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    └── projections
  │         └── gt [type=bool]
- │              ├── variable: xyz.x [type=int]
+ │              ├── variable: x [type=int]
  │              └── subquery [type=decimal]
  │                   └── max1-row
  │                        ├── columns: avg:7(decimal)
  │                        └── scalar-group-by
  │                             ├── columns: avg:7(decimal)
  │                             ├── project
- │                             │    ├── columns: xyz.y:5(int)
+ │                             │    ├── columns: y:5(int)
  │                             │    └── scan xyz
- │                             │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(float)
+ │                             │         └── columns: x:4(int!null) y:5(int) z:6(float)
  │                             └── aggregations
  │                                  └── avg [type=decimal]
- │                                       └── variable: xyz.y [type=int]
+ │                                       └── variable: y [type=int]
  └── const: 1 [type=int]
 
 exec-ddl
@@ -2169,13 +2169,13 @@ project
  │    └── project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── columns: bools.b:1(bool) rowid:2(int!null) bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan bools
- │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    └── columns: bools.b:1(bool) rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── columns: bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    │    └── columns: bools.b:3(bool) rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
@@ -2205,13 +2205,13 @@ project
  │    └── project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── columns: bools.b:1(bool) rowid:2(int!null) bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan bools
- │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    └── columns: bools.b:1(bool) rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── columns: bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    │    └── columns: bools.b:3(bool) rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
@@ -2326,27 +2326,27 @@ SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a
 project
  ├── columns: r:8(bool)
  ├── group-by
- │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
- │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── columns: baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: baz:5(jsonb) column7:7(bool)
  │    └── project
- │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
+ │         ├── columns: column7:7(bool) baz:5(jsonb)
  │         ├── inner-join
- │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    ├── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null) bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
  │         │    ├── scan foo
- │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
+ │         │    │    └── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null)
  │         │    ├── scan foo
- │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    │    └── columns: bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
  │         │    └── filters (true)
  │         └── projections
  │              └── contains [type=bool]
- │                   ├── variable: foo.bar [type=jsonb]
- │                   └── variable: foo.baz [type=jsonb]
+ │                   ├── variable: bar [type=jsonb]
+ │                   └── variable: baz [type=jsonb]
  └── projections
       └── and [type=bool]
            ├── variable: column7 [type=bool]
            └── contains [type=bool]
-                ├── variable: foo.baz [type=jsonb]
-                └── variable: foo.baz [type=jsonb]
+                ├── variable: baz [type=jsonb]
+                └── variable: baz [type=jsonb]
 
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
@@ -2359,27 +2359,27 @@ SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b
 project
  ├── columns: r:8(bool)
  ├── group-by
- │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
- │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── columns: baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: baz:5(jsonb) column7:7(bool)
  │    └── project
- │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
+ │         ├── columns: column7:7(bool) baz:5(jsonb)
  │         ├── inner-join
- │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    ├── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null) bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
  │         │    ├── scan foo
- │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
+ │         │    │    └── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null)
  │         │    ├── scan foo
- │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    │    └── columns: bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
  │         │    └── filters (true)
  │         └── projections
  │              └── contains [type=bool]
- │                   ├── variable: foo.bar [type=jsonb]
- │                   └── variable: foo.baz [type=jsonb]
+ │                   ├── variable: bar [type=jsonb]
+ │                   └── variable: baz [type=jsonb]
  └── projections
       └── and [type=bool]
            ├── variable: column7 [type=bool]
            └── contains [type=bool]
-                ├── variable: foo.baz [type=jsonb]
-                └── variable: foo.baz [type=jsonb]
+                ├── variable: baz [type=jsonb]
+                └── variable: baz [type=jsonb]
 
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
@@ -2401,19 +2401,19 @@ project
  │    └── project
  │         ├── columns: column3:3(interval) column4:4(interval)
  │         ├── inner-join
- │         │    ├── columns: times.t:1(time!null) times.t:2(time!null)
+ │         │    ├── columns: t:1(time!null) t:2(time!null)
  │         │    ├── scan times
- │         │    │    └── columns: times.t:1(time!null)
+ │         │    │    └── columns: t:1(time!null)
  │         │    ├── scan times
- │         │    │    └── columns: times.t:2(time!null)
+ │         │    │    └── columns: t:2(time!null)
  │         │    └── filters (true)
  │         └── projections
  │              ├── function: date_trunc [type=interval]
  │              │    ├── const: 'second' [type=string]
- │              │    └── variable: times.t [type=time]
+ │              │    └── variable: t [type=time]
  │              └── function: date_trunc [type=interval]
  │                   ├── const: 'minute' [type=string]
- │                   └── variable: times.t [type=time]
+ │                   └── variable: t [type=time]
  └── projections
       └── minus [type=interval]
            ├── variable: column3 [type=interval]

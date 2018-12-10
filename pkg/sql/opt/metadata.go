@@ -286,25 +286,27 @@ func (md *Metadata) ColumnOrdinal(id ColumnID) int {
 	return int(id - tabID.firstColID())
 }
 
-// QualifiedColumnLabel returns the column label, possibly qualified with the
-// table name if either of these conditions is true:
+// QualifiedColumnLabel returns the column label, qualified with the table name
+// if either of these conditions is true:
 //
 //   1. fullyQualify is true
-//   2. the label might be ambiguous if it's not qualified, because there's
-//      another column in the metadata with the same name
+//   2. there's another column in the metadata with the same column name but
+//      different table name
 //
 // If the column label is qualified, the table is prefixed to it and separated
-// by a "." character.
+// by a "." character. The table name is qualified with catalog/schema only if
+// fullyQualify is true.
 func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string {
-	col := md.cols[id-1]
+	col := &md.cols[id-1]
 	if col.tabID == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
 		return col.label
 	}
+	tab := md.Table(col.tabID)
 
 	// If a fully qualified label has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
-	ambiguous := fullyQualify
+	var tabName string
 	if !fullyQualify {
 		for i := range md.cols {
 			if i == int(id-1) {
@@ -314,23 +316,28 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 			// If there are two columns with same name, then column is ambiguous.
 			otherCol := &md.cols[i]
 			if otherCol.label == col.label {
-				ambiguous = true
-				break
+				tabName = string(tab.Name().TableName)
+				if otherCol.tabID == 0 {
+					fullyQualify = true
+				} else {
+					// Only qualify if the qualified names are actually different.
+					otherTabName := string(md.Table(otherCol.tabID).Name().TableName)
+					if tabName != otherTabName {
+						fullyQualify = true
+					}
+				}
 			}
 		}
+	} else {
+		tabName = tab.Name().FQString()
 	}
 
-	if !ambiguous {
+	if !fullyQualify {
 		return col.label
 	}
 
 	var sb strings.Builder
-	tabName := md.Table(col.tabID).Name()
-	if fullyQualify {
-		sb.WriteString(tabName.FQString())
-	} else {
-		sb.WriteString(string(tabName.TableName))
-	}
+	sb.WriteString(tabName)
 	sb.WriteRune('.')
 	sb.WriteString(col.label)
 	return sb.String()
@@ -338,7 +345,8 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
-// self-join query).
+// self-join query). All columns are added to the metadata. If mutation columns
+// are present, they are added after active columns.
 func (md *Metadata) AddTable(tab Table) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
@@ -360,27 +368,6 @@ func (md *Metadata) AddTable(tab Table) TableID {
 		})
 	}
 
-	return tabID
-}
-
-// AddTableWithMutations first calls AddTable to add regular columns to the
-// metadata. It then appends any columns that are currently undergoing mutation
-// (i.e. being added or dropped from the table), and which need to be
-// initialized to their default value by INSERT statements. See this RFC for
-// more details:
-//
-//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
-//
-func (md *Metadata) AddTableWithMutations(tab Table) TableID {
-	tabID := md.AddTable(tab)
-	for i, n := 0, tab.MutationColumnCount(); i < n; i++ {
-		col := tab.MutationColumn(i)
-		md.cols = append(md.cols, mdColumn{
-			tabID: tabID,
-			label: string(col.ColName()),
-			typ:   col.DatumType(),
-		})
-	}
 	return tabID
 }
 

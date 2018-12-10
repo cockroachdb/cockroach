@@ -237,7 +237,8 @@ SELECT * FROM xyz
 statement error value type tuple{int, int} doesn't match type INT8 of column "z"
 UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
 
-statement error pgcode 42601 subquery must return 2 columns, found 1
+# HP and CBO return slightly different (but reasonable) errors, so accept both.
+statement error [subquery must return 2 columns, found 1 | number of columns (2) does not match number of values (1)]
 UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
 
 #regression, see #6852

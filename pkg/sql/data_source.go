@@ -220,8 +220,19 @@ func (p *planner) getTableScanByRef(
 	// error messages (we want `foo` not `"".foo`).
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 
+	// Add mutation columns to list of wanted columns if they were requested.
+	wantedColumns := tref.Columns
+	if scanVisibility == publicAndNonPublicColumns {
+		wantedColumns = wantedColumns[:len(wantedColumns):len(wantedColumns)]
+		for _, mutation := range desc.Mutations {
+			if c := mutation.GetColumn(); c != nil {
+				wantedColumns = append(wantedColumns, tree.ColumnID(c.ID))
+			}
+		}
+	}
+
 	colCfg := scanColumnsConfig{
-		wantedColumns:       tref.Columns,
+		wantedColumns:       wantedColumns,
 		addUnwantedAsHidden: true,
 		visibility:          scanVisibility,
 	}

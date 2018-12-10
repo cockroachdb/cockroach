@@ -725,7 +725,9 @@ INSERT INTO error_check VALUES(1, '1')
 statement error could not parse "foo" as type int: strconv.ParseInt
 INSERT INTO error_check VALUES(2, 'foo')
 
-statement error computed column i:
+# NOTE: The CBO cannot show the name of the computed column in the error message
+# because the computation is part of an overall SQL statement.
+statement error could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 UPDATE error_check SET s = 'foo' WHERE k = 1
 
 # Upsert -> update

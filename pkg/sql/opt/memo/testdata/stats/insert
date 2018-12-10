@@ -58,8 +58,10 @@ select
  ├── fd: ()-->(5)
  ├── insert xyz
  │    ├── columns: a:4(int!null) b:5(string!null) c:6(float)
- │    ├── table columns: x:1(string) y:2(int) z:3(float)
- │    ├── input columns: b:5(string!null) a:4(int!null) c:6(float)
+ │    ├── insert-mapping:
+ │    │    ├──  b:5(string!null) => x:1(string)
+ │    │    ├──  a:4(int!null) => y:2(int)
+ │    │    └──  c:6(float) => z:3(float)
  │    ├── side-effects, mutations
  │    ├── stats: [rows=200]
  │    ├── fd: ()-->(5)
@@ -88,8 +90,10 @@ INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE False RETURNING *
 ----
 insert xyz
  ├── columns: x:5(string!null) y:4(int!null) z:6(float)
- ├── table columns: x:1(string) y:2(int) z:3(float)
- ├── input columns: b:5(string!null) a:4(int!null) c:6(float)
+ ├── insert-mapping:
+ │    ├──  b:5(string!null) => x:1(string)
+ │    ├──  a:4(int!null) => y:2(int)
+ │    └──  c:6(float) => z:3(float)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]

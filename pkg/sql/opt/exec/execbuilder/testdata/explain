@@ -186,7 +186,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'database'
       └── values  ·       ·
-·                 size    2 columns, 36 rows
+·                 size    2 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -195,7 +195,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'timezone'
       └── values  ·       ·
-·                 size    2 columns, 36 rows
+·                 size    2 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -204,7 +204,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'default_transaction_isolation'
       └── values  ·       ·
-·                 size    2 columns, 36 rows
+·                 size    2 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -213,7 +213,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_isolation'
       └── values  ·       ·
-·                 size    2 columns, 36 rows
+·                 size    2 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -222,7 +222,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_priority'
       └── values  ·       ·
-·                 size    2 columns, 36 rows
+·                 size    2 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -522,18 +522,18 @@ count                ·         ·                            ()              ·
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-count                ·         ·                              ()                              ·
- └── update          ·         ·                              ()                              ·
-      │              table     t                              ·                               ·
-      │              set       v                              ·                               ·
-      └── render     ·         ·                              (k int, v int, "?column?" int)  k!=NULL; v!=NULL; key(k)
-           │         render 0  (k)[int]                       ·                               ·
-           │         render 1  (v)[int]                       ·                               ·
-           │         render 2  ((k)[int] + (1)[int])[int]     ·                               ·
-           └── scan  ·         ·                              (k int, v int)                  k!=NULL; v!=NULL; key(k)
-·                    table     t@primary                      ·                               ·
-·                    spans     ALL                            ·                               ·
-·                    filter    ((v)[int] > (123)[int])[bool]  ·                               ·
+count                ·         ·                              ()                           ·
+ └── update          ·         ·                              ()                           ·
+      │              table     t                              ·                            ·
+      │              set       v                              ·                            ·
+      └── render     ·         ·                              (k int, v int, column5 int)  ·
+           │         render 0  (k)[int]                       ·                            ·
+           │         render 1  (v)[int]                       ·                            ·
+           │         render 2  ((k)[int] + (1)[int])[int]     ·                            ·
+           └── scan  ·         ·                              (k int, v int)               ·
+·                    table     t@primary                      ·                            ·
+·                    spans     ALL                            ·                            ·
+·                    filter    ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)

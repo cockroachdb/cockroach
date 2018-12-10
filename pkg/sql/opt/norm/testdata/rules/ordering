@@ -237,15 +237,19 @@ project
            └── (123,) [type=tuple{int}]
 
 # --------------------------------------------------
-# SimplifyInsertOrdering
+# SimplifyMutationOrdering
 # --------------------------------------------------
-opt expect=SimplifyInsertOrdering
+opt expect=SimplifyMutationOrdering
 INSERT INTO abcde (a, b, c, d) SELECT y, 1, y+1, 2 FROM xyz ORDER BY y, x, z
 ----
 insert abcde
  ├── columns: <none>
- ├── table columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int)
- ├── input columns: y:7(int) "?column?":9(int) "?column?":10(int) "?column?":11(int) column12:12(int)
+ ├── insert-mapping:
+ │    ├──  y:7(int) => a:1(int)
+ │    ├──  "?column?":9(int) => b:2(int)
+ │    ├──  "?column?":10(int) => c:3(int)
+ │    ├──  "?column?":11(int) => d:4(int)
+ │    └──  column12:12(int) => e:5(int)
  ├── internal-ordering: +7,+6 opt(9,11,12)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations

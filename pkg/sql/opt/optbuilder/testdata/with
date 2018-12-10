@@ -121,43 +121,43 @@ SELECT * FROM t3 NATURAL JOIN t4
 project
  ├── columns: a:1(int!null)
  └── inner-join
-      ├── columns: y.a:1(int!null) y.a:3(int!null)
+      ├── columns: a:1(int!null) a:3(int!null)
       ├── select
-      │    ├── columns: y.a:1(int!null)
+      │    ├── columns: a:1(int!null)
       │    ├── project
-      │    │    ├── columns: y.a:1(int!null)
+      │    │    ├── columns: a:1(int!null)
       │    │    └── select
-      │    │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │    │         ├── columns: a:1(int!null) rowid:2(int!null)
       │    │         ├── scan y
-      │    │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │    │         │    └── columns: a:1(int) rowid:2(int!null)
       │    │         └── filters
       │    │              └── lt [type=bool]
-      │    │                   ├── variable: y.a [type=int]
+      │    │                   ├── variable: a [type=int]
       │    │                   └── const: 3 [type=int]
       │    └── filters
       │         └── lt [type=bool]
-      │              ├── variable: y.a [type=int]
+      │              ├── variable: a [type=int]
       │              └── const: 4 [type=int]
       ├── select
-      │    ├── columns: y.a:3(int!null)
+      │    ├── columns: a:3(int!null)
       │    ├── project
-      │    │    ├── columns: y.a:3(int!null)
+      │    │    ├── columns: a:3(int!null)
       │    │    └── select
-      │    │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+      │    │         ├── columns: a:3(int!null) rowid:4(int!null)
       │    │         ├── scan y
-      │    │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
+      │    │         │    └── columns: a:3(int) rowid:4(int!null)
       │    │         └── filters
       │    │              └── gt [type=bool]
-      │    │                   ├── variable: y.a [type=int]
+      │    │                   ├── variable: a [type=int]
       │    │                   └── const: 1 [type=int]
       │    └── filters
       │         └── gt [type=bool]
-      │              ├── variable: y.a [type=int]
+      │              ├── variable: a [type=int]
       │              └── const: 3 [type=int]
       └── filters
            └── eq [type=bool]
-                ├── variable: y.a [type=int]
-                └── variable: y.a [type=int]
+                ├── variable: a [type=int]
+                └── variable: a [type=int]
 
 # Make sure they scope properly.
 build
@@ -196,27 +196,27 @@ SELECT * FROM t2 NATURAL JOIN x
 project
  ├── columns: a:3(int!null)
  └── inner-join
-      ├── columns: x.a:3(int!null) x.a:5(int!null) x.rowid:6(int!null)
+      ├── columns: a:3(int!null) a:5(int!null) rowid:6(int!null)
       ├── project
-      │    ├── columns: x.a:3(int!null)
+      │    ├── columns: a:3(int!null)
       │    └── inner-join
-      │         ├── columns: x.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
+      │         ├── columns: a:1(int!null) a:3(int!null) rowid:4(int!null)
       │         ├── scan x
-      │         │    └── columns: x.a:3(int) x.rowid:4(int!null)
+      │         │    └── columns: a:3(int) rowid:4(int!null)
       │         ├── project
-      │         │    ├── columns: x.a:1(int)
+      │         │    ├── columns: a:1(int)
       │         │    └── scan x
-      │         │         └── columns: x.a:1(int) x.rowid:2(int!null)
+      │         │         └── columns: a:1(int) rowid:2(int!null)
       │         └── filters
       │              └── eq [type=bool]
-      │                   ├── variable: x.a [type=int]
-      │                   └── variable: x.a [type=int]
+      │                   ├── variable: a [type=int]
+      │                   └── variable: a [type=int]
       ├── scan x
-      │    └── columns: x.a:5(int) x.rowid:6(int!null)
+      │    └── columns: a:5(int) rowid:6(int!null)
       └── filters
            └── eq [type=bool]
-                ├── variable: x.a [type=int]
-                └── variable: x.a [type=int]
+                ├── variable: a [type=int]
+                └── variable: a [type=int]
 
 build
 WITH t AS (SELECT a FROM y WHERE a < 3)

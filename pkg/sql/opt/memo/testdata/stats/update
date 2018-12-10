@@ -1,0 +1,124 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b string
+ ├── c float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+TABLE xyz
+ ├── x string not null
+ ├── y int not null
+ ├── z float
+ └── INDEX primary
+      └── x string not null
+
+# Statistics should be derived from UPDATE input columns and transferred to
+# RETURNING columns.
+build
+SELECT *
+FROM [UPDATE xyz SET y=5 WHERE z=5.5 RETURNING *]
+WHERE x > 'foo'
+----
+select
+ ├── columns: x:4(string!null) y:7(int!null) z:6(float!null)
+ ├── side-effects, mutations
+ ├── stats: [rows=3.3, distinct(4)=3.3, null(4)=0, distinct(6)=0.981940882, null(6)=0, distinct(7)=0.981940882, null(7)=0]
+ ├── key: (4)
+ ├── fd: ()-->(6,7)
+ ├── update xyz
+ │    ├── columns: x:4(string!null) z:6(float!null) column7:7(int!null)
+ │    ├── fetch columns: x:4(string!null) y:5(int) z:6(float!null)
+ │    ├── update-mapping:
+ │    │    └──  column7:7(int!null) => y:2(int)
+ │    ├── side-effects, mutations
+ │    ├── stats: [rows=9.9]
+ │    ├── key: (4)
+ │    ├── fd: ()-->(6,7)
+ │    └── project
+ │         ├── columns: column7:7(int!null) x:4(string!null) y:5(int!null) z:6(float!null)
+ │         ├── stats: [rows=9.9, distinct(4)=9.9, null(4)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0]
+ │         ├── key: (4)
+ │         ├── fd: ()-->(6,7), (4)-->(5)
+ │         ├── select
+ │         │    ├── columns: x:4(string!null) y:5(int!null) z:6(float!null)
+ │         │    ├── stats: [rows=9.9, distinct(4)=9.9, null(4)=0, distinct(5)=9.5617925, null(5)=0, distinct(6)=1, null(6)=0]
+ │         │    ├── key: (4)
+ │         │    ├── fd: ()-->(6), (4)-->(5)
+ │         │    ├── scan xyz
+ │         │    │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+ │         │    │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=10]
+ │         │    │    ├── key: (4)
+ │         │    │    └── fd: (4)-->(5,6)
+ │         │    └── filters
+ │         │         └── z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
+ │         └── projections
+ │              └── const: 5 [type=int]
+ └── filters
+      └── x > 'foo' [type=bool, outer=(4), constraints=(/4: [/e'foo\x00' - ]; tight)]
+
+# Cardinality is zero.
+build
+UPDATE xyz SET x='foo' WHERE False RETURNING *
+----
+update xyz
+ ├── columns: x:7(string!null) y:5(int!null) z:6(float)
+ ├── fetch columns: x:4(string) y:5(int!null) z:6(float)
+ ├── update-mapping:
+ │    └──  column7:7(string!null) => x:1(string)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── fd: ()-->(7)
+ └── project
+      ├── columns: column7:7(string!null) x:4(string!null) y:5(int!null) z:6(float)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── key: (4)
+      ├── fd: ()-->(7), (4)-->(5,6)
+      ├── select
+      │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+      │    ├── cardinality: [0 - 0]
+      │    ├── stats: [rows=0]
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(5,6)
+      │    ├── scan xyz
+      │    │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── key: (4)
+      │    │    └── fd: (4)-->(5,6)
+      │    └── filters
+      │         └── false [type=bool]
+      └── projections
+           └── const: 'foo' [type=string]

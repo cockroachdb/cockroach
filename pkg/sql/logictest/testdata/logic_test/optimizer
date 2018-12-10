@@ -118,3 +118,16 @@ SELECT * FROM test.t
 2  20
 3  30
 4  40
+
+# Test the experimental_optimizer_updates flag.
+statement ok
+SET experimental_optimizer_updates = false
+
+statement error pq: no data source matches prefix: t
+UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
+
+statement ok
+SET experimental_optimizer_updates = true
+
+statement ok
+UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)

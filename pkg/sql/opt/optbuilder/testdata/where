@@ -57,14 +57,14 @@ SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ │    └── columns: k:1(int!null) v:2(int)
  └── filters
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: kv.k:3(int!null)
+           │    ├── columns: k:3(int!null)
            │    └── scan kv
-           │         └── columns: kv.k:3(int!null) kv.v:4(int)
-           └── variable: kv.k [type=int]
+           │         └── columns: k:3(int!null) v:4(int)
+           └── variable: k [type=int]
 
 build
 SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
@@ -72,20 +72,20 @@ SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ │    └── columns: k:1(int!null) v:2(int)
  └── filters
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: column5:5(tuple{int, int})
            │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
+           │    │    └── columns: k:3(int!null) v:4(int)
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
-           │              ├── variable: kv.k [type=int]
-           │              └── variable: kv.v [type=int]
+           │              ├── variable: k [type=int]
+           │              └── variable: v [type=int]
            └── tuple [type=tuple{int, int}]
-                ├── variable: kv.k [type=int]
-                └── variable: kv.v [type=int]
+                ├── variable: k [type=int]
+                └── variable: v [type=int]
 
 build
 SELECT * FROM kv WHERE nonexistent = 1

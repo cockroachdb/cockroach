@@ -763,15 +763,15 @@ inner-join (merge)
  │                        ├── key: ()
  │                        ├── fd: ()-->(10)
  │                        ├── scan b
- │                        │    ├── columns: b.x:8(int!null)
+ │                        │    ├── columns: x:8(int!null)
  │                        │    ├── limit: 1
  │                        │    ├── key: ()
  │                        │    └── fd: ()-->(8)
  │                        └── aggregations
  │                             └── const-agg [type=int, outer=(8)]
- │                                  └── variable: b.x [type=int]
+ │                                  └── variable: x [type=int]
  ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
@@ -786,7 +786,7 @@ project
  ├── key: (6)
  ├── fd: (1)-->(2-5), (1,6)-->(7), (1)==(6), (6)==(1)
  └── inner-join-apply
-      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) "?column?":10(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int) "?column?":10(int)
       ├── key: (6)
       ├── fd: (1)-->(2-5), (1,6)-->(7,10), (1)==(6), (6)==(1)
       ├── scan a
@@ -794,12 +794,12 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2-5)
       ├── left-join
-      │    ├── columns: b.x:6(int!null) b.y:7(int) "?column?":10(int)
+      │    ├── columns: x:6(int!null) y:7(int) "?column?":10(int)
       │    ├── outer: (1)
       │    ├── key: (6)
       │    ├── fd: (6)-->(7,10), ()~~>(10)
       │    ├── scan b
-      │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+      │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7)
       │    ├── max1-row
@@ -812,13 +812,13 @@ project
       │    │         ├── columns: "?column?":10(int)
       │    │         ├── outer: (1)
       │    │         ├── scan b
-      │    │         │    └── columns: b.y:9(int)
+      │    │         │    └── columns: y:9(int)
       │    │         └── projections
-      │    │              └── k * b.y [type=int, outer=(1,9)]
+      │    │              └── k * y [type=int, outer=(1,9)]
       │    └── filters (true)
       └── filters
-           ├── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── ?column? = (b.x * i) [type=bool, outer=(2,6,10), constraints=(/10: (/NULL - ])]
+           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── ?column? = (x * i) [type=bool, outer=(2,6,10), constraints=(/10: (/NULL - ])]
 
 # Ensure that we do not map filters for types with composite key encoding.
 opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -1052,26 +1052,26 @@ project
  ├── columns: "?column?":22(int!null)
  ├── fd: ()-->(22)
  ├── distinct-on
- │    ├── columns: a.k:1(int!null)
- │    ├── grouping columns: a.k:1(int!null)
+ │    ├── columns: k:1(int!null)
+ │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    └── select
- │         ├── columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool!null)
+ │         ├── columns: k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool!null)
  │         ├── key: (1,6,8)
  │         ├── fd: (1,6,8)-->(14)
  │         ├── group-by
- │         │    ├── columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool)
- │         │    ├── grouping columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null)
+ │         │    ├── columns: k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool)
+ │         │    ├── grouping columns: k:1(int!null) xy.x:6(int!null) u:8(int!null)
  │         │    ├── key: (1,6,8)
  │         │    ├── fd: (1,6,8)-->(14)
  │         │    ├── project
- │         │    │    ├── columns: true:13(bool!null) a.k:1(int!null) xy.x:6(int!null) u:8(int!null)
+ │         │    │    ├── columns: true:13(bool!null) k:1(int!null) xy.x:6(int!null) u:8(int!null)
  │         │    │    ├── fd: ()-->(13)
  │         │    │    ├── inner-join-apply
- │         │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null) u:8(int!null)
+ │         │    │    │    ├── columns: k:1(int!null) s:4(string) xy.x:6(int!null) u:8(int!null)
  │         │    │    │    ├── fd: (1)-->(4)
  │         │    │    │    ├── scan a
- │         │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
+ │         │    │    │    │    ├── columns: k:1(int!null) s:4(string)
  │         │    │    │    │    ├── key: (1)
  │         │    │    │    │    └── fd: (1)-->(4)
  │         │    │    │    ├── inner-join
@@ -1090,12 +1090,12 @@ project
  │         │    │    │    │    │    │         └── eq [type=bool]
  │         │    │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │    │              │    └── max1-row
- │         │    │    │    │    │    │              │         ├── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │         ├── columns: s:19(string)
  │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
  │         │    │    │    │    │    │              │         ├── key: ()
  │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
  │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │              └── columns: s:19(string)
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: u:8(int!null)
@@ -1107,12 +1107,12 @@ project
  │         │    │    │    │    │    │         └── eq [type=bool]
  │         │    │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │    │              │    └── max1-row
- │         │    │    │    │    │    │              │         ├── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │         ├── columns: s:19(string)
  │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
  │         │    │    │    │    │    │              │         ├── key: ()
  │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
  │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │              └── columns: s:19(string)
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
  │         │    │    │    │    │    └── filters (true)
  │         │    │    │    │    ├── limit
@@ -1122,7 +1122,7 @@ project
  │         │    │    │    │    │    │    ├── outer: (4)
  │         │    │    │    │    │    │    ├── scan b
  │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── a.s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │         │    │    │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
  │         │    │    │    │    │    └── const: 10 [type=int]
  │         │    │    │    │    └── filters (true)
  │         │    │    │    └── filters (true)
@@ -1202,34 +1202,34 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── anti-join
- │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float!null) a.s:6(string!null) a.j:7(jsonb)
+ │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    ├── outer: (2)
  │    ├── key: (3)
  │    ├── fd: ()-->(6), (3)-->(4,5,7)
  │    ├── select
- │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float!null) a.s:6(string!null) a.j:7(jsonb)
+ │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(6), (3)-->(4,5,7)
  │    │    ├── scan a
- │    │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float!null) a.s:6(string) a.j:7(jsonb)
+ │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    │    │    ├── key: (3)
  │    │    │    └── fd: (3)-->(4-7)
  │    │    └── filters
- │    │         └── a.s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+ │    │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  │    ├── select
- │    │    ├── columns: a.k:8(int!null) a.i:9(int!null) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
+ │    │    ├── columns: k:8(int!null) i:9(int!null) f:10(float!null) s:11(string) j:12(jsonb)
  │    │    ├── key: (8)
  │    │    ├── fd: ()-->(9), (8)-->(10-12)
  │    │    ├── scan a
- │    │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
+ │    │    │    ├── columns: k:8(int!null) i:9(int) f:10(float!null) s:11(string) j:12(jsonb)
  │    │    │    ├── key: (8)
  │    │    │    └── fd: (8)-->(9-12)
  │    │    └── filters
- │    │         └── a.i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
+ │    │         └── i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
  │    └── filters
  │         └── y > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
  └── filters
-      └── a.k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 # --------------------------------------------------
 # SimplifyLeftJoinWithoutFilters
@@ -1429,12 +1429,12 @@ inner-join (merge)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (1)==(6), (6)==(1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    └── ordering: +6
@@ -1451,12 +1451,12 @@ left-join (merge)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── constraint: /6: [/1 - ]
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
@@ -1472,17 +1472,17 @@ inner-join
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (1)==(6), (6)==(1), (3)==(8), (8)==(3)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
  └── filters
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      ├── k = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── k = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── f = f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Input contains Project operator.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1492,17 +1492,17 @@ inner-join
  ├── columns: length:6(int) f:3(float!null) k:7(int!null) i:8(int) f:9(float!null) s:10(string) j:11(jsonb)
  ├── fd: (7)-->(8-11), (3)==(9), (9)==(3)
  ├── project
- │    ├── columns: length:6(int) a.f:3(float!null)
+ │    ├── columns: length:6(int) f:3(float!null)
  │    ├── scan a
- │    │    └── columns: a.f:3(float!null) a.s:4(string)
+ │    │    └── columns: f:3(float!null) s:4(string)
  │    └── projections
- │         └── length(a.s) [type=int, outer=(4)]
+ │         └── length(s) [type=int, outer=(4)]
  ├── scan a
- │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float!null) a.s:10(string) a.j:11(jsonb)
+ │    ├── columns: k:7(int!null) i:8(int) f:9(float!null) s:10(string) j:11(jsonb)
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
  └── filters
-      └── a.f = a.f [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+      └── f = f [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
 
 # Multiple join levels.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1513,28 +1513,28 @@ inner-join
  ├── key: (1,11)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6), (3)==(8), (8)==(3)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── inner-join (merge)
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb) a.k:11(int!null) a.i:12(int) a.f:13(float!null) a.s:14(string) a.j:15(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb) k:11(int!null) i:12(int) f:13(float!null) s:14(string) j:15(jsonb)
  │    ├── left ordering: +6
  │    ├── right ordering: +11
  │    ├── key: (11)
  │    ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6)
  │    ├── scan a
- │    │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7-10)
  │    │    └── ordering: +6
  │    ├── scan a
- │    │    ├── columns: a.k:11(int!null) a.i:12(int) a.f:13(float!null) a.s:14(string) a.j:15(jsonb)
+ │    │    ├── columns: k:11(int!null) i:12(int) f:13(float!null) s:14(string) j:15(jsonb)
  │    │    ├── key: (11)
  │    │    ├── fd: (11)-->(12-15)
  │    │    └── ordering: +11
  │    └── filters (true)
  └── filters
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      └── f = f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Cross-join preserves all rows and enables top-level full-join to become inner-join.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1548,22 +1548,22 @@ inner-join
  ├── key: (11)
  ├── fd: (1)-->(2-5), (1)==(6,11), (6)==(1,11), (11)==(1,6)
  ├── inner-join
- │    ├── columns: a.k:6(int!null) a.k:11(int!null)
+ │    ├── columns: k:6(int!null) k:11(int!null)
  │    ├── key: (6,11)
  │    ├── scan a
- │    │    ├── columns: a.k:6(int!null)
+ │    │    ├── columns: k:6(int!null)
  │    │    └── key: (6)
  │    ├── scan a
- │    │    ├── columns: a.k:11(int!null)
+ │    │    ├── columns: k:11(int!null)
  │    │    └── key: (11)
  │    └── filters (true)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.k = a.k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+      ├── k = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── k = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Left joins on a foreign key turn into inner joins.
 opt
@@ -1691,15 +1691,15 @@ full-join
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
  └── filters
-      └── a.k < a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── k < k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Can't simplify: non-join equality condition.
 opt
@@ -1710,16 +1710,16 @@ full-join
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
  └── filters
-      ├── a.f = 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - /1.0]; tight), fd=()-->(3)]
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      ├── f = 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - /1.0]; tight), fd=()-->(3)]
+      └── f = f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Can't simplify: non-null column.
 opt
@@ -1730,15 +1730,15 @@ full-join
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
  └── filters
-      └── a.s = a.s [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+      └── s = s [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
 
 # Can't simplify: equality column that is synthesized.
 opt
@@ -1748,7 +1748,7 @@ full-join
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) k:11(int)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: a.k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── project
@@ -1770,15 +1770,15 @@ full-join
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
  └── filters
-      └── a.k = a.f [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── k = f [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Can't simplify: one equality condition has columns from same side of join.
 opt
@@ -1791,18 +1791,18 @@ full-join (merge)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan a
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    └── ordering: +6
  └── filters
-      ├── a.f = a.f [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-      └── a.f = a.f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
+      ├── f = f [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+      └── f = f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
 
 # Can't simplify: equality conditions have columns from different tables.
 opt
@@ -1813,11 +1813,11 @@ full-join
  ├── key: (1,6,8)
  ├── fd: (1)-->(2-5), (6)-->(7), (8)-->(9-12)
  ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb) x:6(int!null) y:7(int)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
  │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan b
@@ -1826,12 +1826,12 @@ full-join
  │    │    └── fd: (6)-->(7)
  │    └── filters (true)
  ├── scan a
- │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
+ │    ├── columns: k:8(int!null) i:9(int) f:10(float!null) s:11(string) j:12(jsonb)
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
  └── filters
-      ├── a.k = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      └── x = a.k [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+      ├── k = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── x = k [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Can't simplify: The a2.x column is not part of unfilteredCols.
 opt
@@ -1842,11 +1842,11 @@ right-join
  ├── key: (1,6,11)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (11)-->(12)
  ├── inner-join
- │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb) x:11(int!null) y:12(int)
+ │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb) x:11(int!null) y:12(int)
  │    ├── key: (6,11)
  │    ├── fd: (6)-->(7-10), (11)-->(12)
  │    ├── scan a
- │    │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
+ │    │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7-10)
  │    ├── scan b
@@ -1855,11 +1855,11 @@ right-join
  │    │    └── fd: (11)-->(12)
  │    └── filters (true)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── a.k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+      └── k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # --------------------------------------------------
 # EliminateSemiJoin
