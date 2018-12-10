@@ -48,6 +48,10 @@ func GenerateCerts(ctx context.Context) func() {
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
 		512, 48*time.Hour, false, "testuser", true /* generate pk8 key */))
 
+	maybePanic(security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		1024, 48*time.Hour, false, []string{"localhost", "cockroach"}))
+
 	// Store a copy of the client certificate and private key in a PKCS#12
 	// bundle, which is the only format understood by Npgsql (.NET).
 	{
