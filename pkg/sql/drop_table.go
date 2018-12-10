@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -313,7 +314,12 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.initiateDropTable(ctx, tableDesc, true /* drain name */)
+	err := p.removeComment(ctx, tableDesc)
+	if err != nil {
+		return droppedViews, err
+	}
+
+	err = p.initiateDropTable(ctx, tableDesc, true /* drain name */)
 	return droppedViews, err
 }
 
@@ -474,4 +480,18 @@ func removeMatchingReferences(
 		}
 	}
 	return updatedRefs
+}
+
+func (p *planner) removeComment(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.TableCommentType,
+		tableDesc.ID)
+
+	return err
 }
