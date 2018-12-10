@@ -102,7 +102,7 @@ func (p *planner) Update(
 	// Determine what are the foreign key tables that are involved in the update.
 	fkTables, err := row.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc,
 		row.CheckUpdates,
 		p.LookupTableByID,
 		p.CheckPrivilege,

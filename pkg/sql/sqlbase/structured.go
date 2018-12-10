@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -134,6 +135,15 @@ type ImmutableTableDescriptor struct {
 	// are all set to nullable while column backfilling is still in
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
+
+	mu struct {
+		syncutil.Mutex
+
+		computedColumns []ColumnDescriptor
+
+		// Kept in parallel with computedColumns.
+		computedExprs tree.TypedExprs
+	}
 }
 
 // InvalidMutationID is the uninitialised mutation id.
