@@ -401,18 +401,18 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4189ee6a3844f555124d9d2656fe7af02fca961c2a9bad9074789df13a0c62e0"
+  digest = "1:4ddc17aeaa82cb18c5f0a25d7c253a10682f518f4b2558a82869506eec223d76"
   name = "github.com/docker/distribution"
   packages = [
     "digestset",
     "reference",
   ]
   pruneopts = "UT"
-  revision = "3800056b8832cf6075e78b282ac010131d8687bc"
+  revision = "40b7b5830a2337bb07627617740c0e39eb92800c"
 
 [[projects]]
   branch = "master"
-  digest = "1:3f129743ed5a1ed54e764dd0eaf32e6c99c5440c21840471e822a9a3c0ab7d31"
+  digest = "1:6f10b9f09d1c735fde0b60f13b1942dbfea3fa8ba34f3081052df54933fccf44"
   name = "github.com/docker/docker"
   packages = [
     "api",
@@ -432,16 +432,17 @@
     "api/types/versions",
     "api/types/volume",
     "client",
+    "errdefs",
     "pkg/jsonmessage",
     "pkg/stdcopy",
     "pkg/term",
     "pkg/term/windows",
   ]
   pruneopts = "UT"
-  revision = "3ab20a87fa10360df891a67b8307399cdf1ab429"
+  revision = "a4a816b6bbed2d1442a1646143662b0f16f0535e"
 
 [[projects]]
-  digest = "1:b6b5c3e8da0fb8073cd2886ba249a40f4402b4391ca6eba905a142cceea97a12"
+  digest = "1:811c86996b1ca46729bad2724d4499014c4b9effd05ef8c71b852aad90deb0ce"
   name = "github.com/docker/go-connections"
   packages = [
     "nat",
@@ -449,16 +450,16 @@
     "tlsconfig",
   ]
   pruneopts = "UT"
-  revision = "3ede32e2033de7505e6500d6c868c2b9ed9f169d"
-  version = "v0.3.0"
+  revision = "7395e3f8aa162843a74ed6d48e79627d9792ac55"
+  version = "v0.4.0"
 
 [[projects]]
-  digest = "1:57d39983d01980c1317c2c5c6dd4b5b0c4a804ad2df800f2f6cbcd6a6d05f6ca"
+  digest = "1:6f82cacd0af5921e99bf3f46748705239b36489464f4529a1589bc895764fb18"
   name = "github.com/docker/go-units"
   packages = ["."]
   pruneopts = "UT"
-  revision = "0dadbb0345b35ec7ef35e228dabb8de89a65bf52"
-  version = "v0.3.2"
+  revision = "47565b4f722fb6ceae66b95f853feed578a4a51c"
+  version = "v0.3.3"
 
 [[projects]]
   branch = "master"
