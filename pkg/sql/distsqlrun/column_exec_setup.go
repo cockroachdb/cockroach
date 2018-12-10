@@ -83,7 +83,7 @@ func newColOperator(
 				return nil, errors.New("unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
-			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[i])
+			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[col])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
