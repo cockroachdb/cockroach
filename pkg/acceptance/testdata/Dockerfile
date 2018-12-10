@@ -51,9 +51,11 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc > /etc/apt/trusted.gpg.d/microsoft.asc \
  && echo "deb https://packages.microsoft.com/repos/microsoft-ubuntu-zesty-prod zesty main" > /etc/apt/sources.list.d/microsoft.list \
  && apt-get update \
- && apt-get install --yes --no-install-recommends \
+ && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
     dotnet-sdk-2.0.0 \
     expect \
+    krb5-admin-server \
+    krb5-kdc \
     libc6-dev \
     libpq-dev \
     libpqtypes-dev \
@@ -61,7 +63,7 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     maven \
     nodejs \
     gcc \
-    golang \
+    git \
     php-cli \
     php-pgsql \
     postgresql-client \
@@ -69,11 +71,21 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     python-psycopg2 \
     ruby \
     ruby-pg \
+    sudo \
     xmlstarlet \
     yarn
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.0.0/autouseradd-1.0.0-amd64.tar.gz \
     | tar xz -C /usr --strip-components 1
+
+COPY krb5.conf /etc/krb5.conf
+
+RUN kdb5_util create -s -P kpass \
+ && kadmin.local -q "addprinc -randkey postgres/admin" \
+ && kadmin.local -q "addprinc -randkey postgres/localhost@MY.EX" \
+ && kadmin.local -q "ktadd -k /etc/keytab postgres/localhost@MY.EX" \
+ && chmod +r /etc/keytab \
+ && echo 'roach ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # When system packages are not available for a language's PostgreSQL driver,
 # fall back to using that language's package manager. The high-level process
@@ -118,7 +130,13 @@ RUN xmlstarlet ed --inplace \
 RUN (cd /testdata/node && yarn install && mv node_modules /usr/lib/node) \
  && apt-get purge --yes yarn
 
-RUN apt-get purge --yes \
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH=/go
+RUN curl https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz | tar xzv -C /usr/local \
+ && cd /testdata/go \
+ && go get -d
+
+RUN apt-get purge --yes --autoremove \
     curl \
     xmlstarlet \
  && rm -rf /tmp/* /var/lib/apt/lists/* /testdata
