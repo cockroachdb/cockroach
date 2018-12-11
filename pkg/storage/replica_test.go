@@ -10886,8 +10886,15 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 
 	assert.Equal(
 		t,
-		"; may cause Raft snapshot to r12/2: next = 0, match = 100, state = ProgressStateProbe,"+
-			" waiting = false, pendingSnapshot = 0",
+		"; r12/2 is being probed (may or may not need a Raft snapshot)",
+		splitSnapshotWarningStr(12, status),
+	)
+
+	pr.State = raft.ProgressStateSnapshot
+
+	assert.Equal(
+		t,
+		"; r12/2 is being probed (may or may not need a Raft snapshot)",
 		splitSnapshotWarningStr(12, status),
 	)
 }
