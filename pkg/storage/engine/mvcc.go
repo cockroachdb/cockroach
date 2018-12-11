@@ -1233,9 +1233,7 @@ func mvccPutInternal(
 				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			} else if txn.Epoch == meta.Txn.Epoch &&
-				(txn.Sequence < meta.Txn.Sequence ||
-					(txn.Sequence == meta.Txn.Sequence &&
-						txn.DeprecatedBatchIndex <= meta.Txn.DeprecatedBatchIndex)) {
+				txn.Sequence <= meta.Txn.Sequence {
 				// Since transactions should be idempotent, we must be particularly careful
 				// about writing an intent if it was already written. If the sequence of the
 				// transaction is at or below one found in `meta.Txn` then we should

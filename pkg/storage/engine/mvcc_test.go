@@ -3286,11 +3286,10 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	}
 }
 
-// TestMVCCWriteWithSequenceAndBatchIndex verifies that retry errors
+// TestMVCCWriteWithSequence verifies that no retry errors
 // are thrown in the event that earlier sequence numbers are
-// encountered or if the same sequence and an earlier or same batch
-// index.
-func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
+// encountered.
+func TestMVCCWriteWithSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -3298,39 +3297,32 @@ func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
 	defer engine.Close()
 
 	testCases := []struct {
-		sequence   int32
-		batchIndex int32
-		expRetry   bool
+		sequence    int32
+		expectedErr string
 	}{
-		{1, 0, false}, // old sequence old batch index
-		{1, 1, false}, // old sequence, same batch index
-		{1, 2, false}, // old sequence, new batch index
-		{2, 0, false}, // same sequence, old batch index
-		{2, 1, false}, // same sequence, same batch index
-		{2, 2, false}, // same sequence, new batch index
-		{3, 0, false}, // new sequence, old batch index
-		{3, 1, false}, // new sequence, same batch index
-		{3, 2, false}, // new sequence, new batch index
+		{1, "missing an intent"}, // old sequence
+		{2, ""},                  // same sequence
+		{3, ""},                  // new sequence
 	}
 
 	ts := hlc.Timestamp{Logical: 1}
 	for i, tc := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		// Start with sequence 2, batch index 1.
+		// Start with sequence 2.
 		txn := *txn1
 		txn.Sequence = 2
-		txn.DeprecatedBatchIndex = 1
 		if err := MVCCPut(ctx, engine, nil, key, ts, value1, &txn); err != nil {
 			t.Fatal(err)
 		}
 
-		txn.Sequence, txn.DeprecatedBatchIndex = tc.sequence, tc.batchIndex
-		err := MVCCPut(ctx, engine, nil, key, ts, value2, &txn)
-		_, ok := err.(*roachpb.TransactionRetryError)
-		if !tc.expRetry && ok {
+		txn.Sequence = tc.sequence
+		err := MVCCPut(ctx, engine, nil, key, ts, value1, &txn)
+		if tc.expectedErr != "" && err != nil {
+			if !strings.Contains(err.Error(), tc.expectedErr) {
+				t.Fatalf("%d: unexpected error: %s", i, err)
+			}
+		} else if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
-		} else if ok != tc.expRetry {
-			t.Fatalf("%d: expected retry %t but got %s", i, tc.expRetry, err)
 		}
 	}
 }

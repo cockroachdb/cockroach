@@ -244,12 +244,6 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::int32 sequence() const;
   void set_sequence(::google::protobuf::int32 value);
 
-  // int32 deprecated_batch_index = 8;
-  void clear_deprecated_batch_index();
-  static const int kDeprecatedBatchIndexFieldNumber = 8;
-  ::google::protobuf::int32 deprecated_batch_index() const;
-  void set_deprecated_batch_index(::google::protobuf::int32 value);
-
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMeta)
  private:
 
@@ -260,7 +254,6 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::uint32 epoch_;
   ::google::protobuf::int32 priority_;
   ::google::protobuf::int32 sequence_;
-  ::google::protobuf::int32 deprecated_batch_index_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -1777,20 +1770,6 @@ inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
   
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
-}
-
-// int32 deprecated_batch_index = 8;
-inline void TxnMeta::clear_deprecated_batch_index() {
-  deprecated_batch_index_ = 0;
-}
-inline ::google::protobuf::int32 TxnMeta::deprecated_batch_index() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.deprecated_batch_index)
-  return deprecated_batch_index_;
-}
-inline void TxnMeta::set_deprecated_batch_index(::google::protobuf::int32 value) {
-  
-  deprecated_batch_index_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.deprecated_batch_index)
 }
 
 // -------------------------------------------------------------------

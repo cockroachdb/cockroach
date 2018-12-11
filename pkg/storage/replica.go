@@ -6386,13 +6386,6 @@ func evaluateBatch(
 						log.Fatalf(ctx, "found unsequenced transactional request %v in %v", args, ba)
 					}
 				}
-
-				// The Txn coordinator must not be setting sequence numbers on
-				// individual requests. Use the now-deprecated BatchIndex field.
-				//
-				// TODO(nvanbenschoten): remove this case and the explanation
-				// above in version 2.2.
-				ba.Txn.DeprecatedBatchIndex = int32(index)
 			}
 		}
 		// Note that responses are populated even when an error is returned.
