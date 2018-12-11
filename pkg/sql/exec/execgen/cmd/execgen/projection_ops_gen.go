@@ -34,15 +34,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-{{define "opConstName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
+{{define "opRConstName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
+{{define "opLConstName"}}proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op{{end}}
 {{define "opName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
 {{/* The outer range is a types.T, and the inner is the overloads associated
      with that type. */}}
-{{range .}}
+{{range .TypToOverloads}}
 {{range .}}
 
-type {{template "opConstName" .}} struct {
+type {{template "opRConstName" .}} struct {
 	input Operator
 
 	colIdx   int
@@ -51,9 +52,9 @@ type {{template "opConstName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opConstName" .}}) Next() ColBatch {
+func (p *{{template "opRConstName" .}}) Next() ColBatch {
 	batch := p.input.Next()
-	if p.outputIdx == len(batch.ColVecs()) {
+	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
@@ -72,7 +73,41 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 	return batch
 }
 
-func (p {{template "opConstName" .}}) Init() {
+func (p {{template "opRConstName" .}}) Init() {
+	p.input.Init()
+}
+
+type {{template "opLConstName" .}} struct {
+	input Operator
+
+	colIdx   int
+	constArg {{.LGoType}}
+
+	outputIdx int
+}
+
+func (p *{{template "opLConstName" .}}) Next() ColBatch {
+	batch := p.input.Next()
+	if p.outputIdx == batch.Width() {
+		batch.AppendCol(types.{{.RetTyp}})
+	}
+	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
+	col := batch.ColVec(p.colIdx).{{.RTyp}}()[:ColBatchSize]
+	n := batch.Length()
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel {
+			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
+		}
+	} else {
+		col = col[:n]
+		for i := range col {
+			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
+		}
+	}
+	return batch
+}
+
+func (p {{template "opLConstName" .}}) Init() {
 	p.input.Init()
 }
 
@@ -87,7 +122,7 @@ type {{template "opName" .}} struct {
 
 func (p *{{template "opName" .}}) Next() ColBatch {
 	batch := p.input.Next()
-	if p.outputIdx == len(batch.ColVecs()) {
+	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
@@ -114,9 +149,12 @@ func (p {{template "opName" .}}) Init() {
 {{end}}
 {{end}}
 
+{{/* Range over true and false. $left will be true when outputting a left-const
+     operator, and false when outputting a right-const operator. */}}
+{{range $left := .ConstSides}}
 // GetProjectionConstOperator returns the appropriate constant projection
 // operator for the given column type and comparison.
-func GetProjectionConstOperator(
+func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 	ct sqlbase.ColumnType,
 	op tree.Operator,
 	input Operator,
@@ -129,7 +167,7 @@ func GetProjectionConstOperator(
 		return nil, err
 	}
 	switch t := types.FromColumnType(ct); t {
-	{{range $typ, $overloads := .}}
+	{{range $typ, $overloads := $.TypToOverloads}}
 	case types.{{$typ}}:
 		switch op.(type) {
 		case tree.BinaryOperator:
@@ -137,10 +175,10 @@ func GetProjectionConstOperator(
 			{{range $overloads}}
 			{{if .IsBinOp}}
 			case tree.{{.Name}}:
-				return &{{template "opConstName" .}}{
+				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
 					input:    input,
 					colIdx:   colIdx,
-					constArg: c.({{.RGoType}}),
+					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
 					outputIdx: outputIdx,
 				}, nil
 			{{end}}
@@ -153,10 +191,10 @@ func GetProjectionConstOperator(
 			{{range $overloads}}
 			{{if .IsCmpOp}}
 			case tree.{{.Name}}:
-				return &{{template "opConstName" .}}{
+				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
 					input:    input,
 					colIdx:   colIdx,
-					constArg: c.({{.RGoType}}),
+					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
 					outputIdx: outputIdx,
 				}, nil
 			{{end}}
@@ -172,6 +210,7 @@ func GetProjectionConstOperator(
 		return nil, errors.Errorf("unhandled type: %s", t)
 	}
 }
+{{end}}
 
 // GetProjectionOperator returns the appropriate projection operator for the
 // given column type and comparison.
@@ -184,7 +223,7 @@ func GetProjectionOperator(
   outputIdx int,
 ) (Operator, error) {
 	switch t := types.FromColumnType(ct); t {
-	{{range $typ, $overloads := .}}
+	{{range $typ, $overloads := .TypToOverloads}}
 	case types.{{$typ}}:
 		switch op.(type) {
 		case tree.BinaryOperator:
@@ -229,6 +268,14 @@ func GetProjectionOperator(
 }
 `
 
+type genInput struct {
+	TypToOverloads map[types.T][]*overload
+	// ConstSides is a boolean array that contains two elements, true and false.
+	// It's used by the template to generate both variants of the const projection
+	// op - once where the left is const, and one where the right is const.
+	ConstSides []bool
+}
+
 func genProjectionOps(wr io.Writer) error {
 	tmpl, err := template.New("projection_ops").Parse(projTemplate)
 	if err != nil {
@@ -244,7 +291,7 @@ func genProjectionOps(wr io.Writer) error {
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)
 	}
-	return tmpl.Execute(wr, typToOverloads)
+	return tmpl.Execute(wr, genInput{typToOverloads, []bool{false, true}})
 }
 
 func init() {

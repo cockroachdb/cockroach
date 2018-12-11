@@ -329,19 +329,41 @@ func planExpressionOperators(
 		return op, resultIdx, ct, err
 	case *tree.BinaryExpr:
 		binOp := t.Operator
+		// There are 3 cases. Either the left is constant, the right is constant,
+		// or neither are constant.
+		lConstArg, lConst := t.Left.(tree.Datum)
+		if lConst {
+			// Case one: The left is constant.
+			// Normally, the optimizer normalizes binary exprs so that the constant
+			// argument is on the right side. This doesn't happen for non-commutative
+			// operators such as - and /, though, so we still need this case.
+			rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), columnTypes, input)
+			if err != nil {
+				return nil, resultIdx, ct, err
+			}
+			resultIdx = len(ct)
+			typ := ct[rightIdx]
+			// The projection result will be outputted to a new column which is appended
+			// to the input batch.
+			op, err := exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
+			ct = append(ct, typ)
+			return op, resultIdx, ct, err
+		}
 		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
 		typ := ct[leftIdx]
-		if constArg, ok := t.Right.(tree.Datum); ok {
+		if rConstArg, rConst := t.Right.(tree.Datum); rConst {
+			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.
 			resultIdx = len(ct)
-			op, err := exec.GetProjectionConstOperator(typ, binOp, leftOp, leftIdx, constArg, resultIdx)
+			op, err := exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
 			ct = append(ct, typ)
 			return op, resultIdx, ct, err
 		}
+		// Case 3: neither are constant.
 		rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, nil, err

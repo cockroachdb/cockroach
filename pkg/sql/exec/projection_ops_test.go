@@ -90,7 +90,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionConstOperator(ct, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(ct, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
