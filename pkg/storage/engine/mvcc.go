@@ -1332,6 +1332,9 @@ func mvccPutInternal(
 				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			} else if txn.Epoch == meta.Txn.Epoch && txn.Sequence <= meta.Txn.Sequence {
+				// The transaction has executed at this sequence before. This is merely a
+				// replay of the transactional write. Assert that all is in order and return
+				// early.
 				return replayTransactionalWrite(ctx, engine, iter, meta, ms, key, timestamp, value, txn, buf, valueFn)
 			}
 
