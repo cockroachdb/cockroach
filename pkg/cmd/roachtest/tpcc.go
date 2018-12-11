@@ -129,7 +129,7 @@ func registerTPCC(r *registry) {
 		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
 		// match our expectation for the max tpcc warehouses that previous
 		// releases will support on this hardware.
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400

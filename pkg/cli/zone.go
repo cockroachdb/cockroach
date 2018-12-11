@@ -25,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/spf13/cobra"
 )
 
 type runQueryRawFn func(q string, parameters ...driver.Value) ([]string, [][]string, error)
+
+var verZones = version.MustParse("v1.2.0-alpha.20171026")
 
 // runQueryRawMaybeExperimental tries to run the query without the
 // experimental keyword, and if that fails with a syntax error, with
@@ -82,7 +85,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+	if err := conn.requireServerVersion(verZones); err != nil {
 		return err
 	}
 
@@ -141,7 +144,7 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+	if err := conn.requireServerVersion(verZones); err != nil {
 		return err
 	}
 
@@ -195,7 +198,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+	if err := conn.requireServerVersion(verZones); err != nil {
 		return err
 	}
 
@@ -274,7 +277,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+	if err := conn.requireServerVersion(verZones); err != nil {
 		return err
 	}
 

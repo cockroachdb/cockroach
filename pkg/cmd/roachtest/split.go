@@ -47,7 +47,7 @@ func registerLoadSplits(r *registry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
-		MinVersion: "2.2.0",
+		MinVersion: "v2.2.0",
 		Nodes:      nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// After load based splitting is turned on, from experiments
@@ -85,7 +85,7 @@ func registerLoadSplits(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
-		MinVersion: "2.2.0",
+		MinVersion: "v2.2.0",
 		Nodes:      nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
@@ -102,7 +102,7 @@ func registerLoadSplits(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
-		MinVersion: "2.2.0",
+		MinVersion: "v2.2.0",
 		Nodes:      nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
