@@ -43,6 +43,17 @@ type benchDataOptions struct {
 	numVersions int
 	numKeys     int
 	valueBytes  int
+
+	// In transactional mode, data is written by writing and later resolving
+	// intents. In non-transactional mode, data is written directly, without
+	// leaving intents. Transactional mode notably stresses RocksDB deletion
+	// tombstones, as the metadata key is repeatedly written and deleted.
+	//
+	// Both modes are reflective of real workloads. Transactional mode simulates
+	// data that has recently been INSERTed into a table, while non-transactional
+	// mode simulates data that has been RESTOREd or is old enough to have been
+	// fully compacted.
+	transactional bool
 }
 
 // setupMVCCData writes up to numVersions values at each of numKeys
@@ -64,6 +75,9 @@ func setupMVCCData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (Engine, string) {
 	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", opts.numVersions, opts.numKeys, opts.valueBytes)
+	if opts.transactional {
+		loc += "_txn"
+	}
 
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
@@ -101,6 +115,36 @@ func setupMVCCData(
 	}
 
 	counts := make([]int, opts.numKeys)
+
+	var txn *roachpb.Transaction
+	if opts.transactional {
+		txn = txn1Commit
+	}
+
+	writeKey := func(batch Batch, idx int) {
+		key := keys[idx]
+		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
+		value.InitChecksum(key)
+		counts[idx]++
+		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
+		if err := MVCCPut(ctx, batch, nil /* ms */, key, ts, value, txn); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	resolveLastIntent := func(batch Batch, idx int) {
+		key := keys[idx]
+		txnMeta := txn.TxnMeta
+		txnMeta.Timestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
+		if err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
+			Span:   roachpb.Span{Key: key},
+			Status: roachpb.COMMITTED,
+			Txn:    txnMeta,
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+
 	batch := eng.NewBatch()
 	for i, idx := range order {
 		// Output the keys in ~20 batches. If we used a single batch to output all
@@ -121,13 +165,22 @@ func setupMVCCData(
 			}
 		}
 
-		key := keys[idx]
-		ts := hlc.Timestamp{WallTime: int64(counts[idx]+1) * 5}
-		counts[idx]++
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
-		value.InitChecksum(key)
-		if err := MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
-			b.Fatal(err)
+		if opts.transactional {
+			// If we've previously written this key transactionally, we need to
+			// resolve the intent we left. We don't do this immediately after writing
+			// the key to introduce the possibility that the intent's resolution ends
+			// up in a different batch than writing the intent itself. Note that the
+			// first time through this loop for any given key we'll attempt to resolve
+			// a non-existent intent, but that's OK.
+			resolveLastIntent(batch, idx)
+		}
+		writeKey(batch, idx)
+	}
+	if opts.transactional {
+		// If we were writing transactionally, we need to do one last round of
+		// intent resolution. Just stuff it all into the last batch.
+		for idx := range keys {
+			resolveLastIntent(batch, idx)
 		}
 	}
 	if err := batch.Commit(false /* sync */); err != nil {
