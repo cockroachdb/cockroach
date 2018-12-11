@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -47,8 +48,8 @@ type modelTimeSeriesDataStore struct {
 	t                  testing.TB
 	containsCalled     int
 	pruneCalled        int
-	pruneSeenStartKeys map[string]struct{}
-	pruneSeenEndKeys   map[string]struct{}
+	pruneSeenStartKeys []roachpb.Key
+	pruneSeenEndKeys   []roachpb.Key
 }
 
 func (m *modelTimeSeriesDataStore) ContainsTimeSeries(start, end roachpb.RKey) bool {
@@ -58,7 +59,10 @@ func (m *modelTimeSeriesDataStore) ContainsTimeSeries(start, end roachpb.RKey) b
 	m.Lock()
 	defer m.Unlock()
 	m.containsCalled++
-	return true
+
+	// We're going to consider some user-space ranges as containing timeseries.
+	return roachpb.Key("a").Compare(start.AsRawKey()) <= 0 &&
+		roachpb.Key("z").Compare(end.AsRawKey()) > 0
 }
 
 func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
@@ -83,8 +87,14 @@ func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 	m.Lock()
 	defer m.Unlock()
 	m.pruneCalled++
-	m.pruneSeenStartKeys[start.String()] = struct{}{}
-	m.pruneSeenEndKeys[end.String()] = struct{}{}
+	m.pruneSeenStartKeys = append(m.pruneSeenStartKeys, start.AsRawKey())
+	sort.Slice(m.pruneSeenStartKeys, func(i, j int) bool {
+		return m.pruneSeenStartKeys[i].Compare(m.pruneSeenStartKeys[j]) < 0
+	})
+	m.pruneSeenEndKeys = append(m.pruneSeenEndKeys, end.AsRawKey())
+	sort.Slice(m.pruneSeenEndKeys, func(i, j int) bool {
+		return m.pruneSeenEndKeys[i].Compare(m.pruneSeenEndKeys[j]) < 0
+	})
 	return nil
 }
 
@@ -93,11 +103,8 @@ func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	model := &modelTimeSeriesDataStore{
-		t:                  t,
-		pruneSeenStartKeys: make(map[string]struct{}),
-		pruneSeenEndKeys:   make(map[string]struct{}),
-	}
+	ctx := context.Background()
+	model := &modelTimeSeriesDataStore{t: t}
 
 	manual := hlc.NewManualClock(1)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
@@ -107,15 +114,16 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	cfg.TestingKnobs.DisableMergeQueue = true
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(t, stopper, cfg)
 
-	// Generate several splits.
-	splitKeys := []roachpb.Key{roachpb.Key("c"), roachpb.Key("b"), roachpb.Key("a")}
+	// Generate several splits. The "c"-"zz" range is not going to be considered
+	// as containing timeseries.
+	splitKeys := []roachpb.Key{roachpb.Key("zz"), roachpb.Key("c"), roachpb.Key("b"), roachpb.Key("a")}
 	for _, k := range splitKeys {
 		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
-		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+		if _, pErr := client.SendWrappedWith(ctx, store, roachpb.Header{
 			RangeID: repl.RangeID,
 		}, args); pErr != nil {
 			t.Fatal(pErr)
@@ -125,25 +133,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// Generate a list of start/end keys the model should have been passed by
 	// the queue. This consists of all split keys, with KeyMin as an additional
 	// start and KeyMax as an additional end.
-	expectedStartKeys := make(map[string]struct{})
-	expectedEndKeys := make(map[string]struct{})
-	expectedStartKeys[roachpb.KeyMin.String()] = struct{}{}
-	expectedEndKeys[roachpb.KeyMax.String()] = struct{}{}
-	for _, expected := range splitKeys {
-		expectedStartKeys[expected.String()] = struct{}{}
-		expectedEndKeys[expected.String()] = struct{}{}
-	}
+	expectedStartKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")}
 
-	// Wait for splits to complete and system config to be available.
-	testutils.SucceedsSoon(t, func() error {
-		if a, e := store.ReplicaCount(), len(expectedEndKeys); a != e {
-			return fmt.Errorf("expected %d replicas in store; found %d", a, e)
-		}
-		if cfg := store.Gossip().GetSystemConfig(); cfg == nil {
-			return fmt.Errorf("system config not yet available")
-		}
-		return nil
-	})
+	expectedEndKeys := []roachpb.Key{roachpb.Key("b"), roachpb.Key("c")}
 
 	// Force replica scan to run, which will populate the model.
 	now := store.Clock().Now()
@@ -153,7 +145,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		model.Lock()
 		defer model.Unlock()
-		if a, e := model.containsCalled, len(expectedStartKeys); a != e {
+		// containsCalled is dependent on the number of ranges in the cluster, which
+		// is larger than the ones we've created.
+		if a, e := model.containsCalled, len(expectedStartKeys); a < e {
 			return fmt.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 		}
 		if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
@@ -172,18 +166,14 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	model.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
-		keys := []roachpb.RKey{roachpb.RKeyMin}
-		for _, k := range splitKeys {
-			keys = append(keys, roachpb.RKey(k))
-		}
-		for _, key := range keys {
-			repl := store.LookupReplica(key)
-			ts, err := repl.GetQueueLastProcessed(context.TODO(), "timeSeriesMaintenance")
+		for _, key := range expectedStartKeys {
+			repl := store.LookupReplica(roachpb.RKey(key))
+			ts, err := repl.GetQueueLastProcessed(ctx, "timeSeriesMaintenance")
 			if err != nil {
 				return err
 			}
 			if ts.Less(now) {
-				return errors.Errorf("expected last processed %s > %s", ts, now)
+				return errors.Errorf("expected last processed (%s) %s > %s", repl, ts, now)
 			}
 		}
 		return nil
@@ -193,7 +183,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// clock forward, no pruning will take place on second invocation.
 	store.ForceTimeSeriesMaintenanceQueueProcess()
 	model.Lock()
-	if a, e := model.containsCalled, len(expectedStartKeys); a != e {
+	if a, e := model.containsCalled, len(expectedStartKeys); a < e {
 		t.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 	}
 	if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
@@ -207,7 +197,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		model.Lock()
 		defer model.Unlock()
-		if a, e := model.containsCalled, len(expectedStartKeys)*2; a != e {
+		// containsCalled is dependent on the number of ranges in the cluster, which
+		// is larger than the ones we've created.
+		if a, e := model.containsCalled, len(expectedStartKeys)*2; a < e {
 			return errors.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 		}
 		if a, e := model.pruneCalled, len(expectedStartKeys)*2; a != e {
