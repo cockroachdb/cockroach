@@ -772,7 +772,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.UnresolvedName> table_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
-%type <tree.TableExpr> insert_target
+%type <tree.TableExpr> insert_target create_stats_target
 
 %type <*tree.TableNameWithIndex> table_name_with_index
 %type <tree.TableNameWithIndexList> table_name_with_index_list
@@ -793,7 +793,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
 %type <tree.DistinctOn> distinct_on_clause
-%type <tree.NameList> opt_column_list insert_column_list
+%type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params
@@ -2123,24 +2123,47 @@ create_ddl_stmt:
 // %Category: Experimental
 // %Text:
 // CREATE STATISTICS <statisticname>
-//   ON <colname> [, ...]
+//   [ON <colname> [, ...]]
 //   FROM <tablename> [AS OF SYSTEM TIME <expr>]
 create_stats_stmt:
-  CREATE STATISTICS statistics_name ON name_list FROM table_name opt_as_of_clause
+  CREATE STATISTICS statistics_name opt_stats_columns FROM create_stats_target opt_as_of_clause
   {
-    name, err := tree.NormalizeTableName($7.unresolvedName())
+    $$.val = &tree.CreateStats{
+      Name: tree.Name($3),
+      ColumnNames: $4.nameList(),
+      Table: $6.tblExpr(),
+      AsOf: $7.asOfClause(),
+    }
+  }
+| CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
+
+opt_stats_columns:
+  ON name_list
+  {
+    $$.val = $2.nameList()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.NameList(nil)
+  }
+
+create_stats_target:
+  table_name
+  {
+    name, err := tree.NormalizeTableName($1.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &tree.CreateStats{
-      Name: tree.Name($3),
-      ColumnNames: $5.nameList(),
-      Table: name,
-      AsOf: $8.asOfClause(),
+    $$.val = &name
+  }
+| '[' iconst64 ']'
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TableRef{
+      TableID: $2.int64(),
     }
   }
-| CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 create_changefeed_stmt:
   CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options

@@ -1129,7 +1129,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
-	Table       TableName
+	Table       TableExpr
 	AsOf        AsOfClause
 }
 
@@ -1138,11 +1138,13 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE STATISTICS ")
 	ctx.FormatNode(&node.Name)
 
-	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.ColumnNames)
+	if len(node.ColumnNames) > 0 {
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(&node.ColumnNames)
+	}
 
 	ctx.WriteString(" FROM ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 
 	if node.AsOf.Expr != nil {
 		ctx.WriteByte(' ')

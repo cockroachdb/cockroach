@@ -577,6 +577,10 @@ var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
 	time.Hour*2, // 2 x diagnosticReportFrequency
 )
 
+var queryCacheEnabled = settings.RegisterBoolSetting(
+	"sql.query_cache.enabled", "enable the query cache", false,
+)
+
 // PeriodicallyClearStmtStats runs a loop to ensure that sql stats are reset.
 // Usually we expect those stats to be reset by diagnostics reporting, after it
 // generates its reports. However if the diagnostics loop crashes and stops
