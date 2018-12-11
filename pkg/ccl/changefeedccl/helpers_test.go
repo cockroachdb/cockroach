@@ -735,7 +735,7 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		// TODO(dan): HACK until the changefeed can control pgwire flushing.
 		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -780,7 +780,7 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 		f := makeTable(s, db, flushCh)
 
