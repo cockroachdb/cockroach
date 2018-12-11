@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -93,10 +94,13 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 		return err
 	}
 
-	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
-	//   return err
-	// }
+	l.Printf("running SCRUB for test.kv\n")
+	before := timeutil.Now()
+	err := sqlutils.RunScrub(db, `test`, `kv`)
+	l.Printf("ran SCRUB for test.kv, took %v\n", timeutil.Since(before))
+	if err != nil {
+		return err
+	}
 
 	// All these return the same result.
 	validationQueries := []string{
@@ -122,10 +126,13 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 		return err
 	}
 
-	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
-	//	return err
-	// }
+	l.Printf("running SCRUB for test.kv\n")
+	before = timeutil.Now()
+	err = sqlutils.RunScrub(db, `test`, `kv`)
+	l.Printf("ran SCRUB for test.kv, took %v\n", timeutil.Since(before))
+	if err != nil {
+		return err
+	}
 
 	// All these return the same result.
 	validationQueries = []string{
@@ -293,18 +300,18 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2, time.Hour*7))
 }
 
 func registerSchemaChangeIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15, time.Minute*40))
 }
 
-func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+func makeIndexAddTpccTest(numNodes, warehouses int, length, timeout time.Duration) testSpec {
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
 		Nodes:   nodes(numNodes),
-		Timeout: length * 2,
+		Timeout: timeout,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
@@ -319,6 +326,17 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 				},
 				Duration: length,
 			})
+
+			for _, tbl := range []string{`order`, `customer`} {
+				conn := c.Conn(ctx, 1)
+				c.l.Printf("running SCRUB for %s\n", tbl)
+				before := timeutil.Now()
+				err := sqlutils.RunScrub(conn, `tpcc`, tbl)
+				c.l.Printf("ran SCRUB for %s, took %v\n", tbl, timeutil.Since(before))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 		},
 	}
 }
