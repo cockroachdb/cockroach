@@ -520,17 +520,19 @@ func (s *Store) canApplySnapshotLocked(
 				// we would also need to teach the queues how to deal with un-
 				// initialized replicas).
 				//
-				// So we let the snapshot through. This is safe (or at least we
-				// assume so) because we carry out all snapshot decisions
-				// through Raft (though it still is an odd path that we would
-				// be wise to avoid if it weren't so difficult).
+				// So we let the snapshot through (by falling through to the
+				// overlap check, where it either picks up placeholders or
+				// fails). This is safe (or at least we assume so) because we
+				// carry out all snapshot decisions through Raft (though it
+				// still is an odd path that we would be wise to avoid if it
+				// weren't so difficult).
 				//
 				// A consequence of letting this snapshot through is opening this
 				// replica up to the possiblity of erroneous replicaGC. This is
 				// because it will retain the replicaID of the current replica,
 				// which is going to be initialized after the snapshot (and thus
 				// gc'able).
-				return nil, nil
+				_ = 0 // avoid staticcheck failure
 			}
 		}
 	}
