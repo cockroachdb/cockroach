@@ -110,7 +110,7 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		}
 		// TODO(tschottdorf): remove replicate queue failures when the cluster first starts.
 		// Ditto queue.raftsnapshot.process.failure.
-		rows, err := db.QueryContext(ctx, `SELECT * FROM crdb_internal.gossip_alerts WHERE description != 'queue.replicate.process.failure' AND description != 'ranges.underreplicated' AND description != 'queue.raftsnapshot.process.failure' ORDER BY node_id ASC, store_id ASC`)
+		rows, err := db.QueryContext(ctx, `SELECT * FROM crdb_internal.gossip_alerts ORDER BY node_id ASC, store_id ASC`)
 		_ = db.Close()
 		if err != nil {
 			return err
@@ -134,7 +134,10 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		}
 
 		if elapsed := timeutil.Since(tBegin); elapsed > 10*time.Second {
-			return errors.Errorf("health check against node %d took %s", nodeIdx, elapsed)
+			err := errors.Errorf("health check against node %d took %s", nodeIdx, elapsed)
+			logger.Printf(err.Error() + "\n")
+			// TODO(tschottdorf): see method comment.
+			// return err
 		}
 	}
 }
