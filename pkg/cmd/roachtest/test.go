@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/petermattis/goid"
 )
 
@@ -150,7 +150,7 @@ func newRegistry() *registry {
 
 func (r *registry) setBuildVersion(buildTag string) error {
 	var err error
-	r.buildVersion, err = version.NewVersion(buildTag)
+	r.buildVersion, err = version.Parse(buildTag)
 	return err
 }
 
@@ -259,21 +259,19 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 	}
 
 	if spec.MinVersion != "" {
+		v, err := version.Parse(spec.MinVersion)
+		if err != nil {
+			return fmt.Errorf("%s: unable to parse min-version: %s", spec.Name, err)
+		}
+		if v.PreRelease() != "" {
+			// Specifying a prerelease version as a MinVersion is too confusing
+			// to be useful. The comparison is not straightforward.
+			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", v)
+		}
 		// We append "-0" to the min-version spec so that we capture all
 		// prereleases of the specified version. Otherwise, "v2.1.0" would compare
 		// greater than "v2.1.0-alpha.x".
-		var err error
-		spec.minVersion, err = version.NewVersion(spec.MinVersion)
-		if err != nil {
-			return fmt.Errorf("%s: unable to parse min-version: %s: %+v",
-				spec.Name, spec.MinVersion, err)
-		}
-		if spec.minVersion.Prerelease() != "" {
-			// Specifying a prerelease version as a MinVersion is too confusing
-			// to be useful. The comparison is not straightforward.
-			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", spec.minVersion)
-		}
-		spec.minVersion = version.Must(version.NewVersion(spec.MinVersion + "-0"))
+		spec.minVersion = version.MustParse(spec.MinVersion + "-0")
 	}
 	return nil
 }
@@ -318,7 +316,7 @@ func (r *registry) ListAll(filter []string) []string {
 	var names []string
 	for _, t := range tests {
 		if t.Skip == "" && t.minVersion != nil {
-			if r.buildVersion.LessThan(t.minVersion) {
+			if !r.buildVersion.AtLeast(t.minVersion) {
 				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
 					r.buildVersion, t.minVersion)
 			}
@@ -346,7 +344,7 @@ func (r *registry) Run(filter []string, parallelism int, artifactsDir string, us
 	// Skip any tests for which the min-version is less than the build-version.
 	for _, t := range tests {
 		if t.Skip == "" && t.minVersion != nil {
-			if r.buildVersion.LessThan(t.minVersion) {
+			if !r.buildVersion.AtLeast(t.minVersion) {
 				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
 					r.buildVersion, t.minVersion)
 			}
@@ -734,18 +732,18 @@ func (t *test) ArtifactsDir() string {
 // versions are Cockroach build tag version numbers, not the internal cluster
 // version number.
 func (t *test) IsBuildVersion(minVersion string) bool {
-	vers, err := version.NewVersion(minVersion)
+	vers, err := version.Parse(minVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := vers.Prerelease(); p != "" {
+	if p := vers.PreRelease(); p != "" {
 		panic("cannot specify a prerelease: " + p)
 	}
 	// We append "-0" to the min-version spec so that we capture all
 	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
 	// greater than "v2.1.0-alpha.x".
-	vers = version.Must(version.NewVersion(minVersion + "-0"))
-	return !t.registry.buildVersion.LessThan(vers)
+	vers = version.MustParse(minVersion + "-0")
+	return t.registry.buildVersion.AtLeast(vers)
 }
 
 // runAsync starts a goroutine that runs a test. If the test has subtests,
