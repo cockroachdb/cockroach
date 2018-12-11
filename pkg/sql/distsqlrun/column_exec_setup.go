@@ -209,6 +209,14 @@ func newColOperator(
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 		)
 
+	case core.Sorter != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		op, err = exec.NewSorter(inputs[0],
+			types.FromColumnTypes(spec.Input[0].ColumnTypes),
+			core.Sorter.OutputOrdering.Columns)
+
 	default:
 		return nil, errors.Errorf("unsupported processor core %s", core)
 	}

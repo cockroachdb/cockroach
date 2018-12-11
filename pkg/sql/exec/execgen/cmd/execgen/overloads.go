@@ -90,7 +90,7 @@ var comparisonOpOverloads []*overload
 // implement it.
 var binaryOpToOverloads map[tree.BinaryOperator][]*overload
 
-// comparsionOpToOverloads maps a comparison operator to all of the overloads
+// comparisonOpToOverloads maps a comparison operator to all of the overloads
 // that implement it.
 var comparisonOpToOverloads map[tree.ComparisonOperator][]*overload
 
