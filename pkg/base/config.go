@@ -476,6 +476,14 @@ type RaftConfig struct {
 	// translates to ~1024 commands that might be executed in the handling of a
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
+	// Splitting a range which has a replica needing a snapshot results in two
+	// ranges in that state. The delay configured here slows down splits when in
+	// that situation (limiting to those splits not run through the split
+	// queue). The most important target here are the splits performed by
+	// backup/restore.
+	//
+	// -1 to disable.
+	RaftDelaySplitToSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -509,6 +517,13 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftMaxInflightMsgs == 0 {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
+	}
+
+	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
+		// A total of 100 ticks is >18s which experimentally has been shown to
+		// allow the small pile (<100) of Raft snapshots observed at the
+		// beginning of an import/restore to be resolved.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 100
 	}
 }
 
