@@ -53,20 +53,7 @@ message TxnMeta {
   // last request. Used to prevent replay and out-of-order application
   // protection (by means of a transaction retry).
   int32 sequence = 7;
-  // A zero-indexed sequence number indicating the index of a command
-  // within a batch. This disambiguate Raft replays of a batch from
-  // multiple commands in a batch which modify the same key. The field
-  // has now been deprecated because each request in a batch is now
-  // given its own sequence number.
-  //
-  // TODO(nvanbenschoten): Remove this field and its uses entirely
-  // in 2.2. This is safe because the field is only set on pending
-  // intents by transactions with 2.0 coordinators. 2.1 nodes need
-  // to be able to handle the field so they can interop with 2.0 nodes.
-  // However, 2.2 nodes will not, because all transactions started by
-  // 2.0 nodes will necessarily be abandoned for 2.2 nodes to join a
-  // cluster.
-  int32 deprecated_batch_index = 8;
+  reserved 8;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
