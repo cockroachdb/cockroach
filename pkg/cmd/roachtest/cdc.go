@@ -319,7 +319,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 func registerCDC(r *registry) {
 	r.Add(testSpec{
 		Name:       "cdc/tpcc-1000",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -335,7 +335,7 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/initial-scan",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -352,7 +352,7 @@ func registerCDC(r *registry) {
 	r.Add(testSpec{
 		Name:       "cdc/rangefeed-unstable",
 		Skip:       `resolved timestamps are not yet reliable with RangeFeed`,
-		MinVersion: "2.2.0",
+		MinVersion: "v2.2.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -369,7 +369,7 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/sink-chaos",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -385,7 +385,7 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/crdb-chaos",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -402,7 +402,7 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/ledger",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
@@ -428,7 +428,7 @@ func registerCDC(r *registry) {
 	// without potentially leaking secrets.
 	r.Add(testSpec{
 		Name:       "cdc/bank",
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Nodes:      nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)

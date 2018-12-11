@@ -56,9 +56,9 @@ func registerKV(r *registry) {
 		for _, n := range []int{1, 3} {
 			for _, e := range []bool{false, true} {
 				e := e
-				minVersion := "2.0.0"
+				minVersion := "v2.0.0"
 				if e {
-					minVersion = "2.1.0"
+					minVersion = "v2.1.0"
 				}
 				r.Add(testSpec{
 					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
@@ -77,7 +77,7 @@ func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
 		Name:       "kv/quiescence/nodes=3",
 		Nodes:      nodes(4),
-		MinVersion: "2.1.0",
+		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
