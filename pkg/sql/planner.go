@@ -538,15 +538,15 @@ func (p *planner) optionallyUseOptimizer(
 	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
 ) (bool, error) {
 	if sd.OptimizerMode == sessiondata.OptimizerOff {
-		log.VEvent(ctx, 1, "optimizer disabled")
+		log.VEvent(ctx, 2, "optimizer disabled")
 		return false, nil
 	}
 
-	log.VEvent(ctx, 1, "generating optimizer plan")
+	log.VEvent(ctx, 2, "generating optimizer plan")
 
 	err := p.makeOptimizerPlan(ctx, stmt)
 	if err == nil {
-		log.VEvent(ctx, 1, "optimizer plan succeeded")
+		log.VEvent(ctx, 2, "optimizer plan succeeded")
 		return true, nil
 	}
 	log.VEventf(ctx, 1, "optimizer plan failed: %v", err)

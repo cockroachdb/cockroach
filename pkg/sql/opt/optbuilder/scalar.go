@@ -283,6 +283,7 @@ func (b *Builder) buildScalar(
 
 	case *tree.Placeholder:
 		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
+			b.HadPlaceholders = true
 			// Replace placeholders with their value.
 			d, err := t.Eval(b.evalCtx)
 			if err != nil {

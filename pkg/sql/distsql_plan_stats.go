@@ -158,14 +158,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	planCtx *PlanningCtx, n *createStatsNode,
 ) (PhysicalPlan, error) {
-
-	stats := []requestedStat{
-		{
-			columns:             n.columns,
-			histogram:           len(n.ColumnNames) == 1,
+	stats := make([]requestedStat, len(n.columns))
+	for i := 0; i < len(stats); i++ {
+		stats[i] = requestedStat{
+			columns:             n.columns[i],
+			histogram:           len(n.columns[i]) == 1,
 			histogramMaxBuckets: histogramBuckets,
 			name:                string(n.Name),
-		},
+		}
 	}
 
 	return dsp.createStatsPlan(planCtx, n.tableDesc, stats)

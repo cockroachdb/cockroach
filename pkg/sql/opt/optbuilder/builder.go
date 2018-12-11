@@ -73,6 +73,10 @@ type Builder struct {
 	// pulled from an outer scope, that is, if the query was found to be correlated.
 	IsCorrelated bool
 
+	// HadPlaceholders is set to true if we replaced any placeholders with their
+	// values.
+	HadPlaceholders bool
+
 	factory *norm.Factory
 	stmt    tree.Statement
 

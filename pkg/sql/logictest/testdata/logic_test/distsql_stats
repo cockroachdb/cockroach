@@ -1,7 +1,7 @@
 # LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
 
 statement ok
-CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
 
 # Prevent the merge queue from immediately discarding our splits.
 statement ok
@@ -131,3 +131,125 @@ statistics_name  column_names  row_count  distinct_count  null_count
 s1               {a}           10000      10              0
 NULL             {b}           10000      10              0
 s2               {a}           10000      10              0
+
+#
+# Test default column statistics
+#
+
+statement ok
+CREATE STATISTICS s3 FROM data
+
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's3'
+----
+column_names  row_count  distinct_count  null_count
+{a}           10000      10              0
+{c}           10000      10              0
+
+# Add indexes, including duplicate index on column c.
+statement ok
+CREATE INDEX ON data (c DESC, b ASC); CREATE INDEX ON data (b DESC)
+
+statement ok
+CREATE STATISTICS s4 FROM data
+
+# Check that stats are only collected once per column.
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's4'
+----
+column_names  row_count  distinct_count  null_count
+{a}           10000      10              0
+{b}           10000      10              0
+{c}           10000      10              0
+
+statement ok
+DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
+
+statement ok
+CREATE STATISTICS s5 FROM [53]
+
+# We should no longer get stats for column c.
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's5'
+----
+column_names  row_count  distinct_count  null_count
+{a}           10000      10              0
+{b}           10000      10              0
+
+# A table with a hidden primary key and no other indexes has default
+# column stats collected on the first non-hidden column.
+statement ok
+CREATE TABLE simple (x INT, y INT)
+
+statement ok
+CREATE STATISTICS default_stat1 FROM simple
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat1    {x}           0          0               0
+
+# Add one null row.
+statement ok
+INSERT INTO simple VALUES (DEFAULT, DEFAULT)
+
+# Add an index.
+statement ok
+CREATE UNIQUE INDEX ON simple (y) STORING (x)
+
+statement ok
+CREATE STATISTICS default_stat2 FROM simple
+
+# Now stats are only collected on the index column.
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat1    {x}           0          0               0
+default_stat2    {y}           1          0               1
+
+#
+# Test numeric references
+#
+
+statement ok
+CREATE STATISTICS s6 ON a FROM [53]
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s1               {a}           10000      10              0
+NULL             {b}           10000      10              0
+s2               {a}           10000      10              0
+s3               {a}           10000      10              0
+s3               {c}           10000      10              0
+s4               {a}           10000      10              0
+s4               {b}           10000      10              0
+s4               {c}           10000      10              0
+s5               {a}           10000      10              0
+s5               {b}           10000      10              0
+s6               {a}           10000      10              0
+
+# Combine default columns and numeric reference.
+statement ok
+CREATE STATISTICS __auto__ FROM [53]
+
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = '__auto__'
+----
+column_names  row_count  distinct_count  null_count
+{a}           10000      10              0
+{b}           10000      10              0
