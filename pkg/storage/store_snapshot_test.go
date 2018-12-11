@@ -100,3 +100,43 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 		})
 	}
 }
+
+// TestSnapshotPreemptiveOnUninitializedReplica is a targeted regression test
+// against a bug that once accepted these snapshots without forcing them to
+// check for overlapping ranges.
+func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	store, _ := createTestStore(t, stopper)
+
+	// Create an uninitialized replica.
+	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("no replica created")
+	}
+
+	// Make a descriptor that overlaps r1 (any descriptor does because r1 covers
+	// all of the keyspace).
+	desc := *repl.Desc()
+	desc.StartKey = roachpb.RKey("a")
+	desc.EndKey = roachpb.RKey("b")
+
+	header := &SnapshotRequest_Header{}
+	header.State.Desc = &desc
+
+	if !header.IsPreemptive() {
+		t.Fatal("mock snapshot isn't preemptive")
+	}
+
+	if _, err := store.canApplySnapshot(
+		ctx, header, true, /* authoritative */
+	); !testutils.IsError(err, "intersects existing range") {
+		t.Fatal(err)
+	}
+}
