@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -28,6 +29,9 @@ func TestValidations(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		if strings.Contains(t.Name(), `rangefeed`) {
+			t.Skip(`#32946`)
+		}
 		// HACK: remove this once #32495 is fixed.
 		maybeWaitForEpochLeases(t, f.Server())
 

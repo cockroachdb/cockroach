@@ -530,15 +530,25 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	now := timeutil.Now()
 	if resolvedBehind := now.Sub(frontier.GoTime()); resolvedBehind > slownessThreshold {
 		if frontierChanged {
-			log.Infof(cf.Ctx, "job %d new resolved timestamp %s is behind by %s",
-				cf.spec.JobID, frontier, resolvedBehind)
+			if cf.spec.JobID != 0 {
+				log.Infof(cf.Ctx, "job %d new resolved timestamp %s is behind by %s",
+					cf.spec.JobID, frontier, resolvedBehind)
+			} else {
+				log.Infof(cf.Ctx, "sinkless feed new resolved timestamp %s is behind by %s",
+					frontier, resolvedBehind)
+			}
 		}
 		const slowSpanMaxFrequency = 10 * time.Second
 		if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
 			cf.lastSlowSpanLog = now
 			s := cf.sf.peekFrontierSpan()
-			log.Infof(cf.Ctx, "job %d span [%s,%s) is behind by %s",
-				cf.spec.JobID, s.Key, s.EndKey, resolvedBehind)
+			if cf.spec.JobID != 0 {
+				log.Infof(cf.Ctx, "job %d span [%s,%s) is behind by %s",
+					cf.spec.JobID, s.Key, s.EndKey, resolvedBehind)
+			} else {
+				log.Infof(cf.Ctx, "sinkless feed span [%s,%s) is behind by %s",
+					s.Key, s.EndKey, resolvedBehind)
+			}
 		}
 	}
 
