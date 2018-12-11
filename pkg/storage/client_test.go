@@ -174,6 +174,15 @@ func createTestStoreWithEngine(
 		return nil
 	})
 
+	// Wait for the system config to be available in gossip. All sorts of things
+	// might not work properly while the system config is not available.
+	testutils.SucceedsSoon(t, func() error {
+		if cfg := store.Gossip().GetSystemConfig(); cfg == nil {
+			return errors.Errorf("system config not available in gossip yet")
+		}
+		return nil
+	})
+
 	return store
 }
 
