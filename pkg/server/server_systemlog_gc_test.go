@@ -64,7 +64,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				storagepb.RangeLogEventType_add,
+				storagepb.RangeLogEventType_add.String(),
 			)
 			a.NoError(err)
 		}
@@ -151,15 +151,15 @@ func TestLogGCTrigger(t *testing.T) {
 		return count
 	}
 
-	systemLogMaxTS := func(ctx context.Context, db *gosql.DB, table string) time.Time {
-		var time time.Time
+	systemLogMaxTS := func(ctx context.Context, db *gosql.DB, table string) (time.Time, error) {
+		var ts time.Time
 		err := db.QueryRowContext(ctx,
 			fmt.Sprintf(`SELECT timestamp FROM system.%s ORDER by timestamp DESC LIMIT 1`, table),
-		).Scan(&time)
+		).Scan(&ts)
 		if err != nil {
-			t.Fatal(err)
+			return time.Time{}, err
 		}
-		return time
+		return ts, nil
 	}
 
 	testCases := []struct {
@@ -177,14 +177,13 @@ func TestLogGCTrigger(t *testing.T) {
 	}
 
 	gcDone := make(chan struct{})
-	storeKnobs := &storage.StoreTestingKnobs{
-		SystemLogsGCGCDone: gcDone,
-		SystemLogsGCPeriod: time.Nanosecond,
-	}
 
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: storeKnobs,
+			Store: &storage.StoreTestingKnobs{
+				SystemLogsGCGCDone: gcDone,
+				SystemLogsGCPeriod: time.Nanosecond,
+			},
 		},
 	}
 
@@ -195,8 +194,10 @@ func TestLogGCTrigger(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.table, func(t *testing.T) {
 			a := assert.New(t)
-			maxTS := systemLogMaxTS(ctx, db, tc.table)
-			a.NotEqual(systemLogRowCount(ctx, db, tc.table, maxTS), 0, "Expected non zero number of rows before %v", maxTS)
+			maxTS, err := systemLogMaxTS(ctx, db, tc.table)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// Reading gcDone once ensures that the previous gc is done
 			// (it could have been done long back and is waiting to send on this channel),
@@ -212,9 +213,8 @@ func TestLogGCTrigger(t *testing.T) {
 				maxTS,
 			)
 
-			_, err := db.Exec(fmt.Sprintf("SET CLUSTER SETTING server.%s.ttl='1ns'", tc.table))
+			_, err = db.Exec(fmt.Sprintf("SET CLUSTER SETTING server.%s.ttl='1ns'", tc.table))
 			a.NoError(err)
-			time.Sleep(time.Second)
 
 			<-gcDone
 			<-gcDone

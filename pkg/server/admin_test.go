@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1340,22 +1341,39 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 
 }
 
-func TestAdminAPIRangeLog(t *testing.T) {
+func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	rangeID := 654321
 	testCases := []struct {
 		rangeID  int
 		hasLimit bool
 		limit    int
 		expected int
 	}{
-		{1, false, 0, 1},
-		{2, false, 0, 2},
-		{2, true, 0, 2},
-		{2, true, -1, 2},
-		{2, true, 1, 1},
+		{rangeID, true, 0, 2},
+		{rangeID, true, -1, 2},
+		{rangeID, true, 1, 1},
+		{rangeID, false, 0, 2},
+		// We'll create one event that has rangeID+1 as the otherRangeID.
+		{rangeID + 1, false, 0, 1},
+	}
+
+	for _, otherRangeID := range []int{rangeID + 1, rangeID + 2} {
+		if _, err := db.Exec(
+			`INSERT INTO system.rangelog (
+             timestamp, "rangeID", "otherRangeID", "storeID", "eventType"
+           ) VALUES (
+             now(), $1, $2, $3, $4
+          )`,
+			rangeID, otherRangeID,
+			1, // storeID
+			storagepb.RangeLogEventType_add.String(),
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for _, tc := range testCases {
@@ -1374,16 +1392,18 @@ func TestAdminAPIRangeLog(t *testing.T) {
 			}
 
 			for _, event := range resp.Events {
-				if event.Event.RangeID != roachpb.RangeID(tc.rangeID) &&
-					event.Event.OtherRangeID != roachpb.RangeID(tc.rangeID) {
-					t.Errorf("expected rangeID or otherRangeID to be r%d, got r%d and r%d",
-						tc.rangeID, event.Event.RangeID, event.Event.OtherRangeID)
+				expID := roachpb.RangeID(tc.rangeID)
+				if event.Event.RangeID != expID && event.Event.OtherRangeID != expID {
+					t.Errorf("expected rangeID or otherRangeID to be %d, got %d and r%d",
+						expID, event.Event.RangeID, event.Event.OtherRangeID)
 				}
 			}
 		})
 	}
 }
 
+// Test the range log API when queries are not filtered by a range ID (like in
+// TestAdminAPIRangeLogByRangeID).
 func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})

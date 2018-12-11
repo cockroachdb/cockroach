@@ -220,10 +220,6 @@ func TestReportUsage(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	ts := s.(*TestServer)
 
-	if err := ts.WaitForInitialSplits(); err != nil {
-		t.Fatal(err)
-	}
-
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
 	}

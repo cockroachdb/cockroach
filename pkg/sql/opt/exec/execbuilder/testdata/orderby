@@ -765,13 +765,11 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
-sort                  ·       ·                (x, y, z)              +x
- │                    order   +x               ·                      ·
- └── filter           ·       ·                (x, y, z)              ·
-      │               filter  x = y            ·                      ·
-      └── index-join  ·       ·                (x, y, z)              ·
-           ├── scan   ·       ·                (y, z, rowid[hidden])  ·
-           │          table   xyz@xyz_z_y_idx  ·                      ·
-           │          spans   /1/!NULL-/2      ·                      ·
-           └── scan   ·       ·                (x, y, z)              ·
-·                     table   xyz@primary      ·                      ·
+filter           ·       ·                (x, y, z)              +y
+ │               filter  x = y            ·                      ·
+ └── index-join  ·       ·                (x, y, z)              +y
+      ├── scan   ·       ·                (y, z, rowid[hidden])  +y
+      │          table   xyz@xyz_z_y_idx  ·                      ·
+      │          spans   /1/!NULL-/2      ·                      ·
+      └── scan   ·       ·                (x, y, z)              ·
+·                table   xyz@primary      ·                      ·

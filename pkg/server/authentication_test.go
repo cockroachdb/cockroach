@@ -416,9 +416,6 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
-	if err := ts.WaitForInitialSplits(); err != nil {
-		t.Fatal(err)
-	}
 
 	const (
 		validUsername = "testuser"
