@@ -72,9 +72,9 @@
 # SimplifyMutationOrdering removes redundant columns from a mutation operator's
 # (Insert, Update, etc) input ordering.
 [SimplifyMutationOrdering, Normalize]
-(Insert
+(Insert | Update
     $input:*
     $mutationPrivate:* & (CanSimplifyMutationOrdering $input $mutationPrivate)
 )
 =>
-(Insert $input (SimplifyMutationOrdering $input $mutationPrivate))
+((OpName) $input (SimplifyMutationOrdering $input $mutationPrivate))
