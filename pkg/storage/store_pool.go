@@ -443,9 +443,10 @@ func (sp *StorePool) decommissioningReplicas(
 	return
 }
 
-// AvailableNodeCount returns the number of nodes which are
-// considered available for use as allocation targets. This includes
-// only live nodes which are not decommissioning.
+// AvailableNodeCount returns the number of nodes which are considered
+// available for use as allocation targets. This includes only nodes which are
+// not dead or decommissioning. It notably does include nodes that are not
+// considered live by node liveness but are also not yet considered dead.
 func (sp *StorePool) AvailableNodeCount() int {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
@@ -455,11 +456,14 @@ func (sp *StorePool) AvailableNodeCount() int {
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, detail := range sp.detailsMu.storeDetails {
+		if detail.desc == nil {
+			continue
+		}
 		switch s := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn); s {
-		case storeStatusThrottled, storeStatusAvailable:
+		case storeStatusThrottled, storeStatusAvailable, storeStatusUnknown, storeStatusReplicaCorrupted:
 			availableNodes[detail.desc.Node.NodeID] = struct{}{}
-		case storeStatusReplicaCorrupted, storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
-			// Do nothing; this node cannot be used.
+		case storeStatusDead, storeStatusDecommissioning:
+			// Do nothing; this node can't/shouldn't have any replicas on it.
 		default:
 			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
