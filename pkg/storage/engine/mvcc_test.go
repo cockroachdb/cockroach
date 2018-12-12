@@ -3286,11 +3286,10 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	}
 }
 
-// TestMVCCWriteWithSequenceAndBatchIndex verifies that retry errors
+// TestMVCCWriteWithSequence verifies that no retry errors
 // are thrown in the event that earlier sequence numbers are
-// encountered or if the same sequence and an earlier or same batch
-// index.
-func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
+// encountered.
+func TestMVCCWriteWithSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -3298,39 +3297,32 @@ func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
 	defer engine.Close()
 
 	testCases := []struct {
-		sequence   int32
-		batchIndex int32
-		expRetry   bool
+		sequence    int32
+		expectedErr string
 	}{
-		{1, 0, true},  // old sequence old batch index
-		{1, 1, true},  // old sequence, same batch index
-		{1, 2, true},  // old sequence, new batch index
-		{2, 0, true},  // same sequence, old batch index
-		{2, 1, true},  // same sequence, same batch index
-		{2, 2, false}, // same sequence, new batch index
-		{3, 0, false}, // new sequence, old batch index
-		{3, 1, false}, // new sequence, same batch index
-		{3, 2, false}, // new sequence, new batch index
+		{1, "missing an intent"}, // old sequence
+		{2, ""},                  // same sequence
+		{3, ""},                  // new sequence
 	}
 
 	ts := hlc.Timestamp{Logical: 1}
 	for i, tc := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		// Start with sequence 2, batch index 1.
+		// Start with sequence 2.
 		txn := *txn1
 		txn.Sequence = 2
-		txn.DeprecatedBatchIndex = 1
 		if err := MVCCPut(ctx, engine, nil, key, ts, value1, &txn); err != nil {
 			t.Fatal(err)
 		}
 
-		txn.Sequence, txn.DeprecatedBatchIndex = tc.sequence, tc.batchIndex
-		err := MVCCPut(ctx, engine, nil, key, ts, value2, &txn)
-		_, ok := err.(*roachpb.TransactionRetryError)
-		if !tc.expRetry && ok {
+		txn.Sequence = tc.sequence
+		err := MVCCPut(ctx, engine, nil, key, ts, value1, &txn)
+		if tc.expectedErr != "" && err != nil {
+			if !testutils.IsError(err, tc.expectedErr) {
+				t.Fatalf("%d: unexpected error: %s", i, err)
+			}
+		} else if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
-		} else if ok != tc.expRetry {
-			t.Fatalf("%d: expected retry %t but got %s", i, tc.expRetry, err)
 		}
 	}
 }
@@ -4400,6 +4392,128 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("intent should not be cleared by resolve intent request with lower epoch")
+	}
+}
+
+// TestMVCCIdempotentTransactions verifies that trying to execute a transaction is
+// idempotent.
+func TestMVCCIdempotentTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+
+	key := roachpb.Key("a")
+	value := roachpb.MakeValueFromString("first value")
+	newValue := roachpb.MakeValueFromString("second value")
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1}}
+	txn.Status = roachpb.PENDING
+
+	// Lay down an intent.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lay down an intent again with no problem because we're idempotent.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lay down an intent without increasing the sequence but with a different value.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, newValue, txn); err != nil {
+		if !testutils.IsError(err, "has a different value") {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatalf("put should've failed as replay of a transaction yields a different value")
+	}
+
+	// Lay down a second intent.
+	txn.Sequence++
+	if err := MVCCPut(ctx, engine, nil, key, ts1, newValue, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replay first intent without writing anything down.
+	txn.Sequence--
+	if err := MVCCPut(ctx, engine, nil, key, ts1, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the intent meta was as expected.
+	txn.Sequence++
+	aggMeta := &enginepb.MVCCMetadata{
+		Txn:       &txn.TxnMeta,
+		Timestamp: hlc.LegacyTimestamp(ts1),
+		KeyBytes:  mvccVersionTimestampSize,
+		ValBytes:  int64(len(newValue.RawBytes)),
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: value.RawBytes},
+		},
+	}
+	metaKey := mvccKey(key)
+	meta := &enginepb.MVCCMetadata{}
+	ok, _, _, err := engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared")
+	}
+	if !meta.Equal(aggMeta) {
+		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+	txn.Sequence--
+	// Lay down an intent without increasing the sequence but with a different value.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, newValue, txn); err != nil {
+		if !testutils.IsError(err, "has a different value") {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatalf("put should've failed as replay of a transaction yields a different value")
+	}
+
+	txn.Sequence--
+	// Lay down an intent with a lower sequence number to see if it detects missing intents.
+	if err := MVCCPut(ctx, engine, nil, key, ts1, newValue, txn); err != nil {
+		if !testutils.IsError(err, "missing an intent") {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatalf("put should've failed as replay of a transaction yields a different value")
+	}
+	txn.Sequence += 3
+
+	// on a separate key, start an increment.
+	val, err := MVCCIncrement(ctx, engine, nil, testKey1, ts1, txn, 1)
+	if val != 1 || err != nil {
+		t.Fatalf("expected val=1 (got %d): %s", val, err)
+	}
+	// As long as the sequence in unchanged, replaying the increment doesn't
+	// increase the value.
+	for i := 0; i < 10; i++ {
+		val, err = MVCCIncrement(ctx, engine, nil, testKey1, ts1, txn, 1)
+		if val != 1 || err != nil {
+			t.Fatalf("expected val=1 (got %d): %s", val, err)
+		}
+	}
+
+	// Increment again.
+	txn.Sequence++
+	val, err = MVCCIncrement(ctx, engine, nil, testKey1, ts1, txn, 1)
+	if val != 2 || err != nil {
+		t.Fatalf("expected val=2 (got %d): %s", val, err)
+	}
+	txn.Sequence--
+	// Replaying an older increment doesn't increase the value.
+	for i := 0; i < 10; i++ {
+		val, err = MVCCIncrement(ctx, engine, nil, testKey1, ts1, txn, 1)
+		if val != 1 || err != nil {
+			t.Fatalf("expected val=1 (got %d): %s", val, err)
+		}
 	}
 }
 

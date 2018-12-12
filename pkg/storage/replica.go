@@ -3426,17 +3426,6 @@ func (r *Replica) evaluateProposal(
 	// replication is not necessary.
 	res.Local.Reply = br
 
-	// Assert that successful write requests result in intents. This is
-	// important for transactional pipelining and the parallel commit proposal
-	// because both use the presence of an intent to indicate that a write
-	// succeeded. This check may have false negatives but will never have false
-	// positives.
-	if br.Txn != nil && br.Txn.Status != roachpb.ABORTED {
-		if ba.IsTransactionWrite() && !ba.IsRange() && batch.Empty() {
-			log.Fatalf(ctx, "successful transaction point write batch %v resulted in no-op", ba)
-		}
-	}
-
 	// needConsensus determines if the result needs to be replicated and
 	// proposed through Raft. This is necessary if at least one of the
 	// following conditions is true:
@@ -6388,22 +6377,6 @@ func evaluateBatch(
 				// request. Each request will set their own sequence number on
 				// the TxnMeta, which is stored as part of an intent.
 				ba.Txn.Sequence = seqNum
-			} else {
-				// If the DisallowUnsequencedTransactionalWrites testing knob
-				// is set, we assert that all transaction writes has assigned
-				// Request-scoped sequence numbers.
-				if rec.EvalKnobs().DisallowUnsequencedTransactionalWrites {
-					if roachpb.IsTransactionWrite(args) {
-						log.Fatalf(ctx, "found unsequenced transactional request %v in %v", args, ba)
-					}
-				}
-
-				// The Txn coordinator must not be setting sequence numbers on
-				// individual requests. Use the now-deprecated BatchIndex field.
-				//
-				// TODO(nvanbenschoten): remove this case and the explanation
-				// above in version 2.2.
-				ba.Txn.DeprecatedBatchIndex = int32(index)
 			}
 		}
 		// Note that responses are populated even when an error is returned.
