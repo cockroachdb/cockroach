@@ -196,17 +196,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 		return tree.DNull
 	case ColumnType_ARRAY:
 		if typ.ArrayContents == nil {
-			var contentsTyp ColumnType
-		LOOP:
-			for {
-				contentsTyp = RandColumnType(rng)
-				switch contentsTyp.SemanticType {
-				// Can't have an array of an array.
-				case ColumnType_ARRAY, ColumnType_JSONB:
-				default:
-					break LOOP
-				}
-			}
+			var contentsTyp = RandArrayContentsColumnType(rng)
 			typ.ArrayContents = &contentsTyp.SemanticType
 			typ.Locale = contentsTyp.Locale
 		}
@@ -260,7 +250,17 @@ func RandCollationLocale(rng *rand.Rand) *string {
 
 // RandColumnType returns a random ColumnType value.
 func RandColumnType(rng *rand.Rand) ColumnType {
-	typ := ColumnType{SemanticType: columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]}
+	return randColumnType(rng, columnSemanticTypes)
+}
+
+// RandArrayContentsColumnType returns a random ColumnType that's guaranteed
+// to be valid to use as the contents of an array.
+func RandArrayContentsColumnType(rng *rand.Rand) ColumnType {
+	return randColumnType(rng, arrayElemSemanticTypes)
+}
+
+func randColumnType(rng *rand.Rand, types []ColumnType_SemanticType) ColumnType {
+	typ := ColumnType{SemanticType: types[rng.Intn(len(types))]}
 	if typ.SemanticType == ColumnType_BIT {
 		typ.Width = int32(rng.Intn(50))
 	}
@@ -268,12 +268,12 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 		typ.Locale = RandCollationLocale(rng)
 	}
 	if typ.SemanticType == ColumnType_ARRAY {
-		typ.ArrayContents = &arrayElemSemanticTypes[rng.Intn(len(arrayElemSemanticTypes))]
-		if *typ.ArrayContents == ColumnType_COLLATEDSTRING {
+		inner := RandArrayContentsColumnType(rng)
+		if inner.SemanticType == ColumnType_COLLATEDSTRING {
 			// TODO(justin): change this when collated arrays are supported.
-			s := ColumnType_STRING
-			typ.ArrayContents = &s
+			inner.SemanticType = ColumnType_STRING
 		}
+		typ.ArrayContents = &inner.SemanticType
 	}
 	if typ.SemanticType == ColumnType_TUPLE {
 		// Generate tuples between 0 and 4 datums in length
