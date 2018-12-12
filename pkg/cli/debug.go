@@ -29,7 +29,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/debug"
@@ -51,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1253,77 +1253,26 @@ efficient time filtering as well as multiline regexp pattern matching via flags.
 	RunE: runDebugMergeLogs,
 }
 
+var debugMergeLogsOpts = struct {
+	from    time.Time
+	to      time.Time
+	filter  *regexp.Regexp
+	program *regexp.Regexp
+	file    *regexp.Regexp
+	prefix  string
+}{
+	program: regexp.MustCompile("^cockroach$"),
+	file:    regexp.MustCompile(log.FilePattern),
+}
+
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
-	from, to, filter, program, prefix, err := parseDebugMergeLogsArgs(cmd)
-	if err != nil {
-		return err
-	}
+	o := debugMergeLogsOpts
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, program, from, to)
+		args, o.file, o.program, o.from, o.to)
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), filter, prefix)
-}
-
-func parseDebugMergeLogsArgs(
-	cmd *cobra.Command,
-) (from, to time.Time, filter, program *regexp.Regexp, prefix *template.Template, err error) {
-	if from, err = parseTime(cmd.Flag("from").Value.String()); err != nil {
-		err = errors.Errorf("failed to parse from: %v", err)
-	} else if to, err = parseTime(cmd.Flag("to").Value.String()); err != nil {
-		err = errors.Errorf("failed to parse to: %v", err)
-	} else if filter, err = parseRegexp(cmd, "filter"); err != nil {
-		err = errors.Errorf("failed to parse filter: %v", err)
-	} else if program, err = parseRegexp(cmd, "program"); err != nil {
-		err = errors.Errorf("failed to parse program: %v", err)
-	} else if prefix, err = template.New("prefix").
-		Parse(cmd.Flag("prefix").Value.String()); err != nil {
-		err = errors.Errorf("failed to compile prefix template: %v", err)
-	}
-	return
-}
-
-func parseTime(ts string) (time.Time, error) {
-	if ts == "" {
-		return time.Time{}, nil
-	}
-	t, err := time.Parse("060102 15:04:05.999999", ts)
-	if err != nil {
-		return t, errors.Errorf("failed to parse %s as time: %v", ts, err)
-	}
-	return t.UTC(), nil
-}
-
-func parseRegexp(cmd *cobra.Command, flagName string) (*regexp.Regexp, error) {
-	str := cmd.Flag(flagName).Value.String()
-	if str == "" {
-		return nil, nil
-	}
-	return regexp.Compile(str)
-}
-
-func init() {
-	DebugCmd.AddCommand(debugCmds...)
-
-	f := debugSyncBenchCmd.Flags()
-	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
-		"number of concurrent writers")
-	f.DurationVarP(&syncBenchOpts.Duration, "duration", "d", syncBenchOpts.Duration,
-		"duration to run the test for")
-	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
-		"only write to the WAL, not to sstables")
-
-	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
-	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
-		"list of dead store IDs")
-
-	f = debugMergeLogsCommand.Flags()
-	f.String("from", "", "Time (in format \"060102 15:04:05.999999\") before which messages should be filtered.")
-	f.String("to", "", "Time (in format \"060102 15:04:05.999999\") after which messages should be filtered.")
-	f.String("filter", "", "If present acts as a regexp to filter log messages.")
-	f.String("prefix", "{{ .Details.Host }}> ", "Template pattern used a prefix to merged log messages. Evaluated on log.FileInfo")
-	f.String("program", "^cockroach$", "Regular expression used to select whether a program's log files should be read")
+	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix)
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1367,4 +1316,35 @@ These commands are useful for extracting data from the data files of a
 process that has failed and cannot restart.
 `,
 	RunE: usageAndErr,
+}
+
+func init() {
+	DebugCmd.AddCommand(debugCmds...)
+
+	f := debugSyncBenchCmd.Flags()
+	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
+		"number of concurrent writers")
+	f.DurationVarP(&syncBenchOpts.Duration, "duration", "d", syncBenchOpts.Duration,
+		"duration to run the test for")
+	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
+		"only write to the WAL, not to sstables")
+
+	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
+	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
+		"list of dead store IDs")
+
+	f = debugMergeLogsCommand.Flags()
+	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
+		"time before which messages should be filtered")
+	f.Var(flagutil.Time(&debugMergeLogsOpts.to), "to",
+		"time after which messages should be filtered")
+	f.Var(flagutil.Regexp(&debugMergeLogsOpts.filter), "filter",
+		"re which filters log messages")
+	f.Var(flagutil.Regexp(&debugMergeLogsOpts.file), "file-pattern",
+		"re which filters log files based on path, also used with prefix and program-filter")
+	f.Var(flagutil.Regexp(&debugMergeLogsOpts.program), "program-filter",
+		"re which filter log files that operates on the capture group named \"program\" in file-pattern, "+
+			"if no such group exists, program-filter is ignored")
+	f.StringVar(&debugMergeLogsOpts.prefix, "prefix", "${host}> ",
+		"expansion template (see regexp.Expand) used as prefix to merged log messages evaluated on file-pattern")
 }

@@ -20,23 +20,20 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/sync/errgroup"
 )
 
 type logStream interface {
-	fileInfo() *log.FileInfo // FileInfo for the current entry available in peek.
+	fileInfo() *fileInfo // FileInfo for the current entry available in peek.
 	peek() (log.Entry, bool)
 	pop() (log.Entry, bool) // If called after peek, must return the same values.
 	error() error
@@ -44,32 +41,26 @@ type logStream interface {
 
 // writeLogStream pops messages off of s and writes them to out prepending
 // prefix per message and filtering messages which match filter.
-func writeLogStream(
-	s logStream, out io.Writer, filter *regexp.Regexp, prefix *template.Template,
-) error {
+func writeLogStream(s logStream, out io.Writer, filter *regexp.Regexp, prefix string) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB
 
-	prefixCache := map[*log.FileInfo][]byte{}
-	getPrefix := func(fi *log.FileInfo) ([]byte, error) {
+	prefixCache := map[*fileInfo][]byte{}
+	getPrefix := func(fi *fileInfo) ([]byte, error) {
 		if prefixBuf, ok := prefixCache[fi]; ok {
 			return prefixBuf, nil
 		}
-		var prefixBuf bytes.Buffer
-		if err := prefix.Execute(&prefixBuf, fi); err != nil {
-			return nil, err
-		}
-		prefixCache[fi] = prefixBuf.Bytes()
+		prefixCache[fi] = fi.pattern.ExpandString(nil, prefix, fi.path, fi.matches)
 		return prefixCache[fi], nil
 	}
 
 	type entryInfo struct {
 		log.Entry
-		*log.FileInfo
+		*fileInfo
 	}
 	render := func(ei entryInfo, w io.Writer) (err error) {
 		var prefixBytes []byte
-		if prefixBytes, err = getPrefix(ei.FileInfo); err != nil {
+		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
 			return err
 		}
 		if _, err = w.Write(prefixBytes); err != nil {
@@ -85,7 +76,7 @@ func writeLogStream(
 		defer close(entryChan)
 		for e, ok := s.peek(); ok; e, ok = s.peek() {
 			select {
-			case entryChan <- entryInfo{Entry: e, FileInfo: s.fileInfo()}:
+			case entryChan <- entryInfo{Entry: e, fileInfo: s.fileInfo()}:
 			case <-ctx.Done():
 				return nil
 			}
@@ -146,20 +137,35 @@ type mergedStream []logStream
 
 // newMergedStreamFromPatterns creates a new logStream by first glob
 // expanding pattern, then filtering for matching files which conform to the
-// log filename pattern and match the program. The returned stream will only
-// return log entries in [from, to].
+// filePattern and if program is non-nil, they match the program which is
+// extracted from matching files via the named capture group with the name
+// "program". The returned stream will only return log entries in [from, to].
+// If no program capture group exists all files match.
 func newMergedStreamFromPatterns(
-	ctx context.Context, patterns []string, program *regexp.Regexp, from, to time.Time,
+	ctx context.Context,
+	patterns []string,
+	filePattern, programFilter *regexp.Regexp,
+	from, to time.Time,
 ) (logStream, error) {
 	paths, err := expandPatterns(patterns)
 	if err != nil {
 		return nil, err
 	}
-	files, err := findLogFiles(paths, program, to)
+	files, err := findLogFiles(paths, filePattern, programFilter,
+		groupIndex(filePattern, "program"), to)
 	if err != nil {
 		return nil, err
 	}
 	return newMergedStream(ctx, files, from, to)
+}
+
+func groupIndex(re *regexp.Regexp, groupName string) int {
+	for i, n := range re.SubexpNames() {
+		if n == groupName {
+			return i
+		}
+	}
+	return -1
 }
 
 func newMergedStream(
@@ -246,7 +252,7 @@ func (l *mergedStream) pop() (log.Entry, bool) {
 	return e, true
 }
 
-func (l *mergedStream) fileInfo() *log.FileInfo {
+func (l *mergedStream) fileInfo() *fileInfo {
 	if len(*l) == 0 {
 		return nil
 	}
@@ -285,57 +291,43 @@ func removeDuplicates(strings []string) (filtered []string) {
 	return filtered
 }
 
-type parseLogFilenameError struct {
-	path string
-	err  error
-}
-
-func (e *parseLogFilenameError) Error() string {
-	return fmt.Sprintf("failed to parse filename for %v: %v", e.path, e.err)
-}
-
-func getLogFileInfo(path string) (fileInfo, error) {
-	filename := filepath.Base(path)
-	details, err := log.ParseLogFilename(filename)
-	if err != nil {
-		return fileInfo{}, &parseLogFilenameError{path: path, err: err}
+func getLogFileInfo(path string, filePattern *regexp.Regexp) (fileInfo, bool) {
+	if matches := filePattern.FindStringSubmatchIndex(path); matches != nil {
+		return fileInfo{path: path, matches: matches, pattern: filePattern}, true
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		return fileInfo{}, err
-	}
-	return fileInfo{
-		path:     path,
-		FileInfo: log.MakeFileInfo(details, fi),
-	}, nil
+	return fileInfo{}, false
 }
 
 type fileInfo struct {
-	path string
-	log.FileInfo
+	path    string
+	pattern *regexp.Regexp
+	matches []int
 }
 
-func findLogFiles(paths []string, program *regexp.Regexp, to time.Time) ([]fileInfo, error) {
-	to = to.Truncate(time.Second) // Log files only have second resolution.
+func findLogFiles(
+	paths []string, filePattern, programFilter *regexp.Regexp, programGroup int, to time.Time,
+) ([]fileInfo, error) {
+	to = to.Truncate(time.Second) // log files only have second resolution
 	fileChan := make(chan fileInfo, len(paths))
-	var g errgroup.Group
-	for i := range paths {
-		p := paths[i]
-		g.Go(func() error {
-			fi, err := getLogFileInfo(p)
-			if err == nil && program.MatchString(fi.Details.Program) {
-				if to.IsZero() || timeutil.Unix(0, fi.Details.Time).Before(to) {
-					fileChan <- fi
-				}
-			} else if _, isParseErr := err.(*parseLogFilenameError); isParseErr {
-				err = nil
+	var wg sync.WaitGroup
+	wg.Add(len(paths))
+	for _, p := range paths {
+		go func(p string) {
+			defer wg.Done()
+			fi, ok := getLogFileInfo(p, filePattern)
+			if !ok {
+				return
 			}
-			return err
-		})
+			if programGroup > 0 {
+				program := fi.path[fi.matches[2*programGroup]:fi.matches[2*programGroup+1]]
+				if !programFilter.MatchString(program) {
+					return
+				}
+			}
+			fileChan <- fi
+		}(p)
 	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 	files := make([]fileInfo, 0, len(fileChan))
 	close(fileChan)
 	for f := range fileChan {
@@ -393,7 +385,7 @@ func (bs *bufferedLogStream) run() {
 
 func (bs *bufferedLogStream) peek() (log.Entry, bool) {
 	if bs.ok && !bs.read {
-		if bs.c == nil { // Indicates that run has not been called.
+		if bs.c == nil { // indicates that run has not been called
 			bs.runOnce.Do(bs.run)
 		}
 		bs.e, bs.ok = <-bs.c
@@ -431,7 +423,6 @@ type fileLogStream struct {
 // file is always closed before returning from this constructor so the initial
 // peek does not consume resources.
 func newFileLogStream(fi fileInfo, from, to time.Time) (logStream, error) {
-	// we want to create the struct, do a peek, then close the file
 	s := &fileLogStream{
 		fi:   fi,
 		from: from,
@@ -511,8 +502,8 @@ func (s *fileLogStream) pop() (e log.Entry, ok bool) {
 	return e, ok
 }
 
-func (s *fileLogStream) fileInfo() *log.FileInfo { return &s.fi.FileInfo }
-func (s *fileLogStream) error() error            { return s.err }
+func (s *fileLogStream) fileInfo() *fileInfo { return &s.fi }
+func (s *fileLogStream) error() error        { return s.err }
 
 // seekToFirstAfterFrom uses binary search to seek to an offset after all
 // entries which occur before from.

@@ -41,7 +41,7 @@ var cases = []testCase{
 	{
 		name:  "1.filter-program",
 		args:  []string{"testdata/merge_logs/1/*/*"},
-		flags: []string{"--program", "not-cockroach"},
+		flags: []string{"--program-filter", "not-cockroach"},
 	},
 	{
 		name:  "1.seek-past-end-of-file",
@@ -73,6 +73,11 @@ var cases = []testCase{
 			"testdata/merge_logs/2/2.logs/roachprod.log",
 		},
 		flags: []string{"--from", "181130 22:15:07.525316"},
+	},
+	{
+		name:  "3.non-standard",
+		args:  []string{"testdata/merge_logs/3/*/*"},
+		flags: []string{"--file-pattern", ".*", "--prefix", ""},
 	},
 }
 
