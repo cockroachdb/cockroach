@@ -91,6 +91,7 @@ enable_testing()
 # List of tests to build and run. Tests in `ccl/` are linked against roachccl, all others
 # are linked against roach only.
 set(tests
+  chunked_buffer_test.cc
   db_test.cc
   encoding_test.cc
   file_registry_test.cc
