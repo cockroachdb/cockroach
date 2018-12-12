@@ -245,11 +245,11 @@ INSERT INTO abcde (a, b, c, d) SELECT y, 1, y+1, 2 FROM xyz ORDER BY y, x, z
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  y:7(int) => a:1(int)
- │    ├──  "?column?":9(int) => b:2(int)
- │    ├──  "?column?":10(int) => c:3(int)
- │    ├──  "?column?":11(int) => d:4(int)
- │    └──  column12:12(int) => e:5(int)
+ │    ├──  y:7 => a:1
+ │    ├──  "?column?":9 => b:2
+ │    ├──  "?column?":10 => c:3
+ │    ├──  "?column?":11 => d:4
+ │    └──  column12:12 => e:5
  ├── internal-ordering: +7,+6 opt(9,11,12)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
@@ -279,7 +279,7 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) e:10(int)
  ├── update-mapping:
- │    └──  column11:11(int) => b:2(int)
+ │    └──  column11:11 => b:2
  ├── internal-ordering: +8 opt(7,11)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
