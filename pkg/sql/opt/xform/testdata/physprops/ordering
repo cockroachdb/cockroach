@@ -1190,33 +1190,9 @@ sort
 # Insert operator.
 # --------------------------------------------------
 
-# Verify that the internal ordering is required of the input.
+# Verify that external ordering is passed through to input.
 opt
-INSERT INTO a SELECT a, b::float, c::decimal, 'foo' FROM abc ORDER BY b
-----
-insert a
- ├── columns: <none>
- ├── insert-mapping:
- │    ├──  a:5 => x:1
- │    ├──  b:8 => y:2
- │    ├──  c:9 => z:3
- │    └──  "?column?":10 => s:4
- ├── internal-ordering: +8 opt(10)
- └── sort
-      ├── columns: a:5(int!null) b:8(float) c:9(decimal) "?column?":10(string!null)
-      ├── ordering: +8 opt(10)
-      └── project
-           ├── columns: b:8(float) c:9(decimal) "?column?":10(string!null) a:5(int!null)
-           ├── scan abc
-           │    └── columns: a:5(int!null) abc.b:6(int!null) abc.c:7(int!null)
-           └── projections
-                ├── abc.b::FLOAT8 [type=float]
-                ├── abc.c::DECIMAL [type=decimal]
-                └── const: 'foo' [type=string]
-
-# Verify that the external and internal orderings are intersected.
-opt
-SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *] ORDER BY b
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z LIMIT 2 RETURNING *] ORDER BY b
 ----
 insert abc
  ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
@@ -1224,143 +1200,152 @@ insert abc
  │    ├──  x:4 => a:1
  │    ├──  y:5 => b:2
  │    └──  z:6 => c:3
- ├── internal-ordering: +5,+6
  ├── ordering: +5
- └── sort
+ └── limit
       ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      ├── ordering: +5,+6
-      └── scan xyz
-           └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── internal-ordering: +5,+6
+      ├── ordering: +5
+      ├── sort
+      │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │    ├── ordering: +5,+6
+      │    └── scan xyz
+      │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      └── const: 2 [type=int]
 
-# Verify that the external and internal orderings are intersected and simplified
-# according to FDs.
-opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
-SELECT * FROM [INSERT INTO abc SELECT * FROM xyz WHERE y=z ORDER BY z RETURNING *] ORDER BY b, c
+# Verify that provided orderings are derived correctly.
+# TODO(radu): Use interesting orderings to get rid of top-level sort.
+opt format=show-all
+SELECT *
+FROM [INSERT INTO xyz SELECT b, c, d FROM abcd ORDER BY c, d LIMIT 2 RETURNING *]
+WHERE x=y
+ORDER BY y
 ----
-insert abc
- ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
- ├── insert-mapping:
- │    ├──  x:4 => a:1
- │    ├──  y:5 => b:2
- │    └──  z:6 => c:3
- ├── internal-ordering: +(5|6)
+sort
+ ├── columns: x:5(int!null) y:6(int!null) z:7(int!null)
+ ├── cardinality: [0 - 2]
  ├── side-effects, mutations
- ├── key: (4,6)
+ ├── stats: [rows=1.00903303, distinct(5)=1.00903303, null(5)=0, distinct(6)=1.00903303, null(6)=0, distinct(7)=1.0062099, null(7)=0]
+ ├── cost: 2.24044247
  ├── fd: (5)==(6), (6)==(5)
  ├── ordering: +(5|6) [provided: +5]
- └── sort
-      ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      ├── key: (4,6)
+ └── select
+      ├── columns: t.public.abcd.b:5(int!null) t.public.abcd.c:6(int!null) t.public.abcd.d:7(int!null)
+      ├── cardinality: [0 - 2]
+      ├── side-effects, mutations
+      ├── stats: [rows=1.00903303, distinct(5)=1.00903303, null(5)=0, distinct(6)=1.00903303, null(6)=0, distinct(7)=1.0062099, null(7)=0]
+      ├── cost: 2.21
       ├── fd: (5)==(6), (6)==(5)
-      ├── ordering: +(5|6) [provided: +5]
-      └── select
-           ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-           ├── key: (4,6)
-           ├── fd: (5)==(6), (6)==(5)
-           ├── scan xyz
-           │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-           │    ├── key: (4-6)
-           │    ├── prune: (4-6)
-           │    └── interesting orderings: (+4,+5,+6)
-           └── filters
-                └── y = z [type=bool, outer=(5,6), fd=(5)==(6), (6)==(5)]
+      ├── insert xyz
+      │    ├── columns: t.public.abcd.b:5(int!null) t.public.abcd.c:6(int!null) t.public.abcd.d:7(int!null)
+      │    ├── insert-mapping:
+      │    │    ├──  t.public.abcd.b:5 => t.public.xyz.x:1
+      │    │    ├──  t.public.abcd.c:6 => t.public.xyz.y:2
+      │    │    └──  t.public.abcd.d:7 => t.public.xyz.z:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── side-effects, mutations
+      │    ├── stats: [rows=2]
+      │    ├── cost: 2.18
+      │    └── scan abcd@cd
+      │         ├── columns: t.public.abcd.b:5(int) t.public.abcd.c:6(int) t.public.abcd.d:7(int)
+      │         ├── limit: 2
+      │         ├── stats: [rows=2, distinct(5)=1.98209566, null(5)=0.02, distinct(6)=1.98209566, null(6)=0.02, distinct(7)=1.98209566, null(7)=0.02]
+      │         ├── cost: 2.17
+      │         ├── prune: (5-7)
+      │         └── interesting orderings: (+6,+7)
+      └── filters
+           └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+                ├── variable: t.public.abcd.b [type=int]
+                └── variable: t.public.abcd.c [type=int]
+
+# Ignore internal ordering.
+opt
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
+----
+insert abc
+ ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── insert-mapping:
+ │    ├──  x:4 => a:1
+ │    ├──  y:5 => b:2
+ │    └──  z:6 => c:3
+ └── scan xyz
+      └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
 
 # --------------------------------------------------
 # Update operator.
 # --------------------------------------------------
 
-# Verify that the internal ordering is required of the input.
+# Verify that the external ordering is passed through to input.
 opt
-UPDATE a SET (x, y, z, s)=(SELECT a, b::float, c::decimal, 'foo' FROM abc) ORDER BY y
+SELECT * FROM [UPDATE abcd SET (a, b)=(1, 2) RETURNING *] ORDER BY c
 ----
-update a
- ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(float) z:7(decimal) s:8(string)
- ├── update-mapping:
- │    ├──  a:9 => x:1
- │    ├──  b:12 => y:2
- │    ├──  c:13 => z:3
- │    └──  "?column?":14 => s:4
- ├── internal-ordering: +6
- └── sort
-      ├── columns: x:5(int!null) y:6(float!null) z:7(decimal) s:8(string!null) a:9(int) b:12(float) c:13(decimal) "?column?":14(string)
-      ├── ordering: +6
-      └── left-join
-           ├── columns: x:5(int!null) y:6(float!null) z:7(decimal) s:8(string!null) a:9(int) b:12(float) c:13(decimal) "?column?":14(string)
-           ├── scan a
-           │    └── columns: x:5(int!null) y:6(float!null) z:7(decimal) s:8(string!null)
-           ├── max1-row
-           │    ├── columns: a:9(int!null) b:12(float) c:13(decimal) "?column?":14(string!null)
-           │    └── project
-           │         ├── columns: b:12(float) c:13(decimal) "?column?":14(string!null) a:9(int!null)
-           │         ├── scan abc
-           │         │    └── columns: a:9(int!null) abc.b:10(int!null) abc.c:11(int!null)
-           │         └── projections
-           │              ├── abc.b::FLOAT8 [type=float]
-           │              ├── abc.c::DECIMAL [type=decimal]
-           │              └── const: 'foo' [type=string]
-           └── filters (true)
-
-# Verify that the external and internal orderings are intersected.
-opt
-SELECT * FROM [UPDATE abc SET b=1 ORDER BY b, c RETURNING *] ORDER BY b
-----
-update abc
- ├── columns: a:4(int!null) b:7(int!null) c:6(int!null)
- ├── fetch columns: a:4(int!null) b:5(int) c:6(int!null)
- ├── update-mapping:
- │    └──  column7:7 => b:2
- ├── internal-ordering: +5,+6 opt(7)
- └── sort
-      ├── columns: a:4(int!null) b:5(int!null) c:6(int!null) column7:7(int!null)
-      ├── ordering: +5,+6 opt(7)
+project
+ ├── columns: a:11(int!null) b:12(int!null) c:8(int) d:9(int)
+ ├── ordering: +8 opt(11,12)
+ └── update abcd
+      ├── columns: c:8(int) d:9(int) rowid:10(int!null) column11:11(int!null) column12:12(int!null)
+      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+      ├── update-mapping:
+      │    ├──  column11:11 => a:1
+      │    └──  column12:12 => b:2
+      ├── ordering: +8 opt(11,12)
       └── project
-           ├── columns: column7:7(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
-           ├── scan abc
-           │    └── columns: a:4(int!null) b:5(int!null) c:6(int!null)
-           └── projections
-                └── const: 1 [type=int]
-
-# Verify that the external and internal orderings are intersected and simplified
-# according to FDs.
-opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
-SELECT *
-FROM [UPDATE abc SET (a, b, c)=(1, 2, 3) WHERE b=c ORDER BY c RETURNING *]
-ORDER BY b, c
-----
-update abc
- ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
- ├── fetch columns: a:4(int) b:5(int) c:6(int)
- ├── update-mapping:
- │    ├──  column7:7 => a:1
- │    ├──  column8:8 => b:2
- │    └──  column9:9 => c:3
- ├── internal-ordering: +(5|6) opt(7-9)
- ├── side-effects, mutations
- ├── fd: ()-->(7-9)
- └── sort
-      ├── columns: a:4(int!null) b:5(int!null) c:6(int!null) column7:7(int!null) column8:8(int!null) column9:9(int!null)
-      ├── key: (4,6)
-      ├── fd: ()-->(7-9), (5)==(6), (6)==(5)
-      ├── ordering: +(5|6) opt(7-9) [provided: +5]
-      └── project
-           ├── columns: column7:7(int!null) column8:8(int!null) column9:9(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
-           ├── key: (4,6)
-           ├── fd: ()-->(7-9), (5)==(6), (6)==(5)
-           ├── select
-           │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
-           │    ├── key: (4,6)
-           │    ├── fd: (5)==(6), (6)==(5)
-           │    ├── prune: (4)
-           │    ├── interesting orderings: (+4,+5,+6)
-           │    ├── scan abc
-           │    │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
-           │    │    ├── key: (4-6)
-           │    │    ├── prune: (4-6)
-           │    │    └── interesting orderings: (+4,+5,+6)
-           │    └── filters
-           │         └── b = c [type=bool, outer=(5,6), fd=(5)==(6), (6)==(5)]
+           ├── columns: column11:11(int!null) column12:12(int!null) a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+           ├── ordering: +8 opt(11,12)
+           ├── scan abcd@cd
+           │    ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+           │    └── ordering: +8
            └── projections
                 ├── const: 1 [type=int]
-                ├── const: 2 [type=int]
-                └── const: 3 [type=int]
+                └── const: 2 [type=int]
+
+# Verify that provided orderings are derived correctly.
+opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
+SELECT *
+FROM [UPDATE abcd SET b=b+1 ORDER BY c, d LIMIT 10 RETURNING *]
+WHERE b=c
+ORDER BY b, d
+----
+project
+ ├── columns: a:6(int) b:11(int!null) c:8(int!null) d:9(int)
+ ├── cardinality: [0 - 10]
+ ├── side-effects, mutations
+ ├── fd: (8)==(11), (11)==(8)
+ ├── ordering: +(8|11),+9 [provided: +8,+9]
+ ├── prune: (6,8,9,11)
+ └── select
+      ├── columns: a:6(int) c:8(int!null) d:9(int) rowid:10(int!null) column11:11(int!null)
+      ├── cardinality: [0 - 10]
+      ├── side-effects, mutations
+      ├── key: (10)
+      ├── fd: (10)-->(6,8,9,11), (8)==(11), (11)==(8)
+      ├── ordering: +(8|11),+9 [provided: +8,+9]
+      ├── update abcd
+      │    ├── columns: a:6(int) c:8(int) d:9(int) rowid:10(int!null) column11:11(int)
+      │    ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+      │    ├── update-mapping:
+      │    │    └──  column11:11 => b:2
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects, mutations
+      │    ├── key: (10)
+      │    ├── fd: (10)-->(6,8,9,11)
+      │    ├── ordering: +8,+9
+      │    └── project
+      │         ├── columns: column11:11(int) a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+      │         ├── cardinality: [0 - 10]
+      │         ├── key: (10)
+      │         ├── fd: (10)-->(6-9), (7)-->(11)
+      │         ├── ordering: +8,+9
+      │         ├── prune: (6-11)
+      │         ├── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │         ├── scan abcd@cd
+      │         │    ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+      │         │    ├── limit: 10
+      │         │    ├── key: (10)
+      │         │    ├── fd: (10)-->(6-9)
+      │         │    ├── ordering: +8,+9
+      │         │    ├── prune: (6-10)
+      │         │    └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │         └── projections
+      │              └── b + 1 [type=int, outer=(7)]
+      └── filters
+           └── column11 = c [type=bool, outer=(8,11), fd=(8)==(11), (11)==(8)]

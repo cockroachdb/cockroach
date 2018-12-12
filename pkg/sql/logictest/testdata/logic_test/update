@@ -339,20 +339,11 @@ statement count 4
 INSERT INTO kv VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
 query II
-UPDATE kv SET v = v + 1 ORDER BY v DESC RETURNING k,v
+UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 3 RETURNING k,v
 ----
 1  10
 3  8
 6  5
-8  3
-
-# Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
-
-statement error duplicate key value \(k\)=\(6\) violates unique constraint "primary"
-UPDATE kv SET k = k * 2
-
-statement count 4
-UPDATE kv SET k = k * 2 ORDER BY k DESC
 
 # Check that UPDATE properly supports LIMIT (MySQL extension)
 
