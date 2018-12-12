@@ -8338,6 +8338,18 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		Poison:        true,
 	}
 
+	sendReq := func(
+		ctx context.Context, repl *Replica, req roachpb.Request, txn *roachpb.Transaction,
+	) *roachpb.Error {
+		var ba roachpb.BatchRequest
+		ba.Header.RangeID = repl.RangeID
+		ba.Add(req)
+		ba.SetActiveTimestamp(repl.Clock().Now)
+		ba.Txn = txn
+		_, pErr := repl.Send(ctx, ba)
+		return pErr
+	}
+
 	testCases := []struct {
 		name        string
 		setup       func(context.Context, *Replica) *roachpb.Error // optional
@@ -8397,10 +8409,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		{
 			name: "redundant push txn req",
 			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
-				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
-					RangeID: repl.RangeID,
-				}, pushTxnReq)
-				return pErr
+				return sendReq(ctx, repl, pushTxnReq, nil /* txn */)
 			},
 			req: pushTxnReq,
 			// No-op - the transaction has already been pushed successfully.
@@ -8409,11 +8418,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		{
 			name: "resolve committed intent req, with intent",
 			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
-				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
-					RangeID: repl.RangeID,
-					Txn:     txn,
-				}, putReq)
-				return pErr
+				return sendReq(ctx, repl, putReq, txn)
 			},
 			req:         resolveCommittedIntentReq,
 			expProposal: true,
@@ -8433,10 +8438,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		{
 			name: "redundant resolve aborted intent req",
 			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
-				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
-					RangeID: repl.RangeID,
-				}, resolveAbortedIntentReq)
-				return pErr
+				return sendReq(ctx, repl, resolveAbortedIntentReq, nil /* txn */)
 			},
 			req: resolveAbortedIntentReq,
 			// No-op - the abort span has already been poisoned.
