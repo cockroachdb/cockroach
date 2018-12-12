@@ -1384,10 +1384,11 @@ output row: [30]
 query TTT
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t4@primary
-·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+·          parallel  ·
 
 statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1405,10 +1406,11 @@ output row: [40]
 query TTT
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t4@primary
-·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+·          parallel  ·
 
 # Optimization should also be applied for updates.
 # TODO(andyk): Need to do needed column analysis with column families.
@@ -1440,10 +1442,11 @@ count                ·      ·
 query TTT
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t4@primary
-·          spans  /10/20-/10/21/#
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20-/10/21/#
+·          parallel  ·
 
 # Optimization should not be applied for partial primary key filter.
 query TTT

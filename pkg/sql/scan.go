@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -98,6 +99,9 @@ type scanNode struct {
 
 	disableBatchLimits bool
 
+	// Should be set to true if sqlbase.ParallelScans is true.
+	parallelScansEnabled bool
+
 	run scanRun
 
 	// This struct must be allocated on the heap and its location stay
@@ -107,8 +111,12 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	noCopy util.NoCopy
 
-	// Set when the scanNode is crated via the exec factory.
+	// Set when the scanNode is created via the exec factory.
 	createdByOpt bool
+
+	// maxResults, if greater than 0, is the maximum number of results that a
+	// scan is guaranteed to return.
+	maxResults uint64
 
 	// Indicates if this scan is the source for a delete node.
 	isDeleteSource bool
@@ -259,14 +267,32 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
+// canParallelize returns true if this scanNode can be parallelized at the
+// distSender level safely.
+func (n *scanNode) canParallelize() bool {
+	// We choose only to parallelize if we are certain that no more than
+	// ParallelScanResultThreshold results will be returned, to prevent potential
+	// memory blowup.
+	// We can't parallelize if we have a non-zero limit hint, since DistSender
+	// is limited to running limited batches serially.
+	return n.maxResults != 0 &&
+		n.maxResults < distsqlrun.ParallelScanResultThreshold &&
+		n.limitHint() == 0 &&
+		n.parallelScansEnabled
+}
+
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
+	limitBatches := true
+	if n.canParallelize() || n.disableBatchLimits {
+		limitBatches = false
+	}
 	if err := n.run.fetcher.StartScan(
 		params.ctx,
 		params.p.txn,
 		n.spans,
-		!n.disableBatchLimits,
+		limitBatches,
 		limitHint,
 		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {

@@ -230,13 +230,15 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
+	constraint := c.ic.Constraint()
+
 	var err error
 	s.spans, err = spansFromConstraint(
-		s.desc, c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
+		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			c.ic.Constraint(), s.desc.ID, s.index.ID,
+			constraint, s.desc.ID, s.index.ID,
 		)
 	}
 
@@ -261,6 +263,7 @@ func (p *planner) selectIndex(
 	s.filterVars.Rebind(s.filter, true, false)
 
 	s.reverse = c.reverse
+	s.maxResults = calculateMaxResults(constraint, c.desc, c.index, p.EvalContext())
 
 	var plan planNode
 	if c.covering {
@@ -284,6 +287,47 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// calculateMaxResults returns the maximum number of results for a scan; the
+// scan is guaranteed never to return more results than this. Iff this hint is
+// invalid, 0 is returned.
+// This is a duplicate of the method Builder.indexConstraintMaxResults in the
+// execbuilder package - this exists so that the heuristic planner, which plans
+// mutations, can still detect this condition.
+func calculateMaxResults(
+	c *constraint.Constraint,
+	t *sqlbase.ImmutableTableDescriptor,
+	i *sqlbase.IndexDescriptor,
+	evalCtx *tree.EvalContext,
+) uint64 {
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return 0
+	}
+	if !i.Unique {
+		return 0
+	}
+
+	if c.Columns.Count() < len(i.ColumnIDs) {
+		// Not all cols specified.
+		return 0
+	}
+
+	var (
+		indexCols   opt.ColSet
+		notNullCols opt.ColSet
+	)
+	for _, id := range i.ColumnIDs {
+		if col, err := t.FindColumnByID(id); err != nil {
+			return 0
+		} else if !col.IsNullable() {
+			notNullCols.Add(int(id))
+		}
+
+		indexCols.Add(int(id))
+	}
+
+	return c.CalculateMaxResults(evalCtx, indexCols, notNullCols)
 }
 
 type indexInfo struct {

@@ -29,6 +29,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ParallelScanResultThreshold is the number of results up to which, if the
+// maximum number of results returned by a scan is known, the table reader
+// disables batch limits in the dist sender. This results in the parallelization
+// of these scans.
+const ParallelScanResultThreshold = 10000
+
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
 // desired column values to an output RowReceiver.
@@ -38,6 +44,10 @@ type tableReader struct {
 
 	spans     roachpb.Spans
 	limitHint int64
+
+	// maxResults is non-zero if there is a limit on the total number of rows
+	// that the tableReader will read.
+	maxResults uint64
 
 	ignoreMisplannedRanges bool
 
@@ -75,6 +85,7 @@ func newTableReader(
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
+	tr.maxResults = spec.MaxResults
 
 	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
@@ -234,9 +245,22 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.input.Start(fetcherCtx)
+
+	limitBatches := true
+	// We turn off limited batches if we know we have no limit and if the
+	// tableReader spans will return less than the ParallelScanResultThreshold.
+	// This enables distsender parallelism - if limitBatches is true, distsender
+	// does *not* parallelize multi-range scan requests.
+	if tr.maxResults != 0 &&
+		tr.maxResults < ParallelScanResultThreshold &&
+		tr.limitHint == 0 &&
+		sqlbase.ParallelScans.Get(&tr.flowCtx.Settings.SV) {
+		limitBatches = false
+	}
+	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	if err := tr.fetcher.StartScan(
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
+		limitBatches, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}
