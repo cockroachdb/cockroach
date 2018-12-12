@@ -72,9 +72,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => a:1(int)
- │    ├──  column14:14(int) => d:4(int)
- │    └──  column13:13(int) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column14:14 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
       ├── project
@@ -104,12 +104,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => a:1(int)
- │    ├──  column14:14(int) => b:2(int)
- │    ├──  column15:15(int) => c:3(int)
- │    ├──  column17:17(int) => d:4(int)
- │    ├──  column13:13(int) => e:5(int)
- │    └──  column16:16(int) => rowid:6(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column14:14 => b:2
+ │    ├──  column15:15 => c:3
+ │    ├──  column17:17 => d:4
+ │    ├──  column13:13 => e:5
+ │    └──  column16:16 => rowid:6
  └── project
       ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
       ├── project
@@ -136,12 +136,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column16:16(int) => a:1(int)
- │    ├──  column15:15(int) => b:2(int)
- │    ├──  column14:14(int) => c:3(int)
- │    ├──  column17:17(int) => d:4(int)
- │    ├──  column16:16(int) => e:5(int)
- │    └──  column13:13(int) => rowid:6(int)
+ │    ├──  column16:16 => a:1
+ │    ├──  column15:15 => b:2
+ │    ├──  column14:14 => c:3
+ │    ├──  column17:17 => d:4
+ │    ├──  column16:16 => e:5
+ │    └──  column13:13 => rowid:6
  └── project
       ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
       ├── project
@@ -168,12 +168,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(unknown) => a:1(int)
- │    ├──  column13:13(unknown) => b:2(int)
- │    ├──  column13:13(unknown) => c:3(int)
- │    ├──  column13:13(unknown) => d:4(int)
- │    ├──  column13:13(unknown) => e:5(int)
- │    └──  column13:13(unknown) => rowid:6(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column13:13 => b:2
+ │    ├──  column13:13 => c:3
+ │    ├──  column13:13 => d:4
+ │    ├──  column13:13 => e:5
+ │    └──  column13:13 => rowid:6
  └── project
       ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -189,10 +189,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => a:1(int)
- │    ├──  column14:14(int) => b:2(int)
- │    ├──  column15:15(int) => d:4(int)
- │    └──  column13:13(int) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column14:14 => b:2
+ │    ├──  column15:15 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column15:15(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null) column13:13(int) column14:14(int)
       ├── project
@@ -227,10 +227,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  b:8(int) => a:1(int)
- │    ├──  c:9(int) => b:2(int)
- │    ├──  column13:13(int) => d:4(int)
- │    └──  b:8(int) => e:5(int)
+ │    ├──  b:8 => a:1
+ │    ├──  c:9 => b:2
+ │    ├──  column13:13 => d:4
+ │    └──  b:8 => e:5
  └── project
       ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -250,9 +250,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => b:2(int)
- │    ├──  column14:14(int) => d:4(int)
- │    └──  a:7(int) => e:5(int)
+ │    ├──  column13:13 => b:2
+ │    ├──  column14:14 => d:4
+ │    └──  a:7 => e:5
  ├── internal-ordering: +7
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
@@ -293,8 +293,8 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── update-mapping:
- │    ├──  column7:7(int) => y:2(int)
- │    └──  column8:8(float) => z:3(float)
+ │    ├──  column7:7 => y:2
+ │    └──  column8:8 => z:3
  └── project
       ├── columns: column7:7(int!null) column8:8(float!null) x:4(string!null) y:5(int) z:6(float)
       ├── scan xyz
@@ -311,9 +311,9 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── update-mapping:
- │    ├──  column7:7(string) => x:1(string)
- │    ├──  column8:8(int) => y:2(int)
- │    └──  column9:9(float) => z:3(float)
+ │    ├──  column7:7 => x:1
+ │    ├──  column8:8 => y:2
+ │    └──  column9:9 => z:3
  └── project
       ├── columns: column7:7(string) column8:8(int) column9:9(float) x:4(string!null) y:5(int) z:6(float)
       ├── scan xyz
@@ -331,10 +331,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => a:1(int)
- │    ├──  column13:13(int) => b:2(int)
- │    ├──  column14:14(int) => d:4(int)
- │    └──  column13:13(int) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column13:13 => b:2
+ │    ├──  column14:14 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
       ├── project
@@ -374,10 +374,10 @@ select
                      ├── columns: a:10(int!null) rowid:15(int!null) y:16(int) column17:17(int) column18:18(int)
                      ├── fetch columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
                      ├── update-mapping:
-                     │    ├──  y:16(int) => b:5(int)
-                     │    ├──  column17:17(int) => c:6(int)
-                     │    ├──  column18:18(int) => d:7(int)
-                     │    └──  a:10(int!null) => e:8(int)
+                     │    ├──  y:16 => b:5
+                     │    ├──  column17:17 => c:6
+                     │    ├──  column18:18 => d:7
+                     │    └──  a:10 => e:8
                      └── project
                           ├── columns: column18:18(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null) y:16(int) column17:17(int)
                           ├── project
@@ -447,9 +447,9 @@ project
       ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
       ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── update-mapping:
-      │    ├──  column13:13(int!null) => a:1(int)
-      │    ├──  column14:14(int) => d:4(int)
-      │    └──  column13:13(int!null) => e:5(int)
+      │    ├──  column13:13 => a:1
+      │    ├──  column14:14 => d:4
+      │    └──  column13:13 => e:5
       └── project
            ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
            ├── project
@@ -481,9 +481,9 @@ project
  │    ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
  │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
  │    ├── update-mapping:
- │    │    ├──  column13:13(int!null) => a:1(int)
- │    │    ├──  column14:14(int) => d:4(int)
- │    │    └──  column13:13(int!null) => e:5(int)
+ │    │    ├──  column13:13 => a:1
+ │    │    ├──  column14:14 => d:4
+ │    │    └──  column13:13 => e:5
  │    └── project
  │         ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
  │         ├── project
@@ -524,9 +524,9 @@ project
            ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
            ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            ├── update-mapping:
-           │    ├──  column13:13(int!null) => a:1(int)
-           │    ├──  column14:14(int) => d:4(int)
-           │    └──  column13:13(int!null) => e:5(int)
+           │    ├──  column13:13 => a:1
+           │    ├──  column14:14 => d:4
+           │    └──  column13:13 => e:5
            ├── internal-ordering: +8
            └── sort
                 ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
@@ -562,9 +562,9 @@ project
       ├── columns: a:7(int!null) b:8(int) c:9(int) column13:13(int!null) column14:14(int)
       ├── fetch columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
       ├── update-mapping:
-      │    ├──  column14:14(int) => d:4(int)
-      │    ├──  a:7(int!null) => e:5(int)
-      │    └──  column13:13(int!null) => rowid:6(int)
+      │    ├──  column14:14 => d:4
+      │    ├──  a:7 => e:5
+      │    └──  column13:13 => rowid:6
       └── project
            ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
            ├── project
@@ -606,10 +606,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(unknown) => b:2(int)
- │    ├──  column14:14(int) => c:3(int)
- │    ├──  column13:13(unknown) => d:4(int)
- │    └──  a:7(int) => e:5(int)
+ │    ├──  column13:13 => b:2
+ │    ├──  column14:14 => c:3
+ │    ├──  column13:13 => d:4
+ │    └──  a:7 => e:5
  └── project
       ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -627,9 +627,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(unknown) => a:1(int)
- │    ├──  column14:14(int) => d:4(int)
- │    └──  column13:13(unknown) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column14:14 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(unknown)
       ├── project
@@ -661,11 +661,11 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(int) => a:1(int)
- │    ├──  column14:14(int) => b:2(int)
- │    ├──  column15:15(int) => c:3(int)
- │    ├──  column16:16(int) => d:4(int)
- │    └──  column13:13(int) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column14:14 => b:2
+ │    ├──  column15:15 => c:3
+ │    ├──  column16:16 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column16:16(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null)
       ├── project
@@ -690,11 +690,11 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column15:15(int) => a:1(int)
- │    ├──  column14:14(int) => b:2(int)
- │    ├──  column13:13(unknown) => c:3(int)
- │    ├──  column13:13(unknown) => d:4(int)
- │    └──  column15:15(int) => e:5(int)
+ │    ├──  column15:15 => a:1
+ │    ├──  column14:14 => b:2
+ │    ├──  column13:13 => c:3
+ │    ├──  column13:13 => d:4
+ │    └──  column15:15 => e:5
  └── project
       ├── columns: column13:13(unknown) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -712,10 +712,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(unknown) => b:2(int)
- │    ├──  column14:14(int) => c:3(int)
- │    ├──  column13:13(unknown) => d:4(int)
- │    └──  a:7(int) => e:5(int)
+ │    ├──  column13:13 => b:2
+ │    ├──  column14:14 => c:3
+ │    ├──  column13:13 => d:4
+ │    └──  a:7 => e:5
  └── project
       ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -732,10 +732,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column13:13(unknown) => a:1(int)
- │    ├──  column13:13(unknown) => b:2(int)
- │    ├──  column13:13(unknown) => d:4(int)
- │    └──  column13:13(unknown) => e:5(int)
+ │    ├──  column13:13 => a:1
+ │    ├──  column13:13 => b:2
+ │    ├──  column13:13 => d:4
+ │    └──  column13:13 => e:5
  └── project
       ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan abcde
@@ -775,9 +775,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  one:13(int) => a:1(int)
- │    ├──  column14:14(int) => d:4(int)
- │    └──  one:13(int) => e:5(int)
+ │    ├──  one:13 => a:1
+ │    ├──  column14:14 => d:4
+ │    └──  one:13 => e:5
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
       ├── left-join-apply
@@ -808,12 +808,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  x:16(int) => a:1(int)
- │    ├──  y:14(int) => b:2(int)
- │    ├──  z:17(int) => c:3(int)
- │    ├──  column19:19(int) => d:4(int)
- │    ├──  x:16(int) => e:5(int)
- │    └──  y1:18(int) => rowid:6(int)
+ │    ├──  x:16 => a:1
+ │    ├──  y:14 => b:2
+ │    ├──  z:17 => c:3
+ │    ├──  column19:19 => d:4
+ │    ├──  x:16 => e:5
+ │    └──  y1:18 => rowid:6
  └── project
       ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
       ├── left-join-apply
@@ -850,12 +850,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  y:14(int) => a:1(int)
- │    ├──  y1:16(int) => b:2(int)
- │    ├──  column17:17(int) => c:3(int)
- │    ├──  column19:19(int) => d:4(int)
- │    ├──  y:14(int) => e:5(int)
- │    └──  column18:18(int) => rowid:6(int)
+ │    ├──  y:14 => a:1
+ │    ├──  y1:16 => b:2
+ │    ├──  column17:17 => c:3
+ │    ├──  column19:19 => d:4
+ │    ├──  y:14 => e:5
+ │    └──  column18:18 => rowid:6
  └── project
       ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
       ├── project
@@ -893,12 +893,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column17:17(int) => a:1(int)
- │    ├──  column18:18(int) => b:2(int)
- │    ├──  y:14(int) => c:3(int)
- │    ├──  column19:19(int) => d:4(int)
- │    ├──  column17:17(int) => e:5(int)
- │    └──  y1:16(int) => rowid:6(int)
+ │    ├──  column17:17 => a:1
+ │    ├──  column18:18 => b:2
+ │    ├──  y:14 => c:3
+ │    ├──  column19:19 => d:4
+ │    ├──  column17:17 => e:5
+ │    └──  y1:16 => rowid:6
  └── project
       ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
       ├── project
@@ -936,12 +936,12 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  y1:16(int) => a:1(int)
- │    ├──  y:14(int) => b:2(int)
- │    ├──  one:17(int) => c:3(int)
- │    ├──  column19:19(int) => d:4(int)
- │    ├──  y1:16(int) => e:5(int)
- │    └──  two:18(int) => rowid:6(int)
+ │    ├──  y1:16 => a:1
+ │    ├──  y:14 => b:2
+ │    ├──  one:17 => c:3
+ │    ├──  column19:19 => d:4
+ │    ├──  y1:16 => e:5
+ │    └──  two:18 => rowid:6
  └── project
       ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) one:17(int) two:18(int)
       ├── left-join-apply
@@ -986,9 +986,9 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── update-mapping:
- │    ├──  column9:9(string) => x:1(string)
- │    ├──  three:8(int) => y:2(int)
- │    └──  two:7(float) => z:3(float)
+ │    ├──  column9:9 => x:1
+ │    ├──  three:8 => y:2
+ │    └──  two:7 => z:3
  └── project
       ├── columns: column9:9(string!null) x:4(string!null) y:5(int) z:6(float) two:7(float) three:8(int)
       ├── left-join-apply
@@ -1016,9 +1016,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
- │    ├──  column19:19(int) => b:2(int)
- │    ├──  column20:20(int) => d:4(int)
- │    └──  a:7(int) => e:5(int)
+ │    ├──  column19:19 => b:2
+ │    ├──  column20:20 => d:4
+ │    └──  a:7 => e:5
  └── project
       ├── columns: column20:20(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column19:19(int)
       ├── project
@@ -1082,9 +1082,9 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
  ├── update-mapping:
- │    ├──  b:11(int) => a:4(int)
- │    ├──  column16:16(int) => d:7(int)
- │    └──  b:11(int) => e:8(int)
+ │    ├──  b:11 => a:4
+ │    ├──  column16:16 => d:7
+ │    └──  b:11 => e:8
  └── project
       ├── columns: column16:16(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
       ├── select
@@ -1112,10 +1112,10 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int)
  ├── update-mapping:
- │    ├──  y:2(int) => a:5(int)
- │    ├──  y1:4(int) => b:6(int)
- │    ├──  column17:17(int) => d:8(int)
- │    └──  y:2(int) => e:9(int)
+ │    ├──  y:2 => a:5
+ │    ├──  y1:4 => b:6
+ │    ├──  column17:17 => d:8
+ │    └──  y:2 => e:9
  └── project
       ├── columns: column17:17(int) y:2(int) y1:4(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
       ├── left-join-apply
@@ -1152,8 +1152,8 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
  ├── update-mapping:
- │    ├──  column9:9(int) => m:1(int)
- │    └──  column10:10(int) => p:4(int)
+ │    ├──  column9:9 => m:1
+ │    └──  column10:10 => p:4
  └── project
       ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
       ├── project
@@ -1175,9 +1175,9 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
  ├── update-mapping:
- │    ├──  column9:9(int) => m:1(int)
- │    ├──  column10:10(int) => n:2(int)
- │    └──  column11:11(int) => p:4(int)
+ │    ├──  column9:9 => m:1
+ │    ├──  column10:10 => n:2
+ │    └──  column11:11 => p:4
  └── project
       ├── columns: column11:11(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null) column10:10(int!null)
       ├── project
@@ -1200,8 +1200,8 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
  ├── update-mapping:
- │    ├──  column9:9(int) => m:1(int)
- │    └──  column10:10(int) => p:4(int)
+ │    ├──  column9:9 => m:1
+ │    └──  column10:10 => p:4
  ├── internal-ordering: +5,+6
  └── project
       ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
@@ -1235,8 +1235,8 @@ project
                      ├── columns: n:12(int) o:15(int!null)
                      ├── fetch columns: m:11(int) n:12(int) mutation.o:13(int) p:14(int)
                      ├── update-mapping:
-                     │    ├──  o:15(int!null) => m:7(int)
-                     │    └──  column16:16(int) => p:10(int)
+                     │    ├──  o:15 => m:7
+                     │    └──  column16:16 => p:10
                      └── project
                           ├── columns: column16:16(int) m:11(int!null) n:12(int) mutation.o:13(int) p:14(int) o:15(int)
                           ├── project
