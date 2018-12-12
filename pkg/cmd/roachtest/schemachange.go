@@ -300,7 +300,7 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
 		Nodes:   nodes(numNodes),
-		Timeout: length * 2,
+		Timeout: length * 4,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
@@ -319,13 +319,14 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 }
 
 func runAndLogStmts(ctx context.Context, t *test, c *cluster, prefix string, stmts []string) error {
-	conn := c.Conn(ctx, 1)
+	db := c.Conn(ctx, 1)
+	defer db.Close()
 	c.l.Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()
 	for i, stmt := range stmts {
 		c.l.Printf("%s: running statement %d...\n", prefix, i+1)
 		before := timeutil.Now()
-		if _, err := conn.Exec(stmt); err != nil {
+		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 		c.l.Printf("%s: statement %d: %q took %v\n", prefix, i+1, stmt, timeutil.Since(before))
