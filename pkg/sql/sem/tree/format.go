@@ -292,7 +292,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteString(":::")
 			colType, err := coltypes.DatumTypeToColumnType(typ)
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("invalid datatype %v", typ))
 			}
 			colType.Format(ctx.Buffer, f.EncodeFlags())
 		}
