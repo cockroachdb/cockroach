@@ -167,18 +167,19 @@ func removePeriods(s string) string {
 	return strings.Replace(s, ".", "", -1)
 }
 
+// FileTimeFormat is RFC3339 with the colons replaced with underscores.
+// It is the format used for timestamps in log file names.
+// This removal of colons creates log files safe for Windows file systems.
+const FileTimeFormat = "2006-01-02T15_04_05Z07:00"
+
 // logName returns a new log file name with start time t, and the name
 // for the symlink.
 func logName(prefix string, t time.Time) (name, link string) {
-	// Replace the ':'s in the time format with '_'s to allow for log files in
-	// Windows.
-	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
-
 	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
 		removePeriods(prefix),
 		removePeriods(host),
 		removePeriods(userName),
-		tFormatted,
+		t.Format(FileTimeFormat),
 		pid)
 	return name, removePeriods(prefix) + ".log"
 }
@@ -194,9 +195,7 @@ func ParseLogFilename(filename string) (FileDetails, error) {
 		return FileDetails{}, errMalformedName
 	}
 
-	// Replace the '_'s with ':'s to restore the correct time format.
-	fixTime := strings.Replace(matches[4], "_", ":", -1)
-	time, err := time.Parse(time.RFC3339, fixTime)
+	time, err := time.Parse(FileTimeFormat, matches[4])
 	if err != nil {
 		return FileDetails{}, err
 	}
