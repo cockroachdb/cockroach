@@ -92,9 +92,6 @@ SELECT job_id FROM crdb_internal.jobs
 ----
 
 statement ok
-CREATE SEQUENCE seq
-
-statement ok
 SET OPTIMIZER = ALWAYS
 
 query error pq: unsupported statement: \*tree\.AlterTable
@@ -103,9 +100,6 @@ ALTER TABLE test DROP COLUMN v;
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: aggregates with FILTER are not supported yet
 SELECT count(*) FILTER (WHERE v>10) FROM t
-
-query error pq: sequences are not supported
-SELECT * FROM seq
 
 statement ok
 SET OPTIMIZER = LOCAL

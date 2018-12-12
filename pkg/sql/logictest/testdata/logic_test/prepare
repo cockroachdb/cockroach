@@ -821,3 +821,30 @@ ROLLBACK TRANSACTION
 
 statement error no value provided for placeholder: \$1
 SELECT $1:::int
+
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+PREPARE seqsel AS SELECT * FROM seq
+
+query I
+SELECT nextval('seq')
+----
+1
+
+query IIB
+EXECUTE seqsel
+----
+1  0  true
+
+statement ok
+DROP SEQUENCE seq
+
+statement ok
+CREATE SEQUENCE seq
+
+query IIB
+EXECUTE seqsel
+----
+0  0  true
