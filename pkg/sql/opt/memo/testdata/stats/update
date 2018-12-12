@@ -61,7 +61,7 @@ select
  │    ├── columns: x:4(string!null) z:6(float!null) column7:7(int!null)
  │    ├── fetch columns: x:4(string!null) y:5(int) z:6(float!null)
  │    ├── update-mapping:
- │    │    └──  column7:7(int!null) => y:2(int)
+ │    │    └──  column7:7 => y:2
  │    ├── side-effects, mutations
  │    ├── stats: [rows=9.9]
  │    ├── key: (4)
@@ -96,7 +96,7 @@ update xyz
  ├── columns: x:7(string!null) y:5(int!null) z:6(float)
  ├── fetch columns: x:4(string) y:5(int!null) z:6(float)
  ├── update-mapping:
- │    └──  column7:7(string!null) => x:1(string)
+ │    └──  column7:7 => x:1
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]

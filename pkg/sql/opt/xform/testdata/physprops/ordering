@@ -1197,10 +1197,10 @@ INSERT INTO a SELECT a, b::float, c::decimal, 'foo' FROM abc ORDER BY b
 insert a
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  a:5(int) => x:1(int)
- │    ├──  b:8(float) => y:2(float)
- │    ├──  c:9(decimal) => z:3(decimal)
- │    └──  "?column?":10(string) => s:4(string)
+ │    ├──  a:5 => x:1
+ │    ├──  b:8 => y:2
+ │    ├──  c:9 => z:3
+ │    └──  "?column?":10 => s:4
  ├── internal-ordering: +8 opt(10)
  └── sort
       ├── columns: a:5(int!null) b:8(float) c:9(decimal) "?column?":10(string!null)
@@ -1221,9 +1221,9 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *] ORDE
 insert abc
  ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
  ├── insert-mapping:
- │    ├──  x:4(int!null) => a:1(int)
- │    ├──  y:5(int!null) => b:2(int)
- │    └──  z:6(int!null) => c:3(int)
+ │    ├──  x:4 => a:1
+ │    ├──  y:5 => b:2
+ │    └──  z:6 => c:3
  ├── internal-ordering: +5,+6
  ├── ordering: +5
  └── sort
@@ -1240,9 +1240,9 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz WHERE y=z ORDER BY z RETURNING 
 insert abc
  ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
  ├── insert-mapping:
- │    ├──  x:4(int!null) => a:1(int)
- │    ├──  y:5(int!null) => b:2(int)
- │    └──  z:6(int!null) => c:3(int)
+ │    ├──  x:4 => a:1
+ │    ├──  y:5 => b:2
+ │    └──  z:6 => c:3
  ├── internal-ordering: +(5|6)
  ├── side-effects, mutations
  ├── key: (4,6)
@@ -1277,10 +1277,10 @@ update a
  ├── columns: <none>
  ├── fetch columns: x:5(int) y:6(float) z:7(decimal) s:8(string)
  ├── update-mapping:
- │    ├──  a:9(int) => x:1(int)
- │    ├──  b:12(float) => y:2(float)
- │    ├──  c:13(decimal) => z:3(decimal)
- │    └──  "?column?":14(string) => s:4(string)
+ │    ├──  a:9 => x:1
+ │    ├──  b:12 => y:2
+ │    ├──  c:13 => z:3
+ │    └──  "?column?":14 => s:4
  ├── internal-ordering: +6
  └── sort
       ├── columns: x:5(int!null) y:6(float!null) z:7(decimal) s:8(string!null) a:9(int) b:12(float) c:13(decimal) "?column?":14(string)
@@ -1309,7 +1309,7 @@ update abc
  ├── columns: a:4(int!null) b:7(int!null) c:6(int!null)
  ├── fetch columns: a:4(int!null) b:5(int) c:6(int!null)
  ├── update-mapping:
- │    └──  column7:7(int!null) => b:2(int)
+ │    └──  column7:7 => b:2
  ├── internal-ordering: +5,+6 opt(7)
  └── sort
       ├── columns: a:4(int!null) b:5(int!null) c:6(int!null) column7:7(int!null)
@@ -1332,9 +1332,9 @@ update abc
  ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
  ├── fetch columns: a:4(int) b:5(int) c:6(int)
  ├── update-mapping:
- │    ├──  column7:7(int!null) => a:1(int)
- │    ├──  column8:8(int!null) => b:2(int)
- │    └──  column9:9(int!null) => c:3(int)
+ │    ├──  column7:7 => a:1
+ │    ├──  column8:8 => b:2
+ │    └──  column9:9 => c:3
  ├── internal-ordering: +(5|6) opt(7-9)
  ├── side-effects, mutations
  ├── fd: ()-->(7-9)
