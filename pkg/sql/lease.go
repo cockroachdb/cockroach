@@ -1160,8 +1160,9 @@ type LeaseManagerTestingKnobs struct {
 	GossipUpdateEvent func(*config.SystemConfig) error
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(*config.SystemConfig)
-
-	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
+	// To disable the deletion of orphaned leases at server startup.
+	DisableDeleteOrphanedLeases bool
+	LeaseStoreTestingKnobs      LeaseStoreTestingKnobs
 }
 
 var _ base.ModuleTestingKnobs = &LeaseManagerTestingKnobs{}
@@ -1759,4 +1760,63 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 		}
 	}
 	wg.Wait()
+}
+
+// DeleteOrphanedLeases releases all orphaned leases created by a prior
+// instance of this node.
+func (m *LeaseManager) DeleteOrphanedLeases(startTime time.Time) {
+	if m.testingKnobs.DisableDeleteOrphanedLeases {
+		return
+	}
+	nodeID := m.LeaseStore.execCfg.NodeID.Get()
+	if nodeID == 0 {
+		panic("zero nodeID")
+	}
+
+	// Run as async worker to prevent blocking the main server Start method.
+	// Exit after releasing all the orphaned leases.
+	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		// This could have been implemented using DELETE WHERE, but DELETE WHERE
+		// doesn't implement AS OF SYSTEM TIME.
+
+		// Read orphaned leases.
+		sqlQuery := fmt.Sprintf(`
+SELECT "descID", version, expiration FROM system.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+`, startTime.UnixNano(), nodeID)
+		rows, _, err := m.LeaseStore.execCfg.InternalExecutor.Query(
+			ctx, "read orphaned table leases", nil /*txn*/, sqlQuery)
+		if err != nil {
+			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
+			return
+		}
+		// Limit the number of concurrent lease releases.
+		sem := make(chan struct{}, 5)
+		var wg sync.WaitGroup
+		defer wg.Wait()
+		for i := range rows {
+			// Early exit?
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+			default:
+			}
+
+			row := rows[i]
+			wg.Add(1)
+			lease := storedTableLease{
+				id:         sqlbase.ID(tree.MustBeDInt(row[0])),
+				version:    int(tree.MustBeDInt(row[1])),
+				expiration: tree.MustBeDTimestamp(row[2]),
+			}
+			if err := m.stopper.RunLimitedAsyncTask(
+				ctx, fmt.Sprintf("release table lease %+v", lease), sem, true /*wait*/, func(ctx context.Context) {
+					m.LeaseStore.release(ctx, m.stopper, &lease)
+					log.Infof(ctx, "released orphaned table lease: %+v", lease)
+					wg.Done()
+				}); err != nil {
+				log.Warningf(ctx, "did not release orphaned table lease: %+v, err = %s", lease, err)
+				wg.Done()
+			}
+		}
+	})
 }
