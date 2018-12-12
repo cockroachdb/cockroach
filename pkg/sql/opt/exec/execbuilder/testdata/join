@@ -630,6 +630,7 @@ render          ·         ·
       ├── scan  ·         ·
       │         table     square@primary
       │         spans     /2-/5/#
+      │         parallel  ·
       └── scan  ·         ·
 ·               table     pairs@primary
 ·               spans     ALL
