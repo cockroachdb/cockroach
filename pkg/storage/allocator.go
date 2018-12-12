@@ -240,7 +240,7 @@ func MakeAllocator(
 
 // GetNeededReplicas calculates the number of replicas a range should
 // have given its zone config and the number of nodes available for
-// up-replication (i.e. live and not decommissioning).
+// up-replication (i.e. not dead and not decommissioning).
 func GetNeededReplicas(zoneConfigReplicaCount int32, availableNodes int) int {
 	numZoneReplicas := int(zoneConfigReplicaCount)
 	need := numZoneReplicas
