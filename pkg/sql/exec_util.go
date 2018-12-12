@@ -81,6 +81,18 @@ var ClusterSecret = func() *settings.StringSetting {
 	return s
 }()
 
+// defaultIntSize controls how a "naked" INT type will be parsed.
+// TODO(bob): Change this to 4 in v2.3; https://github.com/cockroachdb/cockroach/issues/32534
+// TODO(bob): Remove or n-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
+var defaultIntSize = settings.RegisterValidatedIntSetting(
+	"sql.defaults.default_int_size",
+	"the size, in bytes, of an INT type", 8, func(i int64) error {
+		if i != 4 && i != 8 {
+			return errors.New("only 4 or 8 are valid values")
+		}
+		return nil
+	})
+
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
 // will log the trace for any transaction that takes 1s or longer. To
@@ -1612,6 +1624,10 @@ func (m *sessionDataMutator) SetExtraFloatDigits(val int) {
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
 	m.data.Database = dbName
+}
+
+func (m *sessionDataMutator) SetDefaultIntSize(size int) {
+	m.data.DefaultIntSize = size
 }
 
 func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
