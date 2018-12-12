@@ -2311,6 +2311,7 @@ writing ` + os.DevNull + `
   debug/metrics
   debug/alerts
   debug/nodes/1/status
+  debug/nodes/1/details
   debug/nodes/1/gossip
   debug/nodes/1/stacks
   debug/nodes/1/heap
