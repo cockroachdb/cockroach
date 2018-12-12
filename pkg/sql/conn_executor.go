@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -356,6 +357,23 @@ func (s *Server) SetupConn(
 // it away from other packages.
 type ConnectionHandler struct {
 	ex *connExecutor
+}
+
+// GetDefaultIntSize implements pgwire.sessionDataProvider and returns
+// the type that INT should be parsed as.
+func (h ConnectionHandler) GetDefaultIntSize() *coltypes.TInt {
+	var size int
+	if h.ex != nil {
+		// The executor will be nil in certain testing situations where
+		// no server is actually present.
+		size = h.ex.sessionData.DefaultIntSize
+	}
+	switch size {
+	case 4, 32:
+		return coltypes.Int4
+	default:
+		return coltypes.Int8
+	}
 }
 
 // GetStatusParam retrieves the configured value of the session

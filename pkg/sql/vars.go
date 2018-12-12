@@ -219,7 +219,39 @@ var varGen = map[string]sessionVar{
 		Get:           func(evalCtx *extendedEvalContext) string { return "ISO, MDY" },
 		GlobalDefault: func(_ *settings.Values) string { return "ISO, MDY" },
 	},
-
+	// Controls the subsequent parsing of a "naked" INT type.
+	// TODO(bob): Remove or no-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
+	`default_int_size`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(int64(evalCtx.SessionData.DefaultIntSize), 10)
+		},
+		GetStringVal: makeIntGetStringValFn("default_int_size"),
+		Set: func(ctx context.Context, m *sessionDataMutator, val string) error {
+			i, err := strconv.ParseInt(val, 10, 64)
+			if err != nil {
+				return wrapSetVarError("default_int_size", val, "%v", err)
+			}
+			if i != 4 && i != 8 {
+				return pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+					`only 4 or 8 are supported by default_int_size`)
+			}
+			// Only record when the value has been changed to a non-default
+			// value, since we really just want to know how useful int4-mode
+			// is. If we were to record counts for size.4 and size.8
+			// variables, we'd have to distinguish cases in which a session
+			// was opened in int8 mode and switched to int4 mode, versus ones
+			// set to int4 by a connection string.
+			// TODO(bob): Change to 8 in v2.3: https://github.com/cockroachdb/cockroach/issues/32534
+			if i == 4 {
+				telemetry.Count("sql.default_int_size.4")
+			}
+			m.SetDefaultIntSize(int(i))
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(defaultIntSize.Get(sv), 10)
+		},
+	},
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
@@ -237,7 +269,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "default" },
 	},
-
 	// See https://www.postgresql.org/docs/9.3/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-READ-ONLY
 	`default_transaction_read_only`: {
 		GetStringVal: makeBoolGetStringValFn("default_transaction_read_only"),
@@ -403,17 +434,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: {
-		GetStringVal: func(
-			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-		) (string, error) {
-			// TODO(knz): extract this code into a common makeIntGetStringValFn when
-			// there are multiple integer parameters.
-			s, err := getIntVal(&evalCtx.EvalContext, `extra_float_digits`, values)
-			if err != nil {
-				return "", err
-			}
-			return strconv.FormatInt(s, 10), nil
-		},
+		GetStringVal: makeIntGetStringValFn(`extra_float_digits`),
 		Set: func(
 			_ context.Context, m *sessionDataMutator, s string,
 		) error {
@@ -682,6 +703,18 @@ func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) s
 				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
 		},
 		GlobalDefault: func(sv *settings.Values) string { return displayValue },
+	}
+}
+
+// makeIntGetStringValFn returns a getStringValFn which allows
+// the user to provide plain integer values to a SET variable.
+func makeIntGetStringValFn(name string) getStringValFn {
+	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
+		s, err := getIntVal(&evalCtx.EvalContext, name, values)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(s, 10), nil
 	}
 }
 

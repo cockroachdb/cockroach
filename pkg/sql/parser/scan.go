@@ -24,6 +24,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,6 +51,10 @@ type scanner struct {
 
 	initialized   bool
 	bytesPrealloc []byte
+	// The type that should be used when an INT is encountered.
+	nakedIntType *coltypes.TInt
+	// The type that should be used when a SERIAL is encountered.
+	nakedSerialType *coltypes.TSerial
 }
 
 // scanErr holds error state for a scanner.
@@ -71,6 +76,12 @@ func (s *scanner) init(str string) {
 		panic("scanner already initialized; a scanner cannot be reused.")
 	}
 	s.initialized = true
+	// INT8 is the historical interpretation of INT. This should be left
+	// alone in the future, since there are many sql fragments stored
+	// in various descriptors.  Any user input that was created after
+	// INT := INT4 will simply use INT4 in any resulting code.
+	s.nakedIntType = coltypes.Int8
+	s.nakedSerialType = coltypes.Serial8
 	s.in = str
 	// Preallocate some buffer space for identifiers etc.
 	s.bytesPrealloc = make([]byte, len(str))
