@@ -35,6 +35,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -46,7 +47,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -130,6 +130,7 @@ type statusServer struct {
 	gossip          *gossip.Gossip
 	metricSource    metricMarshaler
 	nodeLiveness    *storage.NodeLiveness
+	storePool       *storage.StorePool
 	rpcCtx          *rpc.Context
 	stores          *storage.Stores
 	stopper         *stop.Stopper
@@ -146,6 +147,7 @@ func newStatusServer(
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
 	nodeLiveness *storage.NodeLiveness,
+	storePool *storage.StorePool,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 	stopper *stop.Stopper,
@@ -161,6 +163,7 @@ func newStatusServer(
 		gossip:          gossip,
 		metricSource:    metricSource,
 		nodeLiveness:    nodeLiveness,
+		storePool:       storePool,
 		rpcCtx:          rpcCtx,
 		stores:          stores,
 		stopper:         stopper,
@@ -1230,6 +1233,7 @@ func (s *statusServer) Ranges(
 		cfg = config.SystemConfig{}
 	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	availableNodes := s.storePool.AvailableNodeCount()
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		timestamp := store.Clock().Now()
@@ -1249,7 +1253,7 @@ func (s *statusServer) Ranges(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+							rep.Metrics(ctx, timestamp, cfg, isLiveMap, availableNodes),
 						))
 					return false, nil
 				})
@@ -1269,7 +1273,7 @@ func (s *statusServer) Ranges(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+					rep.Metrics(ctx, timestamp, cfg, isLiveMap, availableNodes),
 				))
 		}
 		return nil

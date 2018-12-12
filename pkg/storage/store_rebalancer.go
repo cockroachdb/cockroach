@@ -524,10 +524,9 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			log.Error(ctx, err)
 			return replicaWithStats{}, nil
 		}
-		decommissioningReplicas := len(sr.rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
-		_, aliveStoreCount, _ := sr.rq.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
+		availableNodes := sr.rq.allocator.storePool.AvailableNodeCount()
+		desiredReplicas := GetNeededReplicas(zone.NumReplicas, availableNodes)
 
-		desiredReplicas := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 

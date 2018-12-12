@@ -4319,7 +4319,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.Metrics(ctx, timestamp, cfg, livenessMap)
+		availableNodes := s.cfg.StorePool.AvailableNodeCount()
+		metrics := rep.Metrics(ctx, timestamp, cfg, livenessMap, availableNodes)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {

@@ -6864,6 +6864,7 @@ func (r *Replica) Metrics(
 	now hlc.Timestamp,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
+	availableNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -6887,6 +6888,7 @@ func (r *Replica) Metrics(
 		&r.store.cfg.RaftConfig,
 		cfg,
 		livenessMap,
+		availableNodes,
 		desc,
 		raftStatus,
 		leaseStatus,
@@ -6896,7 +6898,6 @@ func (r *Replica) Metrics(
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
 		raftLogSize,
-		r.store.allocator.storePool,
 	)
 }
 
@@ -6915,6 +6916,7 @@ func calcReplicaMetrics(
 	raftCfg *base.RaftConfig,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
+	availableNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
@@ -6924,7 +6926,6 @@ func calcReplicaMetrics(
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
 	raftLogSize int64,
-	storePool *StorePool,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -6967,10 +6968,7 @@ func calcReplicaMetrics(
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
 		} else {
-			decommissioningReplicas := len(storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
-			_, aliveStoreCount, _ := storePool.getStoreList(desc.RangeID, storeFilterNone)
-
-			if GetNeededReplicas(zoneConfig.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
+			if GetNeededReplicas(zoneConfig.NumReplicas, availableNodes) > liveReplicas {
 				m.Underreplicated = true
 			}
 		}

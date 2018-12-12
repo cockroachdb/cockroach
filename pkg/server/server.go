@@ -545,6 +545,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.recorder,
 		s.nodeLiveness,
+		s.storePool,
 		s.rpcContext,
 		s.node.stores,
 		s.stopper,
