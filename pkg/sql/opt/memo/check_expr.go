@@ -237,9 +237,6 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 	if rel.Relational().OutputCols.Intersects(mutCols) {
 		panic("output columns cannot include mutation columns")
 	}
-	if private.Ordering.ColSet().Intersects(mutCols) {
-		panic("ordering columns cannot include mutation columns")
-	}
 }
 
 // checkExprOrdering runs checks on orderings stored inside operators.

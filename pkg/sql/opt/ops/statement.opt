@@ -89,10 +89,6 @@ define MutationPrivate {
     # then UpdateCols would contain [0, id-b, id-c].
     UpdateCols ColList
 
-    # Ordering is the ordering required of the input expression. Rows will be
-    # inserted into the target table in this order.
-    Ordering OrderingChoice
-
     # NeedResults is true if the Insert operator returns output rows. One output
     # row will be returned for each input row. The output row contains all
     # columns in the table, including hidden columns, but not including any

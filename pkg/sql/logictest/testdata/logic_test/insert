@@ -384,13 +384,12 @@ statement ok
 INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
 # Check that INSERT supports ORDER BY (MySQL extension)
-query II
-INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
+query II rowsort
+INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 3 RETURNING x, v
 ----
 1  9
 3  7
 6  4
-8  2
 
 # Check that INSERT supports LIMIT (MySQL extension)
 
@@ -657,3 +656,19 @@ x  z
 
 statement ok
 COMMIT
+
+# Test ORDER BY with computed ordering column (requires extra column).
+
+statement ok
+CREATE TABLE xy(x INT PRIMARY KEY, y INT);
+CREATE TABLE ab(a INT PRIMARY KEY, b INT);
+INSERT INTO ab VALUES (1, 1), (2, 2)
+
+query II rowsort
+INSERT INTO xy (x, y) SELECT a, b FROM ab ORDER BY -b LIMIT 10 RETURNING *;
+----
+2  2
+1  1
+
+statement ok
+DROP TABLE xy; DROP TABLE ab

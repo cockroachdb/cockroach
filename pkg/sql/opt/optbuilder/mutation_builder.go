@@ -524,7 +524,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
-	projectionsScope.copyOrdering(mb.outScope)
 
 	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
@@ -682,7 +681,6 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		if projectionsScope == nil {
 			projectionsScope = mb.outScope.replace()
 			projectionsScope.appendColumnsFromScope(mb.outScope)
-			projectionsScope.copyOrdering(mb.outScope)
 		}
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
@@ -716,7 +714,6 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 		InsertCols:  mb.insertColList,
 		NeedResults: returning != nil,
 	}
-	private.Ordering.FromOrdering(mb.outScope.ordering)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
 
 	mb.buildReturning(returning)
@@ -731,7 +728,6 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 		UpdateCols:  mb.updateColList,
 		NeedResults: returning != nil,
 	}
-	private.Ordering.FromOrdering(mb.outScope.ordering)
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)
 
 	mb.buildReturning(returning)
