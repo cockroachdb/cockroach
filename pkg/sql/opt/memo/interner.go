@@ -439,6 +439,11 @@ func (h *hasher) HashTableID(val opt.TableID) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashSequenceID(val opt.SequenceID) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashConstraint(val *constraint.Constraint) {
 	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
 	h.hash *= prime64
@@ -684,6 +689,10 @@ func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
 }
 
 func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
+	return l == r
+}
+
+func (h *hasher) IsSequenceIDEqual(l, r opt.SequenceID) bool {
 	return l == r
 }
 

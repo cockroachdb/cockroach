@@ -1025,6 +1025,11 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+// ConstructSequenceSelect is part of the exec.Factory interface.
+func (ef *execFactory) ConstructSequenceSelect(sequence opt.Sequence) (exec.Node, error) {
+	return ef.planner.SequenceSelectNode(sequence.(*optSequence).desc)
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

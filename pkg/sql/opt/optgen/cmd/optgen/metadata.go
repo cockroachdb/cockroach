@@ -146,6 +146,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ColSet":         {fullName: "opt.ColSet", passByVal: true},
 		"ColList":        {fullName: "opt.ColList", passByVal: true},
 		"TableID":        {fullName: "opt.TableID", passByVal: true},
+		"SequenceID":     {fullName: "opt.SequenceID", passByVal: true},
 		"Ordering":       {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice": {fullName: "physical.OrderingChoice", passByVal: true},
 		"TupleOrdinal":   {fullName: "memo.TupleOrdinal", passByVal: true},

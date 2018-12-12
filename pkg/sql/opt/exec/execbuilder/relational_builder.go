@@ -196,6 +196,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.UpdateExpr:
 		ep, err = b.buildUpdate(t)
 
+	case *memo.SequenceSelectExpr:
+		ep, err = b.buildSequenceSelect(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)
@@ -1155,6 +1158,21 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	if upd.NeedResults {
 		ep.outputCols = mutationOutputColMap(upd)
 	}
+	return ep, nil
+}
+
+func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan, error) {
+	seq := b.mem.Metadata().Sequence(seqSel.Sequence)
+	node, err := b.factory.ConstructSequenceSelect(seq)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	ep := execPlan{root: node}
+	for i, c := range seqSel.Cols {
+		ep.outputCols.Set(int(c), i)
+	}
+
 	return ep, nil
 }
 

@@ -263,6 +263,10 @@ type Factory interface {
 	ConstructUpdate(
 		input Node, table opt.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
+
+	// ConstructSequenceSelect creates a node that implements a scan of a sequence
+	// as a data source.
+	ConstructSequenceSelect(sequence opt.Sequence) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

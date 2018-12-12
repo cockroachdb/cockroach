@@ -356,3 +356,18 @@ project
                 │              └── aggregations
                 │                   └── count-rows [type=int]
                 └── const: 0 [type=int]
+
+# Sequences always have a single row when selected from.
+exec-ddl
+CREATE SEQUENCE x
+----
+SEQUENCE t.public.x
+
+build
+SELECT * FROM x
+----
+sequence-select t.public.x
+ ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-3)

@@ -379,6 +379,17 @@ type ForeignKeyReference struct {
 	Match tree.CompositeKeyMatchMethod
 }
 
+// Sequence is an interface to a database sequence.
+type Sequence interface {
+	DataSource
+
+	// SequenceName returns the name of the sequence. This method should always
+	// return the same value as DataSource.Name(), but is included here as a
+	// safety measure so that every DataSource does not trivially implement
+	// Sequence.
+	SequenceName() *tree.TableName
+}
+
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
 func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
@@ -516,4 +527,10 @@ func FormatCatalogView(view View, tp treeprinter.Node) {
 func IsMutationColumn(table Table, i int) bool {
 	_, ok := table.Column(i).(*MutationColumn)
 	return ok
+}
+
+// FormatCatalogView nicely formats a catalog sequence using a treeprinter for
+// debugging and testing.
+func FormatCatalogSequence(cat Catalog, seq Sequence, tp treeprinter.Node) {
+	tp.Childf("SEQUENCE %s", seq.Name())
 }

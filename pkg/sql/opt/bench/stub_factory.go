@@ -204,3 +204,7 @@ func (f *stubFactory) ConstructUpdate(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructSequenceSelect(seq opt.Sequence) (exec.Node, error) {
+	return struct{}{}, nil
+}

@@ -199,8 +199,6 @@ func (ov *optView) ColumnName(i int) tree.Name {
 
 // optSequence is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
 // opt.DataSource interface.
-//
-// TODO(andyk): This should implement opt.Sequence once we have it.
 type optSequence struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
@@ -210,15 +208,16 @@ type optSequence struct {
 }
 
 var _ opt.DataSource = &optSequence{}
+var _ opt.Sequence = &optSequence{}
 
 func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optSequence {
-	ot := &optSequence{desc: desc, name: *name}
+	os := &optSequence{desc: desc, name: *name}
 
 	// The opt.Sequence interface requires that table names be fully qualified.
-	ot.name.ExplicitSchema = true
-	ot.name.ExplicitCatalog = true
+	os.name.ExplicitSchema = true
+	os.name.ExplicitCatalog = true
 
-	return ot
+	return os
 }
 
 // ID is part of the opt.DataSource interface.
@@ -234,6 +233,11 @@ func (os *optSequence) Version() opt.Version {
 // Name is part of the opt.DataSource interface.
 func (os *optSequence) Name() *tree.TableName {
 	return &os.name
+}
+
+// SequenceName is part of the opt.Sequence interface.
+func (os *optSequence) SequenceName() *tree.TableName {
+	return os.Name()
 }
 
 // optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches index

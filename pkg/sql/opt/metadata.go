@@ -94,6 +94,22 @@ var tableAnnIDCount TableAnnID
 // table struct.
 const maxTableAnnIDCount = 2
 
+// SequenceID uniquely identifies the usage of a sequence within the scope of a
+// query. SequenceID 0 is reserved to mean "unknown sequence".
+type SequenceID uint64
+
+// makeSequenceID constructs a new SequenceID from its component parts.
+func makeSequenceID(index int) SequenceID {
+	// Bias the sequence index by 1.
+	return SequenceID(index + 1)
+}
+
+// index returns the index of the sequence in Metadata.sequences. It's biased by 1, so
+// that SequenceID 0 can be be reserved to mean "unknown sequence".
+func (s SequenceID) index() int {
+	return int(s - 1)
+}
+
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // within the scope of a particular query. Because it is specific to one query,
 // the ids tend to be small integers that can be efficiently stored and
@@ -127,6 +143,9 @@ type Metadata struct {
 
 	// tables stores information about each metadata table, indexed by TableID.
 	tables []mdTable
+
+	// sequences stores information about each metadata sequence, indexed by SequenceID.
+	sequences []Sequence
 
 	// deps stores information about all data sources depended on by the query,
 	// as well as the privileges required to access those data sources.
@@ -425,4 +444,22 @@ func NewTableAnnID() TableAnnID {
 	cnt := tableAnnIDCount
 	tableAnnIDCount++
 	return cnt
+}
+
+// AddSequence adds the sequence to the metadata, returning a SequenceID that
+// can be used to retrieve it.
+func (md *Metadata) AddSequence(seq Sequence) SequenceID {
+	seqID := makeSequenceID(len(md.sequences))
+	if md.sequences == nil {
+		md.sequences = make([]Sequence, 0, 4)
+	}
+	md.sequences = append(md.sequences, seq)
+
+	return seqID
+}
+
+// Sequence looks up the catalog sequence associated with the given metadata id. The
+// same sequence can be associated with multiple metadata ids.
+func (md *Metadata) Sequence(seqID SequenceID) Sequence {
+	return md.sequences[seqID.index()]
 }

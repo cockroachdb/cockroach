@@ -334,6 +334,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InsertOp, opt.UpdateOp:
 		return sb.colStatMutation(colSet, e)
 
+	case opt.SequenceSelectOp:
+		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
+
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
 		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps, relProps.NotNullCols)
@@ -1871,6 +1874,27 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	return colStat
+}
+
+// +-----------------+
+// | Sequence Select |
+// +-----------------+
+
+func (sb *statisticsBuilder) buildSequenceSelect(relProps *props.Relational) {
+	s := &relProps.Stats
+	s.RowCount = 1
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatSequenceSelect(
+	colSet opt.ColSet, seq *SequenceSelectExpr,
+) *props.ColumnStatistic {
+	s := &seq.Relational().Stats
+
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	colStat.NullCount = 0
 	return colStat
 }
 
