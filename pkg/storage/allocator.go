@@ -239,17 +239,19 @@ func MakeAllocator(
 	}
 }
 
-// GetNeededReplicas calculates the number of replicas a range should have given its zone config and
-// dynamic up and down replication.
-func GetNeededReplicas(
-	zoneConfigReplicaCount int32, aliveReplicas int, decommissioningReplicas int,
-) int {
+// GetNeededReplicas calculates the number of replicas a range should
+// have given its zone config and the number of nodes available for
+// up-replication (i.e. live and not decommissioning).
+func GetNeededReplicas(zoneConfigReplicaCount int32, availableNodes int) int {
 	numZoneReplicas := int(zoneConfigReplicaCount)
 	need := numZoneReplicas
 
-	// We're adjusting the replication factor all ranges so that if there are less nodes than
-	// replicas specified in the zone config, the cluster can still function.
-	need = int(math.Min(float64(aliveReplicas-decommissioningReplicas), float64(need)))
+	// Adjust the replication factor for all ranges if there are fewer
+	// nodes than replicas specified in the zone config, so the cluster
+	// can still function.
+	if availableNodes < need {
+		need = availableNodes
+	}
 
 	// Ensure that we don't up- or down-replicate to an even number of replicas
 	// unless an even number of replicas was specifically requested by the user
@@ -264,7 +266,9 @@ func GetNeededReplicas(
 	if need%2 == 0 {
 		need = need - 1
 	}
-	need = int(math.Max(3.0, float64(need)))
+	if need < 3 {
+		need = 3
+	}
 	if need > numZoneReplicas {
 		need = numZoneReplicas
 	}
@@ -286,8 +290,8 @@ func (a *Allocator) ComputeAction(
 
 	have := len(rangeInfo.Desc.Replicas)
 	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
-	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
-	need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, len(decommissioningReplicas))
+	availableNodes := a.storePool.AvailableNodeCount()
+	need := GetNeededReplicas(zone.NumReplicas, availableNodes)
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
 

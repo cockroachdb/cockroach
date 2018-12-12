@@ -139,9 +139,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		Settings:   st,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-		Clock:      clock,
+		Settings:                    st,
+		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
@@ -4319,7 +4319,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.Metrics(ctx, timestamp, cfg, livenessMap)
+		availableNodes := s.cfg.StorePool.AvailableNodeCount()
+		metrics := rep.Metrics(ctx, timestamp, cfg, livenessMap, availableNodes)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
