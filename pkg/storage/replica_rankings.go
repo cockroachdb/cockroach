@@ -17,6 +17,7 @@ package storage
 import (
 	"container/heap"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -26,8 +27,8 @@ const (
 )
 
 type replicaWithStats struct {
-	repl *Replica
-	qps  float64
+	rangeID roachpb.RangeID
+	qps     float64
 	// TODO(a-robinson): Include writes-per-second and logicalBytes of storage?
 }
 

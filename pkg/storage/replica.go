@@ -350,6 +350,9 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// Behind indicates the range is quiescent but still has
+		// replica(s) not fully caught up.
+		quiescentButBehind bool
 		// mergeComplete is non-nil if a merge is in-progress, in which case any
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
@@ -3929,6 +3932,7 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 			log.Infof(ctx, "unquiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = false
+		r.mu.quiescentButBehind = false // may not be true, but behind is only valid when quiescent
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -4755,6 +4759,7 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 		commit := status.Commit
 		quiesce := true
 		if prog.Match < status.Commit {
+			r.mu.quiescentButBehind = true
 			commit = prog.Match
 			quiesce = false
 		}
@@ -6974,6 +6979,29 @@ func (r *Replica) startKey() roachpb.RKey {
 // Less implements the btree.Item interface.
 func (r *Replica) Less(i btree.Item) bool {
 	return r.startKey().Less(i.(rangeKeyItem).startKey())
+}
+
+// ReplicaCapacity contains details on the replica storage.
+type ReplicaCapacity struct {
+	Leaseholder bool
+	Stats       enginepb.MVCCStats
+	QPS, WPS    float64
+}
+
+// Capacity returns the current capacity info for the replica.
+func (r *Replica) Capacity(now hlc.Timestamp) ReplicaCapacity {
+	var cap ReplicaCapacity
+	if r.OwnsValidLease(now) {
+		cap.Leaseholder = true
+	}
+	cap.Stats = r.GetMVCCStats()
+	if qps, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		cap.QPS = qps
+	}
+	if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+		cap.WPS = wps
+	}
+	return cap
 }
 
 // ReplicaMetrics contains details on the current status of the replica.

@@ -433,14 +433,15 @@ func (s *Store) canApplySnapshotLocked(
 	// replica it needs to take everything into account.
 	//
 	// TODO(tbg): untangle these two use cases.
-	if v, ok := s.mu.replicas.Load(
-		int64(desc.RangeID),
-	); !ok {
+	var existingRepl *Replica
+	if v, ok := s.mu.replicaShims.Load(int64(desc.RangeID)); ok {
+		existingRepl = (*ReplicaShim)(v).GetReplicaIfResident()
+	}
+	if existingRepl == nil {
 		if authoritative {
 			return nil, errors.Errorf("authoritative call requires a replica present")
 		}
 	} else {
-		existingRepl := (*Replica)(v)
 		// The raftMu is held which allows us to use the existing replica as a
 		// placeholder when we decide that the snapshot can be applied. As long
 		// as the caller releases the raftMu only after feeding the snapshot
