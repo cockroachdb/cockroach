@@ -455,6 +455,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		binaryVersionUpgrade("v2.0.6", nodes),
 		clusterVersionUpgrade("2.0", true /* manual */),
 
+		binaryVersionUpgrade("v2.1.2", nodes),
+		clusterVersionUpgrade("2.1", true /* manual */),
+
 		binaryVersionUpgrade("HEAD", nodes),
 		clusterVersionUpgrade("", false /* manual */),
 	}
