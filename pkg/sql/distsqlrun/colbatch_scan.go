@@ -67,15 +67,7 @@ func newColBatchScan(
 
 	limitHint := limitHint(spec.LimitHint, post)
 
-	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-	if returnMutations {
-		for i := range spec.Table.Mutations {
-			if spec.Table.Mutations[i].GetColumn() != nil {
-				numCols++
-			}
-		}
-	}
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
 	helper := ProcOutputHelper{}
 	if err := helper.Init(

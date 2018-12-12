@@ -133,7 +133,7 @@ func (p *planner) Insert(
 		// not care: the backfill is also inserting defaults, and we do
 		// not provide guarantees about the evaluation order of default
 		// expressions.
-		insertCols = desc.WritableColumns
+		insertCols = desc.WritableColumns()
 	} else {
 		var err error
 		if insertCols, err = p.processColumns(desc, n.Columns,
@@ -649,7 +649,7 @@ func GenerateInsertRow(
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.WritableColumns {
+	for _, col := range tableDesc.WritableColumns() {
 		if !col.Nullable {
 			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
 				return nil, sqlbase.NewNonNullViolationError(col.Name)
