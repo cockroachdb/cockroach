@@ -118,28 +118,22 @@ type MutableTableDescriptor struct {
 type ImmutableTableDescriptor struct {
 	TableDescriptor
 
-	// WritableColumns is a list of columns which are public or in the
-	// DELETE_AND_WRITE_ONLY state.
-	WritableColumns []ColumnDescriptor
+	// publicAndNonPublicCols is a list of public and non-public columns.
+	// It is partitioned by the state of the column: public, write-only, delete-only
+	publicAndNonPublicCols []ColumnDescriptor
 
-	// WritableIndexes is a list of indexes which are public or in the
-	// DELETE_AND_WRITE_ONLY state.
-	WritableIndexes []IndexDescriptor
+	// publicAndNonPublicCols is a list of public and non-public indexes.
+	// It is partitioned by the state of the index: public, write-only, delete-only
+	publicAndNonPublicIndexes []IndexDescriptor
 
-	// DeletableColumns is a list of public and non-public columns.
-	DeletableColumns []ColumnDescriptor
-
-	// DeletableIndexes is a list of public and non-public indexes.
-	DeletableIndexes []IndexDescriptor
+	writeOnlyColCount   int
+	writeOnlyIndexCount int
 
 	// ReadableColumns is a list of columns (including those undergoing a schema change)
 	// which can be scanned. Columns in the process of a schema change
 	// are all set to nullable while column backfilling is still in
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
-
-	// DeleteOnlyIndexes is a list of indexes in the DELETE_ONLY state.
-	DeleteOnlyIndexes []IndexDescriptor
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -202,19 +196,20 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	writableCols, deletableCols := tbl.Columns, tbl.Columns
-	writableIndexes, deletableIndexes := tbl.Indexes, tbl.Indexes
+	publicAndNonPublicCols := tbl.Columns
+	publicAndNonPublicIndexes := tbl.Indexes
 
 	readableCols := tbl.Columns
-	var deleteOnlyIndexes []IndexDescriptor
+
+	desc := &ImmutableTableDescriptor{TableDescriptor: tbl}
 
 	if len(tbl.Mutations) > 0 {
-		deletableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
-		deletableIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
+		publicAndNonPublicCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
+		publicAndNonPublicIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
 		readableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
 
-		deletableCols = append(deletableCols, tbl.Columns...)
-		deletableIndexes = append(deletableIndexes, tbl.Indexes...)
+		publicAndNonPublicCols = append(publicAndNonPublicCols, tbl.Columns...)
+		publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, tbl.Indexes...)
 		readableCols = append(readableCols, tbl.Columns...)
 
 		// Fill up mutations into the column/index lists by placing the writable columns/indexes
@@ -223,49 +218,40 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 			switch m.State {
 			case DescriptorMutation_DELETE_AND_WRITE_ONLY:
 				if idx := m.GetIndex(); idx != nil {
-					deletableIndexes = append(deletableIndexes, *idx)
+					publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, *idx)
+					desc.writeOnlyIndexCount++
 				} else if col := m.GetColumn(); col != nil {
-					deletableCols = append(deletableCols, *col)
+					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
+					desc.writeOnlyColCount++
 				}
 			}
 		}
-
-		// Number of write-only indexes and columns.
-		numWriteIndexes, numWriteCols := len(deletableIndexes), len(deletableCols)
 
 		for _, m := range tbl.Mutations {
 			switch m.State {
 			case DescriptorMutation_DELETE_ONLY:
 				if idx := m.GetIndex(); idx != nil {
-					deletableIndexes = append(deletableIndexes, *idx)
+					publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, *idx)
 				} else if col := m.GetColumn(); col != nil {
-					deletableCols = append(deletableCols, *col)
+					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
 				}
 			}
 		}
 
 		// Iterate through all mutation columns.
-		for _, c := range deletableCols[len(tbl.Columns):] {
+		for _, c := range publicAndNonPublicCols[len(tbl.Columns):] {
 			// Mutation column may need to be fetched, but may not be completely backfilled
 			// and have be null values (even though they may be configured as NOT NULL).
 			c.Nullable = true
 			readableCols = append(readableCols, c)
 		}
-
-		writableCols = deletableCols[:numWriteCols]
-
-		writableIndexes = deletableIndexes[:numWriteIndexes]
-		deleteOnlyIndexes = deletableIndexes[numWriteIndexes:]
 	}
-	return &ImmutableTableDescriptor{
-		TableDescriptor:   tbl,
-		WritableColumns:   writableCols,
-		WritableIndexes:   writableIndexes,
-		DeletableColumns:  deletableCols,
-		DeletableIndexes:  deletableIndexes,
-		ReadableColumns:   readableCols,
-		DeleteOnlyIndexes: deleteOnlyIndexes,
-	}
+
+	desc.ReadableColumns = readableCols
+	desc.publicAndNonPublicCols = publicAndNonPublicCols
+	desc.publicAndNonPublicIndexes = publicAndNonPublicIndexes
+
+	return desc
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
@@ -2698,6 +2684,51 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		refs[c.ID] = struct{}{}
 	}
 	return refs, nil
+}
+
+// WritableColumns returns a list of public and write-only mutation columns.
+func (desc *ImmutableTableDescriptor) WritableColumns() []ColumnDescriptor {
+	return desc.publicAndNonPublicCols[:len(desc.Columns)+desc.writeOnlyColCount]
+}
+
+// DeletableColumns returns a list of public and non-public columns.
+func (desc *ImmutableTableDescriptor) DeletableColumns() []ColumnDescriptor {
+	return desc.publicAndNonPublicCols
+}
+
+// MutationColumns returns a list of mutation columns.
+func (desc *ImmutableTableDescriptor) MutationColumns() []ColumnDescriptor {
+	return desc.publicAndNonPublicCols[len(desc.Columns):]
+}
+
+// WriteOnlyColumns returns a list of write-only mutation columns.
+func (desc *ImmutableTableDescriptor) WriteOnlyColumns() []ColumnDescriptor {
+	return desc.publicAndNonPublicCols[len(desc.Columns) : len(desc.Columns)+desc.writeOnlyColCount]
+}
+
+// DeleteOnlyColumns returns a list of delete-only mutation columns.
+func (desc *ImmutableTableDescriptor) DeleteOnlyColumns() []ColumnDescriptor {
+	return desc.publicAndNonPublicCols[len(desc.Columns)+desc.writeOnlyColCount:]
+}
+
+// WritableIndexes returns a list of public and write-only mutation indexes.
+func (desc *ImmutableTableDescriptor) WritableIndexes() []IndexDescriptor {
+	return desc.publicAndNonPublicIndexes[:len(desc.Indexes)+desc.writeOnlyIndexCount]
+}
+
+// DeletableIndexes returns a list of public and non-public indexes.
+func (desc *ImmutableTableDescriptor) DeletableIndexes() []IndexDescriptor {
+	return desc.publicAndNonPublicIndexes
+}
+
+// MutationIndexes returns a list of mutation indexes.
+func (desc *ImmutableTableDescriptor) MutationIndexes() []IndexDescriptor {
+	return desc.publicAndNonPublicIndexes[len(desc.Indexes):]
+}
+
+// DeleteOnlyIndexes returns a list of delete-only mutation indexes.
+func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
+	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]
 }
 
 // TableDesc implements the ObjectDescriptor interface.

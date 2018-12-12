@@ -64,7 +64,7 @@ func MakeInserter(
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{
-		Helper:                newRowHelper(tableDesc, tableDesc.WritableIndexes),
+		Helper:                newRowHelper(tableDesc, tableDesc.WritableIndexes()),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
@@ -464,22 +464,23 @@ func makeUpdaterWithoutCascader(
 		}) != nil
 	}
 
-	writeIndexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.WritableIndexes))
-	for _, index := range tableDesc.WritableIndexes {
+	writableIndexes := tableDesc.WritableIndexes()
+	includeIndexes := make([]sqlbase.IndexDescriptor, 0, len(writableIndexes))
+	for _, index := range writableIndexes {
 		if needsUpdate(index) {
-			writeIndexes = append(writeIndexes, index)
+			includeIndexes = append(includeIndexes, index)
 		}
 	}
 
 	// Columns of the table to update, including those in delete/write-only state
-	tableCols := tableDesc.DeletableColumns
+	tableCols := tableDesc.DeletableColumns()
 
 	var deleteOnlyIndexes []sqlbase.IndexDescriptor
-	for _, idx := range tableDesc.DeleteOnlyIndexes {
+	for _, idx := range tableDesc.DeleteOnlyIndexes() {
 		if needsUpdate(idx) {
 			if deleteOnlyIndexes == nil {
 				// Allocate at most once.
-				deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes))
+				deleteOnlyIndexes = make([]sqlbase.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes()))
 			}
 			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
 		}
@@ -492,7 +493,7 @@ func makeUpdaterWithoutCascader(
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(tableDesc, writeIndexes),
+		Helper:                newRowHelper(tableDesc, includeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
@@ -565,7 +566,7 @@ func makeUpdaterWithoutCascader(
 
 		// Fetch all columns from indices that are being update so that they can
 		// be used to create the new kv pairs for those indices.
-		for _, index := range writeIndexes {
+		for _, index := range includeIndexes {
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err
 			}
@@ -875,7 +876,7 @@ func makeRowDeleterWithoutCascader(
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
-	indexes := tableDesc.DeletableIndexes
+	indexes := tableDesc.DeletableIndexes()
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
 	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
