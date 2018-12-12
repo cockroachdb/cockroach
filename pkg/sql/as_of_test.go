@@ -176,10 +176,10 @@ func TestAsOfTime(t *testing.T) {
 		}
 	}
 
-	// Old queries shouldn't work.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
+	// Queries before the Unix epoch definitely shouldn't work.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-30'").Scan(&i); err == nil {
 		t.Fatal("expected error")
-	} else if !testutils.IsError(err, "pq: batch timestamp -86400.000000000,0 must be after GC threshold 0.000000000,0") {
+	} else if !testutils.IsError(err, "AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid") {
 		t.Fatal(err)
 	}
 
