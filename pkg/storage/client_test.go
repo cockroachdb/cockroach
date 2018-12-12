@@ -832,7 +832,6 @@ func (m *multiTestContext) addStore(idx int) {
 	if err := m.gossipNodeDesc(m.gossips[idx], nodeID); err != nil {
 		m.t.Fatal(err)
 	}
-	store.WaitForInit()
 
 	ran := struct {
 		sync.Once
@@ -849,6 +848,8 @@ func (m *multiTestContext) addStore(idx int) {
 			close(ran.ch)
 		})
 	})
+
+	store.WaitForInit()
 	// Wait until we see the first heartbeat by waiting for the callback (which
 	// fires *after* the node becomes live).
 	<-ran.ch
