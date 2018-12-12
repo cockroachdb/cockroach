@@ -49,8 +49,12 @@ void chunkedBuffer::Clear() {
 // indicate that the required size of this buffer will soon be
 // len+next_size_hint, to prevent excessive resize operations.
 void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
-  const int avail = bufs_.empty() ? 0 : (bufs_.back().len - (buf_ptr_ - bufs_.back().data));
-  if (len > avail) {
+  for (;;) {
+    const size_t avail = bufs_.empty() ? 0 : (bufs_.back().len - (buf_ptr_ - bufs_.back().data));
+    if (len <= avail) {
+      break;
+    }
+
     // If it's bigger than the last buf's capacity, we fill the last buf,
     // allocate a new one, and write the remainder to the new one.  Our new
     // buf's size will be the next power of two past the size of the last buf
@@ -59,8 +63,12 @@ void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
     data += avail;
     len -= avail;
 
+    const int max_size = 128 << 20; // 128 MB
     int new_size = bufs_.empty() ? 16 : bufs_.back().len * 2;
-    for (; new_size < len + next_size_hint; new_size *= 2) {
+    for (; new_size < len + next_size_hint && new_size < max_size; new_size *= 2) {
+    }
+    if (new_size > max_size) {
+      new_size = max_size;
     }
 
     DBSlice new_buf;
