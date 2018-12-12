@@ -109,15 +109,26 @@ func (l *DirName) IsSet() bool {
 // DirSet returns true of the log directory has been changed from its default.
 func DirSet() bool { return logging.logDir.IsSet() }
 
-// logFileRE matches log files to avoid exposing non-log files accidentally
-// and it splits the details of the filename into groups for easy parsing.
-// The log file format is {process}.{host}.{username}.{timestamp}.{pid}.log
-// cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
+// FileNamePattern matches log files to avoid exposing non-log files
+// accidentally and it splits the details of the filename into groups for easy
+// parsing. The log file format is
+//
+//   {program}.{host}.{username}.{timestamp}.{pid}.log
+//   cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
+//
 // All underscore in process, host and username are escaped to double
 // underscores and all periods are escaped to an underscore.
 // For compatibility with Windows filenames, all colons from the timestamp
-// (RFC3339) are converted from underscores.
-var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.log$`)
+// (RFC3339) are converted from underscores (see FileTimePattern).
+// Note this pattern is unanchored and becomes anchored through its use in
+// LogFilePattern.
+const FileNamePattern = `(?P<program>[^/.]+)\.(?P<host>[^/\.]+)\.` +
+	`(?P<user>[^/\.]+)\.(?P<ts>[^/\.]+)\.(?P<pid>\d+)\.log`
+
+// FilePattern matches log file paths.
+const FilePattern = "^(?:.*/)?" + FileNamePattern + "$"
+
+var fileRE = regexp.MustCompile(FilePattern)
 
 // MakeFileInfo constructs a FileInfo from FileDetails and os.FileInfo.
 func MakeFileInfo(details FileDetails, info os.FileInfo) FileInfo {
@@ -190,7 +201,7 @@ var errMalformedName = errors.New("malformed log filename")
 // for log files. If the filename does not match the log file pattern, an error
 // is returned.
 func ParseLogFilename(filename string) (FileDetails, error) {
-	matches := logFileRE.FindStringSubmatch(filename)
+	matches := fileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 6 {
 		return FileDetails{}, errMalformedName
 	}
