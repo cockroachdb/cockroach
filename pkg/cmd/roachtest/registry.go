@@ -56,6 +56,8 @@ func registerTests(r *registry) {
 	registerSchemaChangeKV(r)
 	registerSchemaChangeIndexTPCC100(r)
 	registerSchemaChangeIndexTPCC1000(r)
+	registerScrubAllChecksTPCC(r)
+	registerScrubIndexOnlyTPCC(r)
 	registerSQLsmith(r)
 	registerSyncTest(r)
 	registerSysbench(r)
