@@ -123,11 +123,6 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
 }
 
-// IsRange returns true iff the BatchRequest contains range-based requests.
-func (ba *BatchRequest) IsRange() bool {
-	return ba.hasFlag(isRange)
-}
-
 // IsUnsplittable returns true iff the BatchRequest an un-splittable request.
 func (ba *BatchRequest) IsUnsplittable() bool {
 	return ba.hasFlag(isUnsplittable)
