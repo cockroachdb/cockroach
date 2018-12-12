@@ -101,7 +101,7 @@ func processColumnSet(
 
 	// Add all public or columns in DELETE_AND_WRITE_ONLY state
 	// that satisfy the condition.
-	for _, col := range tableDesc.WritableColumns {
+	for _, col := range tableDesc.WritableColumns() {
 		if inSet(col) {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}

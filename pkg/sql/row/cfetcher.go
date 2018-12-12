@@ -45,7 +45,7 @@ type cTableInfo struct {
 	// Used to determine whether a key retrieved belongs to the span we
 	// want to scan.
 	spans            roachpb.Spans
-	desc             *sqlbase.TableDescriptor
+	desc             *sqlbase.ImmutableTableDescriptor
 	index            *sqlbase.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []sqlbase.IndexDescriptor_Direction
@@ -195,7 +195,7 @@ func (rf *CFetcher) Init(
 
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
-		desc:             tableArgs.Desc.TableDesc(),
+		desc:             tableArgs.Desc,
 		colIdxMap:        tableArgs.ColIdxMap,
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
@@ -227,7 +227,7 @@ func (rf *CFetcher) Init(
 		}
 	}
 
-	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
+	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
 	var indexColumnIDs []sqlbase.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -278,7 +278,7 @@ func (rf *CFetcher) Init(
 		}
 
 		// Prepare our index key vals slice.
-		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc, indexColumnIDs)
+		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -288,7 +288,7 @@ func (rf *CFetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
 			nExtraColumns := len(table.index.ExtraColumnIDs)
 			if cap(table.extraValColOrdinals) >= nExtraColumns {
 				table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]

@@ -224,10 +224,8 @@ func (p *planner) getTableScanByRef(
 	wantedColumns := tref.Columns
 	if scanVisibility == publicAndNonPublicColumns {
 		wantedColumns = wantedColumns[:len(wantedColumns):len(wantedColumns)]
-		for _, mutation := range desc.Mutations {
-			if c := mutation.GetColumn(); c != nil {
-				wantedColumns = append(wantedColumns, tree.ColumnID(c.ID))
-			}
+		for _, c := range desc.MutationColumns() {
+			wantedColumns = append(wantedColumns, tree.ColumnID(c.ID))
 		}
 	}
 

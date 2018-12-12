@@ -189,7 +189,8 @@ func (p *planner) newUpsertNode(
 			// can't specify it, which means we need to do a lookup and so we can't use
 			// the fast path. When adding or removing an index, same result, so the fast
 			// path is disabled during all mutations.
-			len(desc.Mutations) == 0 &&
+			len(desc.MutationColumns()) == 0 &&
+			len(desc.MutationIndexes()) == 0 &&
 			// For the fast path, all columns must be specified in the insert.
 			len(ri.InsertCols) == len(desc.Columns) &&
 			// We cannot use the fast path if we also have a RETURNING clause, because

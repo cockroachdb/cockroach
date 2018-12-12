@@ -87,15 +87,7 @@ func newTableReader(
 	tr.limitHint = limitHint(spec.LimitHint, post)
 	tr.maxResults = spec.MaxResults
 
-	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-	if returnMutations {
-		for i := range spec.Table.Mutations {
-			if spec.Table.Mutations[i].GetColumn() != nil {
-				numCols++
-			}
-		}
-	}
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	tr.ignoreMisplannedRanges = flowCtx.local
 	if err := tr.Init(
