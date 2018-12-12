@@ -69,8 +69,52 @@ func registerAllocator(r *registry) {
 
 		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, t.l, db, maxStdDev)
+			t.Status("waiting for rebalance")
+			if err := waitForRebalance(ctx, t.l, db, maxStdDev); err != nil {
+				return err
+			}
+
+			t.Status("fully replicating data and waiting")
+			if _, err := db.Exec(`ALTER RANGE default CONFIGURE ZONE USING num_replicas = $1`, c.nodes); err != nil {
+				t.Fatal(err)
+			}
+			if err := waitForRebalance(ctx, t.l, db, maxStdDev); err != nil {
+				t.Fatal(err)
+			}
+
+			t.Status("killing minority and checking for unavailable ranges")
+
+			minority := (c.nodes - 1) / 2
+			m.ExpectDeaths(int32(minority))
+			// NB: spare n1 since verifyMetrics is hard-coded to hit it.
+			c.Stop(ctx, c.Range(c.nodes-minority+1, c.nodes))
+
+			// Wait until the cluster has downreplicated to a three-node configuration.
+			// This happens despite the configured higher replication factor since dead
+			// nodes are taken into account.
+			for ok := false; !ok; {
+				timer := time.AfterFunc(time.Minute, func() {
+					t.l.Printf("test got stuck checking for downreplication, there are likely unavailable ranges")
+				})
+
+				// Make sure we don't see unavailable ranges.
+				func() {
+					ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					defer cancel()
+					if err := verifyMetrics(ctx, c, map[string]checkable{"ranges.unavailable": leq(0)}); err != nil && err != context.DeadlineExceeded {
+						t.Fatal(err)
+					}
+				}()
+
+				if err := db.QueryRow(
+					"SELECT max(array_length(replicas, 1)) <= $1 FROM crdb_internal.ranges_no_leases", c.nodes-minority,
+				).Scan(&ok); err != nil {
+					t.Fatal(err)
+				}
+				timer.Stop()
+			}
+
+			return nil
 		})
 		m.Wait()
 	}

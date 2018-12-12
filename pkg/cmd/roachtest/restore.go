@@ -244,8 +244,8 @@ func registerRestore(r *registry) {
 				// m.Go(func(ctx context.Context) error {
 				// 	// Make sure the merge queue doesn't muck with our restore.
 				// 	return verifyMetrics(ctx, c, map[string]float64{
-				// 		"cr.store.queue.merge.process.success": 10,
-				// 		"cr.store.queue.merge.process.failure": 10,
+				// 		"cr.store.queue.merge.process.success": leq(10),
+				// 		"cr.store.queue.merge.process.failure": leq(10),
 				// 	})
 				// })
 
@@ -269,12 +269,26 @@ func registerRestore(r *registry) {
 	}
 }
 
+type checkable interface {
+	Check(actual float64) (ok bool)
+}
+
+type leq float64
+
+func (l leq) Check(actual float64) bool {
+	return float64(l) <= actual
+}
+
+func (l leq) String() string {
+	return fmt.Sprintf("x <= %.2f", l)
+}
+
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
-// 10s and verifying that the most recent value is less that the limit
-// specified in m. This is particularly useful for verifying that a counter
-// metric does not exceed some threshold during a test. For example, the
-// restore and import tests verify that the range merge queue is inactive.
-func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error {
+// 10s and verifying that the most recent value is within the limit specified in
+// m. This is particularly useful for verifying that a counter metric does not
+// exceed some threshold during a test. For example, the restore and import
+// tests verify that the range merge queue is inactive.
+func verifyMetrics(ctx context.Context, c *cluster, m map[string]checkable) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
 	url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + "/ts/query"
@@ -320,8 +334,8 @@ func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error 
 			}
 			limit := m[name]
 			value := data[n-1].Value
-			if value >= limit {
-				return fmt.Errorf("%s: %.1f >= %.1f @ %d", name, value, limit, data[n-1].TimestampNanos)
+			if !limit.Check(value) {
+				return fmt.Errorf("%s: %.1f failed limit %s @ %d", name, value, limit, data[n-1].TimestampNanos)
 			}
 		}
 	}
