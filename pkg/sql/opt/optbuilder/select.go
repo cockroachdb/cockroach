@@ -92,8 +92,10 @@ func (b *Builder) buildDataSource(
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)
+		case cat.Sequence:
+			return b.buildSequenceSelect(t, inScope)
 		default:
-			panic(unimplementedf("sequences are not supported"))
+			panic(unimplementedf("unknown DataSource type %T", ds))
 		}
 
 	case *tree.ParenTableExpr:
@@ -383,6 +385,36 @@ func (b *Builder) buildScan(
 
 		outScope.expr = b.factory.ConstructScan(&private)
 	}
+	return outScope
+}
+
+func (b *Builder) buildSequenceSelect(seq cat.Sequence, inScope *scope) (outScope *scope) {
+	tn := seq.SequenceName()
+	md := b.factory.Metadata()
+	outScope = inScope.push()
+
+	cols := opt.ColList{
+		md.AddColumn("last_value", types.Int),
+		md.AddColumn("log_cnt", types.Int),
+		md.AddColumn("is_called", types.Bool),
+	}
+
+	outScope.cols = make([]scopeColumn, 3)
+	for i, c := range cols {
+		col := md.ColumnMeta(c)
+		outScope.cols[i] = scopeColumn{
+			id:    c,
+			name:  tree.Name(col.Alias),
+			table: *tn,
+			typ:   col.Type,
+		}
+	}
+
+	private := memo.SequenceSelectPrivate{
+		Sequence: md.AddSequence(seq),
+		Cols:     cols,
+	}
+	outScope.expr = b.factory.ConstructSequenceSelect(&private)
 	return outScope
 }
 
