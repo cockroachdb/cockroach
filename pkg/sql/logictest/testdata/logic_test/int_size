@@ -1,0 +1,177 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+subtest defaults
+
+query T
+SHOW default_int_size
+----
+8
+
+subtest set_int4
+
+statement ok
+SET default_int_size=4
+
+query T
+SHOW default_int_size
+----
+4
+
+statement ok
+CREATE TABLE i4 (i4 INT)
+
+query TT
+SHOW CREATE TABLE i4
+----
+i4  CREATE TABLE i4 (
+    i4 INT4 NULL,
+    FAMILY "primary" (i4, rowid)
+)
+
+subtest set_int8
+
+statement ok
+SET default_int_size=8
+
+query T
+SHOW default_int_size
+----
+8
+
+statement ok
+CREATE TABLE i8 (i8 INT)
+
+query TT
+SHOW CREATE TABLE i8
+----
+i8  CREATE TABLE i8 (
+    i8 INT8 NULL,
+    FAMILY "primary" (i8, rowid)
+)
+
+# https://github.com/cockroachdb/cockroach/issues/32846
+subtest issue_32846
+
+statement ok
+SET default_int_size=8
+
+# Parsing and evaluation are async, so the setting won't take
+# effect until the next statement is evaluated.
+statement ok
+SET default_int_size=4; CREATE TABLE late4 (a INT)
+
+query TT
+SHOW CREATE TABLE late4
+----
+late4  CREATE TABLE late4 (
+       a INT8 NULL,
+       FAMILY "primary" (a, rowid)
+)
+
+query T
+SHOW default_int_size
+----
+4
+
+subtest set_bad_value
+
+statement error pq: only 4 or 8 are supported by default_int_size
+SET default_int_size=2
+
+# We want to check the combinations of default_int_size and
+# experimental_serialization_normalization.
+
+subtest serial_rowid
+# When using rowid, we should always see INT8, since that's the
+# return type of unique_rowid()
+
+statement ok
+SET default_int_size=4; SET experimental_serial_normalization='rowid';
+
+statement ok
+CREATE TABLE i4_rowid (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i4_rowid
+----
+i4_rowid  CREATE TABLE i4_rowid (
+          a INT8 NOT NULL DEFAULT unique_rowid(),
+          FAMILY "primary" (a, rowid)
+)
+
+statement ok
+SET default_int_size=8; SET experimental_serial_normalization='rowid';
+
+statement ok
+CREATE TABLE i8_rowid (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i8_rowid
+----
+i8_rowid  CREATE TABLE i8_rowid (
+          a INT8 NOT NULL DEFAULT unique_rowid(),
+          FAMILY "primary" (a, rowid)
+)
+
+subtest serial_sql_sequence
+# When using rowid, we should see an INTx that matches the current size setting.
+
+statement ok
+SET default_int_size=4; SET experimental_serial_normalization='sql_sequence';
+
+statement ok
+CREATE TABLE i4_sql_sequence (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i4_sql_sequence
+----
+i4_sql_sequence  CREATE TABLE i4_sql_sequence (
+                 a INT4 NOT NULL DEFAULT nextval('i4_sql_sequence_a_seq':::STRING),
+                 FAMILY "primary" (a, rowid)
+)
+
+statement ok
+SET default_int_size=8; SET experimental_serial_normalization='sql_sequence';
+
+statement ok
+CREATE TABLE i8_sql_sequence (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i8_sql_sequence
+----
+i8_sql_sequence  CREATE TABLE i8_sql_sequence (
+                 a INT8 NOT NULL DEFAULT nextval('i8_sql_sequence_a_seq':::STRING),
+                 FAMILY "primary" (a, rowid)
+)
+
+subtest serial_virtual_sequence
+# Virtual sequences are a wrapper around unique_rowid(), so they will also
+# return an INT8 value.
+
+statement ok
+SET default_int_size=4; SET experimental_serial_normalization='virtual_sequence';
+
+statement ok
+CREATE TABLE i4_virtual_sequence (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i4_virtual_sequence
+----
+i4_virtual_sequence  CREATE TABLE i4_virtual_sequence (
+                     a INT8 NOT NULL DEFAULT nextval('i4_virtual_sequence_a_seq':::STRING),
+                     FAMILY "primary" (a, rowid)
+)
+
+statement ok
+SET default_int_size=8; SET experimental_serial_normalization='virtual_sequence';
+
+statement ok
+CREATE TABLE i8_virtual_sequence (a SERIAL)
+
+query TT
+SHOW CREATE TABLE i8_virtual_sequence
+----
+i8_virtual_sequence  CREATE TABLE i8_virtual_sequence (
+                     a INT8 NOT NULL DEFAULT nextval('i8_virtual_sequence_a_seq':::STRING),
+                     FAMILY "primary" (a, rowid)
+)

@@ -6533,7 +6533,7 @@ const_typename:
   }
 | SERIAL
   {
-    $$.val = coltypes.Serial8
+    $$.val = sqllex.(*scanner).nakedSerialType
   }
 | SERIAL2
   {
@@ -6623,11 +6623,11 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = coltypes.Int8
+    $$.val = sqllex.(*scanner).nakedIntType
   }
 | INTEGER
   {
-    $$.val = coltypes.Int8
+    $$.val = sqllex.(*scanner).nakedIntType
   }
 | INT2
   {

@@ -87,6 +87,9 @@ type SessionData struct {
 	// identifier `cockroach_restart` in order use a restartable
 	// transaction.
 	ForceSavepointRestart bool
+	// DefaultIntSize specifies the size in bits or bytes (preferred)
+	// of how a "naked" INT type should be parsed.
+	DefaultIntSize int
 }
 
 // DataConversionConfig contains the parameters that influence
