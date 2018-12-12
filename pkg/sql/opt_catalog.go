@@ -274,19 +274,7 @@ func newOptTable(
 		ot.stats = ot.stats[:n]
 	}
 
-	// Prepare any mutation columns.
-	if len(desc.Mutations) != 0 {
-		ot.mutations = make([]opt.MutationColumn, 0, len(ot.desc.Mutations))
-		for i := range ot.desc.Mutations {
-			m := &ot.desc.Mutations[i]
-			if c := m.GetColumn(); c != nil {
-				ot.mutations = append(ot.mutations, opt.MutationColumn{
-					Column:       c,
-					IsDeleteOnly: m.State == sqlbase.DescriptorMutation_DELETE_ONLY,
-				})
-			}
-		}
-	}
+	ot.prepareMutationColumns(desc)
 
 	// The opt.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
@@ -295,6 +283,26 @@ func newOptTable(
 	ot.primary.init(ot, &desc.PrimaryIndex)
 
 	return ot
+}
+
+func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescriptor) {
+	if len(desc.MutationColumns()) != 0 {
+		ot.mutations = make([]opt.MutationColumn, 0, len(ot.desc.MutationColumns()))
+		writeCols := ot.desc.WriteOnlyColumns()
+		delCols := ot.desc.DeleteOnlyColumns()
+		for i := range writeCols {
+			ot.mutations = append(ot.mutations, opt.MutationColumn{
+				Column:       &writeCols[i],
+				IsDeleteOnly: false,
+			})
+		}
+		for i := range delCols {
+			ot.mutations = append(ot.mutations, opt.MutationColumn{
+				Column:       &delCols[i],
+				IsDeleteOnly: true,
+			})
+		}
+	}
 }
 
 // Fingerprint is part of the opt.DataSource interface.

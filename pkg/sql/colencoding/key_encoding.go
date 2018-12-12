@@ -34,7 +34,7 @@ import (
 func DecodeIndexKeyToCols(
 	vecs []exec.ColVec,
 	idx uint16,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	indexColIdx []int,
 	types []sqlbase.ColumnType,

@@ -890,13 +890,9 @@ func tableOrdinal(
 	}
 	if visibility == publicAndNonPublicColumns {
 		offset := len(desc.Columns)
-		mutationIdx := 0
-		for i := range desc.Mutations {
-			if col := desc.Mutations[i].GetColumn(); col != nil {
-				if col.ID == colID {
-					return offset + mutationIdx
-				}
-				mutationIdx++
+		for i, col := range desc.MutationColumns() {
+			if col.ID == colID {
+				return offset + i
 			}
 		}
 	}
@@ -1124,7 +1120,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 	var types []sqlbase.ColumnType
 	if returnMutations {
-		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns)+len(n.desc.MutationColumns()))
 	} else {
 		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns))
 	}
@@ -1132,11 +1128,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		types = append(types, n.desc.Columns[i].Type)
 	}
 	if returnMutations {
-		for i := range n.desc.Mutations {
-			col := n.desc.Mutations[i].GetColumn()
-			if col != nil {
-				types = append(types, col.Type)
-			}
+		for _, col := range n.desc.MutationColumns() {
+			types = append(types, col.Type)
 		}
 	}
 	p.SetLastStagePost(post, types)
@@ -1156,11 +1149,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
 	}
 	if returnMutations {
-		for _, m := range n.desc.Mutations {
-			c := m.GetColumn()
-			if c != nil {
-				descColumnIDs = append(descColumnIDs, c.ID)
-			}
+		for _, c := range n.desc.MutationColumns() {
+			descColumnIDs = append(descColumnIDs, c.ID)
 		}
 	}
 	for i := range planToStreamColMap {
