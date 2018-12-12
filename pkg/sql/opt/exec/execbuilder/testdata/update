@@ -204,16 +204,17 @@ CREATE TABLE kv (
 )
 
 query TTT
-EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC
+EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
 ----
 count                          ·      ·
  └── update                    ·      ·
       │                        table  kv
       │                        set    v
       └── render               ·      ·
-           └── sort            ·      ·
-                │              order  -v
-                └── render     ·      ·
+           └── limit           ·      ·
+                │              count  10
+                └── sort       ·      ·
+                     │         order  -v
                      └── scan  ·      ·
 ·                              table  kv@primary
 ·                              spans  ALL

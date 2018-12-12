@@ -33,7 +33,7 @@ TABLE xyz
 
 # Properties with no RETURNING clause.
 build
-INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z
+INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10
 ----
 insert abcde
  ├── columns: <none>
@@ -44,49 +44,59 @@ insert abcde
  │    ├──  column13:13 => d:4
  │    ├──  column11:11 => rowid:5
  │    └──  column12:12 => e:6
- ├── internal-ordering: +8,+9
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── sort
-      ├── columns: y:8(int!null) z:9(float) column10:10(int!null) column11:11(int) column12:12(unknown) column13:13(int)
+ └── project
+      ├── columns: column13:13(int) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(unknown)
+      ├── cardinality: [0 - 10]
       ├── side-effects
       ├── fd: ()-->(10,12), (8)-->(13)
-      ├── ordering: +8,+9
-      └── project
-           ├── columns: column13:13(int) y:8(int!null) z:9(float) column10:10(int!null) column11:11(int) column12:12(unknown)
-           ├── side-effects
-           ├── fd: ()-->(10,12), (8)-->(13)
-           ├── project
-           │    ├── columns: column10:10(int!null) column11:11(int) column12:12(unknown) y:8(int!null) z:9(float)
-           │    ├── side-effects
-           │    ├── fd: ()-->(10,12)
-           │    ├── prune: (8-12)
-           │    ├── project
-           │    │    ├── columns: y:8(int!null) z:9(float)
-           │    │    ├── prune: (8,9)
-           │    │    └── scan xyz
-           │    │         ├── columns: x:7(string!null) y:8(int!null) z:9(float)
-           │    │         ├── key: (7)
-           │    │         ├── fd: (7)-->(8,9)
-           │    │         ├── prune: (7-9)
-           │    │         └── interesting orderings: (+7)
-           │    └── projections
-           │         ├── const: 10 [type=int]
-           │         ├── function: unique_rowid [type=int, side-effects]
-           │         └── null [type=unknown]
-           └── projections
-                └── plus [type=int, outer=(8,10)]
-                     ├── plus [type=int]
-                     │    ├── variable: y [type=int]
-                     │    └── variable: column10 [type=int]
-                     └── const: 1 [type=int]
+      ├── prune: (8,10-13)
+      ├── interesting orderings: (+8)
+      ├── project
+      │    ├── columns: column10:10(int!null) column11:11(int) column12:12(unknown) y:8(int!null)
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects
+      │    ├── fd: ()-->(10,12)
+      │    ├── prune: (8,10-12)
+      │    ├── interesting orderings: (+8)
+      │    ├── limit
+      │    │    ├── columns: y:8(int!null) z:9(float)
+      │    │    ├── internal-ordering: +8,+9
+      │    │    ├── cardinality: [0 - 10]
+      │    │    ├── interesting orderings: (+8,+9)
+      │    │    ├── sort
+      │    │    │    ├── columns: y:8(int!null) z:9(float)
+      │    │    │    ├── ordering: +8,+9
+      │    │    │    ├── prune: (8,9)
+      │    │    │    └── project
+      │    │    │         ├── columns: y:8(int!null) z:9(float)
+      │    │    │         ├── prune: (8,9)
+      │    │    │         └── scan xyz
+      │    │    │              ├── columns: x:7(string!null) y:8(int!null) z:9(float)
+      │    │    │              ├── key: (7)
+      │    │    │              ├── fd: (7)-->(8,9)
+      │    │    │              ├── prune: (7-9)
+      │    │    │              └── interesting orderings: (+7)
+      │    │    └── const: 10 [type=int]
+      │    └── projections
+      │         ├── const: 10 [type=int]
+      │         ├── function: unique_rowid [type=int, side-effects]
+      │         └── null [type=unknown]
+      └── projections
+           └── plus [type=int, outer=(8,10)]
+                ├── plus [type=int]
+                │    ├── variable: y [type=int]
+                │    └── variable: column10 [type=int]
+                └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
 build
-INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z RETURNING *
+INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10 RETURNING *
 ----
 project
  ├── columns: a:8(int!null) b:8(int!null) c:10(int!null) d:13(int)
+ ├── cardinality: [0 - 10]
  ├── side-effects, mutations
  ├── fd: ()-->(10), (8)-->(13)
  ├── prune: (8,10,13)
@@ -99,42 +109,52 @@ project
       │    ├──  column13:13 => d:4
       │    ├──  column11:11 => rowid:5
       │    └──  column12:12 => e:6
-      ├── internal-ordering: +8,+9
+      ├── cardinality: [0 - 10]
       ├── side-effects, mutations
       ├── fd: ()-->(10), (8)-->(13)
-      └── sort
-           ├── columns: y:8(int!null) z:9(float) column10:10(int!null) column11:11(int) column12:12(unknown) column13:13(int)
+      └── project
+           ├── columns: column13:13(int) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(unknown)
+           ├── cardinality: [0 - 10]
            ├── side-effects
            ├── fd: ()-->(10,12), (8)-->(13)
-           ├── ordering: +8,+9
-           └── project
-                ├── columns: column13:13(int) y:8(int!null) z:9(float) column10:10(int!null) column11:11(int) column12:12(unknown)
-                ├── side-effects
-                ├── fd: ()-->(10,12), (8)-->(13)
-                ├── project
-                │    ├── columns: column10:10(int!null) column11:11(int) column12:12(unknown) y:8(int!null) z:9(float)
-                │    ├── side-effects
-                │    ├── fd: ()-->(10,12)
-                │    ├── prune: (8-12)
-                │    ├── project
-                │    │    ├── columns: y:8(int!null) z:9(float)
-                │    │    ├── prune: (8,9)
-                │    │    └── scan xyz
-                │    │         ├── columns: x:7(string!null) y:8(int!null) z:9(float)
-                │    │         ├── key: (7)
-                │    │         ├── fd: (7)-->(8,9)
-                │    │         ├── prune: (7-9)
-                │    │         └── interesting orderings: (+7)
-                │    └── projections
-                │         ├── const: 10 [type=int]
-                │         ├── function: unique_rowid [type=int, side-effects]
-                │         └── null [type=unknown]
-                └── projections
-                     └── plus [type=int, outer=(8,10)]
-                          ├── plus [type=int]
-                          │    ├── variable: y [type=int]
-                          │    └── variable: column10 [type=int]
-                          └── const: 1 [type=int]
+           ├── prune: (8,10-13)
+           ├── interesting orderings: (+8)
+           ├── project
+           │    ├── columns: column10:10(int!null) column11:11(int) column12:12(unknown) y:8(int!null)
+           │    ├── cardinality: [0 - 10]
+           │    ├── side-effects
+           │    ├── fd: ()-->(10,12)
+           │    ├── prune: (8,10-12)
+           │    ├── interesting orderings: (+8)
+           │    ├── limit
+           │    │    ├── columns: y:8(int!null) z:9(float)
+           │    │    ├── internal-ordering: +8,+9
+           │    │    ├── cardinality: [0 - 10]
+           │    │    ├── interesting orderings: (+8,+9)
+           │    │    ├── sort
+           │    │    │    ├── columns: y:8(int!null) z:9(float)
+           │    │    │    ├── ordering: +8,+9
+           │    │    │    ├── prune: (8,9)
+           │    │    │    └── project
+           │    │    │         ├── columns: y:8(int!null) z:9(float)
+           │    │    │         ├── prune: (8,9)
+           │    │    │         └── scan xyz
+           │    │    │              ├── columns: x:7(string!null) y:8(int!null) z:9(float)
+           │    │    │              ├── key: (7)
+           │    │    │              ├── fd: (7)-->(8,9)
+           │    │    │              ├── prune: (7-9)
+           │    │    │              └── interesting orderings: (+7)
+           │    │    └── const: 10 [type=int]
+           │    └── projections
+           │         ├── const: 10 [type=int]
+           │         ├── function: unique_rowid [type=int, side-effects]
+           │         └── null [type=unknown]
+           └── projections
+                └── plus [type=int, outer=(8,10)]
+                     ├── plus [type=int]
+                     │    ├── variable: y [type=int]
+                     │    └── variable: column10 [type=int]
+                     └── const: 1 [type=int]
 
 # Input is cardinality 1 VALUES expression.
 build

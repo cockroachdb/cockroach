@@ -21,31 +21,25 @@ import (
 )
 
 func insertCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	// Insert requires a certain ordering of its input, but can also pass through
-	// a stronger ordering. For example:
-	//
-	//   SELECT * FROM [INSERT INTO t1 SELECT * FROM t2 ORDER BY x] ORDER BY x,y
-	//
-	// In this case the internal ordering is x+, but we can pass through x+,y+
-	// to satisfy both orderings.
-	return required.Intersects(&expr.(*memo.InsertExpr).Ordering)
+	// Insert operator can always pass through ordering to its input. Note that
+	// this is not possible for an INSERT...ON CONFLICT statement, which is one
+	// reason it's compiled as an Upsert operator rather than an Insert operator.
+	return true
 }
 
 func insertBuildChildReqOrdering(
 	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
 ) physical.OrderingChoice {
-	return required.Intersection(&parent.(*memo.InsertExpr).Ordering)
+	return *required
 }
 
 func insertBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
-	insert := expr.(*memo.InsertExpr)
-	provided := insert.Input.ProvidedPhysical().Ordering
-	inputFDs := &insert.Input.Relational().FuncDeps
-
-	// Ensure that provided ordering only uses projected columns.
-	provided = remapProvided(provided, inputFDs, insert.Relational().OutputCols)
-
-	// The child's provided ordering satisfies both <required> and the Insert
-	// internal ordering; it may need to be trimmed.
-	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+	// It should always be possible to remap the columns in the input's provided
+	// ordering.
+	ins := expr.(*memo.InsertExpr)
+	return remapProvided(
+		ins.Input.ProvidedPhysical().Ordering,
+		&ins.Input.Relational().FuncDeps,
+		ins.Relational().OutputCols,
+	)
 }
