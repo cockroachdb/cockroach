@@ -529,13 +529,13 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
 		hidden.Remove(int(col.ID))
-		formatCol(f, col.Label, col.ID, notNullCols)
+		formatCol(f, col.Label, col.ID, notNullCols, false /* omitType */)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
 		for _, col := range cols {
 			if hidden.Contains(int(col)) {
-				formatCol(f, "", col, notNullCols)
+				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
 			}
 		}
 		f.Buffer.WriteString("]")
@@ -553,7 +553,7 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
-			formatCol(f, "", col, notNullCols)
+			formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
 		}
 		tp.Child(f.Buffer.String())
 	}
@@ -563,18 +563,17 @@ func (f *ExprFmtCtx) formatColList(
 // given list. Each child shows how the column will be mutated, with the id of
 // the "before" and "after" columns, similar to this:
 //
-//   a:1(int) => x:4(int)
+//   a:1 => x:4
 //
 func (f *ExprFmtCtx) formatMutation(
 	nd RelExpr, tp treeprinter.Node, colList opt.ColList, tabID opt.TableID,
 ) {
-	notNullCols := nd.Relational().NotNullCols
 	for i, col := range colList {
 		if col != 0 {
 			f.Buffer.Reset()
-			formatCol(f, "", col, notNullCols)
+			formatCol(f, "" /* label */, col, opt.ColSet{}, true /* omitType */)
 			f.Buffer.WriteString(" =>")
-			formatCol(f, "", tabID.ColumnID(i), notNullCols)
+			formatCol(f, "" /* label */, tabID.ColumnID(i), opt.ColSet{}, true /* omitType */)
 			tp.Child(f.Buffer.String())
 		}
 	}
@@ -589,7 +588,12 @@ func (f *ExprFmtCtx) formatMutation(
 //
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
-func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet) {
+//
+// If omitType is true, then the type specifier (including not nullable) is
+// omitted from the output.
+func formatCol(
+	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitType bool,
+) {
 	md := f.Memo.metadata
 	if label == "" {
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
@@ -607,13 +611,15 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 	f.Buffer.WriteString(label)
 	f.Buffer.WriteByte(':')
 	fmt.Fprintf(f.Buffer, "%d", id)
-	f.Buffer.WriteByte('(')
-	f.Buffer.WriteString(typ.String())
+	if !omitType {
+		f.Buffer.WriteByte('(')
+		f.Buffer.WriteString(typ.String())
 
-	if notNullCols.Contains(int(id)) {
-		f.Buffer.WriteString("!null")
+		if notNullCols.Contains(int(id)) {
+			f.Buffer.WriteString("!null")
+		}
+		f.Buffer.WriteByte(')')
 	}
-	f.Buffer.WriteByte(')')
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to

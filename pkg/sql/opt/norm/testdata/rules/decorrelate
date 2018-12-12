@@ -89,8 +89,8 @@ update xy
  ├── columns: <none>
  ├── fetch columns: x:3(int) y:4(int)
  ├── update-mapping:
- │    ├──  u:5(int) => x:1(int)
- │    └──  v:6(int) => y:2(int)
+ │    ├──  u:5 => x:1
+ │    └──  v:6 => y:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── left-join (merge)
