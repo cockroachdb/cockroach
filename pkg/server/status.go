@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -597,6 +598,35 @@ func (s *statusServer) Details(
 	}
 
 	return resp, nil
+}
+
+func (s *statusServer) SystemDetails(
+	ctx context.Context, req *serverpb.SystemDetailsRequest,
+) (*serverpb.SystemDetailsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.SystemDetails(ctx, req)
+	}
+	var resp serverpb.SystemDetailsResponse
+	cmd := exec.CommandContext(ctx, "uname", "-a")
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
+	if err := cmd.Run(); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "failed to run uname: %v %v",
+			err, errBuf.String())
+	}
+	resp.NodeID = nodeID
+	resp.SystemInformation = strings.TrimSpace(outBuf.String())
+	return &resp, nil
 }
 
 // GetFiles returns a list of files of type defined in the request.

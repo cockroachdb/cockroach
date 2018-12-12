@@ -77,6 +77,25 @@ message CertificatesResponse {
   repeated CertificateDetails certificates = 1 [ (gogoproto.nullable) = false ];
 }
 
+// SystemDetailsRequest requests a node's operating system and hardware details.
+message SystemDetailsRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message SystemDetailsResponse {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // system_information is the output from `uname -a`
+  string system_information = 2;
+}
+
 // DetailsRequest requests a nodes details.
 message DetailsRequest {
   // node_id is a string so that "local" can be used to specify that no
@@ -677,6 +696,11 @@ service Status {
     option (google.api.http) = {
       get : "/_status/details/{node_id}"
       additional_bindings {get : "/health"}
+    };
+  }
+  rpc SystemDetails(SystemDetailsRequest) returns (SystemDetailsResponse) {
+    option (google.api.http) = {
+      get : "/_status/system_details"
     };
   }
   rpc Nodes(NodesRequest) returns (NodesResponse) {

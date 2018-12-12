@@ -349,6 +349,18 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						}
 					}
 				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if system, err := status.SystemDetails(ctx, &serverpb.SystemDetailsRequest{NodeId: id}); err != nil {
+						if err := z.createError(prefix+"/system", err); err != nil {
+							return err
+						}
+					} else if err := z.createJSON(prefix+"/system", system); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
