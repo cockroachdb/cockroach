@@ -1310,10 +1310,10 @@ update abc
  ├── fetch columns: a:4(int!null) b:5(int) c:6(int!null)
  ├── update-mapping:
  │    └──  column7:7(int!null) => b:2(int)
- ├── internal-ordering: +5,+6
+ ├── internal-ordering: +5,+6 opt(7)
  └── sort
       ├── columns: a:4(int!null) b:5(int!null) c:6(int!null) column7:7(int!null)
-      ├── ordering: +5,+6
+      ├── ordering: +5,+6 opt(7)
       └── project
            ├── columns: column7:7(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
            ├── scan abc
@@ -1335,14 +1335,14 @@ update abc
  │    ├──  column7:7(int!null) => a:1(int)
  │    ├──  column8:8(int!null) => b:2(int)
  │    └──  column9:9(int!null) => c:3(int)
- ├── internal-ordering: +6
+ ├── internal-ordering: +(5|6) opt(7-9)
  ├── side-effects, mutations
  ├── fd: ()-->(7-9)
  └── sort
       ├── columns: a:4(int!null) b:5(int!null) c:6(int!null) column7:7(int!null) column8:8(int!null) column9:9(int!null)
       ├── key: (4,6)
       ├── fd: ()-->(7-9), (5)==(6), (6)==(5)
-      ├── ordering: +6
+      ├── ordering: +(5|6) opt(7-9) [provided: +5]
       └── project
            ├── columns: column7:7(int!null) column8:8(int!null) column9:9(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
            ├── key: (4,6)

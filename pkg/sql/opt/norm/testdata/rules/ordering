@@ -271,3 +271,33 @@ insert abcde
                 ├── const: 1 [type=int]
                 ├── y + 1 [type=int, outer=(7)]
                 └── const: 2 [type=int]
+
+opt expect=SimplifyMutationOrdering
+UPDATE abcde SET b=2 WHERE b=1 ORDER BY b, c
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) e:10(int)
+ ├── update-mapping:
+ │    └──  column11:11(int) => b:2(int)
+ ├── internal-ordering: +8 opt(7,11)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column11:11(int!null) a:6(int!null) b:7(int!null) c:8(int) d:9(int) e:10(int)
+      ├── key: (6)
+      ├── fd: ()-->(7,11), (6)-->(8-10), (7,8)~~>(6,9,10)
+      ├── ordering: +8 opt(7,11) [provided: +8]
+      ├── index-join abcde
+      │    ├── columns: a:6(int!null) b:7(int!null) c:8(int) d:9(int) e:10(int)
+      │    ├── key: (6)
+      │    ├── fd: ()-->(7), (6)-->(8-10), (7,8)~~>(6,9,10)
+      │    ├── ordering: +8 opt(7) [provided: +8]
+      │    └── scan abcde@bc
+      │         ├── columns: a:6(int!null) b:7(int!null) c:8(int)
+      │         ├── constraint: /7/8: [/1 - /1]
+      │         ├── key: (6)
+      │         ├── fd: ()-->(7), (6)-->(8), (7,8)~~>(6)
+      │         └── ordering: +8 opt(7) [provided: +8]
+      └── projections
+           └── const: 2 [type=int]
