@@ -39,6 +39,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
@@ -88,6 +89,11 @@ var (
 	quiet          = false
 	sig            = 9
 	waitFlag       = false
+	logsDir        string
+	logsFilter     string
+	logsFrom       time.Time
+	logsTo         time.Time
+	logsInterval   time.Duration
 )
 
 func sortedClusters() []string {
@@ -856,6 +862,31 @@ The "status" command outputs the binary and PID for the specified nodes:
 	}),
 }
 
+var logsCmd = &cobra.Command{
+	Use:   "logs",
+	Short: "retrieve and merge logs in a cluster",
+	Long: `Retrieve and merge logs in a cluster.
+
+The "logs" command runs until terminated. It works similarly to get but is
+specifically focused on retrieving logs periodically and then merging them
+into a single stream.
+`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0], false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+		var dest string
+		if len(args) == 2 {
+			dest = args[1]
+		} else {
+			dest = c.Name + ".logs"
+		}
+		return c.Logs(logsDir, dest, username, logsFilter, logsInterval, logsFrom, logsTo, cmd.OutOrStdout())
+	}),
+}
+
 var monitorCmd = &cobra.Command{
 	Use:   "monitor",
 	Short: "monitor the status of nodes in a cluster",
@@ -1252,10 +1283,6 @@ var ipCmd = &cobra.Command{
 	}),
 }
 
-func init() {
-	adminurlCmd.Flags().BoolVar(&adminurlOpen, `open`, false, `Open the url in a browser`)
-}
-
 var webCmd = &cobra.Command{
 	Use:   "web <testdir> [<testdir>]",
 	Short: "visualize and compare test output",
@@ -1313,6 +1340,7 @@ func main() {
 		ipCmd,
 		pgurlCmd,
 		adminurlCmd,
+		logsCmd,
 
 		webCmd,
 		dumpCmd,
@@ -1321,7 +1349,7 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&quiet, "quiet", "q", false, "disable fancy progress output")
 
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd} {
+	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}
@@ -1370,6 +1398,9 @@ func main() {
 	listCmd.Flags().BoolVarP(&listMine,
 		"mine", "m", false, "Show only clusters belonging to the current user")
 
+	adminurlCmd.Flags().BoolVar(
+		&adminurlOpen, `open`, false, `Open the url in a browser`)
+
 	gcCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't perform any actions)")
 	gcCmd.Flags().StringVar(&config.SlackToken, "slack-token", "", "Slack bot token")
@@ -1409,6 +1440,17 @@ func main() {
 	}
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
+
+	logsCmd.Flags().StringVar(
+		&logsFilter, "filter", "", "re to filter log messages")
+	logsCmd.Flags().Var(
+		flagutil.Time(&logsFrom), "from", "time from which to stream logs")
+	logsCmd.Flags().Var(
+		flagutil.Time(&logsTo), "to", "time to which to stream logs")
+	logsCmd.Flags().DurationVar(
+		&logsInterval, "interval", 200*time.Millisecond, "interval to poll logs from host")
+	logsCmd.Flags().StringVar(
+		&logsDir, "logs-dir", "logs", "path to the logs dir, if remote, relative to username's home dir, ignored if local")
 
 	for _, cmd := range []*cobra.Command{
 		getCmd, putCmd, runCmd, startCmd, statusCmd, stopCmd, testCmd,
