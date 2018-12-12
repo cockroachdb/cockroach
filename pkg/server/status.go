@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -134,6 +135,7 @@ type statusServer struct {
 	stores          *storage.Stores
 	stopper         *stop.Stopper
 	sessionRegistry *sql.SessionRegistry
+	si              systemInfoOnce
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -570,8 +572,9 @@ func (s *statusServer) Details(
 	}
 
 	resp := &serverpb.DetailsResponse{
-		NodeID:    s.gossip.NodeID.Get(),
-		BuildInfo: build.GetInfo(),
+		NodeID:     s.gossip.NodeID.Get(),
+		BuildInfo:  build.GetInfo(),
+		SystemInfo: s.si.systemInfo(ctx),
 	}
 	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
 		resp.Address = *addr
@@ -1736,4 +1739,44 @@ func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
 		return false
 	}
 	return true
+}
+
+type systemInfoOnce struct {
+	once sync.Once
+	info serverpb.SystemInfo
+}
+
+func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
+	si.once.Do(func() { si.info = getSystemInfo(ctx) })
+	return si.info
+}
+
+// getSystemInfo returns a populated SystemInfo. If an error occurs it is logged
+// but the corresponding field in the returned struct is just left empty as
+// there isn't anything a client ought to do with an error from this function.
+func getSystemInfo(ctx context.Context) (si serverpb.SystemInfo) {
+	// Don't use CommandContext because uname ought to not run for too long and
+	// if the status request were canceled, we don't want future requests to
+	// get blank information because we bailed out of this Once.
+	cmd := exec.Command("uname", "-a")
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	output, err := cmd.Output()
+	if err != nil {
+		log.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
+			err, errBuf.String())
+		return si
+	}
+	si.SystemInfo = string(bytes.TrimSpace(output))
+	cmd = exec.Command("uname", "-r")
+	errBuf.Reset()
+	cmd.Stderr = &errBuf
+	output, err = cmd.Output()
+	if err != nil {
+		log.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
+			err, errBuf.String())
+		return si
+	}
+	si.KernelInfo = string(bytes.TrimSpace(output))
+	return si
 }
