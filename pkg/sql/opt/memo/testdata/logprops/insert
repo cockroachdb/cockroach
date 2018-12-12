@@ -38,12 +38,12 @@ INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  y:8(int) => a:1(int)
- │    ├──  y:8(int) => b:2(int)
- │    ├──  column10:10(int) => c:3(int)
- │    ├──  column13:13(int) => d:4(int)
- │    ├──  column11:11(int) => rowid:5(int)
- │    └──  column12:12(unknown) => e:6(int)
+ │    ├──  y:8 => a:1
+ │    ├──  y:8 => b:2
+ │    ├──  column10:10 => c:3
+ │    ├──  column13:13 => d:4
+ │    ├──  column11:11 => rowid:5
+ │    └──  column12:12 => e:6
  ├── internal-ordering: +8,+9
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
@@ -93,12 +93,12 @@ project
  └── insert abcde
       ├── columns: y:8(int!null) column10:10(int!null) column11:11(int!null) column13:13(int)
       ├── insert-mapping:
-      │    ├──  y:8(int!null) => a:1(int)
-      │    ├──  y:8(int!null) => b:2(int)
-      │    ├──  column10:10(int!null) => c:3(int)
-      │    ├──  column13:13(int) => d:4(int)
-      │    ├──  column11:11(int!null) => rowid:5(int)
-      │    └──  column12:12(unknown) => e:6(int)
+      │    ├──  y:8 => a:1
+      │    ├──  y:8 => b:2
+      │    ├──  column10:10 => c:3
+      │    ├──  column13:13 => d:4
+      │    ├──  column11:11 => rowid:5
+      │    └──  column12:12 => e:6
       ├── internal-ordering: +8,+9
       ├── side-effects, mutations
       ├── fd: ()-->(10), (8)-->(13)
@@ -143,12 +143,12 @@ INSERT INTO abcde (a, b) (VALUES (1, 2)) RETURNING *, rowid;
 insert abcde
  ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:12(int) rowid:10(int!null)
  ├── insert-mapping:
- │    ├──  column1:7(int!null) => a:1(int)
- │    ├──  column2:8(int) => b:2(int)
- │    ├──  column9:9(int!null) => c:3(int)
- │    ├──  column12:12(int) => d:4(int)
- │    ├──  column10:10(int!null) => rowid:5(int)
- │    └──  column11:11(unknown) => e:6(int)
+ │    ├──  column1:7 => a:1
+ │    ├──  column2:8 => b:2
+ │    ├──  column9:9 => c:3
+ │    ├──  column12:12 => d:4
+ │    ├──  column10:10 => rowid:5
+ │    └──  column11:11 => e:6
  ├── cardinality: [1 - 1]
  ├── side-effects, mutations
  ├── key: ()
@@ -199,12 +199,12 @@ project
  └── insert abcde
       ├── columns: y:8(int!null) int8:10(int) column11:11(int!null) column12:12(int!null) column14:14(int)
       ├── insert-mapping:
-      │    ├──  y:8(int!null) => a:1(int)
-      │    ├──  int8:10(int) => b:2(int)
-      │    ├──  column11:11(int!null) => c:3(int)
-      │    ├──  column14:14(int) => d:4(int)
-      │    ├──  column12:12(int!null) => rowid:5(int)
-      │    └──  column13:13(unknown) => e:6(int)
+      │    ├──  y:8 => a:1
+      │    ├──  int8:10 => b:2
+      │    ├──  column11:11 => c:3
+      │    ├──  column14:14 => d:4
+      │    ├──  column12:12 => rowid:5
+      │    └──  column13:13 => e:6
       ├── side-effects, mutations
       ├── fd: ()-->(8,11), (10)-->(14)
       └── project
