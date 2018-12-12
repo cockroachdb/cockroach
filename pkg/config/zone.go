@@ -379,6 +379,28 @@ func (z *ZoneConfig) IsComplete() bool {
 		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
+// ValidateTandemFields returns an error if the ZoneConfig to be written
+// specifies a configuration that could cause problems with the introduction
+// of cascading zone configs.
+func (z *ZoneConfig) ValidateTandemFields() error {
+	var numConstrainedRepls int32
+	for _, constraint := range z.Constraints {
+		numConstrainedRepls += constraint.NumReplicas
+	}
+
+	if numConstrainedRepls > 0 && z.NumReplicas == nil {
+		return fmt.Errorf("when per-replica constraints are set, num_replicas must be set as well")
+	}
+	if (z.RangeMinBytes != nil || z.RangeMaxBytes != nil) &&
+		(z.RangeMinBytes == nil || z.RangeMaxBytes == nil) {
+		return fmt.Errorf("range_min_bytes and range_max_bytes must be set together")
+	}
+	if !z.InheritedLeasePreferences && z.InheritedConstraints {
+		return fmt.Errorf("lease preferences can not be set unless the constraints are explicitly set as well")
+	}
+	return nil
+}
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {
@@ -506,6 +528,45 @@ func (z *ZoneConfig) InheritFromParent(parent ZoneConfig) {
 		if !parent.InheritedLeasePreferences {
 			z.LeasePreferences = parent.LeasePreferences
 			z.InheritedLeasePreferences = false
+		}
+	}
+}
+
+// CopyFromZone copies over the specified fields from the other zone.
+func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
+	for _, fieldName := range fieldList {
+		if fieldName == "num_replicas" {
+			z.NumReplicas = nil
+			if other.NumReplicas != nil {
+				z.NumReplicas = proto.Int32(*other.NumReplicas)
+			}
+		}
+		if fieldName == "range_min_bytes" {
+			z.RangeMinBytes = nil
+			if other.RangeMinBytes != nil {
+				z.RangeMinBytes = proto.Int64(*other.RangeMinBytes)
+			}
+		}
+		if fieldName == "range_max_bytes" {
+			z.RangeMaxBytes = nil
+			if other.RangeMaxBytes != nil {
+				z.RangeMaxBytes = proto.Int64(*other.RangeMaxBytes)
+			}
+		}
+		if fieldName == "gc.ttlseconds" {
+			z.GC = nil
+			if other.GC != nil {
+				tempGC := *other.GC
+				z.GC = &tempGC
+			}
+		}
+		if fieldName == "constraints" {
+			z.Constraints = other.Constraints
+			z.InheritedConstraints = other.InheritedConstraints
+		}
+		if fieldName == "lease_preferences" {
+			z.LeasePreferences = other.LeasePreferences
+			z.InheritedLeasePreferences = other.InheritedLeasePreferences
 		}
 	}
 }

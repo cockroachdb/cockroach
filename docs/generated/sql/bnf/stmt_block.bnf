@@ -1829,7 +1829,7 @@ alter_table_cmd ::=
 	| partition_by
 
 var_set_list ::=
-	( var_name '=' var_value ) ( ( ',' var_name '=' var_value ) )*
+	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
 
 alter_index_cmd ::=
 	partition_by

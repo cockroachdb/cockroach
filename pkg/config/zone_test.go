@@ -245,6 +245,58 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 }
 
+func TestZoneConfigValidateTandemFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		cfg      ZoneConfig
+		expected string
+	}{
+		{
+			ZoneConfig{
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+			},
+			"range_min_bytes and range_max_bytes must be set together",
+		},
+		{
+			ZoneConfig{
+				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
+			},
+			"range_min_bytes and range_max_bytes must be set together",
+		},
+		{
+			ZoneConfig{
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			"when per-replica constraints are set, num_replicas must be set as well",
+		},
+		{
+			ZoneConfig{
+				InheritedConstraints:      true,
+				InheritedLeasePreferences: false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			"lease preferences can not be set unless the constraints are explicitly set as well",
+		},
+	}
+
+	for i, c := range testCases {
+		err := c.cfg.ValidateTandemFields()
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+		}
+	}
+}
+
 func TestZoneConfigSubzones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

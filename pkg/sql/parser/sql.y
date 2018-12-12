@@ -1123,6 +1123,7 @@ alter_ddl_stmt:
 // Zone configurations:
 //   DISCARD
 //   USING <var> = <expr> [, ...]
+//   USING <var> = COPY FROM PARENT [, ...]
 //   { TO | = } <expr>
 //
 // %SeeAlso: WEBDOCS/alter-table.html
@@ -1217,6 +1218,7 @@ alter_database_stmt:
 // Zone configurations:
 //   DISCARD
 //   USING <var> = <expr> [, ...]
+//   USING <var> = COPY FROM PARENT [, ...]
 //   { TO | = } <expr>
 //
 // %SeeAlso: ALTER TABLE
@@ -1412,13 +1414,21 @@ alter_zone_index_stmt:
   }
 
 var_set_list:
-  var_name '=' var_value
+  var_name '=' COPY FROM PARENT
+  {
+    $$.val = []tree.KVOption{tree.KVOption{Key: tree.Name(strings.Join($1.strs(), "."))}}
+  }
+| var_name '=' var_value
   {
     $$.val = []tree.KVOption{tree.KVOption{Key: tree.Name(strings.Join($1.strs(), ".")), Value: $3.expr()}}
   }
 | var_set_list ',' var_name '=' var_value
   {
     $$.val = append($1.kvOptions(), tree.KVOption{Key: tree.Name(strings.Join($3.strs(), ".")), Value: $5.expr()})
+  }
+| var_set_list ',' var_name '=' COPY FROM PARENT
+  {
+    $$.val = append($1.kvOptions(), tree.KVOption{Key: tree.Name(strings.Join($3.strs(), "."))})
   }
 
 alter_scatter_stmt:
