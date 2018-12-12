@@ -362,7 +362,7 @@ func NewEntryDecoder(in io.Reader) *EntryDecoder {
 }
 
 // MessageTimeFormat is the format of the timestamp in log message headers as
-// used in go's time.Parse and time.Format.
+// used in time.Parse and time.Format.
 const MessageTimeFormat = "060102 15:04:05.999999"
 
 // Decode decodes the next log entry into the provided protobuf message.
