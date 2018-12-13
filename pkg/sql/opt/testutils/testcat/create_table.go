@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -56,7 +55,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: stmt.Table, Catalog: tc}
+	tab := &Table{StableID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
 	// Assume that every table in the "system" or "information_schema" catalog
 	// is a virtual table. This is a simplified assumption for testing purposes.
@@ -91,6 +90,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// If there is no primary index, add the hidden rowid column.
 	if len(tab.Indexes) == 0 && !tab.IsVirtual {
 		rowid := &Column{
+			Ordinal:     tab.ColumnCount(),
 			Name:        "rowid",
 			Type:        types.Int,
 			Hidden:      true,
@@ -122,11 +122,6 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			tc.resolveFK(tab, def)
 		}
 	}
-
-	// We need to keep track of the tableID from numeric references. 53 is a magic
-	// number derived from how CRDB internally stores tables. The first user table
-	// is 53. This magic number is used to have tests look consistent.
-	tab.tableID = sqlbase.ID(len(tc.dataSources) + 53)
 
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
@@ -199,8 +194,8 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	for _, idx := range tab.Indexes {
 		if matches(idx, fromCols, false /* strict */) {
 			found = true
-			idx.foreignKey.TableID = targetTable.InternalID()
-			idx.foreignKey.IndexID = targetIndex.InternalID()
+			idx.foreignKey.TableID = targetTable.ID()
+			idx.foreignKey.IndexID = targetIndex.ID()
 			idx.foreignKey.PrefixLen = int32(len(fromCols))
 			idx.fkSet = true
 			break
@@ -223,8 +218,8 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			idx.Columns[i].Direction = tree.Ascending
 		}
 		index := tab.addIndex(&idx, nonUniqueIndex)
-		index.foreignKey.TableID = targetTable.InternalID()
-		index.foreignKey.IndexID = targetIndex.InternalID()
+		index.foreignKey.TableID = targetTable.ID()
+		index.foreignKey.IndexID = targetIndex.ID()
 		index.foreignKey.PrefixLen = int32(len(fromCols))
 		index.fkSet = true
 	}
@@ -233,7 +228,12 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
-	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
+	col := &Column{
+		Ordinal:  tt.ColumnCount(),
+		Name:     string(def.Name),
+		Type:     typ,
+		Nullable: nullable,
+	}
 
 	// Look for name suffixes indicating this is a mutation column.
 	var mutCol *opt.MutationColumn
@@ -265,7 +265,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
-		Name:     tt.makeIndexName(def.Name, typ),
+		IdxName:  tt.makeIndexName(def.Name, typ),
 		Inverted: def.Inverted,
 		table:    tt,
 	}

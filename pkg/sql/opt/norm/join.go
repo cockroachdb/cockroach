@@ -425,12 +425,12 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			continue
 		}
 
-		fkTable := md.TableByDescID(fkRef.TableID)
+		fkTable := md.TableByStableID(fkRef.TableID)
 		fkPrefix := int(fkRef.PrefixLen)
 		if fkPrefix <= 0 {
 			panic("fkPrefix should always be positive")
 		}
-		if fkTable == nil || fkTable.Fingerprint() != rightTab.Fingerprint() {
+		if fkTable == nil || fkTable.ID() != rightTab.ID() {
 			continue
 		}
 
@@ -440,7 +440,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		var fkIndex opt.Index
 		found := false
 		for j, cnt2 := 0, fkTable.IndexCount(); j < cnt2; j++ {
-			if fkTable.Index(j).InternalID() == fkRef.IndexID {
+			if fkTable.Index(j).ID() == fkRef.IndexID {
 				found = true
 				fkIndex = fkTable.Index(j)
 				break

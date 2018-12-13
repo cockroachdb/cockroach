@@ -2576,6 +2576,11 @@ func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
 }
 
+// ColID is part of the opt.Column interface.
+func (desc *ColumnDescriptor) ColID() opt.StableID {
+	return opt.StableID(desc.ID)
+}
+
 // ColName is part of the opt.Column interface.
 func (desc *ColumnDescriptor) ColName() tree.Name {
 	return tree.Name(desc.Name)

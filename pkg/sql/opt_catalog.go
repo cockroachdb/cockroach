@@ -66,14 +66,14 @@ func (oc *optCatalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the opt.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
-	ctx context.Context, dataSourceID int64,
+	ctx context.Context, dataSourceID opt.StableID,
 ) (opt.DataSource, error) {
 
 	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
-			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: dataSourceID})
+			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
 		return nil, err
 	}
@@ -145,8 +145,8 @@ func (oc *optCatalog) newDataSource(
 	return ds, nil
 }
 
-// optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
-// opt.DataSource and opt.View interfaces.
+// optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements
+// the opt.DataSource and opt.View interfaces.
 type optView struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
@@ -167,9 +167,14 @@ func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *o
 	return ov
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (ov *optView) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(ov.desc.ID)<<32 | opt.Fingerprint(ov.desc.Version)
+// ID is part of the opt.DataSource interface.
+func (ov *optView) ID() opt.StableID {
+	return opt.StableID(ov.desc.ID)
+}
+
+// Version is part of the opt.DataSource interface.
+func (ov *optView) Version() opt.Version {
+	return opt.Version(ov.desc.Version)
 }
 
 // Name is part of the opt.View interface.
@@ -216,9 +221,14 @@ func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName
 	return ot
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (os *optSequence) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(os.desc.ID)<<32 | opt.Fingerprint(os.desc.Version)
+// ID is part of the opt.DataSource interface.
+func (os *optSequence) ID() opt.StableID {
+	return opt.StableID(os.desc.ID)
+}
+
+// Version is part of the opt.DataSource interface.
+func (os *optSequence) Version() opt.Version {
+	return opt.Version(os.desc.Version)
 }
 
 // Name is part of the opt.DataSource interface.
@@ -305,19 +315,19 @@ func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescripto
 	}
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (ot *optTable) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(ot.desc.ID)<<32 | opt.Fingerprint(ot.desc.Version)
+// ID is part of the opt.DataSource interface.
+func (ot *optTable) ID() opt.StableID {
+	return opt.StableID(ot.desc.ID)
+}
+
+// Version is part of the opt.DataSource interface.
+func (ot *optTable) Version() opt.Version {
+	return opt.Version(ot.desc.Version)
 }
 
 // Name is part of the opt.DataSource interface.
 func (ot *optTable) Name() *tree.TableName {
 	return &ot.name
-}
-
-// InternalID is part of the opt.Table interface.
-func (ot *optTable) InternalID() uint64 {
-	return uint64(ot.desc.ID)
 }
 
 // IsVirtualTable is part of the opt.Table interface.
@@ -386,17 +396,6 @@ func (ot *optTable) ensureColMap() {
 			ot.colMap[ot.desc.Columns[i].ID] = i
 		}
 	}
-}
-
-// LookupColumnOrdinal is part of the opt.Table interface
-func (ot *optTable) LookupColumnOrdinal(colID uint32) (int, error) {
-	// LookupColumnOrdinal exposes optTable.lookupColumnOrdinal.
-	// In order to preserve the argument type information
-	// on lookupColumnOrdinal, this wrapper function exists.
-	// colID as the sqlbase.ColumnID type would result in a
-	// circular dependency for catalog.Table - the interface this
-	// implements.
-	return ot.lookupColumnOrdinal(sqlbase.ColumnID(colID))
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -491,20 +490,20 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	}
 
 	if desc.ForeignKey.IsSet() {
-		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
-		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.TableID = opt.StableID(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = opt.StableID(desc.ForeignKey.Index)
 		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
 	}
 }
 
-// IdxName is part of the opt.Index interface.
-func (oi *optIndex) IdxName() string {
-	return oi.desc.Name
+// ID is part of the opt.Index interface.
+func (oi *optIndex) ID() opt.StableID {
+	return opt.StableID(oi.desc.ID)
 }
 
-// InternalID is part of the opt.Index interface.
-func (oi *optIndex) InternalID() uint64 {
-	return uint64(oi.desc.ID)
+// Name is part of the opt.Index interface.
+func (oi *optIndex) Name() string {
+	return oi.desc.Name
 }
 
 // IsInverted is part of the opt.Index interface.
@@ -555,8 +554,8 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 func (oi *optIndex) ForeignKey() (opt.ForeignKeyReference, bool) {
 	desc := oi.desc
 	if desc.ForeignKey.IsSet() {
-		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
-		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.TableID = opt.StableID(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = opt.StableID(desc.ForeignKey.Index)
 		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
 		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
 	}
