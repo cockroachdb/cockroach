@@ -34,6 +34,38 @@ import (
 
 const defaultParallelism = 10
 
+func TestMatchOrSkip(t *testing.T) {
+	testCases := []struct {
+		filter       []string
+		name         string
+		tags         []string
+		expected     bool
+		expectedSkip string
+	}{
+		{nil, "foo", nil, true, ""},
+		{nil, "foo", []string{"bar"}, true, ""},
+		{[]string{"tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"tag:b"}, "foo", nil, true, "[tag:b] does not match [default]"},
+		{[]string{"tag:default"}, "foo", nil, true, ""},
+		{[]string{"tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+		{[]string{"f"}, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
+		{[]string{"f"}, "bar", []string{"bar"}, false, ""},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			f := newFilter(c.filter)
+			spec := &testSpec{Name: c.name, Tags: c.tags}
+			if value := spec.matchOrSkip(f); c.expected != value {
+				t.Fatalf("expected %t, but found %t", c.expected, value)
+			} else if value && c.expectedSkip != spec.Skip {
+				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
+			}
+		})
+	}
+}
+
 func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
