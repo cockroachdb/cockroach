@@ -187,7 +187,7 @@ func processProducerMessage(
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
 			// close the consuming side of the stream and call dst.ProducerDone().
-			if *draining {
+			if !*draining {
 				*draining = true
 				if err := sendDrainSignalToStreamProducer(ctx, stream); err != nil {
 					log.Errorf(ctx, "draining error: %s", err)
