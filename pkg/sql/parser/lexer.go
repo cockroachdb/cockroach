@@ -54,6 +54,14 @@ func (l *lexer) init(
 	l.nakedSerialType = nakedSerialType
 }
 
+// cleanup is used to avoid holding on to memory unnecessarily (for the cases
+// where we reuse a scanner).
+func (l *lexer) cleanup() {
+	l.tokens = nil
+	l.stmt = nil
+	l.lastError = nil
+}
+
 // Lex lexes a token from input.
 func (l *lexer) Lex(lval *sqlSymType) int {
 	l.lastPos++

@@ -147,7 +147,6 @@ type planner struct {
 	curPlan planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
-	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
 	nameResolutionVisitor sqlbase.NameResolutionVisitor
