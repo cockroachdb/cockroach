@@ -254,9 +254,17 @@ func (b *Builder) buildScanFromTableRef(
 	if ref.Columns != nil {
 		ordinals = make([]int, len(ref.Columns))
 		for i, c := range ref.Columns {
-			ord, err := tab.LookupColumnOrdinal(uint32(c))
-			if err != nil {
-				panic(builderError{err})
+			ord := 0
+			cnt := tab.ColumnCount()
+			for ord < cnt {
+				if tab.Column(ord).ColID() == opt.StableID(c) {
+					break
+				}
+				ord++
+			}
+			if ord >= cnt {
+				panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+					"column [%d] does not exist", c)})
 			}
 			ordinals[i] = ord
 		}
@@ -330,8 +338,8 @@ func (b *Builder) buildScan(
 			if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 				idx := -1
 				for i := 0; i < tab.IndexCount(); i++ {
-					if tab.Index(i).IdxName() == string(indexFlags.Index) ||
-						tab.Index(i).InternalID() == uint64(indexFlags.IndexID) {
+					if tab.Index(i).Name() == string(indexFlags.Index) ||
+						tab.Index(i).ID() == opt.StableID(indexFlags.IndexID) {
 						idx = i
 						break
 					}

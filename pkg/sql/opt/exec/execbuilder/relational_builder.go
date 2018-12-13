@@ -310,10 +310,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		idx := tab.Index(scan.Flags.Index)
 		var err error
 		if idx.IsInverted() {
-			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.IdxName())
+			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.Name())
 		} else {
 			// This should never happen.
-			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.IdxName())
+			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
 		}
 		return execPlan{}, err
 	}

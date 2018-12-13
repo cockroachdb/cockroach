@@ -420,7 +420,7 @@ func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt
 // does not have the given privilege, then resolveDataSourceFromRef raises an
 // error.
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) opt.DataSource {
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, ref.TableID)
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, opt.StableID(ref.TableID))
 	if err != nil {
 		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}

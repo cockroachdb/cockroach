@@ -203,15 +203,18 @@ func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
 
 // CheckDependencies resolves each data source on which this metadata depends,
 // in order to check that the fully qualified data source names still resolve to
-// the same data source (i.e. having the same fingerprint), and that the user
-// still has sufficient privileges to access the data source.
+// the same version of the same data source, and that the user still has
+// sufficient privileges to access the data source.
 func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool {
 	for _, dep := range md.deps {
 		ds, err := catalog.ResolveDataSource(ctx, dep.ds.Name())
 		if err != nil {
 			return false
 		}
-		if dep.ds.Fingerprint() != ds.Fingerprint() {
+		if dep.ds.ID() != ds.ID() {
+			return false
+		}
+		if dep.ds.Version() != ds.Version() {
 			return false
 		}
 		if dep.priv != 0 {
@@ -377,10 +380,11 @@ func (md *Metadata) Table(tabID TableID) Table {
 	return md.tables[tabID.index()].tab
 }
 
-// TableByDescID looks up the catalog table associated with the given descriptor id.
-func (md *Metadata) TableByDescID(tabID uint64) Table {
+// TableByStableID looks up the catalog table associated with the given
+// StableID (unique across all tables and stable across queries).
+func (md *Metadata) TableByStableID(id StableID) Table {
 	for _, mdTab := range md.tables {
-		if mdTab.tab.InternalID() == tabID {
+		if mdTab.tab.ID() == id {
 			return mdTab.tab
 		}
 	}
