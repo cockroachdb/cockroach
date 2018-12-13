@@ -46,14 +46,25 @@ var (
 	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
-func makeFilterRE(filter []string) *regexp.Regexp {
+type testFilter struct {
+	*regexp.Regexp
+	includeManual bool
+}
+
+func makeFilterRE(filter []string) *testFilter {
 	if len(filter) == 0 {
-		return regexp.MustCompile(`.`)
+		return &testFilter{
+			Regexp:        regexp.MustCompile(`.`),
+			includeManual: false,
+		}
 	}
 	for i := range filter {
 		filter[i] = "(" + filter[i] + ")"
 	}
-	return regexp.MustCompile(strings.Join(filter, "|"))
+	return &testFilter{
+		Regexp:        regexp.MustCompile(strings.Join(filter, "|")),
+		includeManual: true,
+	}
 }
 
 type testSpec struct {
@@ -75,6 +86,10 @@ type testSpec struct {
 	// skipped.
 	MinVersion string
 	minVersion *version.Version
+	// Manual indicates that the test will not be automatically run unless a
+	// filter explicitly matches it. This causes `run` and `run .` to behave
+	// differently (only the latter will match a "manual" test).
+	Manual bool
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
@@ -89,25 +104,31 @@ type testSpec struct {
 
 // matchRegex returns true if the regex matches the test's name or any of the
 // subtest names.
-func (t *testSpec) matchRegex(re *regexp.Regexp) bool {
-	if re.MatchString(t.Name) {
+func (t *testSpec) matchRegex(filter *testFilter) bool {
+	if t.Manual && !filter.includeManual {
+		return false
+	}
+	if filter.Regexp.MatchString(t.Name) {
 		return true
 	}
 	for i := range t.SubTests {
-		if t.SubTests[i].matchRegex(re) {
+		if t.SubTests[i].matchRegex(filter) {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *testSpec) matchRegexRecursive(re *regexp.Regexp) []testSpec {
+func (t *testSpec) matchRegexRecursive(filter *testFilter) []testSpec {
+	if t.Manual && !filter.includeManual {
+		return nil
+	}
 	var res []testSpec
-	if re.MatchString(t.Name) {
+	if filter.Regexp.MatchString(t.Name) {
 		res = append(res, *t)
 	}
 	for i := range t.SubTests {
-		res = append(res, t.SubTests[i].matchRegexRecursive(re)...)
+		res = append(res, t.SubTests[i].matchRegexRecursive(filter)...)
 	}
 	return res
 }
@@ -292,10 +313,10 @@ func (r *registry) Add(spec testSpec) {
 
 // ListTopLevel lists the top level tests that match re, or that have a subtests
 // that matches re.
-func (r *registry) ListTopLevel(re *regexp.Regexp) []*testSpec {
+func (r *registry) ListTopLevel(filter *testFilter) []*testSpec {
 	var results []*testSpec
 	for _, t := range r.m {
-		if t.matchRegex(re) {
+		if t.matchRegex(filter) {
 			results = append(results, t)
 		}
 	}
@@ -760,7 +781,7 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 func (r *registry) runAsync(
 	ctx context.Context,
 	spec *testSpec,
-	filter *regexp.Regexp,
+	filter *testFilter,
 	parent *test,
 	c *cluster,
 	runNum int,

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -65,6 +66,39 @@ func TestRegistryRun(t *testing.T) {
 			code := r.Run(c.filters, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expected != code {
 				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
+			}
+		})
+	}
+}
+
+func TestRegistryListAll(t *testing.T) {
+	r := newRegistry()
+	r.out = ioutil.Discard
+	r.Add(testSpec{
+		Name: "auto",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+		},
+	})
+	r.Add(testSpec{
+		Name:   "manual",
+		Manual: true,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+		},
+	})
+
+	testCases := []struct {
+		filters  []string
+		expected []string
+	}{
+		// Manual tests only match when a filter is explicitly given.
+		{nil, []string{"auto"}},
+		{[]string{"."}, []string{"auto", "manual"}},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			results := r.ListAll(c.filters)
+			if !reflect.DeepEqual(c.expected, results) {
+				t.Fatalf("expected %s, but found code %s", c.expected, results)
 			}
 		})
 	}
