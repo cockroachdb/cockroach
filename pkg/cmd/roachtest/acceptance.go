@@ -52,9 +52,11 @@ func registerAcceptance(r *registry) {
 			{"version-upgrade", runVersionUpgrade},
 		},
 	}
+	tags := []string{"default", "quick"}
 	for numNodes, cases := range testCases {
 		spec := testSpec{
 			Name:  fmt.Sprintf("acceptance/nodes=%d", numNodes),
+			Tags:  tags,
 			Nodes: nodes(numNodes),
 		}
 
@@ -63,6 +65,7 @@ func registerAcceptance(r *registry) {
 			spec.SubTests = append(spec.SubTests, testSpec{
 				Name:    tc.name,
 				Timeout: 10 * time.Minute,
+				Tags:    tags,
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					c.Wipe(ctx)
 					tc.fn(ctx, t, c)
