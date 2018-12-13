@@ -72,6 +72,9 @@ type conn struct {
 	// this.
 	rd bufio.Reader
 
+	// parser is used to avoid allocating a parser each time.
+	parser parser.Parser
+
 	// stmtBuf is populated with commands queued for execution by this conn.
 	stmtBuf sql.StmtBuf
 
@@ -450,7 +453,7 @@ func (c *conn) handleSimpleQuery(
 	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
-	stmts, sqlStrs, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, sqlStrs, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -556,7 +559,7 @@ func (c *conn) handleParse(
 
 	startParse := timeutil.Now()
 	var stmt tree.Statement
-	stmts, _, err := parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, _, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if len(stmts) > 1 {
 		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	} else if len(stmts) == 1 {
