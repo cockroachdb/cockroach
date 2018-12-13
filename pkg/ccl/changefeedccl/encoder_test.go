@@ -9,7 +9,7 @@
 package changefeedccl
 
 import (
-	"bytes"
+	"context"
 	gosql "database/sql"
 	"encoding/binary"
 	gojson "encoding/json"
@@ -17,13 +17,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type testSchemaRegistry struct {
@@ -79,7 +80,7 @@ func (r *testSchemaRegistry) Register(hw http.ResponseWriter, hr *http.Request) 
 	}
 }
 
-func (r *testSchemaRegistry) encodedAvroToJSON(b []byte) (string, error) {
+func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) {
 	if len(b) == 0 || b[0] != confluentAvroWireFormatMagic {
 		return ``, errors.Errorf(`bad magic byte`)
 	}
@@ -93,54 +94,67 @@ func (r *testSchemaRegistry) encodedAvroToJSON(b []byte) (string, error) {
 	r.mu.Lock()
 	jsonSchema := r.mu.schemas[id]
 	r.mu.Unlock()
-	schema, err := parseAvroSchema(jsonSchema)
+	codec, err := goavro.NewCodec(jsonSchema)
 	if err != nil {
 		return ``, err
 	}
-	row, err := schema.RowFromBinary(b)
-	if err != nil {
-		return ``, err
-	}
-	m := make(map[string]interface{})
-	for fieldIdx, field := range schema.Fields {
-		datum := row[schema.colIdxByFieldIdx[fieldIdx]].Datum
-		m[field.Name], err = tree.AsJSON(datum)
-		if err != nil {
-			return ``, err
-		}
-	}
-	j, err := json.MakeJSON(m)
-	if err != nil {
-		return ``, err
-	}
-	var buf bytes.Buffer
-	j.Format(&buf)
-	return buf.String(), nil
+	native, _, err := codec.NativeFromBinary(b)
+	return native, err
 }
 
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		ctx := context.Background()
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'bar'), (2, NULL)`)
+		var ts1 string
+		sqlDB.QueryRow(t,
+			`INSERT INTO foo VALUES (1, 'bar'), (2, NULL) RETURNING cluster_logical_timestamp()`,
+		).Scan(&ts1)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2`,
+		foo := f.Feed(t,
+			`CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2, resolved`,
 			optFormatAvro, reg.server.URL)
 		defer foo.Close(t)
-
 		assertPayloadsAvro(t, reg, foo, []string{
-			`foo: {"a": 1}->{"a": 1, "b": "bar"}`,
-			`foo: {"a": 2}->{"a": 2, "b": null}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}}}`,
+		})
+		resolved := expectResolvedTimestampAvro(t, reg, foo)
+		if ts := parseTimeToHLC(t, ts1); !ts.Less(resolved) {
+			t.Fatalf(`expected a resolved timestamp greater than %s got %s`, ts, resolved)
+		}
+
+		fooUpdated := f.Feed(t,
+			`CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2, updated`,
+			optFormatAvro, reg.server.URL)
+		defer fooUpdated.Close(t)
+		// Skip over the first two rows since we don't know the statement timestamp.
+		_, _, _, _, _, ok := fooUpdated.Next(t)
+		require.True(t, ok)
+		_, _, _, _, _, ok = fooUpdated.Next(t)
+		require.True(t, ok)
+
+		var ts2 string
+		require.NoError(t, crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+			return tx.QueryRow(
+				`INSERT INTO foo VALUES (3, 'baz') RETURNING cluster_logical_timestamp()`,
+			).Scan(&ts2)
+		}))
+		assertPayloadsAvro(t, reg, fooUpdated, []string{
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"baz"}}},` +
+				`"updated":{"string":"` + ts2 + `"}}`,
 		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
 func TestAvroSchemaChange(t *testing.T) {
@@ -158,7 +172,7 @@ func TestAvroSchemaChange(t *testing.T) {
 			optFormatAvro, reg.server.URL)
 		defer foo.Close(t)
 		assertPayloadsAvro(t, reg, foo, []string{
-			`foo: {"a": 1}->{"a": 1}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
 		})
 
 		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b UUID`)
@@ -173,4 +187,5 @@ func TestAvroSchemaChange(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
