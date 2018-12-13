@@ -113,10 +113,12 @@ func (ex *connExecutor) recordStatementSummary(
 	// Collect the statistics.
 	runLat := runLatRaw.Seconds()
 
-	parseLat := phaseTimes[sessionEndParse].
-		Sub(phaseTimes[sessionStartParse]).Seconds()
-	planLat := phaseTimes[plannerEndLogicalPlan].
-		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
+	parseLatRaw := phaseTimes[sessionEndParse].
+		Sub(phaseTimes[sessionStartParse])
+	parseLat := parseLatRaw.Seconds()
+	planLatRaw := phaseTimes[plannerEndLogicalPlan].
+		Sub(phaseTimes[plannerStartLogicalPlan])
+	planLat := planLatRaw.Seconds()
 	// service latency: time query received to end of run
 	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionQueryReceived])
 	svcLat := svcLatRaw.Seconds()
@@ -147,6 +149,39 @@ func (ex *connExecutor) recordStatementSummary(
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
+
+	if planner.SessionData().StatementLoggingEnabled {
+		insertTimings := `INSERT INTO system.statement_executions
+(
+    received_at, statement, application_name,
+    distributed, optimized, retries, error, rows_affected,
+    parse_lat, plan_lat, run_lat, service_lat
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+)`
+		applicationName := planner.SessionData().ApplicationName
+		receivedAt := phaseTimes[sessionQueryReceived]
+		var errorMessage string
+		if err != nil {
+			errorMessage = err.Error()
+		}
+
+		if _ /* rows */, err := planner.execCfg.InternalExecutor.Exec(
+			planner.EvalContext().Ctx(),
+			"insert-statement-execution",
+			nil, /* txn */
+			insertTimings,
+			receivedAt, tree.AsString(stmt.AST), applicationName,
+			planFlags.IsSet(planFlagDistributed),
+			planFlags.IsSet(planFlagOptUsed),
+			automaticRetryCount, errorMessage, rowsAffected,
+			parseLat, planLat,
+			runLat, svcLat,
+		); err != nil {
+			log.Warningf(planner.EvalContext().Ctx(),
+				"Unable to save statement execution stats: %v", err)
+		}
+	}
 
 	if log.V(2) {
 		// ages since significant epochs

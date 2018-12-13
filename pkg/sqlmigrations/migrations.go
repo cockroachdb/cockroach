@@ -202,6 +202,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: true,
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
+	{
+		// Introduced in v2.2.
+		// TODO(couchand): bake this migration into v2.3
+		name:             "create system.statement_executions table",
+		workFn:           createStatementExecutionsTable,
+		newDescriptorIDs: staticIDs(keys.StatementExecutionsTableID),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -541,6 +548,10 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
+}
+
+func createStatementExecutionsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.StatementExecutionsTable)
 }
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)

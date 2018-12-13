@@ -88,6 +88,9 @@ type SessionData struct {
 	// DefaultIntSize specifies the size in bits or bytes (preferred)
 	// of how a "naked" INT type should be parsed.
 	DefaultIntSize int
+	// StatementLoggingEnabled indicates that statement execution details
+	// should be recorded for this session.
+	StatementLoggingEnabled bool
 }
 
 // DataConversionConfig contains the parameters that influence

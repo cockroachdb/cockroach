@@ -224,6 +224,24 @@ CREATE TABLE system.comments (
    comment   STRING NOT NULL, -- the comment
    PRIMARY KEY (type, object_id, sub_id)
 );`
+
+	// statement_executions stores metrics about executed statements.
+	StatementExecutionsTableSchema = `
+CREATE TABLE system.statement_executions (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    received_at      TIMESTAMP NOT NULL,
+    statement        STRING NOT NULL,
+    application_name STRING NOT NULL,
+    distributed      BOOL NOT NULL,
+    optimized        BOOL NOT NULL,
+    retries          INT NOT NULL,      -- how many automatic retries occurred?
+    error            STRING NULL,       -- if execution failed, this is the error
+    rows_affected    INT NOT NULL,      -- the number of rows affected
+    parse_lat        INTERVAL NOT NULL, -- latency of parsing, in nanoseconds
+    plan_lat         INTERVAL NOT NULL, -- latency of planning, in nanoseconds
+    run_lat          INTERVAL NOT NULL, -- execution latency, in nanoseconds
+    service_lat      INTERVAL NOT NULL  -- end-to-end latency, in nanoseconds
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -264,15 +282,19 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.LocationsTableID:       privilege.ReadWriteData,
 	keys.RoleMembersTableID:     privilege.ReadWriteData,
 	keys.CommentsTableID:        privilege.ReadWriteData,
+	// TODO(couchand): This really should be read-only.
+	keys.StatementExecutionsTableID: privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
 	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
+	colTypeInterval  = ColumnType{SemanticType: ColumnType_INTERVAL}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
+	colTypeUuid      = ColumnType{SemanticType: ColumnType_UUID}
 	colTypeIntArray  = ColumnType{
 		SemanticType:    ColumnType_ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
@@ -866,6 +888,54 @@ var (
 		},
 		NextIndexID:    2,
 		Privileges:     newCommentPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	genRandomUUIDString = "gen_random_uuid()"
+
+	// StatementExecutionsTable is the descriptor for the statement_executions table.
+	StatementExecutionsTable = TableDescriptor{
+		Name:     "statement_executions",
+		ID:       keys.StatementExecutionsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: colTypeUuid, DefaultExpr: &genRandomUUIDString},
+			{Name: "received_at", ID: 2, Type: colTypeTimestamp},
+			{Name: "statement", ID: 3, Type: colTypeString},
+			{Name: "application_name", ID: 4, Type: colTypeString},
+			{Name: "distributed", ID: 5, Type: colTypeBool},
+			{Name: "optimized", ID: 6, Type: colTypeBool},
+			{Name: "retries", ID: 7, Type: colTypeInt},
+			{Name: "error", ID: 8, Type: colTypeString, Nullable: true},
+			{Name: "rows_affected", ID: 9, Type: colTypeInt},
+			{Name: "parse_lat", ID: 10, Type: colTypeInterval},
+			{Name: "plan_lat", ID: 11, Type: colTypeInterval},
+			{Name: "run_lat", ID: 12, Type: colTypeInterval},
+			{Name: "service_lat", ID: 13, Type: colTypeInterval},
+		},
+		NextColumnID: 14,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{
+				"id", "received_at", "statement", "application_name",
+				"distributed", "optimized", "retries", "error", "rows_affected",
+				"parse_lat", "plan_lat", "run_lat", "service_lat"},
+				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"id"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1},
+		},
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.StatementExecutionsTableID],
+		),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

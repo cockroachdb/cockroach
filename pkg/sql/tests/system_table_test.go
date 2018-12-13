@@ -120,6 +120,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},
 		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable},
 		{keys.CommentsTableID, sqlbase.CommentsTableSchema, sqlbase.CommentsTable},
+		{keys.StatementExecutionsTableID, sqlbase.StatementExecutionsTableSchema, sqlbase.StatementExecutionsTable},
 	} {
 		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(

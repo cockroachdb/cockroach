@@ -576,6 +576,7 @@ system         public              table_statistics                   BASE TABLE
 system         public              locations                          BASE TABLE   YES                 1
 system         public              role_members                       BASE TABLE   YES                 1
 system         public              comments                           BASE TABLE   YES                 1
+system         public              statement_executions               BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -627,55 +628,57 @@ SELECT *
 FROM system.information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name        constraint_type  is_deferrable  initially_deferred
-system              public             primary          system         public        comments          PRIMARY KEY      NO             NO
-system              public             primary          system         public        descriptor        PRIMARY KEY      NO             NO
-system              public             primary          system         public        eventlog          PRIMARY KEY      NO             NO
-system              public             primary          system         public        jobs              PRIMARY KEY      NO             NO
-system              public             primary          system         public        lease             PRIMARY KEY      NO             NO
-system              public             primary          system         public        locations         PRIMARY KEY      NO             NO
-system              public             primary          system         public        namespace         PRIMARY KEY      NO             NO
-system              public             primary          system         public        rangelog          PRIMARY KEY      NO             NO
-system              public             primary          system         public        role_members      PRIMARY KEY      NO             NO
-system              public             primary          system         public        settings          PRIMARY KEY      NO             NO
-system              public             primary          system         public        table_statistics  PRIMARY KEY      NO             NO
-system              public             primary          system         public        ui                PRIMARY KEY      NO             NO
-system              public             primary          system         public        users             PRIMARY KEY      NO             NO
-system              public             primary          system         public        web_sessions      PRIMARY KEY      NO             NO
-system              public             primary          system         public        zones             PRIMARY KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name           constraint_type  is_deferrable  initially_deferred
+system              public             primary          system         public        comments             PRIMARY KEY      NO             NO
+system              public             primary          system         public        descriptor           PRIMARY KEY      NO             NO
+system              public             primary          system         public        eventlog             PRIMARY KEY      NO             NO
+system              public             primary          system         public        jobs                 PRIMARY KEY      NO             NO
+system              public             primary          system         public        lease                PRIMARY KEY      NO             NO
+system              public             primary          system         public        locations            PRIMARY KEY      NO             NO
+system              public             primary          system         public        namespace            PRIMARY KEY      NO             NO
+system              public             primary          system         public        rangelog             PRIMARY KEY      NO             NO
+system              public             primary          system         public        role_members         PRIMARY KEY      NO             NO
+system              public             primary          system         public        settings             PRIMARY KEY      NO             NO
+system              public             primary          system         public        statement_executions PRIMARY KEY      NO             NO
+system              public             primary          system         public        table_statistics     PRIMARY KEY      NO             NO
+system              public             primary          system         public        ui                   PRIMARY KEY      NO             NO
+system              public             primary          system         public        users                PRIMARY KEY      NO             NO
+system              public             primary          system         public        web_sessions         PRIMARY KEY      NO             NO
+system              public             primary          system         public        zones                PRIMARY KEY      NO             NO
 
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
 ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
 ----
-table_catalog  table_schema  table_name        column_name    constraint_catalog  constraint_schema  constraint_name
-system         public        comments          object_id      system              public             primary
-system         public        comments          sub_id         system              public             primary
-system         public        comments          type           system              public             primary
-system         public        descriptor        id             system              public             primary
-system         public        eventlog          timestamp      system              public             primary
-system         public        eventlog          uniqueID       system              public             primary
-system         public        jobs              id             system              public             primary
-system         public        lease             descID         system              public             primary
-system         public        lease             expiration     system              public             primary
-system         public        lease             nodeID         system              public             primary
-system         public        lease             version        system              public             primary
-system         public        locations         localityKey    system              public             primary
-system         public        locations         localityValue  system              public             primary
-system         public        namespace         name           system              public             primary
-system         public        namespace         parentID       system              public             primary
-system         public        rangelog          timestamp      system              public             primary
-system         public        rangelog          uniqueID       system              public             primary
-system         public        role_members      member         system              public             primary
-system         public        role_members      role           system              public             primary
-system         public        settings          name           system              public             primary
-system         public        table_statistics  statisticID    system              public             primary
-system         public        table_statistics  tableID        system              public             primary
-system         public        ui                key            system              public             primary
-system         public        users             username       system              public             primary
-system         public        web_sessions      id             system              public             primary
-system         public        zones             id             system              public             primary
+table_catalog  table_schema  table_name           column_name    constraint_catalog  constraint_schema  constraint_name
+system         public        comments             object_id      system              public             primary
+system         public        comments             sub_id         system              public             primary
+system         public        comments             type           system              public             primary
+system         public        descriptor           id             system              public             primary
+system         public        eventlog             timestamp      system              public             primary
+system         public        eventlog             uniqueID       system              public             primary
+system         public        jobs                 id             system              public             primary
+system         public        lease                descID         system              public             primary
+system         public        lease                expiration     system              public             primary
+system         public        lease                nodeID         system              public             primary
+system         public        lease                version        system              public             primary
+system         public        locations            localityKey    system              public             primary
+system         public        locations            localityValue  system              public             primary
+system         public        namespace            name           system              public             primary
+system         public        namespace            parentID       system              public             primary
+system         public        rangelog             timestamp      system              public             primary
+system         public        rangelog             uniqueID       system              public             primary
+system         public        role_members         member         system              public             primary
+system         public        role_members         role           system              public             primary
+system         public        settings             name           system              public             primary
+system         public        statement_executions id             system              public             primary
+system         public        table_statistics     statisticID    system              public             primary
+system         public        table_statistics     tableID        system              public             primary
+system         public        ui                   key            system              public             primary
+system         public        users                username       system              public             primary
+system         public        web_sessions         id             system              public             primary
+system         public        zones                id             system              public             primary
 
 statement ok
 CREATE DATABASE constraint_db
@@ -733,74 +736,87 @@ FROM system.information_schema.columns
 WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog' AND table_schema != 'crdb_internal'
 ORDER BY 3,4
 ----
-table_catalog  table_schema  table_name        column_name     ordinal_position
-system         public        comments          comment         4
-system         public        comments          object_id       2
-system         public        comments          sub_id          3
-system         public        comments          type            1
-system         public        descriptor        descriptor      2
-system         public        descriptor        id              1
-system         public        eventlog          eventType       2
-system         public        eventlog          info            5
-system         public        eventlog          reportingID     4
-system         public        eventlog          targetID        3
-system         public        eventlog          timestamp       1
-system         public        eventlog          uniqueID        6
-system         public        jobs              created         3
-system         public        jobs              id              1
-system         public        jobs              payload         4
-system         public        jobs              progress        5
-system         public        jobs              status          2
-system         public        lease             descID          1
-system         public        lease             expiration      4
-system         public        lease             nodeID          3
-system         public        lease             version         2
-system         public        locations         latitude        3
-system         public        locations         localityKey     1
-system         public        locations         localityValue   2
-system         public        locations         longitude       4
-system         public        namespace         id              3
-system         public        namespace         name            2
-system         public        namespace         parentID        1
-system         public        rangelog          eventType       4
-system         public        rangelog          info            6
-system         public        rangelog          otherRangeID    5
-system         public        rangelog          rangeID         2
-system         public        rangelog          storeID         3
-system         public        rangelog          timestamp       1
-system         public        rangelog          uniqueID        7
-system         public        role_members      isAdmin         3
-system         public        role_members      member          2
-system         public        role_members      role            1
-system         public        settings          lastUpdated     3
-system         public        settings          name            1
-system         public        settings          value           2
-system         public        settings          valueType       4
-system         public        table_statistics  columnIDs       4
-system         public        table_statistics  createdAt       5
-system         public        table_statistics  distinctCount   7
-system         public        table_statistics  histogram       9
-system         public        table_statistics  name            3
-system         public        table_statistics  nullCount       8
-system         public        table_statistics  rowCount        6
-system         public        table_statistics  statisticID     2
-system         public        table_statistics  tableID         1
-system         public        ui                key             1
-system         public        ui                lastUpdated     3
-system         public        ui                value           2
-system         public        users             hashedPassword  2
-system         public        users             isRole          3
-system         public        users             username        1
-system         public        web_sessions      auditInfo       8
-system         public        web_sessions      createdAt       4
-system         public        web_sessions      expiresAt       5
-system         public        web_sessions      hashedSecret    2
-system         public        web_sessions      id              1
-system         public        web_sessions      lastUsedAt      7
-system         public        web_sessions      revokedAt       6
-system         public        web_sessions      username        3
-system         public        zones             config          2
-system         public        zones             id              1
+table_catalog  table_schema  table_name            column_name     ordinal_position
+system         public        comments              comment         4
+system         public        comments              object_id       2
+system         public        comments              sub_id          3
+system         public        comments              type            1
+system         public        descriptor            descriptor      2
+system         public        descriptor            id              1
+system         public        eventlog              eventType       2
+system         public        eventlog              info            5
+system         public        eventlog              reportingID     4
+system         public        eventlog              targetID        3
+system         public        eventlog              timestamp       1
+system         public        eventlog              uniqueID        6
+system         public        jobs                  created         3
+system         public        jobs                  id              1
+system         public        jobs                  payload         4
+system         public        jobs                  progress        5
+system         public        jobs                  status          2
+system         public        lease                 descID          1
+system         public        lease                 expiration      4
+system         public        lease                 nodeID          3
+system         public        lease                 version         2
+system         public        locations             latitude        3
+system         public        locations             localityKey     1
+system         public        locations             localityValue   2
+system         public        locations             longitude       4
+system         public        namespace             id              3
+system         public        namespace             name            2
+system         public        namespace             parentID        1
+system         public        rangelog              eventType       4
+system         public        rangelog              info            6
+system         public        rangelog              otherRangeID    5
+system         public        rangelog              rangeID         2
+system         public        rangelog              storeID         3
+system         public        rangelog              timestamp       1
+system         public        rangelog              uniqueID        7
+system         public        role_members          isAdmin         3
+system         public        role_members          member          2
+system         public        role_members          role            1
+system         public        settings              lastUpdated     3
+system         public        settings              name            1
+system         public        settings              value           2
+system         public        settings              valueType       4
+system         public        statement_executions  application_name  4
+system         public        statement_executions  distributed       5
+system         public        statement_executions  error             8
+system         public        statement_executions  id                1
+system         public        statement_executions  optimized         6
+system         public        statement_executions  parse_lat         10
+system         public        statement_executions  plan_lat          11
+system         public        statement_executions  received_at       2
+system         public        statement_executions  retries           7
+system         public        statement_executions  rows_affected     9
+system         public        statement_executions  run_lat           12
+system         public        statement_executions  service_lat       13
+system         public        statement_executions  statement         3
+system         public        table_statistics      columnIDs       4
+system         public        table_statistics      createdAt       5
+system         public        table_statistics      distinctCount   7
+system         public        table_statistics      histogram       9
+system         public        table_statistics      name            3
+system         public        table_statistics      nullCount       8
+system         public        table_statistics      rowCount        6
+system         public        table_statistics      statisticID     2
+system         public        table_statistics      tableID         1
+system         public        ui                    key             1
+system         public        ui                    lastUpdated     3
+system         public        ui                    value           2
+system         public        users                 hashedPassword  2
+system         public        users                 isRole          3
+system         public        users                 username        1
+system         public        web_sessions          auditInfo       8
+system         public        web_sessions          createdAt       4
+system         public        web_sessions          expiresAt       5
+system         public        web_sessions          hashedSecret    2
+system         public        web_sessions          id              1
+system         public        web_sessions          lastUsedAt      7
+system         public        web_sessions          revokedAt       6
+system         public        web_sessions          username        3
+system         public        zones                 config          2
+system         public        zones                 id              1
 
 statement ok
 SET DATABASE = test
@@ -1232,6 +1248,16 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                           INSERT          NULL          NULL
 NULL     root     system         public              settings                           SELECT          NULL          NULL
 NULL     root     system         public              settings                           UPDATE          NULL          NULL
+NULL     admin    system         public              statement_executions               DELETE          NULL          NULL
+NULL     admin    system         public              statement_executions               GRANT           NULL          NULL
+NULL     admin    system         public              statement_executions               INSERT          NULL          NULL
+NULL     admin    system         public              statement_executions               SELECT          NULL          NULL
+NULL     admin    system         public              statement_executions               UPDATE          NULL          NULL
+NULL     root     system         public              statement_executions               DELETE          NULL          NULL
+NULL     root     system         public              statement_executions               GRANT           NULL          NULL
+NULL     root     system         public              statement_executions               INSERT          NULL          NULL
+NULL     root     system         public              statement_executions               SELECT          NULL          NULL
+NULL     root     system         public              statement_executions               UPDATE          NULL          NULL
 NULL     admin    system         public              table_statistics                   DELETE          NULL          NULL
 NULL     admin    system         public              table_statistics                   GRANT           NULL          NULL
 NULL     admin    system         public              table_statistics                   INSERT          NULL          NULL
@@ -1521,6 +1547,16 @@ NULL     root     system         public              comments                   
 NULL     root     system         public              comments                           INSERT          NULL          NULL
 NULL     root     system         public              comments                           SELECT          NULL          NULL
 NULL     root     system         public              comments                           UPDATE          NULL          NULL
+NULL     admin    system         public              statement_executions               DELETE          NULL          NULL
+NULL     admin    system         public              statement_executions               GRANT           NULL          NULL
+NULL     admin    system         public              statement_executions               INSERT          NULL          NULL
+NULL     admin    system         public              statement_executions               SELECT          NULL          NULL
+NULL     admin    system         public              statement_executions               UPDATE          NULL          NULL
+NULL     root     system         public              statement_executions               DELETE          NULL          NULL
+NULL     root     system         public              statement_executions               GRANT           NULL          NULL
+NULL     root     system         public              statement_executions               INSERT          NULL          NULL
+NULL     root     system         public              statement_executions               SELECT          NULL          NULL
+NULL     root     system         public              statement_executions               UPDATE          NULL          NULL
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)
