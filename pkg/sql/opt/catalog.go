@@ -34,16 +34,33 @@ import (
 // index, even if it meant adding a hidden unique rowid column.
 const PrimaryIndex = 0
 
-// Fingerprint uniquely identifies a catalog data source. If the schema of the
-// data source changes in any way, then the fingerprint must also change. This
-// enables cached data sources (or other data structures dependent on the data
-// sources) to be invalidated when their schema changes.
+// StableID permanently and uniquely identifies a catalog object (table, view,
+// index, column, etc.) within its scope:
 //
-// For sqlbase data sources, the fingerprint is simply the concatenation of the
-// 32-bit descriptor ID and version fields. The version is incremented each time
-// a change to a table/view/sequence occurs, including changes to any associated
-// indexes.
-type Fingerprint uint64
+//   data source StableID: unique within database
+//   index StableID: unique within table
+//   column StableID: unique within table
+//
+// If a new catalog object is created, it will always be assigned a new StableID
+// that has never, and will never, be reused by a different object in the same
+// scope. This uniqueness guarantee is true even if the new object has the same
+// name and schema as an old (and possibly dropped) object. The StableID will
+// never change as long as the object exists.
+//
+// Note that while two instances of the same catalog object will always have the
+// same StableID, they can have different schema if the schema has changed over
+// time. See the Version type comments for more details.
+//
+// For sqlbase objects, the StableID is the 32-bit descriptor ID.
+type StableID uint32
+
+// Version is incremented any time the schema of a catalog data source (table,
+// view, etc.) is changed in any way, including changes to any associated
+// indexes. This enables cached data sources (or other data structures dependent
+// on the data sources) to be invalidated when their schema changes.
+//
+// For sqlbase data sources, the version is the 32-bit descriptor version.
+type Version uint32
 
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
@@ -55,9 +72,9 @@ type Catalog interface {
 	ResolveDataSource(ctx context.Context, name *tree.TableName) (DataSource, error)
 
 	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
-	// locates a data source by its unique identifier in the database. This id
-	// is stable as long as the data source exists.
-	ResolveDataSourceByID(ctx context.Context, dataSourceID int64) (DataSource, error)
+	// locates a data source by its StableID. See the comment for StableID for
+	// more details.
+	ResolveDataSourceByID(ctx context.Context, id StableID) (DataSource, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given data source. If not, then CheckPrivilege returns an error.
@@ -67,10 +84,15 @@ type Catalog interface {
 // DataSource is an interface to a database object that provides rows, like a
 // table, a view, or a sequence.
 type DataSource interface {
-	// Fingerprint uniquely identifies this data source. If the schema of this
-	// data source changes, then so will the value of this fingerprint. If two
-	// data sources have the same fingerprint, then they are identical.
-	Fingerprint() Fingerprint
+	// ID is the unique, stable identifier for this data source. See the comment
+	// for StableID for more detail.
+	ID() StableID
+
+	// Version uniquely identifies a particular iteration of the data source's
+	// schema. Each time the schema changes, the version will be incremented,
+	// which allows changes to be easily detected. See the comment for the Version
+	// type for more detail.
+	Version() Version
 
 	// Name returns the fully normalized, fully qualified, and fully resolved
 	// name of the data source. The ExplicitCatalog and ExplicitSchema fields
@@ -88,9 +110,6 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// InternalID returns the table's globally-unique ID.
-	InternalID() uint64
-
 	// ColumnCount returns the number of columns in the table.
 	ColumnCount() int
 
@@ -106,11 +125,6 @@ type Table interface {
 	// To determine if the column is a mutation column, try to cast it to
 	// *MutationColumn.
 	Column(i int) Column
-
-	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
-	// Note that this takes the internal column ID, and has no relation to
-	// ColumnIDs in the optimizer.
-	LookupColumnOrdinal(colID uint32) (int, error)
 
 	// IndexCount returns the number of indexes defined on this table. This
 	// includes the primary index, so the count is always >= 1.
@@ -152,6 +166,13 @@ type View interface {
 // Column is an interface to a table column, exposing only the information
 // needed by the query optimizer.
 type Column interface {
+	// ColID is the unique, stable identifier for this column within its table.
+	// Each new column in the table will be assigned a new ID that is different
+	// than every column allocated before or after. This is true even if a column
+	// is dropped and then re-added with the same name; the new column will have
+	// a different ID. See the comment for StableID for more detail.
+	ColID() StableID
+
 	// ColName returns the name of the column.
 	ColName() tree.Name
 
@@ -227,12 +248,13 @@ type IndexColumn struct {
 // add an implicit primary key based on a hidden rowid column if a primary key
 // was not explicitly declared).
 type Index interface {
-	// IdxName is the name of the index.
-	IdxName() string
+	// ID is the stable identifier for this index that is guaranteed to be
+	// unique within the owning table. See the comment for StableID for more
+	// detail.
+	ID() StableID
 
-	// InternalID returns the internal identifier of the index. Only used
-	// when the query contains a numeric index reference.
-	InternalID() uint64
+	// Name is the name of the index.
+	Name() string
 
 	// Table returns a reference to the table this index is based on.
 	Table() Table
@@ -342,12 +364,12 @@ type TableStatistic interface {
 // ForeignKeyReference is a struct representing an outbound foreign key reference.
 // It has accessors for table and index IDs, as well as the prefix length.
 type ForeignKeyReference struct {
-	// Table contains the referenced table's internal ID.
-	TableID uint64
+	// Table contains the referenced table's stable identifier.
+	TableID StableID
 
-	// Index contains the ID of the index that represents the
+	// Index contains the stable identifier of the index that represents the
 	// destination table's side of the foreign key relation.
-	IndexID uint64
+	IndexID StableID
 
 	// PrefixLen contains the length of columns that form the foreign key
 	// relation in the current and destination indexes.
@@ -389,7 +411,7 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 	if idx.IsInverted() {
 		inverted = "INVERTED "
 	}
-	child := tp.Childf("%sINDEX %s", inverted, idx.IdxName())
+	child := tp.Childf("%sINDEX %s", inverted, idx.Name())
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
@@ -436,7 +458,7 @@ func formatColPrefix(idx Index, prefixLen int) string {
 func formatCatalogFKRef(
 	cat Catalog, tab Table, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node,
 ) {
-	ds, err := cat.ResolveDataSourceByID(context.TODO(), int64(fkRef.TableID))
+	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
 	if err != nil {
 		panic(err)
 	}
@@ -445,7 +467,7 @@ func formatCatalogFKRef(
 
 	var fkIndex Index
 	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
-		if fkTable.Index(j).InternalID() == fkRef.IndexID {
+		if fkTable.Index(j).ID() == fkRef.IndexID {
 			fkIndex = fkTable.Index(j)
 			break
 		}

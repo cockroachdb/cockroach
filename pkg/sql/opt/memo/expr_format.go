@@ -249,7 +249,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Childf("flags: no-index-join")
 			} else if t.Flags.ForceIndex {
 				idx := md.Table(t.Table).Index(t.Flags.Index)
-				tp.Childf("flags: force-index=%s", idx.IdxName())
+				tp.Childf("flags: force-index=%s", idx.Name())
 			}
 		}
 
@@ -658,7 +658,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if t.Index == opt.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
+			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
 		}
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
@@ -692,7 +692,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if t.Index == opt.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
+			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
 		}
 
 	case *ZigzagJoinPrivate:
@@ -700,11 +700,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		rightTab := f.Memo.metadata.Table(t.RightTable)
 		fmt.Fprintf(f.Buffer, " %s", leftTab.Name().TableName)
 		if t.LeftIndex != opt.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).IdxName())
+			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).Name())
 		}
 		fmt.Fprintf(f.Buffer, " %s", rightTab.Name().TableName)
 		if t.RightIndex != opt.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).IdxName())
+			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).Name())
 		}
 
 	case *MergeJoinPrivate:
