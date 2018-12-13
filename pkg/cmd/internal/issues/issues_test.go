@@ -246,7 +246,7 @@ Failed test: %s`,
 					}, nil, nil
 				}
 
-				p.getLatestTag = func() (string, error) { return "3.3", nil }
+				p.getLatestTag = func() (string, error) { return "v3.3.0", nil }
 
 				p.init()
 

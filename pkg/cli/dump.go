@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -46,6 +47,10 @@ is omitted, dump all tables in the database.
 	RunE: MaybeDecorateGRPCError(runDump),
 }
 
+// We accept versions that are strictly newer than v2.1.0-alpha.20180416
+// (hence the "-0" at the end).
+var verDump = version.MustParse("v2.1.0-alpha.20180416-0")
+
 // runDumps performs a dump of a table or database.
 //
 // The approach here and its current flaws are summarized
@@ -57,7 +62,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	if err := conn.requireServerVersion(">v2.1.0-alpha.20180416"); err != nil {
+	if err := conn.requireServerVersion(verDump); err != nil {
 		return err
 	}
 

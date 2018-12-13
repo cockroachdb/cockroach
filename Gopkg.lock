@@ -827,14 +827,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ada37ea3db98b606d2b61577fbd87c0aabaa95e03b409033ebf58c6e5420b033"
-  name = "github.com/hashicorp/go-version"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "fc61389e27c71d120f87031ca8c88a3428f372dd"
-
-[[projects]]
-  branch = "master"
   digest = "1:e345ab0697f8f63d0ff3cc4c4c90fa470fa79c8d3c0b461a1d16df2f5b0c1fd1"
   name = "github.com/ianlancetaylor/cgosymbolizer"
   packages = ["."]
@@ -1755,7 +1747,6 @@
     "github.com/grpc-ecosystem/grpc-gateway/runtime",
     "github.com/grpc-ecosystem/grpc-gateway/utilities",
     "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc",
-    "github.com/hashicorp/go-version",
     "github.com/jackc/pgx",
     "github.com/jackc/pgx/pgproto3",
     "github.com/jackc/pgx/pgtype",

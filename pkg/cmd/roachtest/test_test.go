@@ -370,7 +370,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				MinVersion: "v2.1.0-foo",
 				Run:        dummyRun,
 			},
-			regexp.QuoteMeta(`invalid version 2.1.0-foo, cannot specify a prerelease (-xxx)`),
+			regexp.QuoteMeta(`invalid version v2.1.0-foo, cannot specify a prerelease (-xxx)`),
 			nil,
 		},
 		{
@@ -379,7 +379,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				MinVersion: "foo",
 				Run:        dummyRun,
 			},
-			"a: unable to parse min-version: foo",
+			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
 		},
 		{
@@ -419,9 +419,9 @@ func TestRegistryMinVersion(t *testing.T) {
 		expectedA    bool
 		expectedB    bool
 	}{
-		{"1.1.0", false, false},
-		{"2.0.0", true, false},
-		{"2.1.0", true, true},
+		{"v1.1.0", false, false},
+		{"v2.0.0", true, false},
+		{"v2.1.0", true, true},
 	}
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
@@ -431,14 +431,14 @@ func TestRegistryMinVersion(t *testing.T) {
 			r.out = &buf
 			r.Add(testSpec{
 				Name:       "a",
-				MinVersion: "2.0.0",
+				MinVersion: "v2.0.0",
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runA = true
 				},
 			})
 			r.Add(testSpec{
 				Name:       "b",
-				MinVersion: "2.1.0",
+				MinVersion: "v2.1.0",
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runB = true
 				},
