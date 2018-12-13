@@ -365,10 +365,10 @@ select
  └── filters
       └── exists [type=bool]
            └── project
-                ├── columns: a:10(int!null) y:16(int) column17:17(int) column18:18(int)
+                ├── columns: a:4(int!null) b:5(int) c:6(int) d:7(int) e:8(int!null)
                 └── update abcde
-                     ├── columns: a:10(int!null) rowid:15(int!null) y:16(int) column17:17(int) column18:18(int)
-                     ├── fetch columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                     ├── columns: a:4(int!null) b:5(int) c:6(int) d:7(int) e:8(int!null) rowid:9(int!null)
+                     ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
                      ├── update-mapping:
                      │    ├──  y:16 => b:5
                      │    ├──  column17:17 => c:6
@@ -444,10 +444,10 @@ build
 UPDATE abcde SET a=2 WHERE a=1 RETURNING *
 ----
 project
- ├── columns: a:13(int!null) b:8(int) c:9(int) d:14(int) e:13(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
  └── update abcde
-      ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
-      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
       ├── update-mapping:
       │    ├──  column13:13 => a:1
       │    ├──  column14:14 => d:4
@@ -480,8 +480,8 @@ UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 project
  ├── columns: "?column?":15(int) "?column?":16(int)
  ├── update abcde
- │    ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
- │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
+ │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  │    ├── update-mapping:
  │    │    ├──  column13:13 => a:1
  │    │    ├──  column14:14 => d:4
@@ -508,23 +508,23 @@ project
  │                   └── const: 1 [type=int]
  └── projections
       ├── plus [type=int]
-      │    ├── variable: column13 [type=int]
+      │    ├── variable: a [type=int]
       │    └── const: 1 [type=int]
       └── mult [type=int]
            ├── variable: b [type=int]
-           └── variable: column14 [type=int]
+           └── variable: d [type=int]
 
 # Use returning UPDATE as a FROM expression.
 build
 SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
 project
- ├── columns: a:13(int!null) d:14(int)
+ ├── columns: a:1(int!null) d:4(int)
  └── project
-      ├── columns: b:8(int) c:9(int) column13:13(int!null) column14:14(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
       └── update abcde
-           ├── columns: b:8(int) c:9(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
-           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
+           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
            ├── update-mapping:
            │    ├──  column13:13 => a:1
            │    ├──  column14:14 => d:4
@@ -562,10 +562,10 @@ build
 UPDATE abcde SET rowid=rowid+1 RETURNING rowid
 ----
 project
- ├── columns: rowid:13(int!null)
+ ├── columns: rowid:6(int!null)
  └── update abcde
-      ├── columns: a:7(int!null) b:8(int) c:9(int) column13:13(int!null) column14:14(int)
-      ├── fetch columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
       ├── update-mapping:
       │    ├──  column14:14 => d:4
       │    ├──  a:7 => e:5
@@ -1240,7 +1240,7 @@ project
       └── filters
            └── exists [type=bool]
                 └── update mutation
-                     ├── columns: n:12(int) o:15(int!null)
+                     ├── columns: m:7(int!null) n:8(int)
                      ├── fetch columns: m:11(int) n:12(int) mutation.o:13(int) p:14(int)
                      ├── update-mapping:
                      │    ├──  o:15 => m:7

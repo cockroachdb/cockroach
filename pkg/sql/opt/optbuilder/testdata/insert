@@ -342,9 +342,9 @@ build
 INSERT INTO abcde SELECT 1 RETURNING *
 ----
 project
- ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
  └── insert abcde
-      ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  "?column?":7 => a:1
       │    ├──  column8:8 => b:2
@@ -370,9 +370,9 @@ build
 INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
 ----
 project
- ├── columns: "?column?":11(int) "?column?":12(unknown)
+ ├── columns: "?column?":11(int) "?column?":12(int)
  ├── insert abcde
- │    ├── columns: "?column?":7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
  │    ├── insert-mapping:
  │    │    ├──  "?column?":7 => a:1
  │    │    ├──  column8:8 => b:2
@@ -394,18 +394,20 @@ project
  │              └── function: unique_rowid [type=int]
  └── projections
       ├── plus [type=int]
-      │    ├── variable: ?column? [type=int]
+      │    ├── variable: a [type=int]
       │    └── const: 1 [type=int]
-      └── null [type=unknown]
+      └── mult [type=int]
+           ├── variable: b [type=int]
+           └── variable: c [type=int]
 
 # Use returning INSERT as a FROM expression.
 build
 SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
 ----
 project
- ├── columns: a:7(int!null) b:8(unknown) c:9(int!null) d:8(unknown) e:7(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
  └── insert abcde
-      ├── columns: column1:7(int!null) column8:8(unknown) column9:9(int!null) column10:10(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  column1:7 => a:1
       │    ├──  column8:8 => b:2
@@ -554,9 +556,9 @@ select
  └── filters
       └── exists [type=bool]
            └── project
-                ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column14:14(int)
+                ├── columns: a:4(int!null) b:5(int) c:6(int!null) d:7(int) e:8(int)
                 └── insert abcde
-                     ├── columns: column1:10(int!null) column2:11(int) column12:12(int!null) column13:13(int!null) column14:14(int)
+                     ├── columns: a:4(int!null) b:5(int) c:6(int!null) d:7(int) e:8(int) rowid:9(int!null)
                      ├── insert-mapping:
                      │    ├──  column1:10 => a:4
                      │    ├──  column2:11 => b:5
@@ -650,9 +652,9 @@ build
 INSERT INTO abcde (a, rowid) VALUES (1, 2) RETURNING *
 ----
 project
- ├── columns: a:7(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:7(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
  └── insert abcde
-      ├── columns: column1:7(int!null) column2:8(int!null) column9:9(unknown) column10:10(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  column1:7 => a:1
       │    ├──  column9:9 => b:2
@@ -678,7 +680,7 @@ VALUES (DEFAULT, DEFAULT, 1, DEFAULT), (3, 2, 1, DEFAULT), (DEFAULT, DEFAULT, 2,
 RETURNING *, rowid
 ----
 insert abcde
- ├── columns: a:9(int!null) b:8(int) c:7(int) d:11(int) e:9(int!null) rowid:10(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
  ├── insert-mapping:
  │    ├──  column3:9 => a:1
  │    ├──  column2:8 => b:2
@@ -784,9 +786,9 @@ build
 INSERT INTO abcde (b, a) SELECT x::int, y FROM xyz RETURNING *
 ----
 project
- ├── columns: a:8(int!null) b:10(int) c:11(int!null) d:13(int) e:8(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
  └── insert abcde
-      ├── columns: y:8(int!null) x:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  y:8 => a:1
       │    ├──  x:10 => b:2
@@ -820,7 +822,7 @@ build
 INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
 ----
 insert abcde
- ├── columns: a:8(int!null) b:9(unknown) c:10(int!null) d:9(unknown) e:8(int!null) rowid:7(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
  ├── insert-mapping:
  │    ├──  column2:8 => a:1
  │    ├──  column9:9 => b:2
@@ -844,9 +846,9 @@ build
 SELECT * FROM [INSERT INTO abcde (a, b) SELECT y+1, y FROM xyz RETURNING *]
 ----
 project
- ├── columns: a:10(int!null) b:8(int) c:11(int!null) d:13(int) e:10(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
  └── insert abcde
-      ├── columns: y:8(int) "?column?":10(int!null) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  "?column?":10 => a:1
       │    ├──  y:8 => b:2
@@ -1082,7 +1084,7 @@ build
 INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
 ----
 insert mutation
- ├── columns: m:6(int!null) n:7(int)
+ ├── columns: m:1(int!null) n:2(int)
  ├── insert-mapping:
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2

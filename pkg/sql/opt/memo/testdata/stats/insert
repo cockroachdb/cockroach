@@ -52,19 +52,19 @@ FROM [INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE b='foo' RETURNING 
 WHERE z > 1.0
 ----
 select
- ├── columns: x:5(string!null) y:4(int!null) z:6(float!null)
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float!null)
  ├── side-effects, mutations
- ├── stats: [rows=66, distinct(4)=66, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=60.3661899, null(6)=0]
- ├── fd: ()-->(5)
+ ├── stats: [rows=66, distinct(1)=1, null(1)=0, distinct(2)=66, null(2)=0, distinct(3)=60.3661899, null(3)=0]
+ ├── fd: ()-->(1)
  ├── insert xyz
- │    ├── columns: a:4(int!null) b:5(string!null) c:6(float)
+ │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  │    ├── insert-mapping:
  │    │    ├──  b:5 => x:1
  │    │    ├──  a:4 => y:2
  │    │    └──  c:6 => z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=200]
- │    ├── fd: ()-->(5)
+ │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0, distinct(3)=130.264312, null(3)=2]
+ │    ├── fd: ()-->(1)
  │    └── project
  │         ├── columns: a:4(int!null) b:5(string!null) c:6(float)
  │         ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=130.264312, null(6)=2]
@@ -82,14 +82,14 @@ select
  │              └── filters
  │                   └── b = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
  └── filters
-      └── c > 1.0 [type=bool, outer=(6), constraints=(/6: [/1.0000000000000002 - ]; tight)]
+      └── z > 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
 
 # Cardinality is zero.
 build
 INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE False RETURNING *
 ----
 insert xyz
- ├── columns: x:5(string!null) y:4(int!null) z:6(float)
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── insert-mapping:
  │    ├──  b:5 => x:1
  │    ├──  a:4 => y:2
