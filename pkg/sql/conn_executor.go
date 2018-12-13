@@ -509,6 +509,10 @@ func (s *Server) newConnExecutor(
 		defaults:       sessionDefaults,
 		settings:       s.cfg.Settings,
 		curTxnReadOnly: &ex.state.readOnly,
+		// applicationNameChanged is used when setting app name in client
+		// sessions or when using the session defaults map. When
+		// populating session data for internal executors, we use a
+		// different logic, see below.
 		applicationNameChanged: func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 			ex.applicationName.Store(newName)
@@ -523,11 +527,9 @@ func (s *Server) newConnExecutor(
 			return nil, err
 		}
 	} else {
-		// It's possible there were no defaults, for example when the
-		// connEx is serving an internal executor. In that case we still
-		// need to populate appStats according to the configured
-		// application name.
-		ex.appStats = s.sqlStats.getStatsForApplication(ex.sessionData.ApplicationName)
+		// We have set the ex.sessionData without using the dataMutator.
+		// So we need to update the application name manually.
+		ex.dataMutator.applicationNameChanged(ex.sessionData.ApplicationName)
 	}
 
 	ex.phaseTimes[sessionInit] = timeutil.Now()
