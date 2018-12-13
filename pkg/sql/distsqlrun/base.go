@@ -38,6 +38,8 @@ type columns []uint32
 // producer of a consumer's state.
 type ConsumerStatus uint32
 
+//go:generate stringer -type=ConsumerStatus
+
 const (
 	// NeedMoreRows indicates that the consumer is still expecting more rows.
 	NeedMoreRows ConsumerStatus = iota
