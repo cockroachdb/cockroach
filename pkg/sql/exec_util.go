@@ -1718,6 +1718,10 @@ func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 	m.data.StmtTimeout = timeout
 }
 
+func (m *sessionDataMutator) SetStatementLoggingEnabled(val bool) {
+	m.data.StatementLoggingEnabled = val
+}
+
 // RecordLatestSequenceValue records that value to which the session incremented
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {

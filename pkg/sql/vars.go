@@ -598,6 +598,23 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 	`standard_conforming_strings`: makeCompatStringVar(`standard_conforming_strings`, "on"),
 
+	`statement_logging_enabled`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator, s string,
+		) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetStatementLoggingEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.StatementLoggingEnabled)
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	`statement_timeout`: {
 		GetStringVal: stmtTimeoutVarGetStringVal,
 		Set:          stmtTimeoutVarSet,
