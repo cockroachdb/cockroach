@@ -48,13 +48,15 @@ func (s *metricsSink) EmitRow(
 }
 
 func (s *metricsSink) EmitResolvedTimestamp(
-	ctx context.Context, payload []byte, resolved hlc.Timestamp,
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitResolvedTimestamp(ctx, payload, resolved)
+	err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
-		s.metrics.EmittedBytes.Inc(int64(len(payload)))
+		// TODO(dan): This wasn't correct. The wrapped sink may emit the payload
+		// any number of times.
+		// s.metrics.EmittedBytes.Inc(int64(len(payload)))
 		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}
 	return err

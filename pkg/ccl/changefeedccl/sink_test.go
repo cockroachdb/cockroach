@@ -166,6 +166,20 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	require.Equal(t, sarama.ByteEncoder(`v☃`), m.Value)
 }
 
+type testEncoder struct{}
+
+func (testEncoder) EncodeKey(t *sqlbase.TableDescriptor, _ sqlbase.EncDatumRow) ([]byte, error) {
+	panic(`unimplemented`)
+}
+func (testEncoder) EncodeValue(
+	t *sqlbase.TableDescriptor, _ sqlbase.EncDatumRow, _ hlc.Timestamp,
+) ([]byte, error) {
+	panic(`unimplemented`)
+}
+func (testEncoder) EncodeResolvedTimestamp(_ string, ts hlc.Timestamp) ([]byte, error) {
+	return []byte(ts.String()), nil
+}
+
 func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -257,26 +271,27 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
 	// Emit resolved
-	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r0`), zeroTS))
+	var e testEncoder
+	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, zeroTS))
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`foo0`), []byte(`v0`), zeroTS))
-	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r1`), zeroTS))
+	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, hlc.Timestamp{WallTime: 1}))
 	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t,
 		`SELECT topic, partition, key, value, resolved FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{
-			{`bar`, `0`, ``, ``, `r0`},
-			{`bar`, `0`, ``, ``, `r1`},
-			{`bar`, `1`, ``, ``, `r0`},
-			{`bar`, `1`, ``, ``, `r1`},
-			{`bar`, `2`, ``, ``, `r0`},
-			{`bar`, `2`, ``, ``, `r1`},
-			{`foo`, `0`, ``, ``, `r0`},
+			{`bar`, `0`, ``, ``, `0.000000000,0`},
+			{`bar`, `0`, ``, ``, `0.000000001,0`},
+			{`bar`, `1`, ``, ``, `0.000000000,0`},
+			{`bar`, `1`, ``, ``, `0.000000001,0`},
+			{`bar`, `2`, ``, ``, `0.000000000,0`},
+			{`bar`, `2`, ``, ``, `0.000000001,0`},
+			{`foo`, `0`, ``, ``, `0.000000000,0`},
 			{`foo`, `0`, `foo0`, `v0`, ``},
-			{`foo`, `0`, ``, ``, `r1`},
-			{`foo`, `1`, ``, ``, `r0`},
-			{`foo`, `1`, ``, ``, `r1`},
-			{`foo`, `2`, ``, ``, `r0`},
-			{`foo`, `2`, ``, ``, `r1`},
+			{`foo`, `0`, ``, ``, `0.000000001,0`},
+			{`foo`, `1`, ``, ``, `0.000000000,0`},
+			{`foo`, `1`, ``, ``, `0.000000001,0`},
+			{`foo`, `2`, ``, ``, `0.000000000,0`},
+			{`foo`, `2`, ``, ``, `0.000000001,0`},
 		},
 	)
 }

@@ -90,12 +90,12 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 	return rows, nil
 }
 
-func parseAvroSchema(j string) (*avroSchemaRecord, error) {
-	var s avroSchemaRecord
+func parseAvroSchema(j string) (*avroDataRecord, error) {
+	var s avroDataRecord
 	if err := json.Unmarshal([]byte(j), &s); err != nil {
 		return nil, err
 	}
-	// This avroSchemaRecord doesn't have any of the derived fields we need for
+	// This avroDataRecord doesn't have any of the derived fields we need for
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
 	tableDesc := &sqlbase.TableDescriptor{
@@ -159,7 +159,7 @@ func avroSchemaToColDesc(
 				colDesc.Type.Width = int32(s.(float64))
 			}
 		default:
-			return nil, errors.Errorf(`unknown logical type: %s`, t[`logicalType`])
+			return nil, errors.Errorf(`unknown logical type: %v`, t[`logicalType`])
 		}
 	default:
 		return nil, errors.Errorf(`unknown schema type: %T %s`, schemaType, schemaType)
@@ -282,12 +282,16 @@ func TestAvroSchema(t *testing.T) {
 		tableSchema, err := tableToAvroSchema(tableDesc)
 		require.NoError(t, err)
 		require.Equal(t,
-			`{"type":"record","name":"_u2603_","fields":[{"type":"long","name":"_u0001f366_"}]}`,
+			`{"type":"record","name":"_u2603_","fields":[`+
+				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
+				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
 		indexSchema, err := indexToAvroSchema(tableDesc, &tableDesc.PrimaryIndex)
 		require.NoError(t, err)
 		require.Equal(t,
-			`{"type":"record","name":"_u2603_","fields":[{"type":"long","name":"_u0001f366_"}]}`,
+			`{"type":"record","name":"_u2603_","fields":[`+
+				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
+				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			indexSchema.codec.Schema())
 	})
 }
@@ -313,7 +317,7 @@ func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
 // It'd be nice if our avro library handled this for us, but neither of the
 // popular golang once seem to have it implemented.
 func rowFromBinaryEvolved(
-	buf []byte, writerSchema, readerSchema *avroSchemaRecord,
+	buf []byte, writerSchema, readerSchema *avroDataRecord,
 ) (sqlbase.EncDatumRow, error) {
 	native, newBuf, err := writerSchema.codec.NativeFromBinary(buf)
 	if err != nil {
@@ -330,7 +334,7 @@ func rowFromBinaryEvolved(
 	return readerSchema.rowFromNative(nativeMap)
 }
 
-func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avroSchemaRecord) {
+func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avroDataRecord) {
 	for _, writerField := range writerSchema.Fields {
 		if _, inReader := readerSchema.fieldIdxByName[writerField.Name]; !inReader {
 			// "If the writer's record contains a field with a name not present
