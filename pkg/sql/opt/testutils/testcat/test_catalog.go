@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -34,7 +33,7 @@ import (
 // Catalog implements the opt.Catalog interface for testing purposes.
 type Catalog struct {
 	dataSources map[string]opt.DataSource
-	fingerprint opt.Fingerprint
+	counter     int
 }
 
 var _ opt.Catalog = &Catalog{}
@@ -106,15 +105,15 @@ func (tc *Catalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the opt.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
-	ctx context.Context, tableID int64,
+	ctx context.Context, id opt.StableID,
 ) (opt.DataSource, error) {
 	for _, ds := range tc.dataSources {
-		if tab, ok := ds.(*Table); ok && int64(tab.tableID) == tableID {
+		if tab, ok := ds.(*Table); ok && tab.StableID == id {
 			return ds, nil
 		}
 	}
 	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
-		"relation [%d] does not exist", tableID)
+		"relation [%d] does not exist", id)
 }
 
 // CheckPrivilege is part of the opt.Catalog interface.
@@ -224,10 +223,14 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 	}
 }
 
-// nextFingerprint returns a new unique fingerprint for a data source.
-func (tc *Catalog) nextFingerprint() opt.Fingerprint {
-	tc.fingerprint++
-	return tc.fingerprint
+// nextStableID returns a new unique StableID for a data source.
+func (tc *Catalog) nextStableID() opt.StableID {
+	tc.counter++
+
+	// 53 is a magic number derived from how CRDB internally stores tables. The
+	// first user table is 53. Use this to have the test catalog look more
+	// consistent with the real catalog.
+	return opt.StableID(53 + tc.counter - 1)
 }
 
 // qualifyTableName updates the given table name to include catalog and schema
@@ -263,10 +266,11 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 
 // View implements the opt.View interface for testing purposes.
 type View struct {
-	ViewFingerprint opt.Fingerprint
-	ViewName        tree.TableName
-	QueryText       string
-	ColumnNames     tree.NameList
+	ViewID      opt.StableID
+	ViewVersion opt.Version
+	ViewName    tree.TableName
+	QueryText   string
+	ColumnNames tree.NameList
 
 	// If Revoked is true, then the user has had privileges on the view revoked.
 	Revoked bool
@@ -280,9 +284,14 @@ func (tv *View) String() string {
 	return tp.String()
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (tv *View) Fingerprint() opt.Fingerprint {
-	return tv.ViewFingerprint
+// ID is part of the opt.DataSource interface.
+func (tv *View) ID() opt.StableID {
+	return tv.ViewID
+}
+
+// Version is part of the opt.DataSource interface.
+func (tv *View) Version() opt.Version {
+	return tv.ViewVersion
 }
 
 // Name is part of the opt.DataSource interface.
@@ -307,19 +316,18 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the opt.Table interface for testing purposes.
 type Table struct {
-	TabFingerprint opt.Fingerprint
-	TabName        tree.TableName
-	Columns        []*Column
-	Indexes        []*Index
-	Stats          TableStats
-	IsVirtual      bool
-	Catalog        opt.Catalog
-	Mutations      []opt.MutationColumn
+	StableID   opt.StableID
+	TabVersion opt.Version
+	TabName    tree.TableName
+	Columns    []*Column
+	Indexes    []*Index
+	Stats      TableStats
+	IsVirtual  bool
+	Catalog    opt.Catalog
+	Mutations  []opt.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
-
-	tableID sqlbase.ID
 }
 
 var _ opt.Table = &Table{}
@@ -330,19 +338,19 @@ func (tt *Table) String() string {
 	return tp.String()
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (tt *Table) Fingerprint() opt.Fingerprint {
-	return tt.TabFingerprint
+// ID is part of the opt.DataSource interface.
+func (tt *Table) ID() opt.StableID {
+	return tt.StableID
+}
+
+// Version is part of the opt.DataSource interface.
+func (tt *Table) Version() opt.Version {
+	return tt.TabVersion
 }
 
 // Name is part of the opt.DataSource interface.
 func (tt *Table) Name() *tree.TableName {
 	return &tt.TabName
-}
-
-// InternalID is part of the opt.Table interface.
-func (tt *Table) InternalID() uint64 {
-	return uint64(tt.tableID)
 }
 
 // IsVirtualTable is part of the opt.Table interface.
@@ -361,15 +369,6 @@ func (tt *Table) Column(i int) opt.Column {
 		return tt.Columns[i]
 	}
 	return &tt.Mutations[i-len(tt.Columns)]
-}
-
-// LookupColumnOrdinal is part of the opt.Table interface.
-func (tt *Table) LookupColumnOrdinal(colID uint32) (int, error) {
-	if int(colID) > len(tt.Columns) || int(colID) < 1 {
-		return int(colID), pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-			"column [%d] does not exist", colID)
-	}
-	return int(colID) - 1, nil
 }
 
 // IndexCount is part of the opt.Table interface.
@@ -408,13 +407,10 @@ func (tt *Table) FindOrdinal(name string) int {
 
 // Index implements the opt.Index interface for testing purposes.
 type Index struct {
-	Name string
+	IdxName string
+
 	// Ordinal is the ordinal of this index in the table.
 	Ordinal int
-	Columns []opt.IndexColumn
-
-	// Table is a back reference to the table this index is on.
-	table *Table
 
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the opt.Index.KeyColumnCount for more details.
@@ -428,6 +424,11 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
+	Columns []opt.IndexColumn
+
+	// table is a back reference to the table this index is on.
+	table *Table
+
 	// foreignKey is a struct representing an outgoing foreign key
 	// reference. If fkSet is true, then foreignKey is a valid
 	// index reference.
@@ -435,14 +436,14 @@ type Index struct {
 	fkSet      bool
 }
 
-// IdxName is part of the opt.Index interface.
-func (ti *Index) IdxName() string {
-	return ti.Name
+// ID is part of the opt.Index interface.
+func (ti *Index) ID() opt.StableID {
+	return 1 + opt.StableID(ti.Ordinal)
 }
 
-// InternalID is part of the opt.Index interface.
-func (ti *Index) InternalID() uint64 {
-	return 1 + uint64(ti.Ordinal)
+// Name is part of the opt.Index interface.
+func (ti *Index) Name() string {
+	return ti.IdxName
 }
 
 // Table is part of the opt.Index interface.
@@ -482,6 +483,7 @@ func (ti *Index) ForeignKey() (opt.ForeignKeyReference, bool) {
 
 // Column implements the opt.Column interface for testing purposes.
 type Column struct {
+	Ordinal      int
 	Hidden       bool
 	Nullable     bool
 	Name         string
@@ -491,6 +493,11 @@ type Column struct {
 }
 
 var _ opt.Column = &Column{}
+
+// ColID is part of the opt.Index interface.
+func (tc *Column) ColID() opt.StableID {
+	return 1 + opt.StableID(tc.Ordinal)
+}
 
 // IsNullable is part of the opt.Column interface.
 func (tc *Column) IsNullable() bool {

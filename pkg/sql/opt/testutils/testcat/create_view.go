@@ -31,10 +31,10 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 	stmt.AsSource.Format(&fmtCtx)
 
 	view := &View{
-		ViewFingerprint: tc.nextFingerprint(),
-		ViewName:        stmt.Name,
-		QueryText:       buf.String(),
-		ColumnNames:     stmt.ColumnNames,
+		ViewID:      tc.nextStableID(),
+		ViewName:    stmt.Name,
+		QueryText:   buf.String(),
+		ColumnNames: stmt.ColumnNames,
 	}
 
 	// Add the new view to the catalog.
