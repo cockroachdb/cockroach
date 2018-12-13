@@ -349,10 +349,10 @@ ALTER TABLE o DROP COLUMN h
 statement ok
 ALTER TABLE o DROP COLUMN h CASCADE
 
-statement error adding a CHECK constraint via ALTER not supported
+statement error adding a CHECK constraint while also adding a column via ALTER not supported
 ALTER TABLE t ADD f INT CHECK (f>1)
 
-statement error adding a REFERENCES constraint via ALTER not supported
+statement error adding a REFERENCES constraint while also adding a column via ALTER not supported
 ALTER TABLE t ADD f INT UNIQUE REFERENCES other
 
 # Test that more than one column with constraints can be added in the same
