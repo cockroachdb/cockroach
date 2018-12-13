@@ -85,19 +85,19 @@ build
 UPDATE abcde SET b=10 WHERE a=1 RETURNING *
 ----
 project
- ├── columns: a:7(int!null) b:13(int!null) c:9(int!null) d:14(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── side-effects, mutations
- ├── fd: ()-->(7,13), (9)-->(14)
- ├── prune: (7,9,13,14)
+ ├── fd: ()-->(1,2), (3)-->(4)
+ ├── prune: (1-4)
  └── update abcde
-      ├── columns: a:7(int!null) c:9(int!null) rowid:11(int!null) column13:13(int!null) column14:14(int)
-      ├── fetch columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
       ├── update-mapping:
       │    ├──  column13:13 => b:2
       │    └──  column14:14 => d:4
       ├── side-effects, mutations
-      ├── key: (11)
-      ├── fd: ()-->(7,13), (11)-->(9,14), (9)-->(14)
+      ├── key: (5)
+      ├── fd: ()-->(1,2), (5)-->(3,4), (3)-->(4)
       └── project
            ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int) column13:13(int!null)
            ├── key: (11)
@@ -140,22 +140,22 @@ build
 UPDATE abcde SET b=10 WHERE rowid=1 RETURNING *
 ----
 project
- ├── columns: a:7(int!null) b:13(int!null) c:9(int!null) d:14(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── cardinality: [0 - 1]
  ├── side-effects, mutations
  ├── key: ()
- ├── fd: ()-->(7,9,13,14)
- ├── prune: (7,9,13,14)
+ ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
  └── update abcde
-      ├── columns: a:7(int!null) c:9(int!null) rowid:11(int!null) column13:13(int!null) column14:14(int)
-      ├── fetch columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
       ├── update-mapping:
       │    ├──  column13:13 => b:2
       │    └──  column14:14 => d:4
       ├── cardinality: [0 - 1]
       ├── side-effects, mutations
       ├── key: ()
-      ├── fd: ()-->(7,9,11,13,14)
+      ├── fd: ()-->(1-5)
       └── project
            ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int) column13:13(int!null)
            ├── cardinality: [0 - 1]
@@ -201,19 +201,19 @@ build
 UPDATE abcde SET a=1 WHERE b=c RETURNING *;
 ----
 project
- ├── columns: a:13(int!null) b:8(int!null) c:9(int!null) d:14(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── side-effects, mutations
- ├── fd: ()-->(13), (8)==(9), (9)==(8), (8,9)-->(14)
- ├── prune: (8,9,13,14)
+ ├── fd: ()-->(1), (2)==(3), (3)==(2), (2)-->(4)
+ ├── prune: (1-4)
  └── update abcde
-      ├── columns: b:8(int!null) c:9(int!null) rowid:11(int!null) column13:13(int!null) column14:14(int)
-      ├── fetch columns: a:7(int) b:8(int!null) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
       ├── update-mapping:
       │    ├──  column13:13 => a:1
       │    └──  column14:14 => d:4
       ├── side-effects, mutations
-      ├── key: (11)
-      ├── fd: ()-->(13), (11)-->(8,9,14), (8)==(9), (9)==(8), (8,9)-->(14)
+      ├── key: (5)
+      ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4), (2)-->(4)
       └── project
            ├── columns: column14:14(int) a:7(int!null) b:8(int!null) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int) column13:13(int!null)
            ├── key: (11)

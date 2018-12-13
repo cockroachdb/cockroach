@@ -950,118 +950,87 @@ func (b *logicalPropsBuilder) buildProjectSetProps(
 }
 
 func (b *logicalPropsBuilder) buildInsertProps(ins *InsertExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, ins, &rel.Shared)
+	b.buildMutationProps(ins, rel)
+}
+
+func (b *logicalPropsBuilder) buildUpdateProps(upd *UpdateExpr, rel *props.Relational) {
+	b.buildMutationProps(upd, rel)
+}
+
+func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, mutation, &rel.Shared)
+
+	private := mutation.Private().(*MutationPrivate)
 
 	// If no columns are output by the operator, then all other properties retain
 	// default values.
-	if !ins.NeedResults {
+	if !private.NeedResults {
 		return
 	}
 
+	inputProps := mutation.Child(0).(RelExpr).Relational()
 	md := b.mem.Metadata()
-	tab := md.Table(ins.Table)
-	inputProps := ins.Input.Relational()
+	tab := md.Table(private.Table)
 
 	// Output Columns
 	// --------------
 	// Only non-mutation columns are output columns.
-	for i, col := range ins.InsertCols {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		if opt.IsMutationColumn(tab, i) {
 			continue
 		}
 
-		rel.OutputCols.Add(int(col))
-
-		// Also add to NotNullCols here, in order to avoid another loop below.
-		if !tab.Column(i).IsNullable() {
-			rel.NotNullCols.Add(int(col))
-		}
+		colID := int(private.Table.ColumnID(i))
+		rel.OutputCols.Add(colID)
 	}
 
 	// Not Null Columns
 	// ----------------
-	// Start with set of not null columns computed above. Add any not null columns
-	// from input that are also output columns.
-	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
-	rel.NotNullCols.IntersectionWith(rel.OutputCols)
-
-	// Outer Columns
-	// -------------
-	// Outer columns were already derived by buildSharedProps.
-
-	// Functional Dependencies
-	// -----------------------
-	// Start with copy of FuncDepSet from input, then possibly simplify by calling
-	// ProjectCols.
-	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
-
-	// Cardinality
-	// -----------
-	// Inherit cardinality from input.
-	rel.Cardinality = inputProps.Cardinality
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildMutation(ins, rel)
-	}
-}
-
-func (b *logicalPropsBuilder) buildUpdateProps(upd *UpdateExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, upd, &rel.Shared)
-
-	// If no columns are output by the operator, then all other properties retain
-	// default values.
-	if !upd.NeedResults {
-		return
-	}
-
-	md := b.mem.Metadata()
-	tab := md.Table(upd.Table)
-	inputProps := upd.Input.Relational()
-
-	// Output Columns
-	// --------------
-	// Output columns are a combination of non-zero UpdateCols and FetchCols. If
-	// a column has been updated, then UpdateCols is used, else FetchCols is used.
-	// Only non-mutation columns are output columns.
-	for i, col := range upd.UpdateCols {
-		if opt.IsMutationColumn(tab, i) {
+	// A column should be marked as not-null if the target table column is not
+	// null or the corresponding insert and fetch/update columns are not null. In
+	// other words, if either the source or destination column is not null, then
+	// the column must be not null.
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabColID := private.Table.ColumnID(i)
+		if !rel.OutputCols.Contains(int(tabColID)) {
 			continue
 		}
 
-		if col == 0 {
-			col = upd.FetchCols[i]
+		// If the target table column is not null, then mark the column as not null.
+		if !tab.Column(i).IsNullable() {
+			rel.NotNullCols.Add(int(tabColID))
+			continue
 		}
 
-		if col != 0 {
-			rel.OutputCols.Add(int(col))
-
-			// Also add to NotNullCols here, in order to avoid another loop below.
-			if !tab.Column(i).IsNullable() {
-				rel.NotNullCols.Add(int(col))
+		// Either one or two input columns can provide the source value for the
+		// mutation. If two are present, then both must be not-null in order to
+		// guarantee that the result will be not-null as well.
+		a, b := private.MapToInputIDs(md, tabColID)
+		if inputProps.NotNullCols.Contains(int(a)) {
+			if b == 0 || inputProps.NotNullCols.Contains(int(b)) {
+				rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
 			}
 		}
 	}
 
-	// Not Null Columns
-	// ----------------
-	// Start with set of not null columns computed above. Add any not null columns
-	// from input that are also output columns.
-	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
-	rel.NotNullCols.IntersectionWith(rel.OutputCols)
-
 	// Outer Columns
 	// -------------
 	// Outer columns were already derived by buildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
-	// Start with copy of FuncDepSet from input, then possibly simplify by calling
-	// ProjectCols.
-	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
+	// Start with copy of FuncDepSet from input. For Insert, Update, and Delete
+	// ops, map the FDs of each source column to the corresponding destination
+	// column by making the columns equivalent and then filtering out the source
+	// columns via a call to ProjectCols. Note that this will not work for Upsert
+	// ops, since destination values can be sourced from multiple input columns.
+	// In that case, the functional dependencies are empty.
+	switch mutation.Op() {
+	case opt.InsertOp, opt.UpdateOp:
+		rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+		private.AddEquivTableCols(md, &rel.FuncDeps)
+		rel.FuncDeps.ProjectCols(rel.OutputCols)
+	}
 
 	// Cardinality
 	// -----------
@@ -1071,7 +1040,7 @@ func (b *logicalPropsBuilder) buildUpdateProps(upd *UpdateExpr, rel *props.Relat
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildMutation(upd, rel)
+		b.sb.buildMutation(mutation, rel)
 	}
 }
 

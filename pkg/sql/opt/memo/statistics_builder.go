@@ -1859,7 +1859,19 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 func (sb *statisticsBuilder) colStatMutation(
 	colSet opt.ColSet, mutation RelExpr,
 ) *props.ColumnStatistic {
-	return sb.colStat(colSet, mutation.Child(0).(RelExpr))
+	s := &mutation.Relational().Stats
+	private := mutation.Private().(*MutationPrivate)
+
+	// Get colstat from child by mapping requested columns to corresponding
+	// input columns.
+	inColSet := private.MapToInputCols(sb.md, colSet)
+	inColStat := sb.colStatFromChild(inColSet, mutation, 0 /* childIdx */)
+
+	// Construct mutation colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	return colStat
 }
 
 /////////////////////////////////////////////////
