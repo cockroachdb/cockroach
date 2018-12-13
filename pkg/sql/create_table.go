@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
@@ -271,6 +272,16 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			n.run.rowsAffected++
 		}
+
+		// Initiate a run of CREATE STATISTICS.
+		stats.MaybeRefreshStats(
+			params.EvalContext(),
+			params.ExecCfg().InternalExecutor.AutoStatsCtx(),
+			params.ExecCfg().TableStatsCache,
+			params.ExecCfg().InternalExecutor,
+			desc.ID,
+			n.run.rowsAffected,
+		)
 	}
 	return nil
 }

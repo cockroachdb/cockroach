@@ -128,7 +128,6 @@ query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
 NULL             {b}           10000      10              0
 s2               {a}           10000      10              0
 
@@ -229,15 +228,7 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
-s2               {a}           10000      10              0
-s3               {a}           10000      10              0
-s3               {c}           10000      10              0
-s4               {a}           10000      10              0
-s4               {b}           10000      10              0
 s4               {c}           10000      10              0
-s5               {a}           10000      10              0
 s5               {b}           10000      10              0
 s6               {a}           10000      10              0
 
@@ -253,6 +244,68 @@ WHERE statistics_name = '__auto__'
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
 {b}           10000      10              0
+
+#
+# Test delete stats
+#
+
+statement ok
+DROP INDEX data@data_b_idx
+
+statement ok
+CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [53];
+
+# Only the last 4-5 automatic stats should remain for each column.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names
+s4               {c}
+__auto__         {b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+
+statement ok
+CREATE STATISTICS s7 ON a FROM [53]
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names
+s4               {c}
+__auto__         {b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+s7               {a}
+
+statement ok
+CREATE STATISTICS s8 ON a FROM [53]
+
+# s7 is deleted but the automatic stats remain.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names
+s4               {c}
+__auto__         {b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+s8               {a}
 
 # Regression test for #33195.
 statement ok

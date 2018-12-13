@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -602,6 +603,16 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		// Remember we're done for the next call to BatchedNext().
 		u.run.done = true
 	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	stats.MaybeRefreshStats(
+		params.EvalContext(),
+		params.ExecCfg().InternalExecutor.AutoStatsCtx(),
+		params.ExecCfg().TableStatsCache,
+		params.ExecCfg().InternalExecutor,
+		u.run.tu.tableDesc().ID,
+		u.run.rowCount,
+	)
 
 	return u.run.rowCount > 0, nil
 }

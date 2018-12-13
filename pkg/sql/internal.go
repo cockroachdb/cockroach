@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -83,6 +84,9 @@ type internalExecutorImpl struct {
 	// parent session state if need be, but then we'd need to share a
 	// sessionDataMutator.
 	sessionData *sessiondata.SessionData
+
+	// AutoStatsCtx stores any context used by automatic statistics code.
+	autoStatsCtx stats.AutoStatsCtx
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
@@ -100,9 +104,10 @@ func MakeInternalExecutor(
 	)
 	return InternalExecutor{
 		internalExecutorImpl: internalExecutorImpl{
-			s:          s,
-			mon:        &monitor,
-			memMetrics: memMetrics,
+			s:            s,
+			mon:          &monitor,
+			memMetrics:   memMetrics,
+			autoStatsCtx: stats.MakeAutoStatsCtx(),
 		},
 	}
 }
@@ -132,7 +137,8 @@ func MakeSessionBoundInternalExecutor(
 			memMetrics: memMetrics,
 			// The internal executor gets a copy of the session data, so it can't
 			// update the parent session.
-			sessionData: &dataCopy,
+			sessionData:  &dataCopy,
+			autoStatsCtx: stats.MakeAutoStatsCtx(),
 		},
 	}
 }
@@ -367,6 +373,11 @@ func (ie *SessionBoundInternalExecutor) Exec(
 		return 0, err
 	}
 	return res.rowsAffected, res.err
+}
+
+// AutoStatsCtx returns the AutoStatsCtx stored in this InternalExecutor.
+func (ie *InternalExecutor) AutoStatsCtx() *stats.AutoStatsCtx {
+	return &ie.autoStatsCtx
 }
 
 type result struct {

@@ -803,4 +803,33 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	if recv.resultWriter.Err() == nil {
+		if err := dsp.logEvents(ctx, evalCtx, txn, plan); err != nil {
+			recv.SetError(err)
+			return
+		}
+	}
+}
+
+// logEvents logs events in the system.eventlog table for successful completion
+// of some types of operations.
+func (dsp *DistSQLPlanner) logEvents(
+	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn, plan planNode,
+) error {
+	switch n := plan.(type) {
+	case *createStatsNode:
+		// Record this statistics creation in the event log.
+		return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
+			ctx,
+			txn,
+			EventLogCreateStatistics,
+			int32(n.tableDesc.ID),
+			int32(evalCtx.NodeID),
+			struct {
+				StatisticName string
+				Statement     string
+			}{n.Name.String(), n.String()},
+		)
+	}
+	return nil
 }
