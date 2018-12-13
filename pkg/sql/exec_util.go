@@ -351,6 +351,7 @@ type ExecutorConfig struct {
 	VirtualSchemas   *VirtualSchemaHolder
 	DistSQLPlanner   *DistSQLPlanner
 	TableStatsCache  *stats.TableStatisticsCache
+	StatsRefresher   *stats.Refresher
 	ExecLogger       *log.SecondaryLogger
 	AuditLogger      *log.SecondaryLogger
 	InternalExecutor *InternalExecutor
