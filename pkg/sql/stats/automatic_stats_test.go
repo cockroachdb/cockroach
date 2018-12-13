@@ -1,0 +1,329 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package stats
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+func TestMaybeRefreshStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
+		INSERT INTO t.a VALUES (1, 'a');`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	descA := sqlbase.GetTableDescriptor(s.DB(), "t", "a")
+	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
+	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+
+	// There should not be any stats yet.
+	if err := checkStatsCount(ctx, cache, descA.ID, 0 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// There are no stats yet, so this must refresh the statistics on table t
+	// even though rowsAffected=0.
+	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to refresh again. With rowsAffected=0, the probability of a refresh
+	// is 0, so refreshing will not succeed.
+	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// With rowsAffected=10, refreshing should work. Since there are more rows
+	// updated than exist in the table, the probability of a refresh is 100%.
+	// Use a non-zero asOf time to test that the thread will sleep if necessary.
+	refresher.maybeRefreshStats(ctx, descA.ID, 10 /* rowsAffected */, time.Second /* asOf */)
+	if err := checkStatsCount(ctx, cache, descA.ID, 2 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAverageRefreshTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
+		INSERT INTO t.a VALUES (1, 'a');`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	tableID := sqlbase.GetTableDescriptor(s.DB(), "t", "a").ID
+	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
+	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+
+	checkAverageRefreshTime := func(expected time.Duration) error {
+		cache.InvalidateTableStats(ctx, tableID)
+		stats, err := cache.GetTableStats(ctx, tableID)
+		if err != nil {
+			return err
+		}
+		if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
+			return fmt.Errorf("expected avgRefreshTime %s but found %s",
+				expected.String(), actual.String())
+		}
+		return nil
+	}
+
+	// Checks that the most recent statistic was created less than (greater than)
+	// expectedAge time ago if lessThan is true (false).
+	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
+		cache.InvalidateTableStats(ctx, tableID)
+		stats, err := cache.GetTableStats(ctx, tableID)
+		if err != nil {
+			return err
+		}
+		stat := mostRecentAutomaticStat(stats)
+		if stat == nil {
+			return fmt.Errorf("no recent automatic statistic found")
+		}
+		if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
+			return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
+				expectedAge, stat.CreatedAt, timeutil.Now(),
+			)
+		}
+		if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
+			return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
+				expectedAge, stat.CreatedAt, timeutil.Now(),
+			)
+		}
+		return nil
+	}
+
+	// Since there are no stats yet, avgRefreshTime should return the default
+	// value.
+	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
+		t.Fatal(err)
+	}
+
+	insertStat := func(
+		txn *client.Txn, name string, columnIDs *tree.DArray, createdAt *tree.DTimestamp,
+	) error {
+		_, err := executor.Exec(
+			ctx, "insert-statistic", txn,
+			`INSERT INTO system.table_statistics (
+					  "tableID",
+					  "name",
+					  "columnIDs",
+					  "createdAt",
+					  "rowCount",
+					  "distinctCount",
+					  "nullCount"
+				  ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			tableID,
+			name,
+			columnIDs,
+			createdAt,
+			1, /* rowCount */
+			1, /* distinctCount */
+			0, /* nullCount */
+		)
+		return err
+	}
+
+	// Add some stats on column k in table a with a name different from
+	// autoStatsName, separated by three hours each, starting 7 hours ago.
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for i := 0; i < 10; i++ {
+			columnIDsVal := tree.NewDArray(types.Int)
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
+				return err
+			}
+			createdAt := tree.MakeDTimestamp(
+				timeutil.Now().Add(time.Duration(-1*(i*3+7))*time.Hour), time.Hour,
+			)
+			name := fmt.Sprintf("stat%d", i)
+			if err := insertStat(txn, name, columnIDsVal, createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkStatsCount(ctx, cache, tableID, 10 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// None of the stats have the name autoStatsName, so avgRefreshTime
+	// should still return the default value.
+	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some stats on column v in table a with name autoStatsName, separated
+	// by three hours each, starting 6 hours ago.
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for i := 0; i < 10; i++ {
+			columnIDsVal := tree.NewDArray(types.Int)
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(2))); err != nil {
+				return err
+			}
+			createdAt := tree.MakeDTimestamp(
+				timeutil.Now().Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
+			)
+			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkStatsCount(ctx, cache, tableID, 20 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the calculated average refresh time is four hours. Even though
+	// the average time between all stats just added is less than four hours, we
+	// should only calculate the average based on stats with the name __auto__,
+	// and only on the automatic column statistic that was most recently updated
+	// (in this case, column v, 6 hours ago).
+	if err := checkAverageRefreshTime(4 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the most recent stat is less than 8 hours old.
+	if err := checkMostRecentStat(8*time.Hour, true /* lessThan */); err != nil {
+		t.Fatal(err)
+	}
+
+	// The most recent stat is less than 8 hours old, which is less than 2x the
+	// average time between refreshes, so this call is not required to refresh
+	// the statistics on table t. With rowsAffected=0, the probability of refresh
+	// is 0.
+	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	if err := checkStatsCount(ctx, cache, tableID, 20 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some stats on column k in table a with name autoStatsName, separated
+	// by 1.5 hours each, starting 5 hours ago.
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for i := 0; i < 10; i++ {
+			columnIDsVal := tree.NewDArray(types.Int)
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
+				return err
+			}
+			createdAt := tree.MakeDTimestamp(
+				timeutil.Now().Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
+			)
+			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkStatsCount(ctx, cache, tableID, 30 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the calculated average refresh time is 1.5 hours, based on the
+	// automatic column statistic that was most recently updated (in this case,
+	// column k, 5 hours ago).
+	if err := checkAverageRefreshTime(90 * time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the most recent stat is over 4 hours old.
+	if err := checkMostRecentStat(4*time.Hour, false /* lessThan */); err != nil {
+		t.Fatal(err)
+	}
+
+	// The most recent stat is over 4 hours old, which is more than 2x the
+	// average time between refreshes, so this call must refresh the statistics
+	// on table t even though rowsAffected=0. After refresh, only 15 stats should
+	// remain (5 from column k and 10 from column v), since the old stats on k
+	// were deleted.
+	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	if err := checkStatsCount(ctx, cache, tableID, 15 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMutationsChannel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, true)
+	r := Refresher{mutations: make(chan mutation, refreshChanBufferLen)}
+
+	// Test that the mutations channel doesn't block even when we add 10 more
+	// items than can fit in the buffer.
+	for i := 0; i < refreshChanBufferLen+10; i++ {
+		r.NotifyMutation(evalCtx, sqlbase.ID(53), 5 /* rowsAffected */)
+	}
+
+	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
+		t.Fatalf("expected channel size %d but found %d", expected, actual)
+	}
+}
+
+func checkStatsCount(
+	ctx context.Context, cache *TableStatisticsCache, tableID sqlbase.ID, expected int,
+) error {
+	cache.InvalidateTableStats(ctx, tableID)
+	stats, err := cache.GetTableStats(ctx, tableID)
+	if err != nil {
+		return err
+	}
+	if len(stats) != expected {
+		return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
+	}
+	return nil
+}
