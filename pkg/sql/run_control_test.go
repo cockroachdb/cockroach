@@ -450,9 +450,11 @@ func TestCancelIfExists(t *testing.T) {
 }
 
 func isClientsideQueryCanceledErr(err error) bool {
-	pqErr, ok := err.(*pq.Error)
-	if !ok {
-		return false
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		return pgErr.Code == pgerror.CodeQueryCanceledError
 	}
-	return pqErr.Code == pgerror.CodeQueryCanceledError
+	if pqErr, ok := err.(*pq.Error); ok {
+		return pqErr.Code == pgerror.CodeQueryCanceledError
+	}
+	return false
 }
