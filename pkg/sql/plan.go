@@ -93,6 +93,11 @@ func (r *runParams) SessionData() *sessiondata.SessionData {
 	return r.extendedEvalCtx.SessionData
 }
 
+// ExecCfg gives convenient access to the runParam's ExecutorConfig.
+func (r *runParams) ExecCfg() *ExecutorConfig {
+	return r.extendedEvalCtx.ExecCfg
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases
