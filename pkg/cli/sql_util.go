@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -214,9 +214,9 @@ func (c *sqlConn) checkServerMetadata() error {
 		}
 		fmt.Printf("# Server version: %s%s\n", c.serverBuild, isSame)
 
-		sv, err := version.NewVersion(c.serverVersion)
+		sv, err := version.Parse(c.serverVersion)
 		if err == nil {
-			cv, err := version.NewVersion(client.Tag)
+			cv, err := version.Parse(client.Tag)
 			if err == nil {
 				if sv.Compare(cv) == -1 { // server ver < client ver
 					fmt.Fprintln(stderr, "\nwarning: server version older than client! "+
@@ -245,23 +245,19 @@ func (c *sqlConn) checkServerMetadata() error {
 }
 
 // requireServerVersion returns an error if the version of the connected server
-// does not match the constraints in constraintString.
-func (c *sqlConn) requireServerVersion(constraintString string) error {
+// is not at least the given version.
+func (c *sqlConn) requireServerVersion(required *version.Version) error {
 	versionString, _, err := c.getServerMetadata()
 	if err != nil {
 		return err
 	}
-	constraints, err := version.NewConstraint(constraintString)
+	vers, err := version.Parse(versionString)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to parse server version %q", versionString)
 	}
-	vers, err := version.NewVersion(versionString)
-	if err != nil {
-		return fmt.Errorf("unable to parse server version %q", c.serverVersion)
-	}
-	if !constraints.Check(vers) {
+	if !vers.AtLeast(required) {
 		return fmt.Errorf("incompatible client and server versions (detected server version: %s, required: %s)",
-			vers, constraints)
+			vers, required)
 	}
 	return nil
 }

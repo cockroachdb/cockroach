@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
@@ -55,12 +55,11 @@ func SeemsOfficial() bool {
 
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		return "dev"
 	}
-	semVer := v.Segments()[:2]
-	return fmt.Sprintf("v%d.%d", semVer[0], semVer[1])
+	return fmt.Sprintf("v%d.%d", v.Major(), v.Minor())
 }
 
 func init() {

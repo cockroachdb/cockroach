@@ -25,8 +25,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/google/go-github/github"
-	version "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
@@ -161,17 +161,13 @@ func getProbableMilestone(
 		return nil
 	}
 
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		log.Printf("unable to parse version from tag: %s", err)
 		log.Printf("issues will be posted without milestone")
 		return nil
 	}
-	if len(v.Segments()) < 2 {
-		log.Printf("version %s has less than two components; issues will be posted without milestone", tag)
-		return nil
-	}
-	vstring := fmt.Sprintf("%d.%d", v.Segments()[0], v.Segments()[1])
+	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 
 	milestones, _, err := listMilestones(ctx, githubUser, githubRepo, &github.MilestoneListOptions{
 		State: "open",

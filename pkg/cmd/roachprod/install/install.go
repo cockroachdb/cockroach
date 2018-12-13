@@ -19,8 +19,6 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-
-	"github.com/hashicorp/go-version"
 )
 
 // Clusters memoizes cluster info for install operations
@@ -188,13 +186,4 @@ func Install(c *SyncedCluster, args []string) error {
 		}
 	}
 	return nil
-}
-
-// VersionSatifies TODO(peter): document
-func VersionSatifies(v *version.Version, constraintString string) bool {
-	constraints, err := version.NewConstraint(constraintString)
-	if err != nil {
-		panic(err)
-	}
-	return constraints.Check(v)
 }

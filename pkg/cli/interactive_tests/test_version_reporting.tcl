@@ -68,9 +68,9 @@ eexpect eof
 stop_server $argv
 
 start_test "Check that the client picks up a new server version, and warns about lower versions."
-set env(COCKROACH_TESTING_VERSION_TAG) "v0.1-fakever"
+set env(COCKROACH_TESTING_VERSION_TAG) "v0.1.0-fakever"
 start_server $argv
-set env(COCKROACH_TESTING_VERSION_TAG) "v0.2-fakever"
+set env(COCKROACH_TESTING_VERSION_TAG) "v0.2.0-fakever"
 spawn $argv sql
 send "select 1;\r"
 eexpect "# Client version: CockroachDB"

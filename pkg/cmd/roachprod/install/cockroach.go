@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pkg/errors"
 )
 
@@ -100,11 +100,7 @@ func getCockroachVersion(c *SyncedCluster, i int) (*version.Version, error) {
 		return nil, fmt.Errorf("unable to parse cockroach version output:%s", out)
 	}
 
-	version, err := version.NewVersion(string(matches[1]))
-	if err != nil {
-		return nil, err
-	}
-	return version, nil
+	return version.Parse(string(matches[1]))
 }
 
 // GetAdminUIPort returns the admin UI port for ths specified RPC port.
@@ -320,7 +316,7 @@ tar cvf certs.tar certs
 		}
 		args = append(args, "--log-dir="+logDir)
 		args = append(args, "--background")
-		if VersionSatifies(vers, ">=1.1") {
+		if vers.AtLeast(version.MustParse("v1.1.0")) {
 			cache := 25
 			if c.IsLocal() {
 				cache /= len(nodes)
@@ -333,7 +329,7 @@ tar cvf certs.tar certs
 		}
 		if c.IsLocal() {
 			// This avoids annoying firewall prompts on Mac OS X.
-			if VersionSatifies(vers, ">=2.1") {
+			if vers.AtLeast(version.MustParse("v2.1.0")) {
 				args = append(args, "--listen-addr=127.0.0.1")
 			} else {
 				args = append(args, "--host=127.0.0.1")
