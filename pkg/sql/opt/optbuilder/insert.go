@@ -52,6 +52,12 @@ import (
 //   SELECT aa, bb, cc, bb + cc AS dd
 //   FROM (VALUES (1, NULL, 10)) AS t(aa, bb, cc)
 //
+// Note that an ordered input to the INSERT does not provide any guarantee about
+// the order in which mutations are applied, or the order of any returned rows
+// (i.e. it won't become a physical property required of the Insert or Upsert
+// operator). Not propagating input orderings avoids an extra sort when the
+// ON CONFLICT clause is present, since it joins a new set of rows to the input
+// and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	if ins.OnConflict != nil {
 		panic(unimplementedf("UPSERT is not supported"))

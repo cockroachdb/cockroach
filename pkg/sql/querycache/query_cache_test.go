@@ -139,3 +139,35 @@ func TestSynchronization(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// BenchmarkQueryCache is a worst case benchmark where every session misses the
+// cache. The result of the benchmark is the time to do a pair of Find, Add
+// operations.
+func BenchmarkQueryCache(b *testing.B) {
+	// Run a worst case benchmark where every worker misses the cache.
+	for _, numWorkers := range []int{1, 10, 100} {
+		b.Run(fmt.Sprintf("%d", numWorkers), func(b *testing.B) {
+			const cacheSize = 10
+			c := New(cacheSize * maxCachedSize)
+			numOpsPerWorker := (b.N + numWorkers - 1) / numWorkers
+			var wg sync.WaitGroup
+			wg.Add(numWorkers)
+			for i := 0; i < numWorkers; i++ {
+				workerID := i
+				go func() {
+					cd := CachedData{Memo: &memo.Memo{}}
+					for j := 0; j < numOpsPerWorker; j++ {
+						str := fmt.Sprintf("%d/%d", workerID, j)
+						if _, ok := c.Find(str); ok {
+							panic("found")
+						}
+						cd.SQL = str
+						c.Add(&cd)
+					}
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+		})
+	}
+}

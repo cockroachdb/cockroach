@@ -295,7 +295,7 @@ CREATE TABLE select_t (x INT, v INT)
 # Check that INSERT supports ORDER BY (MySQL extension)
 query TTT
 SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ]
 ----
 count                          ·         ·
@@ -304,13 +304,11 @@ count                          ·         ·
       └── render               ·         ·
            │                   render 0  x
            │                   render 1  v
-           │                   render 2  column7
-           └── sort            ·         ·
-                │              order     -v
-                └── render     ·         ·
-                     │         render 0  unique_rowid()
-                     │         render 1  x
-                     │         render 2  v
+           │                   render 2  unique_rowid()
+           └── limit           ·         ·
+                │              count     10
+                └── sort       ·         ·
+                     │         order     -v
                      └── scan  ·         ·
 ·                              table     select_t@primary
 ·                              spans     ALL
@@ -390,27 +388,29 @@ count                            ·      ·
 
 # ORDER BY expression that's not inserted into table.
 query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v) RETURNING x+v
+EXPLAIN (VERBOSE)
+INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-render                              ·         ·                      ("?column?")                            ·
- │                                  render 0  x + v                  ·                                       ·
- └── run                            ·         ·                      (x, v, rowid[hidden])                   ·
-      └── insert                    ·         ·                      (x, v, rowid[hidden])                   ·
-           │                        into      insert_t(x, v, rowid)  ·                                       ·
-           └── render               ·         ·                      (length, "?column?", column9)           ·
-                │                   render 0  length                 ·                                       ·
-                │                   render 1  "?column?"             ·                                       ·
-                │                   render 2  column9                ·                                       ·
-                └── sort            ·         ·                      (column9, length, "?column?", column8)  +column8
-                     │              order     +column8               ·                                       ·
-                     └── render     ·         ·                      (column9, length, "?column?", column8)  ·
-                          │         render 0  unique_rowid()         ·                                       ·
-                          │         render 1  length(k)              ·                                       ·
-                          │         render 2  2                      ·                                       ·
-                          │         render 3  k || v                 ·                                       ·
-                          └── scan  ·         ·                      (k, v)                                  ·
-·                                   table     kv@primary             ·                                       ·
-·                                   spans     ALL                    ·                                       ·
+render                                   ·         ·                      ("?column?")                   ·
+ │                                       render 0  x + v                  ·                              ·
+ └── run                                 ·         ·                      (x, v, rowid[hidden])          ·
+      └── insert                         ·         ·                      (x, v, rowid[hidden])          ·
+           │                             into      insert_t(x, v, rowid)  ·                              ·
+           └── render                    ·         ·                      (length, "?column?", column9)  ·
+                │                        render 0  length                 ·                              ·
+                │                        render 1  "?column?"             ·                              ·
+                │                        render 2  unique_rowid()         ·                              ·
+                └── limit                ·         ·                      (length, "?column?", column8)  +column8
+                     │                   count     10                     ·                              ·
+                     └── sort            ·         ·                      (length, "?column?", column8)  +column8
+                          │              order     +column8               ·                              ·
+                          └── render     ·         ·                      (length, "?column?", column8)  ·
+                               │         render 0  length(k)              ·                              ·
+                               │         render 1  2                      ·                              ·
+                               │         render 2  k || v                 ·                              ·
+                               └── scan  ·         ·                      (k, v)                         ·
+·                                        table     kv@primary             ·                              ·
+·                                        spans     ALL                    ·                              ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
