@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -789,4 +790,34 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 			t.Errorf("put: expected no error, but got %s", err)
 		}
 	}
+}
+
+// TestCommitBatchLogData is a regression test against a bug that would
+// accidentally make Commit a no-op (via an errant fast-path) when a batch
+// contained only LogData.
+func TestWCommitBatchLogData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	inMem := NewInMem(inMemAttrs, testCacheSize)
+	stopper.AddCloser(inMem)
+
+	testutils.RunTrueAndFalse(t, "distinct", func(t *testing.T, distinct bool) {
+		batch := inMem.NewBatch()
+		defer batch.Close()
+
+		var writer ReadWriter = batch
+
+		if distinct {
+			writer = batch.Distinct()
+			defer writer.Close()
+		}
+		if err := writer.LogData([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if batch.Empty() {
+			t.Fatal("batch is not empty")
+		}
+	})
 }
