@@ -98,11 +98,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			d := t.ColumnDef
 			if len(d.CheckExprs) > 0 {
 				return pgerror.UnimplementedWithIssueError(29639,
-					"adding a CHECK constraint via ALTER not supported")
+					"adding a CHECK constraint while also adding a column via ALTER not supported")
 			}
 			if d.HasFKConstraint() {
-				return pgerror.UnimplementedWithIssueError(8855,
-					"adding a REFERENCES constraint via ALTER not supported")
+				return pgerror.UnimplementedWithIssueError(32917,
+					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
 
 			newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
