@@ -203,8 +203,12 @@ type queueConfig struct {
 	// concurrently. If not set, defaults to 1.
 	maxConcurrency int
 	// needsLease controls whether this queue requires the range lease to
-	// operate on a replica.
+	// operate on a replica. If so, one will be acquired if necessary.
 	needsLease bool
+	// needsRaftInitialized controls whether the Raft group will be initialized
+	// (if not already initialized) when deciding whether to process this
+	// replica.
+	needsRaftInitialized bool
 	// needsSystemConfig controls whether this queue requires a valid copy of the
 	// system config to operate on a replica. Not all queues require it, and it's
 	// unsafe for certain queues to wait on it. For example, a raft snapshot may
@@ -428,6 +432,10 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 
 	if !repl.IsInitialized() {
 		return
+	}
+
+	if bq.needsRaftInitialized {
+		repl.maybeInitializeRaftGroup(ctx)
 	}
 
 	if cfg != nil && bq.requiresSplit(cfg, repl) {
