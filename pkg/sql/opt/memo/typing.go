@@ -137,6 +137,7 @@ func init() {
 	typingFuncMap[opt.IndirectionOp] = typeIndirection
 	typingFuncMap[opt.CollateOp] = typeCollate
 	typingFuncMap[opt.ArrayFlattenOp] = typeArrayFlatten
+	typingFuncMap[opt.IfErrOp] = typeIfErr
 
 	// Override default typeAsAggregate behavior for aggregate functions with
 	// a large number of possible overloads or where ReturnType depends on
@@ -205,6 +206,15 @@ func typeArrayFlatten(e opt.ScalarExpr) types.T {
 	return types.TArray{
 		Typ: input.Memo().Metadata().ColumnType(opt.ColumnID(colID)),
 	}
+}
+
+// typeIfErr returns the type of the IfErrExpr. The type is boolean if
+// there is no OrElse, and the type of Cond/OrElse otherwise.
+func typeIfErr(e opt.ScalarExpr) types.T {
+	if e.(*IfErrExpr).OrElse.ChildCount() == 0 {
+		return types.Bool
+	}
+	return e.(*IfErrExpr).Cond.DataType()
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.

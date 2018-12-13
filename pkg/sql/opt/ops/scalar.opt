@@ -592,6 +592,29 @@ define Cast {
     TargetTyp ColType
 }
 
+# IfErr is roughly a runtime try-catch operator. It has different semantics
+# depending on which of its fields are set.
+#
+# If ErrCode is set, only errors which match the given error code will be
+# caught. If ErrCode is not set, all errors will be caught.
+#
+# If OrElse is not set, IfErr evaluates to true or false indicating whether an
+# error was caught.  If OrElse is set, IfErr evaluates to Cond if no error was
+# caught and to OrElse if an error was caught.
+#
+# TODO(justin): The implementation here is a hack: ErrCode and OrElse are
+# optional, so we repurpose lists as an optional field (since it's not
+# valid to use nil). If this comes up again, we might want to consider
+# adding an explicit Option type.
+[Scalar]
+define IfErr {
+    Cond ScalarExpr
+    # OrElse and ErrCode will be lists with a single element if their respective
+    # values are set, and empty lists otherwise.
+    OrElse  ScalarListExpr
+    ErrCode ScalarListExpr
+}
+
 # Case is a CASE statement of the form:
 #
 #   CASE [ <Input> ]

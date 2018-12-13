@@ -390,6 +390,23 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 			tp.Child("filters (true)")
 			return
 		}
+
+	case opt.IfErrOp:
+		f.Buffer.Reset()
+		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
+		f.FormatScalarProps(scalar)
+
+		tp = tp.Child(f.Buffer.String())
+
+		f.formatExpr(scalar.Child(0), tp)
+		if scalar.Child(1).ChildCount() > 0 {
+			f.formatExpr(scalar.Child(1), tp.Child("else"))
+		}
+		if scalar.Child(2).ChildCount() > 0 {
+			f.formatExpr(scalar.Child(2), tp.Child("err-code"))
+		}
+
+		return
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
