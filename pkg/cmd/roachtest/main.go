@@ -74,6 +74,8 @@ func main() {
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
 
+	var listBench bool
+
 	var listCmd = &cobra.Command{
 		Use:   "list [tests]",
 		Short: "list tests matching the patterns",
