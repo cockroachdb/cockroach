@@ -114,13 +114,14 @@ DBString DBEngine::GetUserProperties() {
 namespace cockroach {
 
 DBImpl::DBImpl(rocksdb::DB* r, std::unique_ptr<EnvManager> e, std::shared_ptr<rocksdb::Cache> bc,
-               std::shared_ptr<DBEventListener> event_listener)
+               std::shared_ptr<DBEventListener> event_listener, bool skip_wal)
     : DBEngine(r, &iters_count),
       env_mgr(std::move(e)),
       rep_deleter(r),
       block_cache(bc),
       event_listener(event_listener),
-      iters_count(0) {}
+      iters_count(0),
+      skip_wal(skip_wal) {}
 
 DBImpl::~DBImpl() {
   const rocksdb::Options& opts = rep->GetOptions();
@@ -171,6 +172,7 @@ DBStatus DBImpl::ApplyBatchRepr(DBSlice repr, bool sync) {
   rocksdb::WriteBatch batch(ToString(repr));
   rocksdb::WriteOptions options;
   options.sync = sync;
+  options.disableWAL = skip_wal;
   return ToDBStatus(rep->Write(options, &batch));
 }
 

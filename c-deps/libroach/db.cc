@@ -250,7 +250,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
     return ToDBStatus(status);
   }
   *db = new DBImpl(db_ptr, std::move(env_mgr),
-                   db_opts.cache != nullptr ? db_opts.cache->rep : nullptr, event_listener);
+                   db_opts.cache != nullptr ? db_opts.cache->rep : nullptr, event_listener, db_opts.skip_wal);
   return kSuccess;
 }
 

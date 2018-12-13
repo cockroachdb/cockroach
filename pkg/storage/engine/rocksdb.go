@@ -448,6 +448,8 @@ type RocksDBConfig struct {
 	// MaxOpenFiles controls the maximum number of file descriptors RocksDB
 	// creates. If MaxOpenFiles is zero, this is set to DefaultMaxOpenFiles.
 	MaxOpenFiles uint64
+	// SkipWAL causes write batches to be applied without writing to the WAL.
+	SkipWAL bool
 	// WarnLargeBatchThreshold controls if a log message is printed when a
 	// WriteBatch takes longer than WarnLargeBatchThreshold. If it is set to
 	// zero, no log messages are ever printed.
@@ -620,6 +622,7 @@ func (r *RocksDB) open() error {
 			use_file_registry: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
 			read_only:         C.bool(r.cfg.ReadOnly),
+			skip_wal:          C.bool(r.cfg.SkipWAL),
 			rocksdb_options:   goToCSlice([]byte(r.cfg.RocksDBOptions)),
 			extra_options:     goToCSlice(r.cfg.ExtraOptions),
 		})

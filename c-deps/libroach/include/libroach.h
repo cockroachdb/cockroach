@@ -80,6 +80,7 @@ typedef struct {
   bool use_file_registry;
   bool must_exist;
   bool read_only;
+  bool skip_wal;
   DBSlice rocksdb_options;
   DBSlice extra_options;
 } DBOptions;

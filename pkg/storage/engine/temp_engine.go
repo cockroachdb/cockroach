@@ -39,6 +39,7 @@ func NewTempEngine(
 		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
 		UseFileRegistry: storeSpec.UseFileRegistry,
 		ExtraOptions:    storeSpec.ExtraOptions,
+		SkipWAL:         true,
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)

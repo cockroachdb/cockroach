@@ -68,12 +68,13 @@ struct DBImpl : public DBEngine {
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
   std::atomic<int64_t> iters_count;
+  bool skip_wal;
 
   // Construct a new DBImpl from the specified DB.
   // The DB and passed Envs will be deleted when the DBImpl is deleted.
   // Either env can be NULL.
   DBImpl(rocksdb::DB* r, std::unique_ptr<EnvManager> e, std::shared_ptr<rocksdb::Cache> bc,
-         std::shared_ptr<DBEventListener> event_listener);
+         std::shared_ptr<DBEventListener> event_listener, bool skip_wal);
   virtual ~DBImpl();
 
   virtual DBStatus AssertPreClose();
