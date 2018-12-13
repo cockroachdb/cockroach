@@ -50,6 +50,7 @@ func registerTests(r *registry) {
 	registerLargeRange(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
+	registerReplicaGC(r)
 	registerRestore(r)
 	registerRoachmart(r)
 	registerScaleData(r)
