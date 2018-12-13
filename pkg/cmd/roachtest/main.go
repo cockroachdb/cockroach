@@ -75,6 +75,7 @@ func main() {
 	f.NoOptDefVal = "true"
 
 	var listBench bool
+	tag := "!weekly"
 
 	var listCmd = &cobra.Command{
 		Use:   "list [tests]",
@@ -84,7 +85,16 @@ func main() {
 If no pattern is passed, all tests are matched.
 Use --bench to list benchmarks instead of tests.
 
-Example: roachtest list acceptance copy/bank/.*false
+The --tag flag can be used as alternative means of filtering the tests, but
+instead of matching against the test name it matches against the test tag. If
+the flag begins with !, then the filter is inverted, excluding any tests with a
+matching tag.
+
+Examples:
+
+   roachtest list acceptance copy/bank/.*false
+   roachtest list --tag weekly
+   roachtest list --tag !weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := newRegistry()
@@ -101,7 +111,7 @@ Example: roachtest list acceptance copy/bank/.*false
 				registerBenchmarks(r)
 			}
 
-			names := r.ListAll(args)
+			names := r.ListAll(args, tag)
 			for _, name := range names {
 				fmt.Println(name)
 			}
@@ -110,6 +120,8 @@ Example: roachtest list acceptance copy/bank/.*false
 	}
 	listCmd.Flags().BoolVar(
 		&listBench, "bench", false, "list benchmarks instead of tests")
+	listCmd.Flags().StringVar(
+		&tag, "tag", tag, "list tests that match tag")
 
 	var runCmd = &cobra.Command{
 		Use:   "run [tests]",
@@ -117,7 +129,8 @@ Example: roachtest list acceptance copy/bank/.*false
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
 roachtest run takes a list of regex patterns and runs all the matching tests.
-If no pattern is given, all tests are run.
+If no pattern is given, all tests are run. See "help list" for more details on
+the --tag flag.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if count <= 0 {
@@ -133,7 +146,7 @@ If no pattern is given, all tests are run.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
+			os.Exit(r.Run(args, tag, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}
@@ -155,7 +168,7 @@ If no pattern is given, all tests are run.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
+			os.Exit(r.Run(args, tag, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}
@@ -176,6 +189,8 @@ If no pattern is given, all tests are run.
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
 			&roachprod, "roachprod", "", "path to roachprod binary to use")
+		cmd.Flags().StringVar(
+			&tag, "tag", tag, "run tests that match tag")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -195,7 +210,7 @@ Cockroach cluster with existing data.
 			registerStoreGen(r, args)
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */, parallelism, artifacts, getUser(username)))
+			os.Exit(r.Run(nil /* filter */, "" /* tag */, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}

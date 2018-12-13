@@ -46,25 +46,42 @@ var (
 	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
+// testFilter holds the name and tag filters for filtering tests.
 type testFilter struct {
-	*regexp.Regexp
-	includeManual bool
+	name       *regexp.Regexp
+	tag        *regexp.Regexp
+	tagExclude bool // invert the sense of tag filtering
 }
 
-func makeFilterRE(filter []string) *testFilter {
-	if len(filter) == 0 {
-		return &testFilter{
-			Regexp:        regexp.MustCompile(`.`),
-			includeManual: false,
+func newFilter(name []string, tag string) *testFilter {
+	f := &testFilter{}
+	if len(name) == 0 {
+		f.name = regexp.MustCompile(`.`)
+	} else {
+		for i := range name {
+			name[i] = "(" + name[i] + ")"
 		}
+		f.name = regexp.MustCompile(strings.Join(name, "|"))
 	}
-	for i := range filter {
-		filter[i] = "(" + filter[i] + ")"
+
+	if len(tag) == 0 {
+		tag = `.*`
+	} else if tag[0] == '!' {
+		tag = tag[1:]
+		f.tagExclude = true
 	}
-	return &testFilter{
-		Regexp:        regexp.MustCompile(strings.Join(filter, "|")),
-		includeManual: true,
+	f.tag = regexp.MustCompile(tag)
+	return f
+}
+
+func (f *testFilter) match(name, tag string) bool {
+	if !f.name.MatchString(name) {
+		return false
 	}
+	if f.tag.MatchString(tag) {
+		return !f.tagExclude
+	}
+	return f.tagExclude
 }
 
 type testSpec struct {
@@ -86,10 +103,11 @@ type testSpec struct {
 	// skipped.
 	MinVersion string
 	minVersion *version.Version
-	// Manual indicates that the test will not be automatically run unless a
-	// filter explicitly matches it. This causes `run` and `run .` to behave
-	// differently (only the latter will match a "manual" test).
-	Manual bool
+	// Tag is an arbitrary string that can be used to group tests on a criteria
+	// other than name. For example, the acceptance tests can use the tag
+	// "acceptance" while weekly tests use the tag "weekly". The tag is matched
+	// against the tagFilter passed to registry.{ListAll,Run}.
+	Tag string
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
@@ -105,10 +123,7 @@ type testSpec struct {
 // matchRegex returns true if the regex matches the test's name or any of the
 // subtest names.
 func (t *testSpec) matchRegex(filter *testFilter) bool {
-	if t.Manual && !filter.includeManual {
-		return false
-	}
-	if filter.Regexp.MatchString(t.Name) {
+	if filter.match(t.Name, t.Tag) {
 		return true
 	}
 	for i := range t.SubTests {
@@ -120,11 +135,8 @@ func (t *testSpec) matchRegex(filter *testFilter) bool {
 }
 
 func (t *testSpec) matchRegexRecursive(filter *testFilter) []testSpec {
-	if t.Manual && !filter.includeManual {
-		return nil
-	}
 	var res []testSpec
-	if filter.Regexp.MatchString(t.Name) {
+	if filter.match(t.Name, t.Tag) {
 		res = append(res, *t)
 	}
 	for i := range t.SubTests {
@@ -330,11 +342,11 @@ func (r *registry) ListTopLevel(filter *testFilter) []*testSpec {
 // ListAll lists all tests that match one of the filters. If a subtest matches
 // but a parent doesn't, only the subtest is returned. If a parent matches, all
 // subtests are returned.
-func (r *registry) ListAll(filter []string) []string {
-	filterRE := makeFilterRE(filter)
+func (r *registry) ListAll(name []string, tag string) []string {
+	filter := newFilter(name, tag)
 	var tests []testSpec
 	for _, t := range r.m {
-		tests = append(tests, t.matchRegexRecursive(filterRE)...)
+		tests = append(tests, t.matchRegexRecursive(filter)...)
 	}
 	var names []string
 	for _, t := range tests {
@@ -359,10 +371,12 @@ func (r *registry) ListAll(filter []string) []string {
 // Args:
 // artifactsDir: The path to the dir where log files will be put. If empty, all
 //   logging will go to stdout/stderr.
-func (r *registry) Run(filter []string, parallelism int, artifactsDir string, user string) int {
-	filterRE := makeFilterRE(filter)
+func (r *registry) Run(
+	name []string, tag string, parallelism int, artifactsDir string, user string,
+) int {
+	filter := newFilter(name, tag)
 	// Find the top-level tests to run.
-	tests := r.ListTopLevel(filterRE)
+	tests := r.ListTopLevel(filter)
 
 	// Skip any tests for which the min-version is less than the build-version.
 	for _, t := range tests {
@@ -422,7 +436,7 @@ func (r *registry) Run(filter []string, parallelism int, artifactsDir string, us
 				}
 
 				r.runAsync(
-					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
+					ctx, tests[i], filter, nil /* parent */, nil, /* cluster */
 					runNum, teeOpt, runDir, user, func(failed bool) {
 						wg.Done()
 						<-sem

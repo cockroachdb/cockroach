@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -34,6 +33,37 @@ import (
 )
 
 const defaultParallelism = 10
+
+func TestFilterMatch(t *testing.T) {
+	testCases := []struct {
+		nameFilter []string
+		tagFilter  string
+		name       string
+		tag        string
+		expected   bool
+	}{
+		{nil, "", "foo", "", true},
+		{nil, "", "foo", "bar", true},
+		{nil, "b", "foo", "bar", true},
+		{nil, "!b", "foo", "bar", false},
+		{nil, "b", "foo", "", false},
+		{nil, "!b", "foo", "", true},
+		{nil, "f", "foo", "bar", false},
+		{nil, "!f", "foo", "bar", true},
+		{[]string{"f"}, "", "foo", "bar", true},
+		{[]string{"f"}, "", "bar", "bar", false},
+		{[]string{"f"}, "b", "foo", "bar", true},
+		{[]string{"f"}, "f", "foo", "bar", false},
+	}
+	for _, c := range testCases {
+		t.Run(c.name+"-"+c.tag, func(t *testing.T) {
+			f := newFilter(c.nameFilter, c.tagFilter)
+			if value := f.match(c.name, c.tag); c.expected != value {
+				t.Fatalf("expected %t, but found %t", c.expected, value)
+			}
+		})
+	}
+}
 
 func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
@@ -63,42 +93,9 @@ func TestRegistryRun(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			code := r.Run(c.filters, defaultParallelism, "" /* artifactsDir */, "myuser")
+			code := r.Run(c.filters, "", defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expected != code {
 				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
-			}
-		})
-	}
-}
-
-func TestRegistryListAll(t *testing.T) {
-	r := newRegistry()
-	r.out = ioutil.Discard
-	r.Add(testSpec{
-		Name: "auto",
-		Run: func(ctx context.Context, t *test, c *cluster) {
-		},
-	})
-	r.Add(testSpec{
-		Name:   "manual",
-		Manual: true,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-		},
-	})
-
-	testCases := []struct {
-		filters  []string
-		expected []string
-	}{
-		// Manual tests only match when a filter is explicitly given.
-		{nil, []string{"auto"}},
-		{[]string{"."}, []string{"auto", "manual"}},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			results := r.ListAll(c.filters)
-			if !reflect.DeepEqual(c.expected, results) {
-				t.Fatalf("expected %s, but found code %s", c.expected, results)
 			}
 		})
 	}
@@ -160,7 +157,7 @@ func TestRegistryStatus(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	r.Run([]string{"status"}, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !waitingRE.MatchString(status) {
@@ -193,7 +190,7 @@ func TestRegistryStatusUnknown(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	r.Run([]string{"status"}, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !unknownRE.MatchString(status) {
@@ -218,7 +215,7 @@ func TestRegistryRunTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	})
-	r.Run([]string{"timeout"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	r.Run([]string{"timeout"}, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !timeoutRE.MatchString(out) {
@@ -242,7 +239,7 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 		}},
 	})
 
-	r.Run([]string{"."}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	r.Run([]string{"."}, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 	out := buf.String()
 	if !failedRE.MatchString(out) {
 		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
@@ -270,7 +267,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 			panic("not reached")
 		},
 	})
-	r.Run([]string{"expired"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	r.Run([]string{"expired"}, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !expiredRE.MatchString(out) {
@@ -480,7 +477,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			if err := r.setBuildVersion(c.buildVersion); err != nil {
 				t.Fatal(err)
 			}
-			r.Run(nil /* filter */, defaultParallelism, "" /* artifactsDir */, "myuser")
+			r.Run(nil /* filter */, "" /* tag */, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expectedA != runA || c.expectedB != runB {
 				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
 					c.expectedA, c.expectedB, runA, runB, buf.String())
