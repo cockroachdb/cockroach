@@ -328,17 +328,15 @@ func checkpointResolvedTimestamp(
 // emitResolvedTimestamp emits a changefeed-level resolved timestamp to the
 // sink.
 func emitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, sink Sink, resolved hlc.Timestamp,
+	ctx context.Context,
+	details jobspb.ChangefeedDetails,
+	encoder Encoder,
+	sink Sink,
+	resolved hlc.Timestamp,
 ) error {
-	payload, err := encoder.EncodeResolvedTimestamp(resolved)
-	if err != nil {
-		return err
-	}
-	// TODO(dan): Plumb a bufalloc.ByteAllocator to use here.
-	payload = append([]byte(nil), payload...)
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
-	if err := sink.EmitResolvedTimestamp(ctx, payload, resolved); err != nil {
+	if err := sink.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
 		return err
 	}
 	if log.V(2) {

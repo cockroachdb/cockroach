@@ -518,7 +518,9 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		if cf.freqEmitResolved != emitNoResolved && sinceEmitted >= cf.freqEmitResolved {
 			// Keeping this after the checkpointResolvedTimestamp call will avoid
 			// some duplicates if a restart happens.
-			if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
+			if err := emitResolvedTimestamp(
+				cf.Ctx, cf.spec.Feed, cf.encoder, cf.sink, newResolved,
+			); err != nil {
 				return err
 			}
 			cf.lastEmitResolved = newResolved.GoTime()
