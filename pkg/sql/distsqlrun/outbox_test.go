@@ -198,7 +198,7 @@ func TestOutbox(t *testing.T) {
 // Test that an outbox connects its stream as soon as possible (i.e. before
 // receiving any rows). This is important, since there's a timeout on waiting on
 // the server-side for the streams to be connected.
-func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
+func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
