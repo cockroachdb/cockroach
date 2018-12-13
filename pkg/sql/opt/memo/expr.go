@@ -278,3 +278,51 @@ type ScanFlags struct {
 func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
+
+// MapToInputID maps from the ID of a target table column to the ID of the
+// corresponding input column that provides the value for it:
+//
+//   Insert: from InsertCols
+//   Update: from UpdateCols if non-zero, otherwise FetchCols
+//   Delete: from FetchCols
+//   Upsert: !ERROR! (ambiguous, since the value is dynamically derived from
+//           either of two columns)
+//
+func (m *MutationPrivate) MapToInputID(md *opt.Metadata, tabColID opt.ColumnID) opt.ColumnID {
+	ord := md.ColumnOrdinal(tabColID)
+	if m.InsertCols != nil {
+		if m.FetchCols != nil {
+			panic("MapToInputID should not be called for UPSERT")
+		}
+		return m.InsertCols[ord]
+	}
+	if m.UpdateCols != nil && m.UpdateCols[ord] != 0 {
+		return m.UpdateCols[ord]
+	}
+	return m.FetchCols[ord]
+}
+
+// MapToInputCols maps the given set of table columns to a corresponding set of
+// input columns using the MapToInputID function. This method should not be
+// called for Upsert ops, since the mapping is ambiguous.
+func (m *MutationPrivate) MapToInputCols(md *opt.Metadata, tabCols opt.ColSet) opt.ColSet {
+	var inCols opt.ColSet
+	tabCols.ForEach(func(i int) {
+		colID := m.MapToInputID(md, opt.ColumnID(i))
+		inCols.Add(int(colID))
+	})
+	return inCols
+}
+
+// AddEquivTableCols adds an FD to the given set that declares an equivalence
+// between each table column and its corresponding input column. This method
+// should not be called for Upsert ops, since the mapping is ambiguous.
+func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
+	for i, n := 0, md.Table(m.Table).ColumnCount(); i < n; i++ {
+		tabColID := m.Table.ColumnID(i)
+		inColID := m.MapToInputID(md, tabColID)
+		if inColID != 0 {
+			fdset.AddEquivalency(tabColID, inColID)
+		}
+	}
+}
