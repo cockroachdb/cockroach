@@ -54,6 +54,12 @@ func (s *scanner) init(str string) {
 	s.bytesPrealloc = make([]byte, len(str))
 }
 
+// cleanup is used to avoid holding on to memory unnecessarily (for the cases
+// where we reuse a scanner).
+func (s *scanner) cleanup() {
+	s.bytesPrealloc = nil
+}
+
 func (s *scanner) allocBytes(length int) []byte {
 	if len(s.bytesPrealloc) >= length {
 		res := s.bytesPrealloc[:length:length]

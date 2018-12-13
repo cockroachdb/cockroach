@@ -55,10 +55,16 @@ func (p *Parser) Parse(sql string) (stmts tree.StatementList, sqlStrings []strin
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
-// ParseOne parses a sql statement string, ensuring that it contains only a
-// single statement, and returns that Statement.
-func (p *Parser) ParseOne(sql string) (tree.Statement, error) {
-	return p.parseOneWithDepth(1, sql)
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func (p *Parser) ParseWithInt(
+	sql string, nakedIntType *coltypes.TInt,
+) (stmts tree.StatementList, sqlStrings []string, _ error) {
+	nakedSerialType := coltypes.Serial8
+	if nakedIntType == coltypes.Int4 {
+		nakedSerialType = coltypes.Serial4
+	}
+	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
 }
 
 func (p *Parser) parseOneWithDepth(depth int, sql string) (tree.Statement, error) {
@@ -111,6 +117,7 @@ func (p *Parser) parseWithDepth(
 	stmts = tree.StatementList(p.stmtBuf[:0])
 	sqlStrings = p.strBuf[:0]
 	p.scanner.init(sql)
+	defer p.scanner.cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
@@ -137,6 +144,7 @@ func (p *Parser) parse(
 	nakedSerialType *coltypes.TSerial,
 ) (tree.Statement, error) {
 	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
+	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		lastError := p.lexer.lastError
 		var err *pgerror.Error
@@ -178,19 +186,6 @@ func unaryNegation(e tree.Expr) tree.Expr {
 func Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
-}
-
-// ParseWithInt parses a sql statement string and returns a list of
-// Statements. The INT token will result in the specified TInt type.
-func ParseWithInt(
-	sql string, nakedIntType *coltypes.TInt,
-) (stmts tree.StatementList, sqlStrings []string, _ error) {
-	nakedSerialType := coltypes.Serial8
-	if nakedIntType == coltypes.Int4 {
-		nakedSerialType = coltypes.Serial4
-	}
-	var p Parser
-	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a

@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,7 +29,7 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sql := "SELECT 1 WHERE (SELECT crdb_internal.force_error('xxx', 'forced') > 0)"
 	p := makeTestPlanner()
-	stmt, err := p.parser.ParseOne(sql)
+	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
