@@ -134,6 +134,14 @@ var OptimizerUpdatesClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+// AutomaticStatisticsClusterMode controls the cluster default for when
+// automatic table statistics collection is enabled.
+var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_automatic_statistics",
+	"default experimental_automatic_statistics mode",
+	false,
+)
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterBoolSetting(
@@ -1664,6 +1672,10 @@ func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
 
 func (m *sessionDataMutator) SetOptimizerUpdates(val bool) {
 	m.data.OptimizerUpdates = val
+}
+
+func (m *sessionDataMutator) SetAutomaticStatistics(val bool) {
+	m.data.AutomaticStatistics = val
 }
 
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {

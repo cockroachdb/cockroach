@@ -237,6 +237,18 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
+			// Delete old stats that have been superseded.
+			if err := stats.DeleteStats(
+				ctx,
+				s.flowCtx.executor,
+				txn,
+				s.tableID,
+				columnIDs,
+			); err != nil {
+				return err
+			}
+
+			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
 				s.flowCtx.Gossip,
@@ -253,6 +265,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				return err
 			}
 		}
+
 		return nil
 	})
 }

@@ -2404,6 +2404,9 @@ type EvalContextTestingKnobs struct {
 	// cost of each expression in the query tree for the purpose of creating
 	// alternate query plans in the optimizer.
 	OptimizerCostPerturbation float64
+	// AutomaticStatisticsAsOfTime is a duration which is used to define the
+	// AS OF time for automatic runs of CREATE STATISTICS.
+	AutomaticStatisticsAsOfTime time.Duration
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}

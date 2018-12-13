@@ -967,6 +967,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
+					AutomaticStatisticsAsOfTime:     time.Nanosecond,
 				},
 				Upgrade: &server.UpgradeTestingKnobs{
 					DisableUpgrade: cfg.disableUpgrade,

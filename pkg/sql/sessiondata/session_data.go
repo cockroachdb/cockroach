@@ -52,6 +52,9 @@ type SessionData struct {
 	// OptimizerUpdates indicates whether to use the cost-based optimizer to
 	// plan UPDATE statements.
 	OptimizerUpdates bool
+	// AutomaticStatistics indicates whether CREATE STATISTICS should be
+	// called automatically by SQL mutation operations.
+	AutomaticStatistics bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of databases that will be searched for a table name
