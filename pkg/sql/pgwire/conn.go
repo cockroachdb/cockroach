@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"strconv"
 	"sync"
@@ -179,7 +180,8 @@ func newConn(
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
-	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
+	c.writerState.fi.cmdStartsList = makeCmdStarts()
+	c.writerState.fi.oldestCmdInBuf = 0
 	c.msgBuilder.init(metrics.BytesOutCount)
 
 	return c
@@ -818,18 +820,33 @@ type flushInfo struct {
 	// flushed. The command may have further results in the buffer that haven't
 	// been flushed.
 	lastFlushed sql.CmdPos
-	// map from CmdPos to the index of the buffer where the results for the
-	// respective result begins.
-	cmdStarts map[sql.CmdPos]int
+	// slice representing a map from CmdPos to the index of the buffer where
+	// the results for the respective result begins.
+	cmdStartsList []uint64
+	// offset for the slice above to be able to map a CmdPos to a location in
+	// this slice.
+	oldestCmdInBuf sql.CmdPos
 }
 
-// registerCmd updates cmdStarts when the first result for a new command is
+func makeCmdStarts() []uint64 {
+	return make([]uint64, 10)
+}
+
+// registerCmd updates cmdStartsList when the first result for a new command is
 // received.
 func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
-	if _, ok := fi.cmdStarts[pos]; ok {
-		return
+	slicePos := int64(pos) - int64(fi.oldestCmdInBuf)
+
+	if slicePos < int64(len(fi.cmdStartsList)) {
+		if fi.cmdStartsList[slicePos]>>32 != 0 {
+			return
+		}
+	} else {
+		expandBy := slicePos - int64(len(fi.cmdStartsList))
+		fi.cmdStartsList = append(fi.cmdStartsList, make([]uint64, expandBy)...)
 	}
-	fi.cmdStarts[pos] = fi.buf.Len()
+
+	fi.cmdStartsList[slicePos] = (uint64(1) << 32) | uint64(fi.buf.Len())
 }
 
 // convertToErrWithPGCode recognizes errs that should have SQL error codes to be
@@ -1105,7 +1122,8 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 	}
 
 	c.writerState.fi.lastFlushed = pos
-	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
+	c.writerState.fi.cmdStartsList = makeCmdStarts()
+	c.writerState.fi.oldestCmdInBuf = pos
 
 	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
 	if err != nil {
@@ -1158,18 +1176,19 @@ func (cl *clientConnLock) RTrim(ctx context.Context, pos sql.CmdPos) {
 	if pos <= cl.lastFlushed {
 		panic(fmt.Sprintf("asked to trim to pos: %d, below the last flush: %d", pos, cl.lastFlushed))
 	}
-	idx, ok := cl.cmdStarts[pos]
-	if !ok {
-		// If we don't have a start index for pos yet, it must be that no results
-		// for it yet have been produced yet.
+	var idx int
+	slicePos := int64(pos) - int64(cl.oldestCmdInBuf)
+	if slicePos >= int64(len(cl.cmdStartsList)) || cl.cmdStartsList[slicePos]>>32 == 0 {
 		idx = cl.buf.Len()
+	} else {
+		idx = int(cl.cmdStartsList[slicePos] & math.MaxUint32)
 	}
 	// Remove everything from the buffer after idx.
 	cl.buf.Truncate(idx)
 	// Update cmdStarts: delete commands that were trimmed.
-	for p := range cl.cmdStarts {
-		if p >= pos {
-			delete(cl.cmdStarts, p)
+	for p := range cl.cmdStartsList {
+		if int64(p)+int64(cl.oldestCmdInBuf) >= int64(pos) {
+			cl.cmdStartsList[p] = 0
 		}
 	}
 }
