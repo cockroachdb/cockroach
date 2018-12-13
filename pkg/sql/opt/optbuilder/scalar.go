@@ -159,6 +159,25 @@ func (b *Builder) buildScalar(
 			b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
 		)
 
+	case *tree.IfErrExpr:
+		cond := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
+
+		orElse := memo.EmptyScalarListExpr
+		if t.Else != nil {
+			orElse = memo.ScalarListExpr{
+				b.buildScalar(t.Else.(tree.TypedExpr), inScope, nil, nil, colRefs),
+			}
+		}
+
+		errCode := memo.EmptyScalarListExpr
+		if t.ErrCode != nil {
+			errCode = memo.ScalarListExpr{
+				b.buildScalar(t.ErrCode.(tree.TypedExpr), inScope, nil, nil, colRefs),
+			}
+		}
+
+		out = b.factory.ConstructIfErr(cond, orElse, errCode)
+
 	case *tree.BinaryExpr:
 		// It's possible for an overload to be selected that expects different
 		// types than the TypedExpr arguments return:

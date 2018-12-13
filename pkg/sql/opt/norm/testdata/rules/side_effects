@@ -262,3 +262,84 @@ select
                                └── filters
                                     ├── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
                                     └── (5 / y) > 1 [type=bool, outer=(7), side-effects]
+
+
+# Don't decorrelate IFERROR branch if there are side effects
+norm
+SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i AND 5/y>1))=k
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── eq [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ])]
+           ├── variable: k [type=int]
+           └── if-err [type=decimal]
+                ├── 1 / 0 [type=decimal]
+                └── else
+                     └── subquery [type=decimal]
+                          └── project
+                               ├── columns: y:8(decimal)
+                               ├── outer: (2)
+                               ├── cardinality: [0 - 1]
+                               ├── side-effects
+                               ├── key: ()
+                               ├── fd: ()-->(8)
+                               ├── select
+                               │    ├── columns: x:6(int!null) xy.y:7(int)
+                               │    ├── outer: (2)
+                               │    ├── cardinality: [0 - 1]
+                               │    ├── side-effects
+                               │    ├── key: ()
+                               │    ├── fd: ()-->(6,7)
+                               │    ├── scan xy
+                               │    │    ├── columns: x:6(int!null) xy.y:7(int)
+                               │    │    ├── key: (6)
+                               │    │    └── fd: (6)-->(7)
+                               │    └── filters
+                               │         ├── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+                               │         └── (5 / xy.y) > 1 [type=bool, outer=(7), side-effects]
+                               └── projections
+                                    └── xy.y::DECIMAL [type=decimal, outer=(7)]
+
+# Decorrelate IFERROR branch if there are no side effects
+norm
+SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i))=k
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── side-effects
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:8(decimal)
+      ├── side-effects
+      ├── key: (1,6)
+      ├── fd: (1)-->(2-5), (6)-->(8)
+      ├── left-join
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:8(decimal)
+      │    ├── key: (1,6)
+      │    ├── fd: (1)-->(2-5), (6)-->(8)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    ├── project
+      │    │    ├── columns: y:8(decimal) x:6(int!null)
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(8)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6(int!null) xy.y:7(int)
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    └── projections
+      │    │         └── xy.y::DECIMAL [type=decimal, outer=(7)]
+      │    └── filters
+      │         └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      └── filters
+           └── k = IFERROR(1 / 0, y) [type=bool, outer=(1,8), side-effects, constraints=(/1: (/NULL - ])]

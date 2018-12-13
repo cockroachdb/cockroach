@@ -100,6 +100,15 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 					memo.BuildSharedProps(c.mem, child, &sharedProps)
 					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
 				}
+
+			case *memo.IfErrExpr:
+				// Determine whether this is the Else child. Checking this how the
+				// other branches do is tricky because it's a list, but we know that
+				// it's at position 1.
+				if i == 1 {
+					memo.BuildSharedProps(c.mem, child, &sharedProps)
+					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+				}
 			}
 
 			if hasHoistableSubquery {
