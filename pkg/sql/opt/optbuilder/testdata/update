@@ -253,17 +253,13 @@ update abcde
  │    ├──  column13:13 => b:2
  │    ├──  column14:14 => d:4
  │    └──  a:7 => e:5
- ├── internal-ordering: +7
  └── project
       ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
-      ├── ordering: +7
       ├── project
       │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      │    ├── ordering: +7 opt(13)
       │    ├── limit
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    ├── internal-ordering: +7
-      │    │    ├── ordering: +7
       │    │    ├── sort
       │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    │    ├── ordering: +7
@@ -433,6 +429,12 @@ UPDATE abcde AS foo SET a=abcde.b
 ----
 error (42P01): no data source matches prefix: abcde
 
+# ORDER BY can only be used with LIMIT.
+build
+UPDATE abcde SET b=1 ORDER BY c
+----
+error: UPDATE statement requires LIMIT when ORDER BY is used
+
 # ------------------------------------------------------------------------------
 # Test RETURNING.
 # ------------------------------------------------------------------------------
@@ -514,7 +516,7 @@ project
 
 # Use returning UPDATE as a FROM expression.
 build
-SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b RETURNING *]
+SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
 project
  ├── columns: a:13(int!null) d:14(int)
@@ -527,30 +529,33 @@ project
            │    ├──  column13:13 => a:1
            │    ├──  column14:14 => d:4
            │    └──  column13:13 => e:5
-           ├── internal-ordering: +8
-           └── sort
-                ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int)
-                ├── ordering: +8
-                └── project
-                     ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
-                     ├── project
-                     │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                     │    ├── select
-                     │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                     │    │    ├── scan abcde
-                     │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                     │    │    └── filters
-                     │    │         └── gt [type=bool]
-                     │    │              ├── variable: a [type=int]
-                     │    │              └── const: 0 [type=int]
-                     │    └── projections
-                     │         └── const: 2 [type=int]
-                     └── projections
-                          └── plus [type=int]
-                               ├── plus [type=int]
-                               │    ├── variable: b [type=int]
-                               │    └── variable: c [type=int]
-                               └── const: 1 [type=int]
+           └── project
+                ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+                ├── project
+                │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    ├── limit
+                │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    │    ├── internal-ordering: +8
+                │    │    ├── sort
+                │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    │    │    ├── ordering: +8
+                │    │    │    └── select
+                │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    │    │         ├── scan abcde
+                │    │    │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    │    │         └── filters
+                │    │    │              └── gt [type=bool]
+                │    │    │                   ├── variable: a [type=int]
+                │    │    │                   └── const: 0 [type=int]
+                │    │    └── const: 10 [type=int]
+                │    └── projections
+                │         └── const: 2 [type=int]
+                └── projections
+                     └── plus [type=int]
+                          ├── plus [type=int]
+                          │    ├── variable: b [type=int]
+                          │    └── variable: c [type=int]
+                          └── const: 1 [type=int]
 
 # Return hidden column.
 build
@@ -1194,7 +1199,7 @@ update mutation
 
 # Ensure that ORDER BY wildcard does not select mutation columns.
 build
-UPDATE mutation SET m=1 ORDER BY mutation.*
+UPDATE mutation SET m=1 ORDER BY mutation.* LIMIT 10
 ----
 update mutation
  ├── columns: <none>
@@ -1202,16 +1207,19 @@ update mutation
  ├── update-mapping:
  │    ├──  column9:9 => m:1
  │    └──  column10:10 => p:4
- ├── internal-ordering: +5,+6
  └── project
       ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
-      ├── ordering: +5,+6
       ├── project
       │    ├── columns: column9:9(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    ├── ordering: +5 opt(9)
-      │    ├── scan mutation
+      │    ├── limit
       │    │    ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    │    └── ordering: +5
+      │    │    ├── internal-ordering: +5,+6
+      │    │    ├── sort
+      │    │    │    ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    │    │    ├── ordering: +5,+6
+      │    │    │    └── scan mutation
+      │    │    │         └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    │    └── const: 10 [type=int]
       │    └── projections
       │         └── const: 1 [type=int]
       └── projections
@@ -1276,6 +1284,6 @@ error (42P10): column "o" is being backfilled
 
 # Try to use mutation column in ORDER BY expression.
 build
-UPDATE mutation SET m=1 ORDER BY o
+UPDATE mutation SET m=1 ORDER BY o LIMIT 2
 ----
 error (42P10): column "o" is being backfilled

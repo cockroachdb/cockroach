@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 // buildUpdate builds a memo group for an UpdateOp expression. First, an input
@@ -54,9 +55,19 @@ import (
 //
 // Computed columns result in an additional wrapper projection that can depend
 // on input columns.
+//
+// Note that the ORDER BY clause can only be used if the LIMIT clause is also
+// present. In that case, the ordering determines which rows are included by the
+// limit. The ORDER BY makes no additional guarantees about the order in which
+// mutations are applied, or the order of any returned rows (i.e. it won't
+// become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
 	if !b.evalCtx.SessionData.OptimizerUpdates {
 		panic(unimplementedf("cost-based optimizer is not planning UPDATE statements"))
+	}
+
+	if upd.OrderBy != nil && upd.Limit == nil {
+		panic(builderError{errors.New("UPDATE statement requires LIMIT when ORDER BY is used")})
 	}
 
 	// UX friendliness safeguard.

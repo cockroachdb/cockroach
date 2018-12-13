@@ -1675,7 +1675,7 @@ constraint_elem ::=
 	'CHECK' '(' a_expr ')'
 	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'PRIMARY' 'KEY' '(' index_params ')'
-	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list reference_actions
+	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
 const_typename ::=
 	numeric
@@ -1870,6 +1870,11 @@ col_qualification ::=
 	| 'CREATE' 'FAMILY'
 	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
 
+key_match ::=
+	'MATCH' 'SIMPLE'
+	| 'MATCH' 'FULL'
+	| 
+
 reference_actions ::=
 	reference_on_update
 	| reference_on_delete
@@ -2057,7 +2062,7 @@ col_qualification_elem ::=
 	| 'PRIMARY' 'KEY'
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
-	| 'REFERENCES' table_name opt_name_parens reference_actions
+	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| 'AS' '(' a_expr ')' 'STORED'
 
 family_name ::=

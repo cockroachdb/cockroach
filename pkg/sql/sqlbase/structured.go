@@ -2516,6 +2516,33 @@ func (cc *TableDescriptor_CheckConstraint) UsesColumn(
 	return i < len(colsUsed) && colsUsed[i] == colID, nil
 }
 
+// CompositeKeyMatchMethodValue allows the conversion from a
+// tree.ReferenceCompositeKeyMatchMethod to a ForeignKeyReference_Match.
+var CompositeKeyMatchMethodValue = [...]ForeignKeyReference_Match{
+	tree.MatchSimple: ForeignKeyReference_SIMPLE,
+	tree.MatchFull:   ForeignKeyReference_FULL,
+}
+
+// ForeignKeyReferenceMatchValue allows the conversion from a
+// ForeignKeyReference_Match to a tree.ReferenceCompositeKeyMatchMethod.
+// This should match CompositeKeyMatchMethodValue.
+var ForeignKeyReferenceMatchValue = [...]tree.CompositeKeyMatchMethod{
+	ForeignKeyReference_SIMPLE: tree.MatchSimple,
+	ForeignKeyReference_FULL:   tree.MatchFull,
+}
+
+// String implements the fmt.Stringer interface.
+func (x ForeignKeyReference_Match) String() string {
+	switch x {
+	case ForeignKeyReference_SIMPLE:
+		return "MATCH SIMPLE"
+	case ForeignKeyReference_FULL:
+		return "MATCH FULL"
+	default:
+		return strconv.Itoa(int(x))
+	}
+}
+
 // ForeignKeyReferenceActionValue allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{

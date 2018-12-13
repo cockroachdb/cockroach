@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -132,11 +133,9 @@ func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	// they have default values.
 	mb.checkPrimaryKeyForInsert()
 
-	// Here, there was previously was a check to ensure that all columns needed
-	// for a composite foreign key were present. Since we've moved to MATCH SIMPLE
-	// instead of MATCH FULL, performing this check is not needed.
-	// TODO(bram): Bring this check back once MATCH FULL is implemented
-	// correctly. See #20305.
+	// Ensure that foreign keys columns are in the target column list, or that
+	// they have default values.
+	mb.checkForeignKeysForInsert()
 }
 
 // checkPrimaryKeyForInsert ensures that the columns of the primary key are
@@ -158,8 +157,77 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(builderError{fmt.Errorf(
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 			"missing %q primary key column", col.Column.ColName())})
+	}
+}
+
+// checkForeignKeysForInsert ensures that all composite foreign keys that
+// specify the matching method as MATCH FULL have all of their columns assigned
+// values by the INSERT statement, or else have default/computed values.
+// Alternatively, all columns can be unspecified. If neither condition is true,
+// checkForeignKeys raises an error. Here is an example:
+//
+//   CREATE TABLE orders (
+//     id INT,
+//     cust_id INT,
+//     state STRING,
+//     FOREIGN KEY (cust_id, state) REFERENCES customers (id, state) MATCH FULL
+//   )
+//
+//   INSERT INTO orders (cust_id) VALUES (1)
+//
+// This INSERT statement would trigger a static error, because only cust_id is
+// specified in the INSERT statement. Either the state column must be specified
+// as well, or else neither column can be specified.
+func (mb *mutationBuilder) checkForeignKeysForInsert() {
+	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
+		idx := mb.tab.Index(i)
+		fkey, ok := idx.ForeignKey()
+		if !ok {
+			continue
+		}
+
+		// This check should only be performed on composite foreign keys that use
+		// the MATCH FULL method.
+		if fkey.Match != tree.MatchFull {
+			continue
+		}
+
+		var missingCols []string
+		allMissing := true
+		for j := 0; j < int(fkey.PrefixLen); j++ {
+			indexCol := idx.Column(j)
+			if indexCol.Column.HasDefault() || indexCol.Column.IsComputed() {
+				// The column has a default value.
+				allMissing = false
+				continue
+			}
+
+			colID := mb.tabID.ColumnID(indexCol.Ordinal)
+			if mb.targetColSet.Contains(int(colID)) {
+				// The column is explicitly specified in the target name list.
+				allMissing = false
+				continue
+			}
+
+			missingCols = append(missingCols, string(indexCol.Column.ColName()))
+		}
+		if allMissing {
+			continue
+		}
+
+		switch len(missingCols) {
+		case 0:
+			// Do nothing.
+		case 1:
+			panic(builderError{errors.Errorf(
+				"missing value for column %q in multi-part foreign key", missingCols[0])})
+		default:
+			sort.Strings(missingCols)
+			panic(builderError{errors.Errorf(
+				"missing values for columns %q in multi-part foreign key", missingCols)})
+		}
 	}
 }
 
@@ -524,7 +592,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
-	projectionsScope.copyOrdering(mb.outScope)
 
 	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
@@ -682,7 +749,6 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		if projectionsScope == nil {
 			projectionsScope = mb.outScope.replace()
 			projectionsScope.appendColumnsFromScope(mb.outScope)
-			projectionsScope.copyOrdering(mb.outScope)
 		}
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
@@ -716,7 +782,6 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 		InsertCols:  mb.insertColList,
 		NeedResults: returning != nil,
 	}
-	private.Ordering.FromOrdering(mb.outScope.ordering)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
 
 	mb.buildReturning(returning)
@@ -731,7 +796,6 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 		UpdateCols:  mb.updateColList,
 		NeedResults: returning != nil,
 	}
-	private.Ordering.FromOrdering(mb.outScope.ordering)
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)
 
 	mb.buildReturning(returning)

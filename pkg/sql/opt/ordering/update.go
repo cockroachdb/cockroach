@@ -21,31 +21,23 @@ import (
 )
 
 func updateCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	// Update requires a certain ordering of its input, but can also pass through
-	// a stronger ordering. For example:
-	//
-	//   SELECT * FROM [UPDATE t1 SET y=1 ORDER BY x] ORDER BY x,y
-	//
-	// In this case the internal ordering is x+, but we can pass through x+,y+
-	// to satisfy both orderings.
-	return required.Intersects(&expr.(*memo.UpdateExpr).Ordering)
+	// Update operator can always pass through ordering to its input.
+	return true
 }
 
 func updateBuildChildReqOrdering(
 	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
 ) physical.OrderingChoice {
-	return required.Intersection(&parent.(*memo.UpdateExpr).Ordering)
+	return *required
 }
 
 func updateBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
-	update := expr.(*memo.UpdateExpr)
-	provided := update.Input.ProvidedPhysical().Ordering
-	inputFDs := &update.Input.Relational().FuncDeps
-
-	// Ensure that provided ordering only uses projected columns.
-	provided = remapProvided(provided, inputFDs, update.Relational().OutputCols)
-
-	// The child's provided ordering satisfies both <required> and the Update
-	// internal ordering; it may need to be trimmed.
-	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+	// It should always be possible to remap the columns in the input's provided
+	// ordering.
+	upd := expr.(*memo.UpdateExpr)
+	return remapProvided(
+		upd.Input.ProvidedPhysical().Ordering,
+		&upd.Input.Relational().FuncDeps,
+		upd.Relational().OutputCols,
+	)
 }

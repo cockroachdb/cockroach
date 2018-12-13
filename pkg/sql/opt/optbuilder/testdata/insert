@@ -130,6 +130,37 @@ insert abcde
 
 # Ordered input.
 build
+INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z LIMIT 10
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  y:8 => a:1
+ │    ├──  column10:10 => b:2
+ │    ├──  column11:11 => c:3
+ │    ├──  column10:10 => d:4
+ │    ├──  y:8 => e:5
+ │    └──  column12:12 => rowid:6
+ └── project
+      ├── columns: column10:10(unknown) column11:11(int!null) column12:12(int) y:8(int)
+      ├── limit
+      │    ├── columns: y:8(int) z:9(float)
+      │    ├── internal-ordering: +8,+9
+      │    ├── sort
+      │    │    ├── columns: y:8(int) z:9(float)
+      │    │    ├── ordering: +8,+9
+      │    │    └── project
+      │    │         ├── columns: y:8(int) z:9(float)
+      │    │         └── scan xyz
+      │    │              └── columns: x:7(string!null) y:8(int) z:9(float)
+      │    └── const: 10 [type=int]
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 10 [type=int]
+           └── function: unique_rowid [type=int]
+
+# Ignore ORDER BY without LIMIT.
+build
 INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z
 ----
 insert abcde
@@ -141,20 +172,16 @@ insert abcde
  │    ├──  column10:10 => d:4
  │    ├──  y:8 => e:5
  │    └──  column12:12 => rowid:6
- ├── internal-ordering: +8,+9
- └── sort
-      ├── columns: y:8(int) z:9(float) column10:10(unknown) column11:11(int!null) column12:12(int)
-      ├── ordering: +8,+9
-      └── project
-           ├── columns: column10:10(unknown) column11:11(int!null) column12:12(int) y:8(int) z:9(float)
-           ├── project
-           │    ├── columns: y:8(int) z:9(float)
-           │    └── scan xyz
-           │         └── columns: x:7(string!null) y:8(int) z:9(float)
-           └── projections
-                ├── null [type=unknown]
-                ├── const: 10 [type=int]
-                └── function: unique_rowid [type=int]
+ └── project
+      ├── columns: column10:10(unknown) column11:11(int!null) column12:12(int) y:8(int)
+      ├── project
+      │    ├── columns: y:8(int) z:9(float)
+      │    └── scan xyz
+      │         └── columns: x:7(string!null) y:8(int) z:9(float)
+      └── projections
+           ├── null [type=unknown]
+           ├── const: 10 [type=int]
+           └── function: unique_rowid [type=int]
 
 # Use placeholders.
 build
