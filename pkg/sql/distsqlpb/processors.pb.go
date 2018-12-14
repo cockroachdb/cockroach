@@ -956,7 +956,7 @@ type AggregatorSpec_Aggregation struct {
 	// the filter clause, e.g.:
 	//   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
 	FilterColIdx *uint32 `protobuf:"varint,4,opt,name=filter_col_idx,json=filterColIdx" json:"filter_col_idx,omitempty"`
-	// Arguments are const expressions passed to aggregation functions.
+	// ConstArgs are const expressions passed to aggregation functions.
 	Arguments []Expression `protobuf:"bytes,6,rep,name=arguments" json:"arguments"`
 }
 
@@ -8335,7 +8335,7 @@ func (m *AggregatorSpec_Aggregation) Unmarshal(dAtA []byte) error {
 			}
 		case 6:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Arguments", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConstArgs", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {

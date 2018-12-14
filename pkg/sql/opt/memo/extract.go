@@ -117,9 +117,10 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	if !opt.IsAggregateOp(e) {
 		panic("not an Aggregate")
 	}
+
 	var res opt.ColSet
-	for i, n := 0, e.ChildCount(); i < n; i++ {
-		res.Add(int(ExtractVarFromAggInput(e.Child(i).(opt.ScalarExpr)).Col))
+	if e.ChildCount() > 0 {
+		res.Add(int(ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col))
 	}
 	return res
 }
