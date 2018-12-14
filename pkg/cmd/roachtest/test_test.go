@@ -88,9 +88,9 @@ func TestRegistryRun(t *testing.T) {
 		{nil, 1},
 		{[]string{"pass"}, 0},
 		{[]string{"fail"}, 1},
-		{[]string{"fail-unstable"}, 0},
 		{[]string{"pass|fail"}, 1},
 		{[]string{"pass", "fail"}, 1},
+		{[]string{"notests"}, 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -244,6 +244,26 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 	out := buf.String()
 	if !failedRE.MatchString(out) {
 		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunNoTests(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^warning: no tests to run \[notest\]\nFAIL$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name: "some-test",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+
+	r.Run([]string{"notest"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"warning: no tests to run\" message:\n%s", out)
 	}
 }
 
