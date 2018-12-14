@@ -322,4 +322,5 @@ type AggInfo struct {
 	Distinct   bool
 	ResultType types.T
 	ArgCols    []ColumnOrdinal
+	Arguments  []tree.Datum
 }

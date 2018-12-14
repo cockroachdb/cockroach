@@ -245,20 +245,33 @@ func (b *Builder) buildAggregation(
 		fromCols = fromScope.colSet()
 	}
 	for i, agg := range aggInfos {
-		// Aggregate functions will never have more than 3 operands.
-		var args [memo.MaxAggChildren]opt.ScalarExpr
-		for j := range agg.args {
+		// args is a list of opt.ScalarExprs, we need to make it a list of interfaces
+		// so we can pass it to DynamicConstruct.
+		args := make([]interface{}, 0, 2)
+		op := getAggregateOp(agg.def.Name)
+		if len(agg.args) > 0 {
 			colID := argCols[0].id
-			argCols = argCols[1:]
-			args[j] = b.factory.ConstructVariable(colID)
+			args = append(args, b.factory.ConstructVariable(colID))
 			if agg.distinct {
 				// Wrap the argument with AggDistinct.
-				args[j] = b.factory.ConstructAggDistinct(args[j])
+				args[0] = b.factory.ConstructAggDistinct(args[0].(opt.ScalarExpr))
 			}
 		}
 
-		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args)
-		if opt.AggregateIsOrderingSensitive(aggCols[i].scalar.Op()) {
+		if len(agg.args) > 1 {
+			// This should only be true for string_agg, which is the only aggregate which
+			// accepts multiple arguments. Further, the second argument is restricted to be a
+			// constant expression.
+			if op != opt.StringAggOp {
+				panic("expected string_agg to be the only multi-argument aggregate")
+			}
+			args = append(args, argCols[1].scalar)
+		}
+
+		aggCols[i].scalar = b.factory.DynamicConstruct(op, args...).(opt.ScalarExpr)
+		argCols = argCols[len(agg.args):]
+
+		if opt.AggregateIsOrderingSensitive(op) {
 			haveOrderingSensitiveAgg = true
 		}
 
@@ -416,14 +429,6 @@ func (b *Builder) buildGrouping(
 func (b *Builder) buildAggregateFunction(
 	f *tree.FuncExpr, def *memo.FunctionPrivate, inScope *scope,
 ) *aggregateInfo {
-	if len(f.Exprs) > 1 {
-		// TODO: #10495
-		panic(builderError{pgerror.UnimplementedWithIssueError(
-			10495,
-			"aggregate functions with multiple arguments are not supported yet"),
-		})
-	}
-
 	tempScope := inScope.startAggFunc()
 	tempScopeColsBefore := len(tempScope.cols)
 
@@ -433,6 +438,8 @@ func (b *Builder) buildAggregateFunction(
 		distinct: (f.Type == tree.DistinctFuncType),
 		args:     make(memo.ScalarListExpr, len(f.Exprs)),
 	}
+
+	op := getAggregateOp(def.Name)
 
 	// Temporarily set b.subquery to nil so we don't add outer columns to the
 	// wrong scope.
@@ -444,6 +451,9 @@ func (b *Builder) buildAggregateFunction(
 		// This synthesizes a new tempScope column, unless the argument is a
 		// simple VariableOp.
 		texpr := pexpr.(tree.TypedExpr)
+
+		b.checkAggregateArgument(op, i, texpr)
+
 		col := b.addColumn(tempScope, "" /* label */, texpr)
 		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		if col.scalar != nil {
@@ -485,44 +495,59 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
-func (b *Builder) constructAggregate(
-	name string, args [memo.MaxAggChildren]opt.ScalarExpr,
-) opt.ScalarExpr {
+// checkAggregateArgument validates an argument to an aggregate, raising a builderError
+// if the argument is invalid for the given index.
+func (b *Builder) checkAggregateArgument(op opt.Operator, nth int, expr tree.TypedExpr) {
+	switch op {
+	case opt.StringAggOp:
+		if nth == 1 {
+			if !tree.IsConst(b.evalCtx, expr) {
+				panic(builderError{
+					fmt.Errorf("unimplemented: aggregate functions with multiple non-constant expressions are not supported"),
+				})
+			}
+		}
+	}
+}
+
+func getAggregateOp(name string) opt.Operator {
 	switch name {
 	case "array_agg":
-		return b.factory.ConstructArrayAgg(args[0])
+		return opt.ArrayAggOp
 	case "avg":
-		return b.factory.ConstructAvg(args[0])
+		return opt.AvgOp
 	case "bool_and":
-		return b.factory.ConstructBoolAnd(args[0])
+		return opt.BoolAndOp
 	case "bool_or":
-		return b.factory.ConstructBoolOr(args[0])
+		return opt.BoolOrOp
 	case "concat_agg":
-		return b.factory.ConstructConcatAgg(args[0])
+		return opt.ConcatAggOp
 	case "count":
-		return b.factory.ConstructCount(args[0])
+		return opt.CountOp
 	case "count_rows":
-		return b.factory.ConstructCountRows()
+		return opt.CountRowsOp
 	case "max":
-		return b.factory.ConstructMax(args[0])
+		return opt.MaxOp
 	case "min":
-		return b.factory.ConstructMin(args[0])
+		return opt.MinOp
 	case "sum_int":
-		return b.factory.ConstructSumInt(args[0])
+		return opt.SumIntOp
 	case "sum":
-		return b.factory.ConstructSum(args[0])
+		return opt.SumOp
 	case "sqrdiff":
-		return b.factory.ConstructSqrDiff(args[0])
+		return opt.SqrDiffOp
 	case "variance":
-		return b.factory.ConstructVariance(args[0])
+		return opt.VarianceOp
 	case "stddev":
-		return b.factory.ConstructStdDev(args[0])
+		return opt.StdDevOp
 	case "xor_agg":
-		return b.factory.ConstructXorAgg(args[0])
+		return opt.XorAggOp
 	case "json_agg":
-		return b.factory.ConstructJsonAgg(args[0])
+		return opt.JsonAggOp
 	case "jsonb_agg":
-		return b.factory.ConstructJsonbAgg(args[0])
+		return opt.JsonbAggOp
+	case "string_agg":
+		return opt.StringAggOp
 	}
 	panic(fmt.Sprintf("unhandled aggregate: %s", name))
 }
