@@ -16,6 +16,7 @@ package localtestcluster
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -92,7 +94,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ambient.AddLogTag("n", nc)
 
 	nodeID := roachpb.NodeID(1)
-	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
+	nodeDesc := &roachpb.NodeDescriptor{
+		NodeID:  nodeID,
+		Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:26257")),
+	}
 
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
