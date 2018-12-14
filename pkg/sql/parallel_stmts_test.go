@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -324,14 +325,10 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	// planner with the session so that its copy of the session data gets updated.
 	p.extendedEvalCtx.SessionData.Database = "test"
 
-	stmts, err := p.parser.Parse(sql)
+	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stmts) != 1 {
-		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
-	}
-	stmt := stmts[0]
 	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}

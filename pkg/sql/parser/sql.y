@@ -41,17 +41,17 @@ const MaxUint = ^uint(0)
 const MaxInt = int(MaxUint >> 1)
 
 func unimplemented(sqllex sqlLexer, feature string) int {
-    sqllex.(*scanner).Unimplemented(feature)
+    sqllex.(*lexer).Unimplemented(feature)
     return 1
 }
 
 func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
-    sqllex.(*scanner).UnimplementedWithIssue(issue)
+    sqllex.(*lexer).UnimplementedWithIssue(issue)
     return 1
 }
 
 func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int {
-    sqllex.(*scanner).UnimplementedWithIssueDetail(issue, detail)
+    sqllex.(*lexer).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
 %}
@@ -165,9 +165,6 @@ func (u *sqlSymUnion) stmt() tree.Statement {
         return stmt
     }
     return nil
-}
-func (u *sqlSymUnion) stmts() []tree.Statement {
-    return u.val.([]tree.Statement)
 }
 func (u *sqlSymUnion) cte() *tree.CTE {
     if cte, ok := u.val.(*tree.CTE); ok {
@@ -568,14 +565,13 @@ func newNameFromStr(s string) *tree.Name {
 %token NOT_LA WITH_LA AS_LA
 
 %union {
-  id    int
-  pos   int
+  id    int32
+  pos   int32
   str   string
   union sqlSymUnion
 }
 
-%type <[]tree.Statement> stmt_block
-%type <[]tree.Statement> stmt_list
+%type <tree.Statement> stmt_block
 %type <tree.Statement> stmt
 
 %type <tree.Statement> alter_stmt
@@ -1030,28 +1026,9 @@ func newNameFromStr(s string) *tree.Name {
 %%
 
 stmt_block:
-  stmt_list
+  stmt
   {
-    sqllex.(*scanner).stmts = $1.stmts()
-  }
-
-stmt_list:
-  stmt_list ';' stmt
-  {
-    l := $1.stmts()
-    s := $3.stmt()
-    if s != nil {
-      l = append(l, s)
-    }
-    $$.val = l
-  }
-| stmt
-  {
-    $$.val = []tree.Statement(nil)
-    s := $1.stmt()
-    if s != nil {
-       $$.val = []tree.Statement{s}
-    }
+    sqllex.(*lexer).stmt = $1.stmt()
   }
 
 stmt:
@@ -6557,7 +6534,7 @@ const_typename:
   }
 | SERIAL
   {
-    $$.val = sqllex.(*scanner).nakedSerialType
+    $$.val = sqllex.(*lexer).nakedSerialType
   }
 | SERIAL2
   {
@@ -6647,11 +6624,11 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = sqllex.(*scanner).nakedIntType
+    $$.val = sqllex.(*lexer).nakedIntType
   }
 | INTEGER
   {
-    $$.val = sqllex.(*scanner).nakedIntType
+    $$.val = sqllex.(*lexer).nakedIntType
   }
 | INT2
   {

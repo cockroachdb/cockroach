@@ -87,12 +87,12 @@ func TestScanner(t *testing.T) {
 		{`e'a'`, []int{SCONST}},
 		{`E'a'`, []int{SCONST}},
 		{`NOT`, []int{NOT}},
-		{`NOT BETWEEN`, []int{NOT_LA, BETWEEN}},
-		{`NOT IN`, []int{NOT_LA, IN}},
-		{`NOT SIMILAR`, []int{NOT_LA, SIMILAR}},
+		{`NOT BETWEEN`, []int{NOT, BETWEEN}},
+		{`NOT IN`, []int{NOT, IN}},
+		{`NOT SIMILAR`, []int{NOT, SIMILAR}},
 		{`WITH`, []int{WITH}},
-		{`WITH TIME`, []int{WITH_LA, TIME}},
-		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
+		{`WITH TIME`, []int{WITH, TIME}},
+		{`WITH ORDINALITY`, []int{WITH, ORDINALITY}},
 		{`1`, []int{ICONST}},
 		{`0xa`, []int{ICONST}},
 		{`x'2F'`, []int{BCONST}},
@@ -107,11 +107,11 @@ func TestScanner(t *testing.T) {
 		var tokens []int
 		for {
 			var lval sqlSymType
-			id := s.Lex(&lval)
-			if id == 0 {
+			s.scan(&lval)
+			if lval.id == 0 {
 				break
 			}
-			tokens = append(tokens, id)
+			tokens = append(tokens, int(lval.id))
 		}
 
 		if !reflect.DeepEqual(d.expected, tokens) {
@@ -158,9 +158,9 @@ func TestScanKeyword(t *testing.T) {
 	for kwName, kwID := range lex.Keywords {
 		s := makeScanner(kwName)
 		var lval sqlSymType
-		id := s.Lex(&lval)
-		if kwID.Tok != id {
-			t.Errorf("%s: expected %d, but found %d", kwName, kwID.Tok, id)
+		s.scan(&lval)
+		if int32(kwID.Tok) != lval.id {
+			t.Errorf("%s: expected %d, but found %d", kwName, kwID.Tok, lval.id)
 		}
 	}
 }
@@ -198,9 +198,9 @@ func TestScanNumber(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval sqlSymType
-		id := s.Lex(&lval)
-		if d.id != id {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, id)
+		s.scan(&lval)
+		if d.id != int(lval.id) {
+			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.id)
 		}
 		if d.expected != lval.str {
 			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
@@ -220,9 +220,9 @@ func TestScanPlaceholder(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval sqlSymType
-		id := s.Lex(&lval)
-		if id != PLACEHOLDER {
-			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, id)
+		s.scan(&lval)
+		if lval.id != PLACEHOLDER {
+			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, lval.id)
 		}
 		if d.expected != lval.str {
 			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
@@ -296,7 +296,7 @@ world`},
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval sqlSymType
-		_ = s.Lex(&lval)
+		s.scan(&lval)
 		if d.expected != lval.str {
 			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
 		}
@@ -328,9 +328,9 @@ func TestScanError(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval sqlSymType
-		id := s.Lex(&lval)
-		if id != ERROR {
-			t.Errorf("%s: expected ERROR, but found %d", d.sql, id)
+		s.scan(&lval)
+		if lval.id != ERROR {
+			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.id)
 		}
 		if !testutils.IsError(pgerror.NewError(pgerror.CodeInternalError, lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)

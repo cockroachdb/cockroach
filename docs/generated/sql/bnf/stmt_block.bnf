@@ -1,8 +1,5 @@
 stmt_block ::=
-	stmt_list
-
-stmt_list ::=
-	( stmt ) ( ( ';' stmt ) )*
+	stmt
 
 stmt ::=
 	'HELPTOKEN'

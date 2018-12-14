@@ -73,7 +73,7 @@ func (h *HelpMessage) Format(w io.Writer) {
 // error", with the error set to a contextual help message about the
 // current statement.
 func helpWith(sqllex sqlLexer, helpText string) int {
-	scan := sqllex.(*scanner)
+	scan := sqllex.(*lexer)
 	if helpText == "" {
 		scan.populateHelpMsg("help:\n" + AllHelp)
 		return 1
@@ -127,7 +127,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	_ = w.Flush()
 	msg.Text = buf.String()
 
-	sqllex.(*scanner).SetHelp(msg)
+	sqllex.(*lexer).SetHelp(msg)
 	return 1
 }
 

@@ -15,16 +15,13 @@
 package parser
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"go/token"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,30 +36,9 @@ const identQuote = '"'
 
 // scanner lexes SQL statements.
 type scanner struct {
-	in        string
-	pos       int
-	tokBuf    sqlSymType
-	lastTok   sqlSymType
-	nextTok   *sqlSymType
-	lastError *scanErr
-
-	// stmts contains the list of statements at the end of parsing.
-	stmts []tree.Statement
-
-	initialized   bool
+	in            string
+	pos           int
 	bytesPrealloc []byte
-	// The type that should be used when an INT is encountered.
-	nakedIntType *coltypes.TInt
-	// The type that should be used when a SERIAL is encountered.
-	nakedSerialType *coltypes.TSerial
-}
-
-// scanErr holds error state for a scanner.
-type scanErr struct {
-	msg                  string
-	hint                 string
-	detail               string
-	unimplementedFeature string
 }
 
 func makeScanner(str string) scanner {
@@ -72,19 +48,16 @@ func makeScanner(str string) scanner {
 }
 
 func (s *scanner) init(str string) {
-	if s.initialized {
-		panic("scanner already initialized; a scanner cannot be reused.")
-	}
-	s.initialized = true
-	// INT8 is the historical interpretation of INT. This should be left
-	// alone in the future, since there are many sql fragments stored
-	// in various descriptors.  Any user input that was created after
-	// INT := INT4 will simply use INT4 in any resulting code.
-	s.nakedIntType = coltypes.Int8
-	s.nakedSerialType = coltypes.Serial8
 	s.in = str
+	s.pos = 0
 	// Preallocate some buffer space for identifiers etc.
 	s.bytesPrealloc = make([]byte, len(str))
+}
+
+// cleanup is used to avoid holding on to memory unnecessarily (for the cases
+// where we reuse a scanner).
+func (s *scanner) cleanup() {
+	s.bytesPrealloc = nil
 }
 
 func (s *scanner) allocBytes(length int) []byte {
@@ -120,143 +93,9 @@ func (s *scanner) finishString(buf []byte) string {
 	return str
 }
 
-// Lex lexes a token from input.
-func (s *scanner) Lex(lval *sqlSymType) int {
-	// The core lexing takes place in scan(). Here we do a small bit of post
-	// processing of the lexical tokens so that the grammar only requires
-	// one-token lookahead despite SQL requiring multi-token lookahead in some
-	// cases. These special cases are handled below and the returned tokens are
-	// adjusted to reflect the lookahead (LA) that occurred.
-
-	if s.nextTok != nil {
-		*lval = *s.nextTok
-		s.nextTok = nil
-	} else {
-		s.scan(lval)
-	}
-
-	switch lval.id {
-	case NOT, WITH, AS:
-	default:
-		s.lastTok = *lval
-		return lval.id
-	}
-
-	s.nextTok = &s.tokBuf
-	s.scan(s.nextTok)
-
-	// If you update these cases, update lex.lookaheadKeywords.
-	switch lval.id {
-	case AS:
-		switch s.nextTok.id {
-		case OF:
-			lval.id = AS_LA
-		}
-	case NOT:
-		switch s.nextTok.id {
-		case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
-			lval.id = NOT_LA
-		}
-
-	case WITH:
-		switch s.nextTok.id {
-		case TIME, ORDINALITY:
-			lval.id = WITH_LA
-		}
-	}
-
-	s.lastTok = *lval
-	return lval.id
-}
-
-func (s *scanner) initLastErr() {
-	if s.lastError == nil {
-		s.lastError = new(scanErr)
-	}
-}
-
-// Unimplemented wraps Error, setting lastUnimplementedError.
-func (s *scanner) Unimplemented(feature string) {
-	s.Error("unimplemented")
-	s.lastError.unimplementedFeature = feature
-}
-
-// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
-func (s *scanner) UnimplementedWithIssue(issue int) {
-	s.Error("unimplemented")
-	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
-	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
-
-// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
-func (s *scanner) UnimplementedWithIssueDetail(issue int, detail string) {
-	s.Error("unimplemented")
-	s.lastError.unimplementedFeature = fmt.Sprintf("#%d.%s", issue, detail)
-	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
-
-func (s *scanner) Error(e string) {
-	s.initLastErr()
-	if s.lastTok.id == ERROR {
-		// This is a tokenizer (lexical) error: just emit the invalid
-		// input as error.
-		s.lastError.msg = s.lastTok.str
-	} else {
-		// This is a contextual error. Print the provided error message
-		// and the error context.
-		s.lastError.msg = fmt.Sprintf("%s at or near \"%s\"", e, s.lastTok.str)
-	}
-
-	// Find the end of the line containing the last token.
-	i := strings.IndexByte(s.in[s.lastTok.pos:], '\n')
-	if i == -1 {
-		i = len(s.in)
-	} else {
-		i += s.lastTok.pos
-	}
-	// Find the beginning of the line containing the last token. Note that
-	// LastIndexByte returns -1 if '\n' could not be found.
-	j := strings.LastIndexByte(s.in[:s.lastTok.pos], '\n') + 1
-	// Output everything up to and including the line containing the last token.
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "source SQL:\n%s\n", s.in[:i])
-	// Output a caret indicating where the last token starts.
-	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", s.lastTok.pos-j))
-	s.lastError.detail = buf.String()
-	s.lastError.unimplementedFeature = ""
-	s.lastError.hint = ""
-}
-
-// SetHelp marks the "last error" field in the scanner to become a
-// help text. This method is invoked in the error action of the
-// parser, so the help text is only produced if the last token
-// encountered was HELPTOKEN -- other cases are just syntax errors,
-// and in that case we do not want the help text to overwrite the
-// lastError field, which was set earlier to contain details about the
-// syntax error.
-func (s *scanner) SetHelp(msg HelpMessage) {
-	if s.lastTok.id == HELPTOKEN {
-		s.populateHelpMsg(msg.String())
-	} else {
-		s.initLastErr()
-		if msg.Command != "" {
-			s.lastError.hint = `try \h ` + msg.Command
-		} else {
-			s.lastError.hint = `try \hf ` + msg.Function
-		}
-	}
-}
-
-func (s *scanner) populateHelpMsg(msg string) {
-	s.initLastErr()
-	s.lastError.unimplementedFeature = ""
-	s.lastError.msg = "help token in input"
-	s.lastError.hint = msg
-}
-
 func (s *scanner) scan(lval *sqlSymType) {
 	lval.id = 0
-	lval.pos = s.pos
+	lval.pos = int32(s.pos)
 	lval.str = "EOF"
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
@@ -265,12 +104,12 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	ch := s.next()
 	if ch == eof {
-		lval.pos = s.pos
+		lval.pos = int32(s.pos)
 		return
 	}
 
-	lval.id = ch
-	lval.pos = s.pos - 1
+	lval.id = int32(ch)
+	lval.pos = int32(s.pos - 1)
 	lval.str = s.in[lval.pos:s.pos]
 
 	switch ch {
@@ -632,7 +471,7 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 
 			case eof:
 				lval.id = ERROR
-				lval.pos = start
+				lval.pos = int32(start)
 				lval.str = "unterminated comment"
 				return false, false
 			}
@@ -706,7 +545,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
 	if id, ok := lex.Keywords[lval.str]; ok {
-		lval.id = id.Tok
+		lval.id = int32(id.Tok)
 	} else {
 		lval.id = IDENT
 	}
@@ -1051,7 +890,7 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 			return ERROR, true
 		}
 		if lval.id == 0 {
-			return last, last != 0
+			return int(last), last != 0
 		}
 	}
 }
