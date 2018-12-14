@@ -1000,7 +1000,7 @@ func anonymizeStmtAndConstants(stmt tree.Statement) string {
 func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) error {
 	var anonymized []string
 	{
-		stmts, err := parser.Parse(sqlStmts)
+		stmts, _, err := parser.Parse(sqlStmts)
 		if err == nil {
 			for _, stmt := range stmts {
 				anonymized = append(anonymized, anonymizeStmtAndConstants(stmt))

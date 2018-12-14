@@ -36,39 +36,135 @@ import (
 // package.
 type Parser struct {
 	scanner    scanner
+	lexer      lexer
 	parserImpl sqlParserImpl
+	tokBuf     [8]sqlSymType
+	stmtBuf    [1]tree.Statement
+	strBuf     [1]string
 }
 
+// INT8 is the historical interpretation of INT. This should be left
+// alone in the future, since there are many sql fragments stored
+// in various descriptors.  Any user input that was created after
+// INT := INT4 will simply use INT4 in any resulting code.
+var defaultNakedIntType = coltypes.Int8
+var defaultNakedSerialType = coltypes.Serial8
+
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
-	return p.parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
+func (p *Parser) Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
+	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+}
+
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func (p *Parser) ParseWithInt(
+	sql string, nakedIntType *coltypes.TInt,
+) (stmts tree.StatementList, sqlStrings []string, _ error) {
+	nakedSerialType := coltypes.Serial8
+	if nakedIntType == coltypes.Int4 {
+		nakedSerialType = coltypes.Serial4
+	}
+	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
+}
+
+func (p *Parser) parseOneWithDepth(depth int, sql string) (tree.Statement, error) {
+	stmts, _, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
+	}
+	return stmts[0], nil
+}
+
+func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
+	var lval sqlSymType
+	tokens = p.tokBuf[:0]
+
+	// Scan the first token.
+	for {
+		p.scanner.scan(&lval)
+		if lval.id == 0 {
+			return "", nil, true
+		}
+		if lval.id != ';' {
+			break
+		}
+	}
+
+	startPos := lval.pos
+	// We make the resulting token positions match the returned string.
+	lval.pos = 0
+	tokens = append(tokens, lval)
+	for {
+		if lval.id == ERROR {
+			return p.scanner.in[startPos:], tokens, true
+		}
+		posBeforeScan := p.scanner.pos
+		p.scanner.scan(&lval)
+		if lval.id == 0 || lval.id == ';' {
+			return p.scanner.in[startPos:posBeforeScan], tokens, (lval.id == 0)
+		}
+		lval.pos -= startPos
+		tokens = append(tokens, lval)
+	}
 }
 
 func (p *Parser) parseWithDepth(
 	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (stmts tree.StatementList, err error) {
+) (stmts tree.StatementList, sqlStrings []string, err error) {
+	stmts = tree.StatementList(p.stmtBuf[:0])
+	sqlStrings = p.strBuf[:0]
 	p.scanner.init(sql)
-	p.scanner.nakedIntType = nakedIntType
-	p.scanner.nakedSerialType = nakedSerialType
-	if p.parserImpl.Parse(&p.scanner) != 0 {
+	defer p.scanner.cleanup()
+	for {
+		sql, tokens, done := p.scanOneStmt()
+		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
+		if err != nil {
+			return nil, nil, err
+		}
+		if stmt != nil {
+			stmts = append(stmts, stmt)
+			sqlStrings = append(sqlStrings, sql)
+		}
+		if done {
+			break
+		}
+	}
+	return stmts, sqlStrings, nil
+}
+
+// parse parses a statement from the given scanned tokens.
+func (p *Parser) parse(
+	depth int,
+	sql string,
+	tokens []sqlSymType,
+	nakedIntType *coltypes.TInt,
+	nakedSerialType *coltypes.TSerial,
+) (tree.Statement, error) {
+	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
+	defer p.lexer.cleanup()
+	if p.parserImpl.Parse(&p.lexer) != 0 {
+		lastError := p.lexer.lastError
 		var err *pgerror.Error
-		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
+		if feat := lastError.unimplementedFeature; feat != "" {
 			// UnimplementedWithDepth populates the generic hint. However
 			// in some cases we have a more specific hint. This is overridden
 			// below.
-			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, p.scanner.lastError.msg)
+			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, lastError.msg)
 		} else {
-			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, p.scanner.lastError.msg)
+			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, lastError.msg)
 		}
-		if p.scanner.lastError.hint != "" {
+		if lastError.hint != "" {
 			// If lastError.hint is not set, e.g. from (*scanner).Unimplemented(),
 			// we're OK with the default hint. Otherwise, override it.
-			err.Hint = p.scanner.lastError.hint
+			err.Hint = lastError.hint
 		}
-		err.Detail = p.scanner.lastError.detail
+		err.Detail = lastError.detail
 		return nil, err
 	}
-	return p.scanner.stmts, nil
+	return p.lexer.stmt, nil
 }
 
 // unaryNegation constructs an AST node for a negation. This attempts
@@ -87,25 +183,9 @@ func unaryNegation(e tree.Expr) tree.Expr {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (tree.StatementList, error) {
-	return parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
-}
-
-// ParseWithInt parses a sql statement string and returns a list of
-// Statements. The INT token will result in the specified TInt type.
-func ParseWithInt(sql string, nakedIntType *coltypes.TInt) (tree.StatementList, error) {
-	nakedSerialType := coltypes.Serial8
-	if nakedIntType == coltypes.Int4 {
-		nakedSerialType = coltypes.Serial4
-	}
-	return parseWithDepth(1, sql, nakedIntType, nakedSerialType)
-}
-
-func parseWithDepth(
-	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (tree.StatementList, error) {
+func Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
 	var p Parser
-	return p.parseWithDepth(depth+1, sql, nakedIntType, nakedSerialType)
+	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
@@ -115,14 +195,8 @@ func parseWithDepth(
 // bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (tree.Statement, error) {
-	stmts, err := parseWithDepth(1, sql, coltypes.Int8, coltypes.Serial8)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
-	}
-	return stmts[0], nil
+	var p Parser
+	return p.parseOneWithDepth(1, sql)
 }
 
 // ParseTableNameWithIndex parses a table name with index.

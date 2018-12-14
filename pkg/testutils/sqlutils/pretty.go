@@ -26,7 +26,7 @@ import (
 func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	t.Helper()
 
-	stmts, err := parser.Parse(sql)
+	stmts, _, err := parser.Parse(sql)
 	if err != nil {
 		t.Fatalf("%s: %s", err, sql)
 	}
