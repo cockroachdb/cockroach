@@ -844,11 +844,15 @@ func (ag *orderedAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create    func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+
+	// arguments is the list of constant (non-aggregated) arguments to the
+	// aggregate, for instance, the separator in string_agg.
 	arguments tree.Datums
-	group     *aggregatorBase
-	seen      map[string]struct{}
-	arena     *stringarena.Arena
+
+	group *aggregatorBase
+	seen  map[string]struct{}
+	arena *stringarena.Arena
 }
 
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))

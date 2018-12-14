@@ -148,10 +148,6 @@ var ScalarListWithEmptyTuple = ScalarListExpr{EmptyTuple}
 // grouping columns and no ordering.
 var EmptyGroupingPrivate = GroupingPrivate{}
 
-// MaxAggChildren is the maximum number of children that any aggregate operator
-// can have.
-const MaxAggChildren = 3
-
 // LastGroupMember returns the last member in the same memo group of the given
 // relational expression.
 func LastGroupMember(e RelExpr) RelExpr {

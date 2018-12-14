@@ -95,6 +95,11 @@ scalar-group-by
            └── variable: column16 [type=bytes]
 
 build
+SELECT min(1, 2)
+----
+error (42883): unknown signature: min(int, int)
+
+build
 SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
   variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
@@ -2792,6 +2797,114 @@ project
       └── aggregations
            └── max [type=decimal]
                 └── variable: column5 [type=decimal]
+
+# Tests for string_agg.
+
+build
+SELECT string_agg(s, 'separator') FROM kv
+----
+scalar-group-by
+ ├── columns: string_agg:6(string)
+ ├── project
+ │    ├── columns: column5:5(string!null) s:4(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── const: 'separator' [type=string]
+ └── aggregations
+      └── string-agg [type=string]
+           ├── variable: s [type=string]
+           └── const: 'separator' [type=string]
+
+build
+SELECT string_agg(s) FROM kv
+----
+error (42883): unknown signature: string_agg(string)
+
+build
+SELECT string_agg(s, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: string_agg(string, string, string)
+
+build
+SELECT string_agg(DISTINCT s, 'separator') FROM kv
+----
+scalar-group-by
+ ├── columns: string_agg:6(string)
+ ├── project
+ │    ├── columns: column5:5(string!null) s:4(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── const: 'separator' [type=string]
+ └── aggregations
+      └── string-agg [type=string]
+           ├── agg-distinct [type=string]
+           │    └── variable: s [type=string]
+           └── const: 'separator' [type=string]
+
+build
+SELECT max(s), string_agg(s, 'sep1'), string_agg(s, 'sep2'), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:5(string) string_agg:7(string) string_agg:9(string) min:10(string)
+ ├── project
+ │    ├── columns: column6:6(string!null) column8:8(string!null) s:4(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         ├── const: 'sep1' [type=string]
+ │         └── const: 'sep2' [type=string]
+ └── aggregations
+      ├── max [type=string]
+      │    └── variable: s [type=string]
+      ├── string-agg [type=string]
+      │    ├── variable: s [type=string]
+      │    └── const: 'sep1' [type=string]
+      ├── string-agg [type=string]
+      │    ├── variable: s [type=string]
+      │    └── const: 'sep2' [type=string]
+      └── min [type=string]
+           └── variable: s [type=string]
+
+# The separator must be constant, but it need not be a literal - any constant (as
+# determined by tree.IsConst) is valid.
+build
+SELECT string_agg(s, 'abc' || 'xyz') FROM kv
+----
+scalar-group-by
+ ├── columns: string_agg:6(string)
+ ├── project
+ │    ├── columns: column5:5(string!null) s:4(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── const: 'abcxyz' [type=string]
+ └── aggregations
+      └── string-agg [type=string]
+           ├── variable: s [type=string]
+           └── const: 'abcxyz' [type=string]
+
+build
+SELECT string_agg(s, NULL) FROM kv
+----
+scalar-group-by
+ ├── columns: string_agg:6(string)
+ ├── project
+ │    ├── columns: column5:5(unknown) s:4(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── null [type=unknown]
+ └── aggregations
+      └── string-agg [type=string]
+           ├── variable: s [type=string]
+           └── null [type=unknown]
+
+build
+SELECT string_agg('foo', s) FROM kv
+----
+error: unimplemented: aggregate functions with multiple non-constant expressions are not supported
 
 # Regression test for #26419
 build

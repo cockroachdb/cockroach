@@ -171,7 +171,7 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 			// Remove AggDistinct. We rely on the fact that AggDistinct must be
 			// directly "under" the Aggregate.
 			// TODO(radu): this will need to be revisited when we add more modifiers.
-			newAggs[i].Agg = c.f.DynamicConstruct(item.Agg.Op(), v).(opt.ScalarExpr)
+			newAggs[i].Agg = c.replaceAggInputVar(item.Agg, v)
 			newAggs[i].Col = aggs[i].Col
 		} else {
 			newAggs[i] = *item
@@ -179,6 +179,20 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 	}
 
 	return newAggs
+}
+
+// replaceAggInputVar swaps out the aggregated variable in an aggregate with v. In
+// the case of aggregates with multiple arguments (like string_agg) the other arguments
+// are kept the same.
+func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) opt.ScalarExpr {
+	switch agg.ChildCount() {
+	case 1:
+		return c.f.DynamicConstruct(agg.Op(), v).(opt.ScalarExpr)
+	case 2:
+		return c.f.DynamicConstruct(agg.Op(), v, agg.Child(1)).(opt.ScalarExpr)
+	default:
+		panic("unhandled number of aggregate children")
+	}
 }
 
 // hasRemovableAggDistinct is called with an aggregation element and returns
@@ -189,7 +203,7 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 func (c *CustomFuncs) hasRemovableAggDistinct(
 	agg opt.ScalarExpr, groupingCols opt.ColSet, inputFDs *props.FuncDepSet,
 ) (ok bool, aggDistinctVar *memo.VariableExpr) {
-	if agg.ChildCount() != 1 {
+	if agg.ChildCount() == 0 {
 		return false, nil
 	}
 

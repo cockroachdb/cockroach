@@ -245,19 +245,22 @@ func (b *Builder) buildAggregation(
 		fromCols = fromScope.colSet()
 	}
 	for i, agg := range aggInfos {
-		// Aggregate functions will never have more than 3 operands.
-		var args [memo.MaxAggChildren]opt.ScalarExpr
-		for j := range agg.args {
+		args := make([]opt.ScalarExpr, 0, 2)
+		if len(agg.args) > 0 {
 			colID := argCols[0].id
-			argCols = argCols[1:]
-			args[j] = b.factory.ConstructVariable(colID)
+			args = append(args, b.factory.ConstructVariable(colID))
 			if agg.distinct {
 				// Wrap the argument with AggDistinct.
-				args[j] = b.factory.ConstructAggDistinct(args[j])
+				args[0] = b.factory.ConstructAggDistinct(args[0].(opt.ScalarExpr))
 			}
+
+			// Append any constant arguments without further processing.
+			args = append(args, agg.args[1:]...)
 		}
 
-		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args)
+		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args).(opt.ScalarExpr)
+		argCols = argCols[len(agg.args):]
+
 		if opt.AggregateIsOrderingSensitive(aggCols[i].scalar.Op()) {
 			haveOrderingSensitiveAgg = true
 		}
@@ -416,14 +419,6 @@ func (b *Builder) buildGrouping(
 func (b *Builder) buildAggregateFunction(
 	f *tree.FuncExpr, def *memo.FunctionPrivate, inScope *scope,
 ) *aggregateInfo {
-	if len(f.Exprs) > 1 {
-		// TODO: #10495
-		panic(builderError{pgerror.UnimplementedWithIssueError(
-			10495,
-			"aggregate functions with multiple arguments are not supported yet"),
-		})
-	}
-
 	tempScope := inScope.startAggFunc()
 	tempScopeColsBefore := len(tempScope.cols)
 
@@ -444,6 +439,7 @@ func (b *Builder) buildAggregateFunction(
 		// This synthesizes a new tempScope column, unless the argument is a
 		// simple VariableOp.
 		texpr := pexpr.(tree.TypedExpr)
+
 		col := b.addColumn(tempScope, "" /* label */, texpr)
 		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		if col.scalar != nil {
@@ -485,9 +481,7 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
-func (b *Builder) constructAggregate(
-	name string, args [memo.MaxAggChildren]opt.ScalarExpr,
-) opt.ScalarExpr {
+func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
 	case "array_agg":
 		return b.factory.ConstructArrayAgg(args[0])
@@ -523,6 +517,13 @@ func (b *Builder) constructAggregate(
 		return b.factory.ConstructJsonAgg(args[0])
 	case "jsonb_agg":
 		return b.factory.ConstructJsonbAgg(args[0])
+	case "string_agg":
+		if !memo.CanExtractConstDatum(args[1]) {
+			panic(builderError{
+				fmt.Errorf("unimplemented: aggregate functions with multiple non-constant expressions are not supported"),
+			})
+		}
+		return b.factory.ConstructStringAgg(args[0], args[1])
 	}
 	panic(fmt.Sprintf("unhandled aggregate: %s", name))
 }

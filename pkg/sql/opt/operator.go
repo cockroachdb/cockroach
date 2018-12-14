@@ -183,6 +183,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	XorAggOp:          "xor_agg",
 	JsonAggOp:         "json_agg",
 	JsonbAggOp:        "jsonb_agg",
+	StringAggOp:       "string_agg",
 	ConstAggOp:        "any_not_null",
 	ConstNotNullAggOp: "any_not_null",
 	AnyNotNullAggOp:   "any_not_null",
@@ -232,7 +233,7 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 // values are fed to it.
 func AggregateIsOrderingSensitive(op Operator) bool {
 	switch op {
-	case ArrayAggOp, ConcatAggOp, JsonAggOp, JsonbAggOp:
+	case ArrayAggOp, ConcatAggOp, JsonAggOp, JsonbAggOp, StringAggOp:
 		return true
 	}
 	return false
@@ -245,7 +246,7 @@ func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
 	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
 		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
-		AnyNotNullAggOp:
+		AnyNotNullAggOp, StringAggOp:
 		return true
 	}
 	return false
@@ -260,7 +261,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
 	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp, SqrDiffOp,
 		VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
-		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp:
+		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp, StringAggOp:
 		return true
 	}
 	return false
