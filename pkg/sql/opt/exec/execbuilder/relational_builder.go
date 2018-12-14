@@ -1096,15 +1096,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// If INSERT returns rows, they contain all non-mutation columns from the
-	// table, in the same order they're defined in the table.
+	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults {
-		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if !opt.IsMutationColumn(tab, i) {
-				ep.outputCols.Set(int(ins.InsertCols[i]), i)
-			}
-		}
+		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, nil
 }
@@ -1146,20 +1141,10 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// If UPDATE returns rows, they contain all non-mutation columns from the
-	// table, in the same order they're defined in the table. If a column was
-	// updated, it should "shadow" the original value fetched from the table.
+	// Construct the output column map.
 	ep := execPlan{root: node}
 	if upd.NeedResults {
-		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			// Use the update column if it's present, otherwise fall back to the
-			// fetched column.
-			if upd.UpdateCols[i] != 0 {
-				ep.outputCols.Set(int(upd.UpdateCols[i]), i)
-			} else if upd.FetchCols[i] != 0 {
-				ep.outputCols.Set(int(upd.FetchCols[i]), i)
-			}
-		}
+		ep.outputCols = mutationOutputColMap(upd)
 	}
 	return ep, nil
 }
@@ -1314,4 +1299,24 @@ func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
 		}
 	}
 	return res
+}
+
+// mutationOutputColMap constructs a ColMap for the execPlan that maps from the
+// opt.ColumnID of each output column to the ordinal position of that column in
+// the result.
+func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
+	private := mutation.Private().(*memo.MutationPrivate)
+	tab := mutation.Memo().Metadata().Table(private.Table)
+	outCols := mutation.Relational().OutputCols
+
+	var colMap opt.ColMap
+	ord := 0
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		colID := int(private.Table.ColumnID(i))
+		if outCols.Contains(colID) {
+			colMap.Set(colID, ord)
+			ord++
+		}
+	}
+	return colMap
 }

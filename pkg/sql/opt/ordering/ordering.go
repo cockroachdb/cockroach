@@ -172,14 +172,14 @@ func init() {
 		buildProvidedOrdering: sortBuildProvided,
 	}
 	funcMap[opt.InsertOp] = funcs{
-		canProvideOrdering:    insertCanProvideOrdering,
-		buildChildReqOrdering: insertBuildChildReqOrdering,
-		buildProvidedOrdering: insertBuildProvided,
+		canProvideOrdering:    mutationCanProvideOrdering,
+		buildChildReqOrdering: mutationBuildChildReqOrdering,
+		buildProvidedOrdering: mutationBuildProvided,
 	}
 	funcMap[opt.UpdateOp] = funcs{
-		canProvideOrdering:    updateCanProvideOrdering,
-		buildChildReqOrdering: updateBuildChildReqOrdering,
-		buildProvidedOrdering: updateBuildProvided,
+		canProvideOrdering:    mutationCanProvideOrdering,
+		buildChildReqOrdering: mutationBuildChildReqOrdering,
+		buildProvidedOrdering: mutationBuildProvided,
 	}
 }
 
