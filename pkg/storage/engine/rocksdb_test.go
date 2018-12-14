@@ -1658,7 +1658,7 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 	if err := b.Put(mvccKey("foo"), []byte{'b', 'a', 'r'}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Commit(true); err != nil {
+	if err := b.Commit(true /* sync */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1677,7 +1677,7 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 	// Commit an empty batch.
 	b = e.NewBatch()
 	defer b.Close()
-	if err := b.Commit(true); err != nil {
+	if err := b.Commit(true /* sync */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1690,4 +1690,51 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 		t.Fatalf("expected wal files %#v after committing empty batch, but got %#v",
 			walsBefore, walsAfter)
 	}
+
+	// Regression test a bug that would accidentally make Commit a no-op (via an
+	// errant fast-path) when a batch contained only LogData.
+	testutils.RunTrueAndFalse(t, "distinct", func(t *testing.T, distinct bool) {
+		walsBefore, err := e.GetSortedWALFiles()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(walsBefore) != 1 {
+			t.Fatalf("expected one WAL file, got %d", len(walsBefore))
+		}
+
+		batch := e.NewBatch()
+		defer batch.Close()
+
+		var writer ReadWriter = batch
+		if distinct {
+			// NB: we can't actually close this distinct batch because it auto-
+			// closes when the batch commits.
+			writer = batch.Distinct()
+		}
+
+		if err := writer.LogData([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if batch.Empty() {
+			t.Error("batch is not empty")
+		}
+
+		if err := batch.Commit(true /* sync */); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify that the WAL has grown.
+		walsAfter, err := e.GetSortedWALFiles()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(walsAfter) != 1 {
+			t.Fatalf("expected one WAL file, got %+v", walsAfter)
+		}
+
+		if after, before := walsAfter[0].Size, walsBefore[0].Size; after <= before {
+			t.Fatalf("wal size was expected to increase, got %d -> %d", before, after)
+		}
+	})
 }
