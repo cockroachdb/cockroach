@@ -112,9 +112,11 @@ func (b *RowResultWriter) IncrementRowsAffected(n int) {
 }
 
 // AddRow implements the rowResultWriter interface.
-func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	_, err := b.rowContainer.AddRow(ctx, row)
-	return err
+func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) (bool, error) {
+	if _, err := b.rowContainer.AddRow(ctx, row); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // SetError is part of the rowResultWriter interface.
@@ -148,8 +150,8 @@ func (c *callbackResultWriter) IncrementRowsAffected(n int) {
 	c.rowsAffected += n
 }
 
-func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return c.fn(ctx, row)
+func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) (cont bool, err error) {
+	return true, c.fn(ctx, row)
 }
 
 func (c *callbackResultWriter) SetError(err error) {

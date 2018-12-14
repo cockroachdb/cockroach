@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -43,6 +41,77 @@ const (
 	noCompletionMsg
 )
 
+// limitedCommandResult is a commandResult that has a limit, after which calls
+// to AddRow will block until the associated client connection asks for more
+// rows. It essentially implements the "execute portal with limit" part of the
+// Postgres protocol.
+type limitedCommandResult struct {
+	commandResult
+
+	seenTuples int
+	// If set, an error will be sent to the client if more rows are produced than
+	// this limit.
+	limit int
+}
+
+// AddRow is part of the CommandResult interface.
+func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) (cont bool, _ error) {
+	if _, err := r.commandResult.AddRow(ctx, row); err != nil {
+		return false, err
+	}
+	r.seenTuples++
+
+	if r.seenTuples == r.limit {
+		// If we've seen up to the limit of rows, send a "portal suspended" message
+		// and wait for further instructions.
+		r.conn.bufferPortalSuspended()
+		if err := r.conn.Flush(r.pos); err != nil {
+			return false, err
+		}
+		r.seenTuples = 0
+
+		return r.moreResultsNeeded()
+
+	}
+	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// moreResultsNeeded is a restricted connection handler that waits for more
+// requests for rows from the active portal, during the "execute portal" flow
+// when a limit has been specified.
+func (r *limitedCommandResult) moreResultsNeeded() (cont bool, err error) {
+	r.conn.stmtBuf.AdvanceOne()
+	for {
+		cmd, _, err := r.conn.stmtBuf.CurCmd()
+		if err != nil {
+			return false, err
+		}
+		switch c := cmd.(type) {
+		case sql.ExecPortal:
+			// The client wants more rows from the portal.
+			// TODO(jordan,andrei): Check the portal name - what to do if it doesn't match?
+			// Do we need to handle this? c.TimeReceived
+			r.limit = c.Limit
+			return true, nil
+		case sql.Sync:
+			// The client wants to see a ready for query message back.
+			// TODO(jordan,andrei): we should be doing something different
+			// (returning to the outer loop) in the case that we are only in an
+			// implicit transaction.
+			r.conn.stmtBuf.AdvanceOne()
+			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
+			if err := r.conn.Flush(r.pos); err != nil {
+				return false, err
+			}
+		default:
+			return false, nil
+		}
+	}
+}
+
 // commandResult is an implementation of sql.CommandResult that streams a
 // commands results over a pgwire network connection.
 type commandResult struct {
@@ -62,9 +131,6 @@ type commandResult struct {
 	// If typ == commandComplete, this is the tag to be written in the
 	// CommandComplete message.
 	cmdCompleteTag string
-	// If set, an error will be sent to the client if more rows are produced than
-	// this limit.
-	limit int
 
 	stmtType     tree.StatementType
 	descOpt      sql.RowDescOpt
@@ -85,8 +151,9 @@ func (c *conn) makeCommandResult(
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
-) commandResult {
-	return commandResult{
+	limit int,
+) sql.CommandResult {
+	res := commandResult{
 		conn:           c,
 		pos:            pos,
 		descOpt:        descOpt,
@@ -95,6 +162,13 @@ func (c *conn) makeCommandResult(
 		typ:            commandComplete,
 		cmdCompleteTag: stmt.StatementTag(),
 		conv:           conv,
+	}
+	if limit == 0 {
+		return &res
+	}
+	return &limitedCommandResult{
+		limit:         limit,
+		commandResult: res,
 	}
 }
 
@@ -117,19 +191,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		// TODO(andrei): I'm not sure this is the best place to do error conversion.
 		r.conn.bufferErr(convertToErrWithPGCode(r.err))
 		return
-	}
-
-	if r.err == nil &&
-		r.limit != 0 &&
-		r.rowsAffected > r.limit &&
-		r.typ == commandComplete &&
-		r.stmtType == tree.Rows {
-
-		r.err = pgerror.UnimplementedWithIssueErrorf(4035,
-			"execute row count limits not supported: %d of %d",
-			r.limit, r.rowsAffected)
-		telemetry.RecordError(r.err)
-		r.conn.bufferErr(r.err)
 	}
 
 	// Send a completion message, specific to the type of result.
@@ -199,14 +260,14 @@ func (r *commandResult) OverwriteError(err error) {
 }
 
 // AddRow is part of the CommandResult interface.
-func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) (cont bool, _ error) {
 	if r.err != nil {
 		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
 			r.err))
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {
-		return err
+		return false, err
 	}
 	if r.err != nil {
 		panic("can't send row after error")
@@ -215,7 +276,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 
 	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv)
 	_ /* flushed */, err := r.conn.maybeFlush(r.pos)
-	return err
+	return true, err
 }
 
 // SetColumns is part of the CommandResult interface.
@@ -260,11 +321,6 @@ func (r *commandResult) IncrementRowsAffected(n int) {
 // RowsAffected is part of the CommandResult interface.
 func (r *commandResult) RowsAffected() int {
 	return r.rowsAffected
-}
-
-// SetLimit is part of the CommandResult interface.
-func (r *commandResult) SetLimit(n int) {
-	r.limit = n
 }
 
 // ResetStmtType is part of the CommandResult interface.

@@ -347,7 +347,12 @@ type errWrap struct {
 type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
-	AddRow(ctx context.Context, row tree.Datums) error
+	// Note further that calls to AddRow may block.
+	// The cont (continue) boolean will be true in the normal case - if the sender
+	// should continue sending rows to this result writer. However, if it is
+	// false, then the sender should instead gracefully stop sending rows early
+	// and shut down in an orderly fashion, as if the query was finished.
+	AddRow(ctx context.Context, row tree.Datums) (cont bool, err error)
 	IncrementRowsAffected(n int)
 	SetError(error)
 	Err() error
@@ -368,7 +373,7 @@ func (w *errOnlyResultWriter) Err() error {
 	return w.err
 }
 
-func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) (bool, error) {
 	panic("AddRow not supported by errOnlyResultWriter")
 }
 func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
@@ -554,7 +559,7 @@ func (r *DistSQLReceiver) Push(
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
-	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
+	if cont, commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
 		r.commErr = commErr
 		// Set the error on the resultWriter too, for the convenience of some of the
 		// clients. If clients don't care to differentiate between communication
@@ -566,6 +571,9 @@ func (r *DistSQLReceiver) Push(
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
+		r.status = distsqlrun.ConsumerClosed
+		return r.status
+	} else if !cont {
 		r.status = distsqlrun.ConsumerClosed
 		return r.status
 	}

@@ -204,16 +204,16 @@ func makeChangefeedResultWriter(rowsCh chan<- tree.Datums) *changefeedResultWrit
 	return &changefeedResultWriter{rowsCh: rowsCh}
 }
 
-func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) (cont bool, _ error) {
 	// Copy the row because it's not guaranteed to exist after this function
 	// returns.
 	row = append(tree.Datums(nil), row...)
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return false, ctx.Err()
 	case w.rowsCh <- row:
-		return nil
+		return true, nil
 	}
 }
 func (w *changefeedResultWriter) IncrementRowsAffected(n int) {

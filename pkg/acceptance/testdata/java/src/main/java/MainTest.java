@@ -67,6 +67,29 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testLimit() throws Exception {
+        conn.setAutoCommit(false);
+        PreparedStatement stmt = conn.prepareStatement(
+                "SELECT generate_series(1,5)");
+
+        stmt.setFetchSize(2);
+
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals(1, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(2, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(3, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(4, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(5, rs.getInt(1));
+        conn.commit();
+        conn.setAutoCommit(true);
+    }
+
+    @Test
     public void testInsertWithParameters() throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
                 "CREATE TABLE accounts (id INT PRIMARY KEY, balance INT, cdate DATE)"
