@@ -57,9 +57,9 @@ func makeScrubTPCCTest(
 	for i := 0; i < len(stmts); i += len(tpccTables) {
 		for j, t := range tpccTables {
 			if indexOnly {
-				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s WITH OPTIONS INDEX ALL`, t)
+				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s AS OF SYSTEM TIME '-0s' WITH OPTIONS INDEX ALL`, t)
 			} else {
-				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s`, t)
+				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s AS OF SYSTEM TIME '-0s'`, t)
 			}
 		}
 	}
