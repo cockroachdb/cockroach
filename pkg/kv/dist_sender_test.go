@@ -172,6 +172,13 @@ func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
+func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
+	return &roachpb.NodeDescriptor{
+		NodeID:  nodeID,
+		Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:%d", nodeID)),
+	}
+}
+
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // lease holder, attributes and required consistency to determine where to send
 // remote requests.
@@ -340,7 +347,8 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			// The local node needs to get its attributes during sendRPC.
 			nd := &roachpb.NodeDescriptor{
-				NodeID: 6,
+				NodeID:  6,
+				Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:6")),
 				Locality: roachpb.Locality{
 					Tiers: tc.tiers,
 				},
@@ -590,10 +598,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	g, clock := makeGossip(t, stopper)
 	if err := g.AddInfoProto(
 		gossip.MakeNodeIDKey(roachpb.NodeID(2)),
-		&roachpb.NodeDescriptor{
-			NodeID:  2,
-			Address: util.MakeUnresolvedAddr("tcp", "neverused:12345"),
-		},
+		newNodeDesc(2),
 		gossip.NodeDescriptorTTL,
 	); err != nil {
 		t.Fatal(err)
@@ -723,10 +728,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock
 
 	const nodeID = 1
 	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry())
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
-		NodeID:  nodeID,
-		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
-	}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
@@ -930,11 +932,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 
 	// Gossip the two nodes referred to in testUserRangeDescriptor3Replicas.
 	for i := 2; i <= 3; i++ {
-		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
-		nd := &roachpb.NodeDescriptor{
-			NodeID:  roachpb.NodeID(i),
-			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		}
+		nd := newNodeDesc(roachpb.NodeID(i))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -1218,7 +1216,7 @@ func TestSendRPCRetry(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1289,7 +1287,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1380,7 +1378,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 		Clock:      clock,
 	}, g)
 	g.NodeID.Reset(5)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(5)); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -1671,7 +1669,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -1793,7 +1791,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -1953,7 +1951,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		},
 	}
 
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -2148,10 +2146,7 @@ func TestGatewayNodeID(t *testing.T) {
 
 	g, clock := makeGossip(t, stopper)
 	const expNodeID = 42
-	nd := &roachpb.NodeDescriptor{
-		NodeID:  expNodeID,
-		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
-	}
+	nd := newNodeDesc(expNodeID)
 	g.NodeID.Reset(nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
@@ -2201,7 +2196,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 
 	g, clock := makeGossip(t, stopper)
 
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
