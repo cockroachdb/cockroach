@@ -252,18 +252,8 @@ func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog o
 		return true
 	}
 
-	// Memo is stale if the search path has changed. Assume it's changed if the
-	// slice length is different, or if it no longer points to the same underlying
-	// array. If two slices are the same length and point to the same underlying
-	// array, then they are guaranteed to be identical. Note that GetPathArray
-	// already specifies that the slice must not be modified, so its elements will
-	// never be modified in-place.
-	left := m.searchPath.GetPathArray()
-	right := evalCtx.SessionData.SearchPath.GetPathArray()
-	if len(left) != len(right) {
-		return true
-	}
-	if len(left) != 0 && &left[0] != &right[0] {
+	// Memo is stale if the search path has changed.
+	if !m.searchPath.Equals(&evalCtx.SessionData.SearchPath) {
 		return true
 	}
 

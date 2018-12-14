@@ -54,9 +54,7 @@ type SessionData struct {
 	OptimizerUpdates bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
-	// SearchPath is a list of databases that will be searched for a table name
-	// before the database. Currently, this is used only for SELECTs.
-	// Names in the search path must have been normalized already.
+	// SearchPath is a list of namespaces to search builtins in.
 	SearchPath SearchPath
 	// StmtTimeout is the duration a query is permitted to run before it is
 	// canceled by the session. If set to 0, there is no timeout.
