@@ -432,7 +432,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			agg.ResultType,
 			renderIdx,
 			aggFn,
-			nil, /* arguments */
+			agg.ConstArgs,
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		if agg.Distinct {

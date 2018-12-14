@@ -1242,6 +1242,18 @@ company_id  string_agg
 4           D,D,D,D
 
 query IT colnames
+SELECT company_id, string_agg(DISTINCT employee, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           B
+3           C
+4           D
+
+query IT colnames
 SELECT company_id, string_agg(employee::BYTES, b',')
 FROM string_agg_test
 GROUP BY company_id
