@@ -106,7 +106,10 @@ func createTestStoreWithEngine(
 
 	rpcContext := rpc.NewContext(
 		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
-	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
+	nodeDesc := &roachpb.NodeDescriptor{
+		NodeID:  1,
+		Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:26257"),
+	}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
