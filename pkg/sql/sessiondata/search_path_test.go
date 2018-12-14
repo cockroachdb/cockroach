@@ -18,6 +18,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestImpliedSearchPath(t *testing.T) {
@@ -57,4 +59,25 @@ func TestImpliedSearchPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSearchPathEquals(t *testing.T) {
+	a1 := MakeSearchPath([]string{"x", "y", "z"})
+	a2 := MakeSearchPath([]string{"x", "y", "z"})
+	assert.True(t, a1.Equals(&a1))
+	assert.True(t, a2.Equals(&a2))
+
+	assert.True(t, a1.Equals(&a2))
+	assert.True(t, a2.Equals(&a1))
+
+	b := MakeSearchPath([]string{"x", "z", "y"})
+	assert.False(t, a1.Equals(&b))
+
+	c1 := MakeSearchPath([]string{"x", "y", "pg_catalog"})
+	c2 := MakeSearchPath([]string{"x", "y", "pg_catalog"})
+	assert.True(t, c1.Equals(&c2))
+	assert.False(t, a1.Equals(&c1))
+
+	d := MakeSearchPath([]string{"x"})
+	assert.False(t, a1.Equals(&d))
 }
