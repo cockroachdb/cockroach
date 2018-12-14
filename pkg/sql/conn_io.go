@@ -164,7 +164,7 @@ type ExecPortal struct {
 func (ExecPortal) command() {}
 
 func (e ExecPortal) String() string {
-	return fmt.Sprintf("ExecPortal name: %q", e.Name)
+	return fmt.Sprintf("ExecPortal name: %q (limit %d)", e.Name, e.Limit)
 }
 
 var _ Command = ExecPortal{}
@@ -400,7 +400,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	return nil
 }
 
-// curCmd returns the Command currently indicated by the cursor. Besides the
+// CurCmd returns the Command currently indicated by the cursor. Besides the
 // Command itself, the command's position is also returned; the position can be
 // used to later rewind() to this Command.
 //
@@ -409,7 +409,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 //
 // If the buffer has previously been Close()d, or is closed while this is
 // blocked, io.EOF is returned.
-func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
+func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	for {
@@ -474,9 +474,9 @@ func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
 	}
 }
 
-// advanceOne advances the cursor one Command over. The command over which the
+// AdvanceOne advances the cursor one Command over. The command over which the
 // cursor will be positioned when this returns may not be in the buffer yet.
-func (buf *StmtBuf) advanceOne() {
+func (buf *StmtBuf) AdvanceOne() {
 	buf.mu.Lock()
 	buf.mu.curPos++
 	buf.mu.Unlock()
@@ -509,8 +509,8 @@ func (buf *StmtBuf) seekToNextBatch() error {
 
 	var foundSync bool
 	for !foundSync {
-		buf.advanceOne()
-		_, pos, err := buf.curCmd()
+		buf.AdvanceOne()
+		_, pos, err := buf.CurCmd()
 		if err != nil {
 			return err
 		}
@@ -575,6 +575,7 @@ type ClientComm interface {
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
 		conv sessiondata.DataConversionConfig,
+		limit int,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult
@@ -618,12 +619,6 @@ type ClientComm interface {
 type CommandResult interface {
 	RestrictedCommandResult
 	CommandResultClose
-
-	// SetLimit is used when executing a portal to set a limit on the number of
-	// rows to be returned. We don't currently properly support this feature of
-	// the Postgres protocol; instead, we'll return an error if the number of rows
-	// produced is larger than this limit.
-	SetLimit(n int)
 }
 
 // CommandResultErrBase is the subset of CommandResult dealing with setting a
@@ -705,7 +700,7 @@ type RestrictedCommandResult interface {
 	//
 	// The implementation cannot hold on to the row slice; it needs to make a
 	// shallow copy if it needs to.
-	AddRow(ctx context.Context, row tree.Datums) error
+	AddRow(ctx context.Context, row tree.Datums) (cont bool, err error)
 
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -872,14 +867,16 @@ func (r *bufferedCommandResult) ResetStmtType(stmt tree.Statement) {
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+func (r *bufferedCommandResult) AddRow(
+	ctx context.Context, row tree.Datums,
+) (cont bool, err error) {
 	if r.errOnly {
 		panic("AddRow() called when errOnly is set")
 	}
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
 	r.rows = append(r.rows, rowCopy)
-	return nil
+	return true, nil
 }
 
 // SetError is part of the RestrictedCommandResult interface.
@@ -905,13 +902,6 @@ func (r *bufferedCommandResult) IncrementRowsAffected(n int) {
 // RowsAffected is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) RowsAffected() int {
 	return r.rowsAffected
-}
-
-// SetLimit is part of the CommandResult interface.
-func (r *bufferedCommandResult) SetLimit(limit int) {
-	if limit != 0 {
-		panic("unimplemented")
-	}
 }
 
 // Close is part of the CommandResult interface.

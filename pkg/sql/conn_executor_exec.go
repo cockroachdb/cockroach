@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -932,6 +933,7 @@ func (ex *connExecutor) execWithLocalEngine(
 		defer cleanup()
 
 		var commErr error
+		var quitEarly bool
 		queryErr := ex.forEachRow(params, planner.curPlan.plan, func(values tree.Datums) error {
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
@@ -939,9 +941,17 @@ func (ex *connExecutor) execWithLocalEngine(
 				}
 			}
 			ex.sessionTracing.TraceExecRowsResult(consumeCtx, values)
-			commErr = res.AddRow(consumeCtx, values)
+			quitEarly, commErr = res.AddRow(consumeCtx, values)
+			if quitEarly {
+				return io.EOF
+			}
 			return commErr
 		})
+		if quitEarly {
+			// We discovered that the client doesn't want any more rows, so we can
+			// give up early.
+			return nil
+		}
 		if commErr != nil {
 			res.SetError(commErr)
 			return commErr
@@ -1234,7 +1244,7 @@ func (ex *connExecutor) runShowSyntax(
 	var commErr error
 	if err := runShowSyntax(ctx, stmt,
 		func(ctx context.Context, field, msg string) error {
-			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
+			_, commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 			return nil
 		},
 		telemetry.RecordError, /* reportErr */
@@ -1253,7 +1263,8 @@ func (ex *connExecutor) runShowTransactionState(
 	res.SetColumns(ctx, sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
-	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+	_, err := res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+	return err
 }
 
 func (ex *connExecutor) runSetTracing(

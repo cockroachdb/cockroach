@@ -1103,7 +1103,7 @@ func (ex *connExecutor) run(
 			return err
 		}
 
-		cmd, pos, err := ex.stmtBuf.curCmd()
+		cmd, pos, err := ex.stmtBuf.CurCmd()
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -1127,9 +1127,7 @@ func (ex *connExecutor) run(
 			}
 			ex.curStmt = tcmd.Stmt
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				tcmd.Stmt, NeedRowDesc, pos, nil, /* formatCodes */
-				ex.sessionData.DataConversion)
+			stmtRes := ex.clientComm.CreateStatementResult(tcmd.Stmt, NeedRowDesc, pos, nil, ex.sessionData.DataConversion, 0)
 			res = stmtRes
 			curStmt := Statement{SQL: tcmd.SQL, AST: tcmd.Stmt}
 
@@ -1179,14 +1177,8 @@ func (ex *connExecutor) run(
 				break
 			}
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.Statement,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData.DataConversion)
-			stmtRes.SetLimit(tcmd.Limit)
+			stmtRes := ex.clientComm.CreateStatementResult(portal.Stmt.Statement, DontNeedRowDesc, pos, portal.OutFormats,
+				ex.sessionData.DataConversion, tcmd.Limit)
 			res = stmtRes
 			curStmt := Statement{
 				SQL:           portal.Stmt.Str,
@@ -1304,7 +1296,7 @@ func (ex *connExecutor) run(
 		// Move the cursor according to what the state transition told us to do.
 		switch advInfo.code {
 		case advanceOne:
-			ex.stmtBuf.advanceOne()
+			ex.stmtBuf.AdvanceOne()
 		case skipBatch:
 			// We'll flush whatever results we have to the network. The last one must
 			// be an error. This flush may seem unnecessary, as we generally only
