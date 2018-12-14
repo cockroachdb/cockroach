@@ -247,6 +247,26 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 	}
 }
 
+func TestRegistryRunNoTests(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^warning: no tests to run\nPASS$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name: "some-test",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+
+	r.Run([]string{"notest"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
 func TestRegistryRunClusterExpired(t *testing.T) {
 	defer func(l bool, n string) {
 		local, clusterName = l, n

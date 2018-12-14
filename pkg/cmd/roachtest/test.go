@@ -412,6 +412,9 @@ func (r *registry) Run(filters []string, parallelism int, artifactsDir string, u
 	filter := newFilter(filters)
 	// Find the top-level tests to run.
 	tests := r.ListTopLevel(filter)
+	if len(tests) == 0 {
+		fmt.Fprintf(r.out, "warning: no tests to run\n")
+	}
 
 	// Skip any tests for which the min-version is less than the build-version.
 	for _, t := range tests {
