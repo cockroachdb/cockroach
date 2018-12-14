@@ -1441,6 +1441,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
+	// Record a walltime that is lower than the lowest hlc timestamp this current
+	// instance of the node can use. We do not use startTime because it is lower
+	// than the timestamp used to create the bootstrap schema.
+	timeThreshold := s.clock.Now().WallTime
+
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
@@ -1693,7 +1698,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node.
-	s.leaseMgr.DeleteOrphanedLeases(startTime)
+	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
 
 	log.Event(ctx, "server ready")
 
