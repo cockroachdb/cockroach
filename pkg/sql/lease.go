@@ -1763,8 +1763,9 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 }
 
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
-// instance of this node.
-func (m *LeaseManager) DeleteOrphanedLeases(startTime time.Time) {
+// instance of this node. timeThreshold is a walltime lower than the
+// lowest hlc timestamp that the current instance of the node can use.
+func (m *LeaseManager) DeleteOrphanedLeases(timeThreshold int64) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
@@ -1782,10 +1783,17 @@ func (m *LeaseManager) DeleteOrphanedLeases(startTime time.Time) {
 		// Read orphaned leases.
 		sqlQuery := fmt.Sprintf(`
 SELECT "descID", version, expiration FROM system.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
-`, startTime.UnixNano(), nodeID)
-		rows, _, err := m.LeaseStore.execCfg.InternalExecutor.Query(
-			ctx, "read orphaned table leases", nil /*txn*/, sqlQuery)
-		if err != nil {
+`, timeThreshold, nodeID)
+		var rows []tree.Datums
+		retryOptions := base.DefaultRetryOptions()
+		retryOptions.Closer = m.stopper.ShouldQuiesce()
+		// The retry is required because of errors caused by node restarts. Retry 30 times.
+		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
+			var err error
+			rows, _, err = m.LeaseStore.execCfg.InternalExecutor.Query(
+				ctx, "read orphaned table leases", nil /*txn*/, sqlQuery)
+			return err
+		}); err != nil {
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
 			return
 		}
