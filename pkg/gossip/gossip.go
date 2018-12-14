@@ -389,6 +389,9 @@ func (g *Gossip) GetNodeMetrics() *Metrics {
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(ctx, "NodeDescriptor set to %+v", desc)
+	if desc.Address.IsEmpty() {
+		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
+	}
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Errorf("n%d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
@@ -795,7 +798,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// nodes to prevent other parts of the system from trying to talk to it.
 	// We can't directly compare the node against the empty descriptor because
 	// the proto has a repeated field and thus isn't comparable.
-	if desc.NodeID == 0 && desc.Address.IsEmpty() {
+	if desc.NodeID == 0 || desc.Address.IsEmpty() {
 		nodeID, err := NodeIDFromKey(key, KeyNodeIDPrefix)
 		if err != nil {
 			log.Errorf(ctx, "unable to update node address for removed node: %s", err)
@@ -826,12 +829,6 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// of resolvers so we can keep connecting to gossip if the original
 	// resolvers go offline.
 	g.maybeAddResolverLocked(desc.Address)
-
-	// We ignore empty addresses for the sake of not breaking the many tests
-	// that don't bother specifying addresses.
-	if desc.Address.IsEmpty() {
-		return
-	}
 
 	// If the new node's address conflicts with another node's address, then it
 	// must be the case that the new node has replaced the previous one. Remove
@@ -942,6 +939,9 @@ func (g *Gossip) recomputeMaxPeersLocked() {
 // GetNodeDescriptor and internally by getNodeIDAddressLocked.
 func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	if desc, ok := g.nodeDescs[nodeID]; ok {
+		if desc.Address.IsEmpty() {
+			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
+		}
 		return desc, nil
 	}
 
