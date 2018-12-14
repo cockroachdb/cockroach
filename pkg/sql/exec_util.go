@@ -59,7 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -228,6 +228,18 @@ var (
 	MetaSQLOptFallback = metric.Metadata{
 		Name:        "sql.optimizer.fallback.count",
 		Help:        "Number of statements which the cost-based optimizer was unable to plan",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLOptPlanCacheHits = metric.Metadata{
+		Name:        "sql.optimizer.plan_cache.hits",
+		Help:        "Number of non-prepared statements for which a cached plan was used",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLOptPlanCacheMisses = metric.Metadata{
+		Name:        "sql.optimizer.plan_cache.misses",
+		Help:        "Number of non-prepared statements for which a cached plan was not used",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}

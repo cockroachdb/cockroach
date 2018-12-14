@@ -209,9 +209,9 @@ func (ex *connExecutor) prepare(
 		// As of right now, the optimizer only works on SELECT statements and will
 		// fallback for all others, so this should be safe for the foreseeable
 		// future.
-		if optimizerPlanned, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
+		if flags, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
 			return err
-		} else if !optimizerPlanned {
+		} else if !flags.IsSet(planFlagOptUsed) {
 			isCorrelated := p.curPlan.isCorrelated
 			log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
 			// Fallback if the optimizer was not enabled or used.

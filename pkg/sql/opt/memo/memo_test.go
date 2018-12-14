@@ -138,8 +138,8 @@ func TestMemoIsStale(t *testing.T) {
 		t.Errorf("expected stale search path")
 	}
 	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath([]string{"path1", "path2"})
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
-		t.Errorf("expected stale search path")
+	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("memo should not be stale")
 	}
 	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
 
