@@ -804,58 +804,45 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 // buildReturning wraps the input expression with a Project operator that
 // projects the given RETURNING expressions.
 func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
-	if returning != nil {
-		// Start out by constructing a scope containing one column for each non-
-		// mutation column in the target table, in the same order, and with the
-		// same names. These columns can be referenced by the RETURNING clause.
-		//
-		//   1. Project only non-mutation columns.
-		//   2. Alias columns to use table column names.
-		//   3. Mark hidden columns.
-		//   4. Project columns in same order as defined in table schema.
-		//
-		inScope := mb.outScope.replace()
-		inScope.expr = mb.outScope.expr
-		inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
-		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if opt.IsMutationColumn(mb.tab, i) {
-				continue
-			}
+	// Handle case of no RETURNING clause.
+	if returning == nil {
+		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
+		return
+	}
 
-			// Derive ID of column projected by default by the mutation operator.
-			var srcColID opt.ColumnID
-			if mb.op == opt.InsertOp {
-				srcColID = mb.insertColList[i]
-			} else {
-				// The Update operator returns the updated column if one exists, or
-				// else the fetched column if not.
-				if mb.updateColList[i] != 0 {
-					srcColID = mb.updateColList[i]
-				} else {
-					srcColID = mb.fetchColList[i]
-				}
-			}
-
-			// Copy column from the input scope to the returning scope, and update the
-			// name and hidden attribute to correspond to the target table column.
-			srcCol := mb.outScope.getColumn(srcColID)
-			inScope.cols = inScope.cols[:len(inScope.cols)+1]
-			dstCol := &inScope.cols[len(inScope.cols)-1]
-			*dstCol = *srcCol
-			dstCol.table = *mb.alias
-			dstCol.name = mb.tab.Column(i).ColName()
-			dstCol.hidden = mb.tab.Column(i).IsHidden()
+	// Start out by constructing a scope containing one column for each non-
+	// mutation column in the target table, in the same order, and with the
+	// same names. These columns can be referenced by the RETURNING clause.
+	//
+	//   1. Project only non-mutation columns.
+	//   2. Alias columns to use table column names.
+	//   3. Mark hidden columns.
+	//   4. Project columns in same order as defined in table schema.
+	//
+	inScope := mb.outScope.replace()
+	inScope.expr = mb.outScope.expr
+	inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		if opt.IsMutationColumn(mb.tab, i) {
+			continue
 		}
 
-		// Construct the Project operator that projects the RETURNING expressions.
-		outScope := inScope.replace()
-		mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
-		mb.b.buildProjectionList(inScope, outScope)
-		mb.b.constructProjectForScope(inScope, outScope)
-		mb.outScope = outScope
-	} else {
-		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
+		tabCol := mb.tab.Column(i)
+		inScope.cols = append(inScope.cols, scopeColumn{
+			name:   tabCol.ColName(),
+			table:  *mb.alias,
+			typ:    tabCol.DatumType(),
+			id:     mb.tabID.ColumnID(i),
+			hidden: tabCol.IsHidden(),
+		})
 	}
+
+	// Construct the Project operator that projects the RETURNING expressions.
+	outScope := inScope.replace()
+	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
+	mb.b.buildProjectionList(inScope, outScope)
+	mb.b.constructProjectForScope(inScope, outScope)
+	mb.outScope = outScope
 }
 
 // checkNumCols raises an error if the expected number of columns does not match

@@ -278,3 +278,66 @@ type ScanFlags struct {
 func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
+
+// MapToInputIDs maps from the ID of a target table column to the ID(s) of the
+// corresponding input column(s) that provides the value for it:
+//
+//   Insert: a = InsertCols
+//   Update: a = UpdateCols/FetchCols
+//   Upsert: a = UpdateCols/FetchCols, b = InsertCols
+//   Delete: a = FetchCols
+//
+// For the UpdateCols/FetchCols case, use the corresponding UpdateCol if it is
+// non-zero (meaning that column will be updated), else use the FetchCol (which
+// holds the existing value of the column).
+func (m *MutationPrivate) MapToInputIDs(
+	md *opt.Metadata, tabColID opt.ColumnID,
+) (a, b opt.ColumnID) {
+	ord := md.ColumnOrdinal(tabColID)
+	if m.FetchCols != nil {
+		if m.UpdateCols != nil && m.UpdateCols[ord] != 0 {
+			a = m.UpdateCols[ord]
+		} else {
+			a = m.FetchCols[ord]
+		}
+	}
+	if m.InsertCols != nil {
+		if a == 0 {
+			a = m.InsertCols[ord]
+		} else {
+			b = m.InsertCols[ord]
+		}
+	}
+	return a, b
+}
+
+// MapToInputCols maps the given set of table columns to a corresponding set of
+// input columns using the MapToInputID function. This method should not be
+// called for Upsert ops, since the mapping is ambiguous.
+func (m *MutationPrivate) MapToInputCols(md *opt.Metadata, tabCols opt.ColSet) opt.ColSet {
+	var inCols opt.ColSet
+	tabCols.ForEach(func(t int) {
+		a, b := m.MapToInputIDs(md, opt.ColumnID(t))
+		if b != 0 {
+			panic("MapToInputCols cannot be called for Upsert case")
+		}
+		inCols.Add(int(a))
+	})
+	return inCols
+}
+
+// AddEquivTableCols adds an FD to the given set that declares an equivalence
+// between each table column and its corresponding input column. This method
+// should not be called for Upsert ops, since the mapping is ambiguous.
+func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
+	for i, n := 0, md.Table(m.Table).ColumnCount(); i < n; i++ {
+		t := m.Table.ColumnID(i)
+		a, b := m.MapToInputIDs(md, t)
+		if b != 0 {
+			panic("AddEquivTableCols cannot be called for Upsert case")
+		}
+		if a != 0 {
+			fdset.AddEquivalency(t, a)
+		}
+	}
+}

@@ -162,9 +162,9 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		if len(t.InsertCols) != tab.ColumnCount() {
-			panic("count of insert columns does not match count of table columns")
-		}
+		m.checkColListLen(t.InsertCols, tab.ColumnCount(), "InsertCols")
+		m.checkColListLen(t.FetchCols, 0, "FetchCols")
+		m.checkColListLen(t.UpdateCols, 0, "UpdateCols")
 
 		// Ensure that insert columns include all columns except for delete-only
 		// mutation columns (which do not need to be part of INSERT).
@@ -181,15 +181,9 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *UpdateExpr:
 		tab := m.Metadata().Table(t.Table)
-		if len(t.FetchCols) != tab.ColumnCount() {
-			panic("count of fetch columns does not match count of table columns")
-		}
-		if len(t.UpdateCols) != tab.ColumnCount() {
-			panic("count of update columns does not match count of table columns")
-		}
-		if t.InsertCols != nil {
-			panic("Update operator cannot have insert columns")
-		}
+		m.checkColListLen(t.InsertCols, 0, "InsertCols")
+		m.checkColListLen(t.FetchCols, tab.ColumnCount(), "FetchCols")
+		m.checkColListLen(t.UpdateCols, tab.ColumnCount(), "UpdateCols")
 		m.checkMutationExpr(t, &t.MutationPrivate)
 
 	case *ZigzagJoinExpr:
@@ -216,24 +210,22 @@ func (m *Memo) checkExpr(e opt.Expr) {
 	checkExprOrdering(e)
 }
 
+func (m *Memo) checkColListLen(colList opt.ColList, expectedLen int, listName string) {
+	if len(colList) != expectedLen {
+		panic(fmt.Sprintf("column list %s expected length = %d, actual length = %d",
+			listName, expectedLen, len(colList)))
+	}
+}
+
 func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
+	// Output columns should never include mutation columns.
 	tab := m.Metadata().Table(private.Table)
 	var mutCols opt.ColSet
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		if _, ok := tab.Column(i).(*opt.MutationColumn); ok {
-			if len(private.InsertCols) > 0 {
-				mutCols.Add(int(private.InsertCols[i]))
-			}
-			if len(private.FetchCols) > 0 {
-				mutCols.Add(int(private.FetchCols[i]))
-			}
-			if len(private.UpdateCols) > 0 {
-				mutCols.Add(int(private.UpdateCols[i]))
-			}
+			mutCols.Add(int(private.Table.ColumnID(i)))
 		}
 	}
-
-	// Output and ordering columns should never include mutation columns.
 	if rel.Relational().OutputCols.Intersects(mutCols) {
 		panic("output columns cannot include mutation columns")
 	}
