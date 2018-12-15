@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,14 +60,30 @@ func TestQueryCache(t *testing.T) {
 		}
 	}
 
+	hitsDelta, missesDelta := 0, 0
+	getStats := func() (numHits, numMisses int) {
+		return int(s.MustGetSQLCounter(MetaSQLOptPlanCacheHits.Name)) - hitsDelta,
+			int(s.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name)) - missesDelta
+	}
+	resetStats := func() {
+		h, m := getStats()
+		hitsDelta += h
+		missesDelta += m
+	}
+
 	t.Run("simple", func(t *testing.T) {
 		init(t)
+		resetStats()
 		// Alternate between the connections.
 		for i := 0; i < 5; i++ {
 			for _, r := range runners {
 				r.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
 			}
 		}
+		h, m := getStats()
+		// We should have 1 miss and the rest hits.
+		assert.Equal(t, 1, m)
+		assert.Equal(t, 5*len(runners)-1, h)
 	})
 
 	t.Run("parallel", func(t *testing.T) {

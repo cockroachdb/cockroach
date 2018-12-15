@@ -358,8 +358,10 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 }
 
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
-// optimizer.
-func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+// optimizer. On success, the returned flags always have planFlagOptUsed set.
+func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFlags, error) {
+	flags := planFlagOptUsed
+
 	// Ensure that p.curPlan is populated in case an error occurs early,
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
@@ -371,7 +373,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		*tree.Insert, *tree.Update:
 
 	default:
-		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
 	}
 
 	var catalog optCatalog
@@ -390,7 +392,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	useCache := !noMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 	cacheLog := func(msg string) {
 		if log.V(1) {
-			log.Infof(ctx, "%s: %s", msg, stmt.SQL)
+			log.Infof(ctx, "%s: %s", msg, stmt)
 		} else {
 			log.Event(ctx, msg)
 		}
@@ -411,7 +413,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		//
 		memo, err := p.prepareMemo(ctx, &catalog, stmt)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if !noMemoReuse {
 			stmt.Prepared.Memo = memo
@@ -427,7 +429,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 			resultCols[i].Typ = md.ColumnType(col.ID)
 		}
 		p.curPlan.plan = &zeroNode{columns: resultCols}
-		return nil
+		return flags, nil
 	}
 
 	var execMemo *memo.Memo
@@ -440,7 +442,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
 			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
 
@@ -449,24 +451,28 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
 		if ok {
-			cacheLog("query cache hit")
 			if cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
 				cachedData.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				// Update the plan in the cache.
 				p.execCfg.QueryCache.Add(&cachedData)
-				cacheLog("query cache updated")
+				cacheLog("query cache hit but needed update")
+				flags.Set(planFlagOptCacheMiss)
+			} else {
+				cacheLog("query cache hit")
+				flags.Set(planFlagOptCacheHit)
 			}
 			execMemo, err = p.reuseMemo(cachedData.Memo)
 		} else {
+			flags.Set(planFlagOptCacheMiss)
 			cacheLog("query cache miss")
 		}
 	}
 
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if execMemo == nil {
@@ -477,7 +483,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		if err := bld.Build(); err != nil {
 			// isCorrelated is used in the fallback case to create a better error.
 			p.curPlan.isCorrelated = bld.IsCorrelated
-			return err
+			return 0, err
 		}
 		p.optimizer.Optimize()
 		execMemo = f.Memo()
@@ -501,7 +507,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	p.curPlan = *plan.(*planTop)
@@ -511,12 +517,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return 0, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 
-	return nil
+	return flags, nil
 }
 
 // prepareMemo builds the statement into a memo that can be stored for prepared
@@ -1108,4 +1114,41 @@ func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
 	}
 	// Mark transaction as operating on the system DB.
 	return p.txn.SetSystemConfigTrigger()
+}
+
+// planFlags is used throughout the planning code to keep track of various
+// events or decisions along the way.
+type planFlags uint32
+
+const (
+	// planFlagOptUsed is set if the optimizer was used to create the plan.
+	planFlagOptUsed planFlags = (1 << iota)
+
+	// planFlagOptFallback is set if the optimizer was enabled but did not support the
+	// statement.
+	planFlagOptFallback
+
+	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
+	// re-optimized).
+	planFlagOptCacheHit
+
+	// planFlagOptCacheMiss is set if we looked for a plan in the query plan cache but
+	// did not find one.
+	planFlagOptCacheMiss
+
+	// planFlagDistributed is set if the plan is for the DistSQL engine, in
+	// distributed mode.
+	planFlagDistributed
+
+	// planFlagDistSQLLocal is set if the plan is for the DistSQL engine,
+	// but in local mode.
+	planFlagDistSQLLocal
+)
+
+func (pf planFlags) IsSet(flag planFlags) bool {
+	return (pf & flag) != 0
+}
+
+func (pf *planFlags) Set(flag planFlags) {
+	*pf |= flag
 }

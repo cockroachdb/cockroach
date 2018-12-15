@@ -531,29 +531,36 @@ func (p *planner) prepareForDistSQLSupportCheck() {
 }
 
 // optionallyUseOptimizer will attempt to make an optimizer plan based on the
-// optimizerMode setting. If it is run, it will return true. If it returns false
-// and no error is returned, it is safe to fallback to a non-optimizer plan.
+// optimizerMode setting.
+//
+// If we are able to create a plan with the optimizer, the planFlagOptUsed is
+// set in the flags.
+//
+// If the optimizer is off or it is safe to fall back to the heuristic planner,
+// no error is returned and planFlagOptUsed is not set in the flags
+// (planFlagOptFallback is set in the latter case).
 func (p *planner) optionallyUseOptimizer(
 	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
-) (bool, error) {
+) (planFlags, error) {
 	if sd.OptimizerMode == sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "optimizer disabled")
-		return false, nil
+		return 0, nil
 	}
 
 	log.VEvent(ctx, 2, "generating optimizer plan")
 
-	err := p.makeOptimizerPlan(ctx, stmt)
-	if err == nil {
-		log.VEvent(ctx, 2, "optimizer plan succeeded")
-		return true, nil
+	flags, err := p.makeOptimizerPlan(ctx, stmt)
+	if err != nil {
+		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
+		if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
+			log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
+			return planFlagOptFallback, nil
+		}
+		return 0, err
 	}
-	log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
-	if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
-		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-		return false, nil
-	}
-	return false, err
+
+	log.VEvent(ctx, 2, "optimizer plan succeeded")
+	return flags, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

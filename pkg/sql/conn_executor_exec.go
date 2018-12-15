@@ -694,8 +694,14 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 
+		var flags planFlags
 		shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
 		if shouldUseDistSQL {
+			if distributePlan {
+				flags.Set(planFlagDistributed)
+			} else {
+				flags.Set(planFlagDistSQLLocal)
+			}
 			ex.sessionTracing.TraceExecStart(ctx, "distributed-parallel")
 			err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 		} else {
@@ -706,7 +712,7 @@ func (ex *connExecutor) execStmtInParallel(
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 		ex.recordStatementSummary(
-			planner, stmt, distributePlan, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, flags, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -771,12 +777,11 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) {
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, stmt Statement, planner *planner, res RestrictedCommandResult,
 ) error {
-
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
-	optimizerPlanned, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
-	if !optimizerPlanned && err == nil {
+	flags, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
+	if err == nil && !flags.IsSet(planFlagOptUsed) {
 		isCorrelated := planner.curPlan.isCorrelated
 		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
 		// Fallback if the optimizer was not enabled or used.
@@ -833,6 +838,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
 
 	if shouldUseDistSQL {
+		if distributePlan {
+			flags.Set(planFlagDistributed)
+		} else {
+			flags.Set(planFlagDistSQLLocal)
+		}
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
@@ -845,7 +855,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return err
 	}
 	ex.recordStatementSummary(
-		planner, stmt, distributePlan, optimizerPlanned,
+		planner, stmt, flags,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
 		&ex.server.EngineMetrics,
 	)

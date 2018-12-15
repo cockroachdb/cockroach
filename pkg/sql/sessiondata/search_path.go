@@ -33,8 +33,8 @@ type SearchPath struct {
 	containsPgCatalog bool
 }
 
-// MakeSearchPath returns a new SearchPath struct. The paths slice must not be
-// modified after hand-off to MakeSearchPath.
+// MakeSearchPath returns a new immutable SearchPath struct. The paths slice
+// must not be modified after hand-off to MakeSearchPath.
 func MakeSearchPath(paths []string) SearchPath {
 	containsPgCatalog := false
 	for _, e := range paths {
@@ -74,6 +74,25 @@ func (s SearchPath) IterWithoutImplicitPGCatalog() SearchPathIter {
 // resultant slice is not to be modified.
 func (s SearchPath) GetPathArray() []string {
 	return s.paths
+}
+
+// Equals returns true if two SearchPaths are the same.
+func (s SearchPath) Equals(other *SearchPath) bool {
+	if s.containsPgCatalog != other.containsPgCatalog {
+		return false
+	}
+	if len(s.paths) != len(other.paths) {
+		return false
+	}
+	// Fast path: skip the check if it is the same slice.
+	if &s.paths[0] != &other.paths[0] {
+		for i := range s.paths {
+			if s.paths[i] != other.paths[i] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s SearchPath) String() string {
