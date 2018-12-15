@@ -26,6 +26,12 @@ import (
 // Metadata for more details.
 type ColumnID int32
 
+// index returns the index of the column in Metadata.cols. It's biased by 1, so
+// that ColumnID 0 can be be reserved to mean "unknown column".
+func (c ColumnID) index() int {
+	return int(c - 1)
+}
+
 // ColSet efficiently stores an unordered set of column ids.
 type ColSet = util.FastIntSet
 
@@ -35,112 +41,84 @@ type ColSet = util.FastIntSet
 // representation as FastIntMap but with a slice for large cases.
 type ColList []ColumnID
 
-// mdColumn stores information about one of the columns stored in the metadata,
-// including its label and type.
-type mdColumn struct {
-	// tabID is the identifier of the base table to which this column belongs.
-	// If the column was synthesized (i.e. no base table), then the value is set
-	// to UnknownTableID.
-	tabID TableID
+// ColumnMeta stores information about one of the columns stored in the
+// metadata.
+type ColumnMeta struct {
+	// MetaID is the identifier for this column that is unique within the query
+	// metadata.
+	MetaID ColumnID
 
-	// label is the best-effort name of this column. Since the same column can
-	// have multiple labels (using aliasing), one of those is chosen to be used
-	// for pretty-printing and debugging. This might be different than what is
-	// stored in the physical properties and is presented to end users.
-	label string
+	// Alias is the best-effort name of this column. Since the same column in a
+	// query can have multiple names (using aliasing), one of those is chosen to
+	// be used for pretty-printing and debugging. This might be different than
+	// what is stored in the physical properties and is presented to end users.
+	Alias string
 
-	// typ is the scalar SQL type of this column.
-	typ types.T
+	// Type is the scalar SQL type of this column.
+	Type types.T
+
+	// TableMeta is the metadata for the base table to which this column belongs.
+	// If the column was synthesized (i.e. no base table), then is is null.
+	TableMeta *TableMeta
+
+	// md is a back-reference to the query metadata.
+	md *Metadata
 }
 
-// ColumnTableID returns the identifier of the base table to which the given
-// column belongs. If the column has no base table because it was synthesized,
-// ColumnTableID returns zero.
-func (md *Metadata) ColumnTableID(id ColumnID) TableID {
-	// ColumnID is biased so that 0 is never used (reserved to indicate the
-	// unknown column).
-	return md.cols[id-1].tabID
-}
-
-// ColumnLabel returns the label of the given column. It is used for pretty-
-// printing and debugging.
-func (md *Metadata) ColumnLabel(id ColumnID) string {
-	// ColumnID is biased so that 0 is never used (reserved to indicate the
-	// unknown column).
-	return md.cols[id-1].label
-}
-
-// ColumnType returns the SQL scalar type of the given column.
-func (md *Metadata) ColumnType(id ColumnID) types.T {
-	// ColumnID is biased so that 0 is never used (reserved to indicate the
-	// unknown column).
-	return md.cols[id-1].typ
-}
-
-// ColumnOrdinal returns the ordinal position of the column in its base table.
-// It panics if the column has no base table because it was synthesized.
-func (md *Metadata) ColumnOrdinal(id ColumnID) int {
-	tabID := md.cols[id-1].tabID
-	if tabID == 0 {
-		panic("column was synthesized and has no ordinal position")
-	}
-	return int(id - tabID.firstColID())
-}
-
-// QualifiedColumnLabel returns the column label, qualified with the table name
-// if either of these conditions is true:
+// QualifiedAlias returns the column alias, possibly qualified with the table,
+// schema, or database name:
 //
-//   1. fullyQualify is true
-//   2. there's another column in the metadata with the same column name but
-//      different table name
+//   1. If fullyQualify is true, then the returned alias is prefixed by the
+//      original, fully qualified name of the table: tab.Name().FQString().
 //
-// If the column label is qualified, the table is prefixed to it and separated
-// by a "." character. The table name is qualified with catalog/schema only if
-// fullyQualify is true.
-func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string {
-	col := &md.cols[id-1]
-	if col.tabID == 0 {
+//   2. If there's another column in the metadata with the same column alias but
+//      a different table alias, then prefix the column alias with the table
+//      alias: "tabAlias.columnAlias".
+//
+func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
+	if cm.TableMeta == nil {
 		// Column doesn't belong to a table, so no need to qualify it further.
-		return col.label
+		return cm.Alias
 	}
-	tab := md.Table(col.tabID)
+	tab := cm.TableMeta.Table
+	md := cm.md
 
-	// If a fully qualified label has not been requested, then only qualify it if
+	// If a fully qualified alias has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
-	var tabName string
+	var tabAlias string
 	if !fullyQualify {
 		for i := range md.cols {
-			if i == int(id-1) {
+			if i == int(cm.MetaID-1) {
 				continue
 			}
 
 			// If there are two columns with same name, then column is ambiguous.
-			otherCol := &md.cols[i]
-			if otherCol.label == col.label {
-				tabName = string(tab.Name().TableName)
-				if otherCol.tabID == 0 {
+			cm2 := &md.cols[i]
+			if cm2.Alias == cm.Alias {
+				tabAlias = string(tab.Name().TableName)
+				if cm2.TableMeta == nil {
 					fullyQualify = true
 				} else {
 					// Only qualify if the qualified names are actually different.
-					otherTabName := string(md.Table(otherCol.tabID).Name().TableName)
-					if tabName != otherTabName {
+					tabName2 := string(cm2.TableMeta.Table.Name().TableName)
+					if tabAlias != tabName2 {
 						fullyQualify = true
 					}
 				}
 			}
 		}
 	} else {
-		tabName = tab.Name().FQString()
+		tabAlias = tab.Name().FQString()
 	}
 
 	if !fullyQualify {
-		return col.label
+		return cm.Alias
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tabName)
+	sb.WriteString(tabAlias)
 	sb.WriteRune('.')
-	sb.WriteString(col.label)
+	sb.WriteString(cm.Alias)
 	return sb.String()
 }
 

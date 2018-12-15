@@ -67,8 +67,8 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 	fmtCtx := tree.MakeFmtCtx(f.Buffer, tree.FmtSimple)
 	fmtCtx.WithIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
-		label := md.QualifiedColumnLabel(opt.ColumnID(idx+1), fullyQualify)
-		ctx.WriteString(label)
+		alias := md.ColumnMeta(opt.ColumnID(idx + 1)).QualifiedAlias(fullyQualify)
+		ctx.WriteString(alias)
 	})
 	expr.Format(&fmtCtx)
 	f.FormatScalarProps(nd.(opt.ScalarExpr))
@@ -101,21 +101,21 @@ func (c *indexedVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tr
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
 func (c *indexedVarContainer) IndexedVarResolvedType(idx int) types.T {
-	return c.md.ColumnType(opt.ColumnID(idx))
+	return c.md.ColumnMeta(opt.ColumnID(idx)).Type
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.
 func (c *indexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return &varFormatter{label: c.md.ColumnLabel(opt.ColumnID(idx))}
+	return &varFormatter{alias: c.md.ColumnMeta(opt.ColumnID(idx)).Alias}
 }
 
 type varFormatter struct {
-	label string
+	alias string
 }
 
 var _ tree.NodeFormatter = &varFormatter{}
 
 // Format is part of the tree.NodeFormatter interface.
 func (v *varFormatter) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(v.label)
+	ctx.WriteString(v.alias)
 }

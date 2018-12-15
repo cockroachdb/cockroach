@@ -14,7 +14,10 @@
 
 package opt
 
-import "github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/util"
+)
 
 // TableID uniquely identifies the usage of a table within the scope of a
 // query. TableID 0 is reserved to mean "unknown table".
@@ -31,12 +34,30 @@ const (
 )
 
 // ColumnID returns the metadata id of the column at the given ordinal position
-// in the table.
+// in the table. This is equivalent to calling:
 //
-// NOTE: This method does not do bounds checking, so it's up to the caller to
+//   md.TableMeta(t).ColumnMeta(ord).MetaID
+//
+// NOTE: This method cannot do bounds checking, so it's up to the caller to
 //       ensure that a column really does exist at this ordinal position.
 func (t TableID) ColumnID(ord int) ColumnID {
 	return t.firstColID() + ColumnID(ord)
+}
+
+// ColumnOrdinal returns the ordinal position of the given column in its base
+// table. This is equivalent to calling:
+//
+//   md.ColumnMeta(id).Ordinal()
+//
+// NOTE: This method cannot do complete bounds checking, so it's up to the
+//       caller to ensure that this column is really in the given base table.
+func (t TableID) ColumnOrdinal(id ColumnID) int {
+	if util.RaceEnabled {
+		if id < t.firstColID() {
+			panic("ordinal cannot be negative")
+		}
+	}
+	return int(id - t.firstColID())
 }
 
 // makeTableID constructs a new TableID from its component parts.
@@ -87,25 +108,29 @@ var tableAnnIDCount TableAnnID
 // table struct.
 const maxTableAnnIDCount = 2
 
-// mdTable stores information about one of the tables stored in the metadata.
-type mdTable struct {
-	// tab is a reference to the table in the catalog.
-	tab cat.Table
+// TableMeta stores information about one of the tables stored in the metadata.
+type TableMeta struct {
+	// MetaID is the identifier for this table that is unique within the query
+	// metadata.
+	MetaID TableID
+
+	// Table is a reference to the table in the catalog.
+	Table cat.Table
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
 
-// IndexColumns returns the set of columns in the given index.
+// IndexColumns returns the metadata IDs for the set of columns in the given
+// index.
 // TODO(justin): cache this value in the table metadata.
-func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
-	tab := md.Table(tableID)
-	index := tab.Index(indexOrdinal)
+func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		ord := index.Column(i).Ordinal
-		indexCols.Add(int(tableID.ColumnID(ord)))
+		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
 	}
 	return indexCols
 }
@@ -118,9 +143,9 @@ func (md *Metadata) TableAnnotation(tabID TableID, annID TableAnnID) interface{}
 }
 
 // SetTableAnnotation associates the given annotation with the given table. The
-// annotation is associated by the given ID, which was allocated by
-// calling NewTableAnnID. If an annotation with the ID already exists on the
-// table, then it is overwritten.
+// annotation is associated by the given ID, which was allocated by calling
+// NewTableAnnID. If an annotation with the ID already exists on the table, then
+// it is overwritten.
 //
 // See the TableAnnID comment for more details and a usage example.
 func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann interface{}) {

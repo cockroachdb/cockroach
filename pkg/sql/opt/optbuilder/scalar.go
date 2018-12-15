@@ -122,7 +122,7 @@ func (b *Builder) buildScalar(
 		// This looks kind of arbitrary and strange, because it is:
 		// We cannot array_agg over some types, but we can only decorrelate via array_agg.
 		// Thus, we reject a query that is correlated and over a type that we can't array_agg.
-		typ := b.factory.Metadata().ColumnType(inCol)
+		typ := b.factory.Metadata().ColumnMeta(inCol).Type
 		if !s.outerCols.Empty() && !memo.AggregateOverloadExists(opt.ArrayAggOp, typ) {
 			panic(builderError{fmt.Errorf("can't execute a correlated ARRAY(...) over %s", typ)})
 		}
@@ -700,10 +700,10 @@ func NewScalar(
 	// Put all the columns in the current scope.
 	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
-		name := tree.Name(md.ColumnLabel(colID))
+		colMeta := md.ColumnMeta(colID)
 		sb.scope.cols = append(sb.scope.cols, scopeColumn{
-			name: name,
-			typ:  md.ColumnType(colID),
+			name: tree.Name(colMeta.Alias),
+			typ:  colMeta.Type,
 			id:   colID,
 		})
 	}
