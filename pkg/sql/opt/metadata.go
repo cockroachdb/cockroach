@@ -17,6 +17,7 @@ package opt
 import (
 	"context"
 	"fmt"
+	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -56,15 +57,12 @@ type Metadata struct {
 	// tables stores information about each metadata table, indexed by TableID.
 	tables []TableMeta
 
-	// deps stores information about all data sources depended on by the query,
-	// as well as the privileges required to access those data sources.
-	deps []mdDependency
-}
-
-type mdDependency struct {
-	ds DataSource
-
-	priv privilege.Kind
+	// deps stores information about all unique data sources depended on by the
+	// query, as well as the privileges required to access those data sources.
+	// The map key is the data source so that each data source is referenced at
+	// most once. The map value is the union of all required privileges, where
+	// each bit is 1 << privilege.Kind so that multiple privileges can be stored.
+	deps map[DataSource]uint64
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -79,7 +77,7 @@ func (md *Metadata) Init() {
 	}
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
-	md.deps = md.deps[:0]
+	md.deps = nil
 }
 
 // AddMetadata initializes the metadata with a copy of the provided metadata.
@@ -90,7 +88,10 @@ func (md *Metadata) AddMetadata(from *Metadata) {
 	}
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
-	md.deps = append(md.deps, from.deps...)
+	md.deps = make(map[DataSource]uint64, len(from.deps))
+	for ds, privs := range from.deps {
+		md.deps[ds] = privs
+	}
 }
 
 // AddDependency tracks one of the data sources on which the query depends, as
@@ -99,7 +100,14 @@ func (md *Metadata) AddMetadata(from *Metadata) {
 // changes to schema or permissions on the data source has invalidated the
 // cached metadata.
 func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
-	md.deps = append(md.deps, mdDependency{ds: ds, priv: priv})
+	if md.deps == nil {
+		md.deps = make(map[DataSource]uint64)
+	}
+
+	// Use shift operator to store union of privileges required of the data
+	// source.
+	existing := md.deps[ds]
+	md.deps[ds] = existing | (1 << priv)
 }
 
 // CheckDependencies resolves each data source on which this metadata depends,
@@ -107,21 +115,29 @@ func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
 // the same version of the same data source, and that the user still has
 // sufficient privileges to access the data source.
 func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool {
-	for _, dep := range md.deps {
-		ds, err := catalog.ResolveDataSource(ctx, dep.ds.Name())
+	for dep, privs := range md.deps {
+		ds, err := catalog.ResolveDataSource(ctx, dep.Name())
 		if err != nil {
 			return false
 		}
-		if dep.ds.ID() != ds.ID() {
+		if dep.ID() != ds.ID() {
 			return false
 		}
-		if dep.ds.Version() != ds.Version() {
+		if dep.Version() != ds.Version() {
 			return false
 		}
-		if dep.priv != 0 {
-			if err = catalog.CheckPrivilege(ctx, ds, dep.priv); err != nil {
+
+		for privs != 0 {
+			// Strip off each privilege bit and make call to CheckPrivilege for it.
+			priv := privilege.Kind(bits.TrailingZeros64(privs))
+			if priv == 0 {
+				// No privileges need to be checked.
+				break
+			}
+			if err = catalog.CheckPrivilege(ctx, ds, priv); err != nil {
 				return false
 			}
+			privs = privs >> (priv + 1)
 		}
 	}
 	return true
