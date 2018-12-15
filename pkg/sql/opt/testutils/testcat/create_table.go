@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -236,13 +236,13 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	// Look for name suffixes indicating this is a mutation column.
-	var mutCol *opt.MutationColumn
+	var mutCol *cat.MutationColumn
 	if strings.HasSuffix(string(def.Name), ":write-only") {
 		col.Name = strings.TrimSuffix(col.Name, ":write-only")
-		mutCol = &opt.MutationColumn{Column: col, IsDeleteOnly: false}
+		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: false}
 	} else if strings.HasSuffix(string(def.Name), ":delete-only") {
 		col.Name = strings.TrimSuffix(col.Name, ":delete-only")
-		mutCol = &opt.MutationColumn{Column: col, IsDeleteOnly: true}
+		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: true}
 	}
 
 	if def.DefaultExpr.Expr != nil {
@@ -304,7 +304,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	}
 
 	// Add implicit key columns from primary index.
-	pkCols := tt.Indexes[opt.PrimaryIndex].Columns[:tt.Indexes[opt.PrimaryIndex].KeyCount]
+	pkCols := tt.Indexes[cat.PrimaryIndex].Columns[:tt.Indexes[cat.PrimaryIndex].KeyCount]
 	for _, pkCol := range pkCols {
 		// Only add columns that aren't already part of index.
 		found := false
@@ -379,7 +379,7 @@ func (ti *Index) addColumnByOrdinal(
 	tt *Table, ord int, direction tree.Direction, colType colType,
 ) *Column {
 	col := tt.Column(ord)
-	idxCol := opt.IndexColumn{
+	idxCol := cat.IndexColumn{
 		Column:     col,
 		Ordinal:    ord,
 		Descending: direction == tree.Descending,

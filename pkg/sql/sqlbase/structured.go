@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2569,54 +2569,54 @@ func (x ForeignKeyReference_Action) String() string {
 	}
 }
 
-var _ opt.Column = &ColumnDescriptor{}
+var _ cat.Column = &ColumnDescriptor{}
 
-// IsNullable is part of the opt.Column interface.
+// IsNullable is part of the cat.Column interface.
 func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
 }
 
-// ColID is part of the opt.Column interface.
-func (desc *ColumnDescriptor) ColID() opt.StableID {
-	return opt.StableID(desc.ID)
+// ColID is part of the cat.Column interface.
+func (desc *ColumnDescriptor) ColID() cat.StableID {
+	return cat.StableID(desc.ID)
 }
 
-// ColName is part of the opt.Column interface.
+// ColName is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColName() tree.Name {
 	return tree.Name(desc.Name)
 }
 
-// DatumType is part of the opt.Column interface.
+// DatumType is part of the cat.Column interface.
 func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
 
-// ColTypeStr is part of the opt.Column interface.
+// ColTypeStr is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeStr() string {
 	return desc.Type.SQLString()
 }
 
-// IsHidden is part of the opt.Column interface.
+// IsHidden is part of the cat.Column interface.
 func (desc *ColumnDescriptor) IsHidden() bool {
 	return desc.Hidden
 }
 
-// HasDefault is part of the opt.Column interface.
+// HasDefault is part of the cat.Column interface.
 func (desc *ColumnDescriptor) HasDefault() bool {
 	return desc.DefaultExpr != nil
 }
 
-// IsComputed returns whether the given column is computed.
+// IsComputed is part of the cat.Column interface.
 func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil
 }
 
-// DefaultExprStr is part of the opt.Column interface.
+// DefaultExprStr is part of the cat.Column interface.
 func (desc *ColumnDescriptor) DefaultExprStr() string {
 	return *desc.DefaultExpr
 }
 
-// ComputedExprStr is part of the opt.Column interface.
+// ComputedExprStr is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ComputedExprStr() string {
 	return *desc.ComputeExpr
 }

@@ -15,7 +15,7 @@
 package bench
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,8 +32,8 @@ func (f *stubFactory) ConstructValues(
 }
 
 func (f *stubFactory) ConstructScan(
-	table opt.Table,
-	index opt.Index,
+	table cat.Table,
+	index cat.Index,
 	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
@@ -44,7 +44,7 @@ func (f *stubFactory) ConstructScan(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructVirtualScan(table opt.Table) (exec.Node, error) {
+func (f *stubFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
@@ -125,7 +125,7 @@ func (f *stubFactory) ConstructOrdinality(input exec.Node, colName string) (exec
 }
 
 func (f *stubFactory) ConstructIndexJoin(
-	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node, table cat.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -133,8 +133,8 @@ func (f *stubFactory) ConstructIndexJoin(
 func (f *stubFactory) ConstructLookupJoin(
 	joinType sqlbase.JoinType,
 	input exec.Node,
-	table opt.Table,
-	index opt.Index,
+	table cat.Table,
+	index cat.Index,
 	keyCols []exec.ColumnOrdinal,
 	lookupCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
@@ -144,10 +144,10 @@ func (f *stubFactory) ConstructLookupJoin(
 }
 
 func (f *stubFactory) ConstructZigzagJoin(
-	leftTable opt.Table,
-	leftIndex opt.Index,
-	rightTable opt.Table,
-	rightIndex opt.Index,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	rightTable cat.Table,
+	rightIndex cat.Index,
 	leftEqCols []exec.ColumnOrdinal,
 	rightEqCols []exec.ColumnOrdinal,
 	leftCols exec.ColumnOrdinalSet,
@@ -194,13 +194,13 @@ func (f *stubFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (
 }
 
 func (f *stubFactory) ConstructInsert(
-	input exec.Node, table opt.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node, table cat.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
 func (f *stubFactory) ConstructUpdate(
-	input exec.Node, table opt.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node, table cat.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

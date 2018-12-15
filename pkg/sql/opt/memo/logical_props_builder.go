@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -976,7 +977,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if opt.IsMutationColumn(tab, i) {
+		if cat.IsMutationColumn(tab, i) {
 			continue
 		}
 
@@ -1192,7 +1193,7 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		}
 
 		// If index has a separate lax key, add a lax key FD. Otherwise, add a
-		// strict key. See the comment for opt.Index.LaxKeyColumnCount.
+		// strict key. See the comment for cat.Index.LaxKeyColumnCount.
 		for col := 0; col < index.LaxKeyColumnCount(); col++ {
 			ord := index.Column(col).Ordinal
 			keyCols.Add(int(tabID.ColumnID(ord)))
@@ -1363,7 +1364,7 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	// columns can be null during backfill.
 	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
-		if !tab.Column(i).IsNullable() && !opt.IsMutationColumn(tab, i) {
+		if !tab.Column(i).IsNullable() && !cat.IsMutationColumn(tab, i) {
 			cs.Add(int(tabID.ColumnID(i)))
 		}
 	}

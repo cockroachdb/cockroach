@@ -20,6 +20,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -295,7 +296,7 @@ func (c *coster) computeIndexJoinCost(join *memo.IndexJoinExpr) memo.Cost {
 	// Since the matching rows in the table may not all be in the same range, this
 	// counts as random I/O.
 	perRowCost := cpuCostFactor + randIOCostFactor +
-		c.rowScanCost(join.Table, opt.PrimaryIndex, join.Cols.Len())
+		c.rowScanCost(join.Table, cat.PrimaryIndex, join.Cols.Len())
 	return memo.Cost(leftRowCount) * perRowCost
 }
 
