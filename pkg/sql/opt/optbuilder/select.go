@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -87,9 +88,9 @@ func (b *Builder) buildDataSource(
 
 		ds := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
-		case opt.Table:
+		case cat.Table:
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, excludeMutations, inScope)
-		case opt.View:
+		case cat.View:
 			return b.buildView(t, inScope)
 		default:
 			panic(unimplementedf("sequences are not supported"))
@@ -123,7 +124,7 @@ func (b *Builder) buildDataSource(
 	case *tree.TableRef:
 		ds := b.resolveDataSourceRef(source, privilege.SELECT)
 		switch t := ds.(type) {
-		case opt.Table:
+		case cat.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
 		default:
 			panic(unimplementedf("view and sequence numeric refs are not supported"))
@@ -137,10 +138,10 @@ func (b *Builder) buildDataSource(
 }
 
 // buildView parses the view query text and builds it as a Select expression.
-func (b *Builder) buildView(view opt.View, inScope *scope) (outScope *scope) {
+func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 	// Cache the AST so that multiple references won't need to reparse.
 	if b.views == nil {
-		b.views = make(map[opt.View]*tree.Select)
+		b.views = make(map[cat.View]*tree.Select)
 	}
 
 	// Check whether view has already been parsed, and if not, parse now.
@@ -238,7 +239,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // Note, the query SELECT * FROM [53() as t] is unsupported. Column lists must
 // be non-empty
 func (b *Builder) buildScanFromTableRef(
-	tab opt.Table, ref *tree.TableRef, indexFlags *tree.IndexFlags, inScope *scope,
+	tab cat.Table, ref *tree.TableRef, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
 	if ref.Columns != nil && len(ref.Columns) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -257,7 +258,7 @@ func (b *Builder) buildScanFromTableRef(
 			ord := 0
 			cnt := tab.ColumnCount()
 			for ord < cnt {
-				if tab.Column(ord).ColID() == opt.StableID(c) {
+				if tab.Column(ord).ColID() == cat.StableID(c) {
 					break
 				}
 				ord++
@@ -280,7 +281,7 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tab opt.Table,
+	tab cat.Table,
 	tn *tree.TableName,
 	ordinals []int,
 	indexFlags *tree.IndexFlags,
@@ -305,7 +306,7 @@ func (b *Builder) buildScan(
 		}
 
 		// Exclude any mutation columns if they were not requested.
-		isMutation := opt.IsMutationColumn(tab, ord)
+		isMutation := cat.IsMutationColumn(tab, ord)
 		if !scanMutationCols && isMutation {
 			continue
 		}
@@ -339,7 +340,7 @@ func (b *Builder) buildScan(
 				idx := -1
 				for i := 0; i < tab.IndexCount(); i++ {
 					if tab.Index(i).Name() == string(indexFlags.Index) ||
-						tab.Index(i).ID() == opt.StableID(indexFlags.IndexID) {
+						tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
 						idx = i
 						break
 					}

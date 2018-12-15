@@ -17,7 +17,7 @@ package optbuilder
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -83,7 +83,7 @@ type Builder struct {
 	ctx              context.Context
 	semaCtx          *tree.SemaContext
 	evalCtx          *tree.EvalContext
-	catalog          opt.Catalog
+	catalog          cat.Catalog
 	exprTransformCtx transform.ExprTransformContext
 	scopeAlloc       []scope
 
@@ -95,7 +95,7 @@ type Builder struct {
 
 	// views contains a cache of views that have already been parsed, in case they
 	// are referenced multiple times in the same query.
-	views map[opt.View]*tree.Select
+	views map[cat.View]*tree.Select
 
 	// subquery contains a pointer to the subquery which is currently being built
 	// (if any).
@@ -108,7 +108,7 @@ func New(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	catalog opt.Catalog,
+	catalog cat.Catalog,
 	factory *norm.Factory,
 	stmt tree.Statement,
 ) *Builder {

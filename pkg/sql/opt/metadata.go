@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -134,7 +135,7 @@ type Metadata struct {
 }
 
 type mdDependency struct {
-	ds DataSource
+	ds cat.DataSource
 
 	priv privilege.Kind
 }
@@ -142,7 +143,7 @@ type mdDependency struct {
 // mdTable stores information about one of the tables stored in the metadata.
 type mdTable struct {
 	// tab is a reference to the table in the catalog.
-	tab Table
+	tab cat.Table
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
@@ -197,7 +198,7 @@ func (md *Metadata) AddMetadata(from *Metadata) {
 // this metadata is cached, then a call to CheckDependencies can detect if
 // changes to schema or permissions on the data source has invalidated the
 // cached metadata.
-func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
+func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
 	md.deps = append(md.deps, mdDependency{ds: ds, priv: priv})
 }
 
@@ -205,7 +206,7 @@ func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
 // in order to check that the fully qualified data source names still resolve to
 // the same version of the same data source, and that the user still has
 // sufficient privileges to access the data source.
-func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool {
+func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) bool {
 	for _, dep := range md.deps {
 		ds, err := catalog.ResolveDataSource(ctx, dep.ds.Name())
 		if err != nil {
@@ -350,7 +351,7 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string 
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query). All columns are added to the metadata. If mutation columns
 // are present, they are added after active columns.
-func (md *Metadata) AddTable(tab Table) TableID {
+func (md *Metadata) AddTable(tab cat.Table) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
 		md.tables = make([]mdTable, 0, 4)
@@ -376,13 +377,13 @@ func (md *Metadata) AddTable(tab Table) TableID {
 
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
-func (md *Metadata) Table(tabID TableID) Table {
+func (md *Metadata) Table(tabID TableID) cat.Table {
 	return md.tables[tabID.index()].tab
 }
 
 // TableByStableID looks up the catalog table associated with the given
 // StableID (unique across all tables and stable across queries).
-func (md *Metadata) TableByStableID(id StableID) Table {
+func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
 	for _, mdTab := range md.tables {
 		if mdTab.tab.ID() == id {
 			return mdTab.tab

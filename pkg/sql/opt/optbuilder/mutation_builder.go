@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -39,7 +40,7 @@ type mutationBuilder struct {
 	op opt.Operator
 
 	// tab is the target table.
-	tab opt.Table
+	tab cat.Table
 
 	// tabID is the metadata ID of the table.
 	tabID opt.TableID
@@ -94,7 +95,7 @@ type mutationBuilder struct {
 	outScope *scope
 }
 
-func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alias *tree.TableName) {
+func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias *tree.TableName) {
 	mb.b = b
 	mb.md = b.factory.Metadata()
 	mb.op = op
@@ -143,7 +144,7 @@ func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 // values. If neither condition is true, checkPrimaryKeyForInsert raises an
 // error.
 func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
-	primary := mb.tab.Index(opt.PrimaryIndex)
+	primary := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, primary.KeyColumnCount(); i < n; i++ {
 		col := primary.Column(i)
 		if col.Column.HasDefault() || col.Column.IsComputed() {
@@ -332,7 +333,7 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	tabCol := mb.tab.Column(ord)
 
 	// Don't allow targeting of mutation columns.
-	if opt.IsMutationColumn(mb.tab, ord) {
+	if cat.IsMutationColumn(mb.tab, ord) {
 		panic(builderError{makeBackfillError(tabCol.ColName())})
 	}
 
@@ -687,14 +688,14 @@ func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
 	// Add any missing default and nullable columns.
 	mb.addSynthesizedCols(
 		mb.insertColList,
-		func(tabCol opt.Column) bool { return !tabCol.IsComputed() },
+		func(tabCol cat.Column) bool { return !tabCol.IsComputed() },
 	)
 
 	// Add any missing computed columns. This must be done after adding default
 	// columns above, because computed columns can depend on default columns.
 	mb.addSynthesizedCols(
 		mb.insertColList,
-		func(tabCol opt.Column) bool { return tabCol.IsComputed() },
+		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
 }
 
@@ -712,7 +713,7 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 
 	mb.addSynthesizedCols(
 		mb.updateColList,
-		func(tabCol opt.Column) bool { return tabCol.IsComputed() },
+		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
 }
 
@@ -722,7 +723,7 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 // columns are synthesized for any missing columns, as long as the addCol
 // callback function returns true for that column.
 func (mb *mutationBuilder) addSynthesizedCols(
-	colList opt.ColList, addCol func(tabCol opt.Column) bool,
+	colList opt.ColList, addCol func(tabCol cat.Column) bool,
 ) {
 	var projectionsScope *scope
 
@@ -734,7 +735,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 		// Skip delete-only mutation columns, since they are ignored by all
 		// mutation operators that synthesize columns.
-		if mut, ok := mb.tab.Column(i).(*opt.MutationColumn); ok && mut.IsDeleteOnly {
+		if mut, ok := mb.tab.Column(i).(*cat.MutationColumn); ok && mut.IsDeleteOnly {
 			continue
 		}
 
@@ -823,7 +824,7 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	inScope.expr = mb.outScope.expr
 	inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if opt.IsMutationColumn(mb.tab, i) {
+		if cat.IsMutationColumn(mb.tab, i) {
 			continue
 		}
 
@@ -946,7 +947,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 // be different (eg. TEXT and VARCHAR will fit the same scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func checkDatumTypeFitsColumnType(col opt.Column, typ types.T) {
+func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
 	if typ == types.Unknown || typ.Equivalent(col.DatumType()) {
 		return
 	}

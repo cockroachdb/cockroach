@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -30,17 +30,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// Catalog implements the opt.Catalog interface for testing purposes.
+// Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	dataSources map[string]opt.DataSource
+	dataSources map[string]cat.DataSource
 	counter     int
 }
 
-var _ opt.Catalog = &Catalog{}
+var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
 func New() *Catalog {
-	return &Catalog{dataSources: make(map[string]opt.DataSource)}
+	return &Catalog{dataSources: make(map[string]cat.DataSource)}
 }
 
 const (
@@ -48,13 +48,13 @@ const (
 	testDB = "t"
 )
 
-// ResolveDataSource is part of the opt.Catalog interface.
+// ResolveDataSource is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSource(
 	_ context.Context, name *tree.TableName,
-) (opt.DataSource, error) {
+) (cat.DataSource, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
-	var ds opt.DataSource
+	var ds cat.DataSource
 	var err error
 	toResolve := *name
 	if name.ExplicitSchema && name.ExplicitCatalog {
@@ -103,10 +103,10 @@ func (tc *Catalog) ResolveDataSource(
 	return nil, err
 }
 
-// ResolveDataSourceByID is part of the opt.Catalog interface.
+// ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
-	ctx context.Context, id opt.StableID,
-) (opt.DataSource, error) {
+	ctx context.Context, id cat.StableID,
+) (cat.DataSource, error) {
 	for _, ds := range tc.dataSources {
 		if tab, ok := ds.(*Table); ok && tab.StableID == id {
 			return ds, nil
@@ -116,9 +116,9 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
-// CheckPrivilege is part of the opt.Catalog interface.
+// CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(
-	ctx context.Context, ds opt.DataSource, priv privilege.Kind,
+	ctx context.Context, ds cat.DataSource, priv privilege.Kind,
 ) error {
 	switch t := ds.(type) {
 	case *Table:
@@ -139,7 +139,7 @@ func (tc *Catalog) CheckPrivilege(
 // resolveDataSource checks if `toResolve` exists among the data sources in this
 // Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
 // and returns the corresponding data source. Otherwise, it returns an error.
-func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (opt.DataSource, error) {
+func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (cat.DataSource, error) {
 	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
 		*name = *toResolve
 		return table, nil
@@ -224,13 +224,13 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 }
 
 // nextStableID returns a new unique StableID for a data source.
-func (tc *Catalog) nextStableID() opt.StableID {
+func (tc *Catalog) nextStableID() cat.StableID {
 	tc.counter++
 
 	// 53 is a magic number derived from how CRDB internally stores tables. The
 	// first user table is 53. Use this to have the test catalog look more
 	// consistent with the real catalog.
-	return opt.StableID(53 + tc.counter - 1)
+	return cat.StableID(53 + tc.counter - 1)
 }
 
 // qualifyTableName updates the given table name to include catalog and schema
@@ -264,10 +264,10 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	name.SchemaName = tree.PublicSchemaName
 }
 
-// View implements the opt.View interface for testing purposes.
+// View implements the cat.View interface for testing purposes.
 type View struct {
-	ViewID      opt.StableID
-	ViewVersion opt.Version
+	ViewID      cat.StableID
+	ViewVersion cat.Version
 	ViewName    tree.TableName
 	QueryText   string
 	ColumnNames tree.NameList
@@ -276,118 +276,118 @@ type View struct {
 	Revoked bool
 }
 
-var _ opt.View = &View{}
+var _ cat.View = &View{}
 
 func (tv *View) String() string {
 	tp := treeprinter.New()
-	opt.FormatCatalogView(tv, tp)
+	cat.FormatCatalogView(tv, tp)
 	return tp.String()
 }
 
-// ID is part of the opt.DataSource interface.
-func (tv *View) ID() opt.StableID {
+// ID is part of the cat.DataSource interface.
+func (tv *View) ID() cat.StableID {
 	return tv.ViewID
 }
 
-// Version is part of the opt.DataSource interface.
-func (tv *View) Version() opt.Version {
+// Version is part of the cat.DataSource interface.
+func (tv *View) Version() cat.Version {
 	return tv.ViewVersion
 }
 
-// Name is part of the opt.DataSource interface.
+// Name is part of the cat.DataSource interface.
 func (tv *View) Name() *tree.TableName {
 	return &tv.ViewName
 }
 
-// Query is part of the opt.View interface.
+// Query is part of the cat.View interface.
 func (tv *View) Query() string {
 	return tv.QueryText
 }
 
-// ColumnNameCount is part of the opt.View interface.
+// ColumnNameCount is part of the cat.View interface.
 func (tv *View) ColumnNameCount() int {
 	return len(tv.ColumnNames)
 }
 
-// ColumnName is part of the opt.View interface.
+// ColumnName is part of the cat.View interface.
 func (tv *View) ColumnName(i int) tree.Name {
 	return tv.ColumnNames[i]
 }
 
-// Table implements the opt.Table interface for testing purposes.
+// Table implements the cat.Table interface for testing purposes.
 type Table struct {
-	StableID   opt.StableID
-	TabVersion opt.Version
+	StableID   cat.StableID
+	TabVersion cat.Version
 	TabName    tree.TableName
 	Columns    []*Column
 	Indexes    []*Index
 	Stats      TableStats
 	IsVirtual  bool
-	Catalog    opt.Catalog
-	Mutations  []opt.MutationColumn
+	Catalog    cat.Catalog
+	Mutations  []cat.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
 }
 
-var _ opt.Table = &Table{}
+var _ cat.Table = &Table{}
 
 func (tt *Table) String() string {
 	tp := treeprinter.New()
-	opt.FormatCatalogTable(tt.Catalog, tt, tp)
+	cat.FormatCatalogTable(tt.Catalog, tt, tp)
 	return tp.String()
 }
 
-// ID is part of the opt.DataSource interface.
-func (tt *Table) ID() opt.StableID {
+// ID is part of the cat.DataSource interface.
+func (tt *Table) ID() cat.StableID {
 	return tt.StableID
 }
 
-// Version is part of the opt.DataSource interface.
-func (tt *Table) Version() opt.Version {
+// Version is part of the cat.DataSource interface.
+func (tt *Table) Version() cat.Version {
 	return tt.TabVersion
 }
 
-// Name is part of the opt.DataSource interface.
+// Name is part of the cat.DataSource interface.
 func (tt *Table) Name() *tree.TableName {
 	return &tt.TabName
 }
 
-// IsVirtualTable is part of the opt.Table interface.
+// IsVirtualTable is part of the cat.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
-// ColumnCount is part of the opt.Table interface.
+// ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
 	return len(tt.Columns) + len(tt.Mutations)
 }
 
-// Column is part of the opt.Table interface.
-func (tt *Table) Column(i int) opt.Column {
+// Column is part of the cat.Table interface.
+func (tt *Table) Column(i int) cat.Column {
 	if i < len(tt.Columns) {
 		return tt.Columns[i]
 	}
 	return &tt.Mutations[i-len(tt.Columns)]
 }
 
-// IndexCount is part of the opt.Table interface.
+// IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
 	return len(tt.Indexes)
 }
 
-// Index is part of the opt.Table interface.
-func (tt *Table) Index(i int) opt.Index {
+// Index is part of the cat.Table interface.
+func (tt *Table) Index(i int) cat.Index {
 	return tt.Indexes[i]
 }
 
-// StatisticCount is part of the opt.Table interface.
+// StatisticCount is part of the cat.Table interface.
 func (tt *Table) StatisticCount() int {
 	return len(tt.Stats)
 }
 
-// Statistic is part of the opt.Table interface.
-func (tt *Table) Statistic(i int) opt.TableStatistic {
+// Statistic is part of the cat.Table interface.
+func (tt *Table) Statistic(i int) cat.TableStatistic {
 	return tt.Stats[i]
 }
 
@@ -405,7 +405,7 @@ func (tt *Table) FindOrdinal(name string) int {
 	))
 }
 
-// Index implements the opt.Index interface for testing purposes.
+// Index implements the v.Index interface for testing purposes.
 type Index struct {
 	IdxName string
 
@@ -413,18 +413,18 @@ type Index struct {
 	Ordinal int
 
 	// KeyCount is the number of columns that make up the unique key for the
-	// index. See the opt.Index.KeyColumnCount for more details.
+	// index. See the cat.Index.KeyColumnCount for more details.
 	KeyCount int
 
 	// LaxKeyCount is the number of columns that make up a lax key for the
 	// index, which allows duplicate rows when at least one of the values is
-	// NULL. See the opt.Index.LaxKeyColumnCount for more details.
+	// NULL. See the cat.Index.LaxKeyColumnCount for more details.
 	LaxKeyCount int
 
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
-	Columns []opt.IndexColumn
+	Columns []cat.IndexColumn
 
 	// table is a back reference to the table this index is on.
 	table *Table
@@ -432,56 +432,56 @@ type Index struct {
 	// foreignKey is a struct representing an outgoing foreign key
 	// reference. If fkSet is true, then foreignKey is a valid
 	// index reference.
-	foreignKey opt.ForeignKeyReference
+	foreignKey cat.ForeignKeyReference
 	fkSet      bool
 }
 
-// ID is part of the opt.Index interface.
-func (ti *Index) ID() opt.StableID {
-	return 1 + opt.StableID(ti.Ordinal)
+// ID is part of the cat.Index interface.
+func (ti *Index) ID() cat.StableID {
+	return 1 + cat.StableID(ti.Ordinal)
 }
 
-// Name is part of the opt.Index interface.
+// Name is part of the cat.Index interface.
 func (ti *Index) Name() string {
 	return ti.IdxName
 }
 
-// Table is part of the opt.Index interface.
-func (ti *Index) Table() opt.Table {
+// Table is part of the cat.Index interface.
+func (ti *Index) Table() cat.Table {
 	return ti.table
 }
 
-// IsInverted is part of the opt.Index interface.
+// IsInverted is part of the cat.Index interface.
 func (ti *Index) IsInverted() bool {
 	return ti.Inverted
 }
 
-// ColumnCount is part of the opt.Index interface.
+// ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
 }
 
-// KeyColumnCount is part of the opt.Index interface.
+// KeyColumnCount is part of the cat.Index interface.
 func (ti *Index) KeyColumnCount() int {
 	return ti.KeyCount
 }
 
-// LaxKeyColumnCount is part of the opt.Index interface.
+// LaxKeyColumnCount is part of the cat.Index interface.
 func (ti *Index) LaxKeyColumnCount() int {
 	return ti.LaxKeyCount
 }
 
-// Column is part of the opt.Index interface.
-func (ti *Index) Column(i int) opt.IndexColumn {
+// Column is part of the cat.Index interface.
+func (ti *Index) Column(i int) cat.IndexColumn {
 	return ti.Columns[i]
 }
 
-// ForeignKey is part of the opt.Index interface.
-func (ti *Index) ForeignKey() (opt.ForeignKeyReference, bool) {
+// ForeignKey is part of the cat.Index interface.
+func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
 	return ti.foreignKey, ti.fkSet
 }
 
-// Column implements the opt.Column interface for testing purposes.
+// Column implements the cat.Column interface for testing purposes.
 type Column struct {
 	Ordinal      int
 	Hidden       bool
@@ -492,29 +492,29 @@ type Column struct {
 	ComputedExpr *string
 }
 
-var _ opt.Column = &Column{}
+var _ cat.Column = &Column{}
 
-// ColID is part of the opt.Index interface.
-func (tc *Column) ColID() opt.StableID {
-	return 1 + opt.StableID(tc.Ordinal)
+// ColID is part of the cat.Index interface.
+func (tc *Column) ColID() cat.StableID {
+	return 1 + cat.StableID(tc.Ordinal)
 }
 
-// IsNullable is part of the opt.Column interface.
+// IsNullable is part of the cat.Column interface.
 func (tc *Column) IsNullable() bool {
 	return tc.Nullable
 }
 
-// ColName is part of the opt.Column interface.
+// ColName is part of the cat.Column interface.
 func (tc *Column) ColName() tree.Name {
 	return tree.Name(tc.Name)
 }
 
-// DatumType is part of the opt.Column interface.
+// DatumType is part of the cat.Column interface.
 func (tc *Column) DatumType() types.T {
 	return tc.Type
 }
 
-// ColTypeStr is part of the opt.Column interface.
+// ColTypeStr is part of the cat.Column interface.
 func (tc *Column) ColTypeStr() string {
 	t, err := coltypes.DatumTypeToColumnType(tc.Type)
 	if err != nil {
@@ -523,40 +523,40 @@ func (tc *Column) ColTypeStr() string {
 	return t.String()
 }
 
-// IsHidden is part of the opt.Column interface.
+// IsHidden is part of the cat.Column interface.
 func (tc *Column) IsHidden() bool {
 	return tc.Hidden
 }
 
-// HasDefault is part of the opt.Column interface.
+// HasDefault is part of the cat.Column interface.
 func (tc *Column) HasDefault() bool {
 	return tc.DefaultExpr != nil
 }
 
-// IsComputed is part of the opt.Column interface.
+// IsComputed is part of the cat.Column interface.
 func (tc *Column) IsComputed() bool {
 	return tc.ComputedExpr != nil
 }
 
-// DefaultExprStr is part of the opt.Column interface.
+// DefaultExprStr is part of the cat.Column interface.
 func (tc *Column) DefaultExprStr() string {
 	return *tc.DefaultExpr
 }
 
-// ComputedExprStr is part of the opt.Column interface.
+// ComputedExprStr is part of the cat.Column interface.
 func (tc *Column) ComputedExprStr() string {
 	return *tc.ComputedExpr
 }
 
-// TableStat implements the opt.TableStatistic interface for testing purposes.
+// TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {
 	js stats.JSONStatistic
 	tt *Table
 }
 
-var _ opt.TableStatistic = &TableStat{}
+var _ cat.TableStatistic = &TableStat{}
 
-// CreatedAt is part of the opt.TableStatistic interface.
+// CreatedAt is part of the cat.TableStatistic interface.
 func (ts *TableStat) CreatedAt() time.Time {
 	d, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
@@ -565,27 +565,27 @@ func (ts *TableStat) CreatedAt() time.Time {
 	return d.Time
 }
 
-// ColumnCount is part of the opt.TableStatistic interface.
+// ColumnCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) ColumnCount() int {
 	return len(ts.js.Columns)
 }
 
-// ColumnOrdinal is part of the opt.TableStatistic interface.
+// ColumnOrdinal is part of the cat.TableStatistic interface.
 func (ts *TableStat) ColumnOrdinal(i int) int {
 	return ts.tt.FindOrdinal(ts.js.Columns[i])
 }
 
-// RowCount is part of the opt.TableStatistic interface.
+// RowCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) RowCount() uint64 {
 	return ts.js.RowCount
 }
 
-// DistinctCount is part of the opt.TableStatistic interface.
+// DistinctCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) DistinctCount() uint64 {
 	return ts.js.DistinctCount
 }
 
-// NullCount is part of the opt.TableStatistic interface.
+// NullCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
