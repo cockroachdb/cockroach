@@ -620,6 +620,51 @@ EXECUTE change_privileges
 
 user root
 
+## Permissions: Use UPDATE statement that requires both UPDATE and SELECT
+## privileges.
+statement ok
+GRANT ALL ON othertable TO testuser
+
+user testuser
+
+statement ok
+USE otherdb
+
+statement ok
+PREPARE update_privileges AS UPDATE othertable SET b=$1
+
+user root
+
+statement ok
+REVOKE UPDATE ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have UPDATE privilege on relation othertable
+EXECUTE update_privileges(5)
+
+user root
+
+statement ok
+GRANT UPDATE ON othertable TO testuser
+
+statement ok
+REVOKE SELECT ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have SELECT privilege on relation othertable
+EXECUTE update_privileges(5)
+
+user root
+
+query II
+SELECT * FROM othertable
+----
+1  10
+
+user root
+
 ## Schema change (rename): Rename column in table and ensure that the prepared
 ## statement is updated to incorporate it.
 statement ok
