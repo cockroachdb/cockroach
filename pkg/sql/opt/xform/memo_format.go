@@ -296,7 +296,7 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 
 	case *memo.ProjectExpr:
 		t.Passthrough.ForEach(func(i int) {
-			fmt.Fprintf(mf.buf, " %s", m.Metadata().ColumnLabel(opt.ColumnID(i)))
+			fmt.Fprintf(mf.buf, " %s", m.Metadata().ColumnMeta(opt.ColumnID(i)).Alias)
 		})
 	}
 }

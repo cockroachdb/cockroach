@@ -80,7 +80,7 @@ func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *phy
 			childProps.Presentation = physical.Presentation{
 				opt.LabeledColumn{
 					// Keep the existing label for the column.
-					Label: o.mem.Metadata().ColumnLabel(af.RequestedCol),
+					Label: o.mem.Metadata().ColumnMeta(af.RequestedCol).Alias,
 					ID:    af.RequestedCol,
 				},
 			}

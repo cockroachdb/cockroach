@@ -33,14 +33,13 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label := md.ColumnLabel(colID)
-	if label != "alias" {
-		t.Fatalf("unexpected column label: %s", label)
+	colMeta := md.ColumnMeta(colID)
+	if colMeta.Alias != "alias" {
+		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	typ := md.ColumnType(colID)
-	if typ != types.Int {
-		t.Fatalf("unexpected column type: %s", typ)
+	if colMeta.Type != types.Int {
+		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 
 	if n := md.NumColumns(); n != 1 {
@@ -53,14 +52,13 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label = md.ColumnLabel(colID)
-	if label != "alias2" {
-		t.Fatalf("unexpected column label: %s", label)
+	colMeta = md.ColumnMeta(colID)
+	if colMeta.Alias != "alias2" {
+		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	typ = md.ColumnType(colID)
-	if typ != types.String {
-		t.Fatalf("unexpected column type: %s", typ)
+	if colMeta.Type != types.String {
+		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 
 	if n := md.NumColumns(); n != 2 {
@@ -93,9 +91,9 @@ func TestMetadataTables(t *testing.T) {
 		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label := md.ColumnLabel(colID)
-	if label != "x" {
-		t.Fatalf("unexpected column label: %s", label)
+	colMeta := md.ColumnMeta(colID)
+	if colMeta.Alias != "x" {
+		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
 	// Add another table reference to the metadata.
@@ -108,9 +106,9 @@ func TestMetadataTables(t *testing.T) {
 		t.Fatalf("unexpected table id: %d", tabID)
 	}
 
-	label = md.ColumnLabel(otherTabID.ColumnID(0))
-	if label != "x" {
-		t.Fatalf("unexpected column label: %s", label)
+	alias := md.ColumnMeta(otherTabID.ColumnID(0)).Alias
+	if alias != "x" {
+		t.Fatalf("unexpected column alias: %s", alias)
 	}
 }
 
@@ -146,7 +144,7 @@ func TestIndexColumns(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		actual := md.IndexColumns(a, tc.index)
+		actual := md.TableMeta(a).IndexColumns(tc.index)
 		if !tc.expectedCols.Equals(actual) {
 			t.Errorf("expected %v, got %v", tc.expectedCols, actual)
 		}

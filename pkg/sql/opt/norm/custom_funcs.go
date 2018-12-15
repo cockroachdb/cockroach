@@ -160,8 +160,7 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 // in an array.
 func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
 	inCol, _ := c.OutputCols(in).Next(0)
-	inTyp := c.mem.Metadata().ColumnType(opt.ColumnID(inCol))
-
+	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
 	return types.TArray{Typ: inTyp}
 }
 

@@ -424,7 +424,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
 		for i, col := range physical.Presentation {
 			resultCols[i].Name = col.Label
-			resultCols[i].Typ = md.ColumnType(col.ID)
+			resultCols[i].Typ = md.ColumnMeta(col.ID).Type
 		}
 		p.curPlan.plan = &zeroNode{columns: resultCols}
 		return nil
