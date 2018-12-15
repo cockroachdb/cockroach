@@ -381,7 +381,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = unknownNullCountRatio * s.RowCount
-		if sb.md.ColumnType(opt.ColumnID(col)) == types.Bool {
+		if sb.md.ColumnMeta(opt.ColumnID(col)).Type == types.Bool {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
 		if notNullCols.Contains(col) {
@@ -1864,7 +1864,7 @@ func (sb *statisticsBuilder) colStatMutation(
 
 	// Get colstat from child by mapping requested columns to corresponding
 	// input columns.
-	inColSet := private.MapToInputCols(sb.md, colSet)
+	inColSet := private.MapToInputCols(colSet)
 	inColStat := sb.colStatFromChild(inColSet, mutation, 0 /* childIdx */)
 
 	// Construct mutation colstat using the corresponding input stats.

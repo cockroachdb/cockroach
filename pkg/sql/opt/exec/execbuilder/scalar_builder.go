@@ -144,7 +144,7 @@ func (b *Builder) indexedVar(
 	if !ok {
 		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colID))
 	}
-	return ctx.ivh.IndexedVarWithType(idx, md.ColumnType(colID))
+	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -430,7 +430,7 @@ func (b *Builder) buildArrayFlatten(
 		return nil, err
 	}
 
-	typ := b.mem.Metadata().ColumnType(af.RequestedCol)
+	typ := b.mem.Metadata().ColumnMeta(af.RequestedCol).Type
 	e := b.addSubquery(exec.SubqueryAllRows, typ, root.root, af.OriginalExpr)
 
 	return tree.NewTypedArrayFlattenExpr(e), nil
@@ -488,7 +488,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Construct tuple type of columns in the row.
 	types := types.TTuple{Types: make([]types.T, plan.numOutputCols())}
 	plan.outputCols.ForEach(func(key, val int) {
-		types.Types[val] = b.mem.Metadata().ColumnType(opt.ColumnID(key))
+		types.Types[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
 
 	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root, any.OriginalExpr)

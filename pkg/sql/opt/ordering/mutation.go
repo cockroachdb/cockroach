@@ -33,15 +33,14 @@ func mutationBuildChildReqOrdering(
 	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
 ) physical.OrderingChoice {
 	// Remap each of the required columns to corresponding input columns.
-	md := parent.Memo().Metadata()
 	private := parent.Private().(*memo.MutationPrivate)
 
-	optional := private.MapToInputCols(md, required.Optional)
+	optional := private.MapToInputCols(required.Optional)
 	columns := make([]physical.OrderingColumnChoice, len(required.Columns))
 	for i := range required.Columns {
 		colChoice := &required.Columns[i]
 		columns[i] = physical.OrderingColumnChoice{
-			Group:      private.MapToInputCols(md, colChoice.Group),
+			Group:      private.MapToInputCols(colChoice.Group),
 			Descending: colChoice.Descending,
 		}
 	}

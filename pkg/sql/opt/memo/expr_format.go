@@ -607,9 +607,10 @@ func formatCol(
 	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitType bool,
 ) {
 	md := f.Memo.metadata
+	colMeta := md.ColumnMeta(id)
 	if label == "" {
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label = md.QualifiedColumnLabel(id, fullyQualify)
+		label = colMeta.QualifiedAlias(fullyQualify)
 	}
 
 	if !isSimpleColumnName(label) {
@@ -618,14 +619,13 @@ func formatCol(
 		label = "\"" + label + "\""
 	}
 
-	typ := md.ColumnType(id)
 	f.Buffer.WriteByte(' ')
 	f.Buffer.WriteString(label)
 	f.Buffer.WriteByte(':')
 	fmt.Fprintf(f.Buffer, "%d", id)
 	if !omitType {
 		f.Buffer.WriteByte('(')
-		f.Buffer.WriteString(typ.String())
+		f.Buffer.WriteString(colMeta.Type.String())
 
 		if notNullCols.Contains(int(id)) {
 			f.Buffer.WriteString("!null")
@@ -647,7 +647,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	switch t := private.(type) {
 	case *opt.ColumnID:
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label := f.Memo.metadata.QualifiedColumnLabel(*t, fullyQualify)
+		label := f.Memo.metadata.ColumnMeta(*t).QualifiedAlias(fullyQualify)
 		fmt.Fprintf(f.Buffer, " %s", label)
 
 	case *TupleOrdinal:

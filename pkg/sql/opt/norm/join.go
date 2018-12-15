@@ -253,7 +253,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	col opt.ColumnID, filters memo.FiltersExpr,
 ) opt.ColSet {
 	var res opt.ColSet
-	colType := c.f.Metadata().ColumnType(col)
+	colType := c.f.Metadata().ColumnMeta(col).Type
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
@@ -270,7 +270,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 
 	eqCols.ForEach(func(i int) {
 		// Only include columns that have the same type as col.
-		eqColType := c.f.Metadata().ColumnType(opt.ColumnID(i))
+		eqColType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
 		if colType.Equivalent(eqColType) {
 			res.Add(i)
 		}
@@ -339,16 +339,15 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		return false
 	}
 
-	leftCols := left.Relational().NotNullCols
-	rightCols := right.Relational().NotNullCols
+	leftColIDs := left.Relational().NotNullCols
+	rightColIDs := right.Relational().NotNullCols
 
 	md := c.f.Metadata()
 
-	var leftTab, rightTab cat.Table
-	var leftTabID, rightTabID opt.TableID
+	var leftTabMeta, rightTabMeta *opt.TableMeta
 
 	// Any left columns that don't match conditions 1-4 end up in this set.
-	var remainingLeftCols opt.ColSet
+	var remainingLeftColIDs opt.ColSet
 
 	for i := range filters {
 		eq, _ := filters[i].Condition.(*memo.EqExpr)
@@ -364,61 +363,61 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			return false
 		}
 
-		leftCol := leftVar.Col
-		rightCol := rightVar.Col
+		leftColID := leftVar.Col
+		rightColID := rightVar.Col
 
-		// Normalize leftCol to come from leftCols.
-		if !leftCols.Contains(int(leftCol)) {
-			leftCol, rightCol = rightCol, leftCol
+		// Normalize leftColID to come from leftColIDs.
+		if !leftColIDs.Contains(int(leftColID)) {
+			leftColID, rightColID = rightColID, leftColID
 		}
-		if !leftCols.Contains(int(leftCol)) || !rightCols.Contains(int(rightCol)) {
+		if !leftColIDs.Contains(int(leftColID)) || !rightColIDs.Contains(int(rightColID)) {
 			// Condition #1: columns don't come from both sides of join, or
 			// columns are nullable.
 			return false
 		}
 
-		if !unfilteredCols.Contains(int(rightCol)) {
+		if !unfilteredCols.Contains(int(rightColID)) {
 			// Condition #3: right column doesn't contain values from every row.
 			return false
 		}
 
-		if leftTab == nil {
-			leftTabID = md.ColumnTableID(leftCol)
-			rightTabID = md.ColumnTableID(rightCol)
-			if leftTabID == 0 || rightTabID == 0 {
+		if leftTabMeta == nil {
+			leftTabMeta = md.ColumnMeta(leftColID).TableMeta
+			rightTabMeta = md.ColumnMeta(rightColID).TableMeta
+			if leftTabMeta == nil || rightTabMeta == nil {
 				// Condition #2: Columns don't come from base tables.
 				return false
 			}
-			leftTab = md.Table(leftTabID)
-			rightTab = md.Table(rightTabID)
-		} else if md.Table(md.ColumnTableID(leftCol)) != leftTab {
+		} else if md.ColumnMeta(leftColID).TableMeta != leftTabMeta {
 			// Condition #2: All left columns don't come from same table.
 			return false
-		} else if md.Table(md.ColumnTableID(rightCol)) != rightTab {
+		} else if md.ColumnMeta(rightColID).TableMeta != rightTabMeta {
 			// Condition #2: All right columns don't come from same table.
 			return false
 		}
 
-		if leftTab == rightTab {
+		if leftTabMeta.Table == rightTabMeta.Table {
 			// Check self-join case.
-			if md.ColumnOrdinal(leftCol) != md.ColumnOrdinal(rightCol) {
+			leftColOrd := leftTabMeta.MetaID.ColumnOrdinal(leftColID)
+			rightColOrd := rightTabMeta.MetaID.ColumnOrdinal(rightColID)
+			if leftColOrd != rightColOrd {
 				// Condition #4: Left and right column ordinals do not match.
 				return false
 			}
 		} else {
 			// Column could be a potential foreign key match so save it.
-			remainingLeftCols.Add(int(leftCol))
+			remainingLeftColIDs.Add(int(leftColID))
 		}
 	}
 
-	if remainingLeftCols.Empty() {
+	if remainingLeftColIDs.Empty() {
 		return true
 	}
 
 	var leftRightColMap map[opt.ColumnID]opt.ColumnID
 	// Condition #5: All remaining left columns correspond to a foreign key relation.
-	for i, cnt := 0, leftTab.IndexCount(); i < cnt; i++ {
-		index := leftTab.Index(i)
+	for i, cnt := 0, leftTabMeta.Table.IndexCount(); i < cnt; i++ {
+		index := leftTabMeta.Table.Index(i)
 		fkRef, ok := index.ForeignKey()
 
 		if !ok {
@@ -431,7 +430,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		if fkPrefix <= 0 {
 			panic("fkPrefix should always be positive")
 		}
-		if fkTable == nil || fkTable.ID() != rightTab.ID() {
+		if fkTable == nil || fkTable.ID() != rightTabMeta.Table.ID() {
 			continue
 		}
 
@@ -454,10 +453,10 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		var leftIndexCols opt.ColSet
 		for j := 0; j < fkPrefix; j++ {
 			ord := index.Column(j).Ordinal
-			leftIndexCols.Add(int(leftTabID.ColumnID(ord)))
+			leftIndexCols.Add(int(leftTabMeta.MetaID.ColumnID(ord)))
 		}
 
-		if !remainingLeftCols.SubsetOf(leftIndexCols) {
+		if !remainingLeftColIDs.SubsetOf(leftIndexCols) {
 			continue
 		}
 
@@ -466,7 +465,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		// whether the filter conditions follow the foreign key
 		// constraint exactly.
 		if leftRightColMap == nil {
-			leftRightColMap = c.eqConditionsToColMap(filters, leftCols)
+			leftRightColMap = c.eqConditionsToColMap(filters, leftColIDs)
 		}
 
 		// Loop through all columns in fk index that also exist in LHS of match condition,
@@ -476,14 +475,14 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		// referenced) that it's being equated to.
 		fkMatch := true
 		for j := 0; j < fkPrefix; j++ {
-			indexLeftCol := leftTabID.ColumnID(index.Column(j).Ordinal)
+			indexLeftCol := leftTabMeta.MetaID.ColumnID(index.Column(j).Ordinal)
 
 			// Not every fk column needs to be in the equality conditions.
-			if !remainingLeftCols.Contains(int(indexLeftCol)) {
+			if !remainingLeftColIDs.Contains(int(indexLeftCol)) {
 				continue
 			}
 
-			indexRightCol := rightTabID.ColumnID(fkIndex.Column(j).Ordinal)
+			indexRightCol := rightTabMeta.MetaID.ColumnID(fkIndex.Column(j).Ordinal)
 
 			if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
 				fkMatch = false

@@ -52,10 +52,10 @@ import (
 //   -- [1] -> y
 type Metadata struct {
 	// cols stores information about each metadata column, indexed by ColumnID.
-	cols []mdColumn
+	cols []ColumnMeta
 
 	// tables stores information about each metadata table, indexed by TableID.
-	tables []mdTable
+	tables []TableMeta
 
 	// deps stores information about all data sources depended on by the query,
 	// as well as the privileges required to access those data sources.
@@ -73,10 +73,10 @@ func (md *Metadata) Init() {
 	// Clear the columns and tables to release memory (this clearing pattern is
 	// optimized by Go).
 	for i := range md.cols {
-		md.cols[i] = mdColumn{}
+		md.cols[i] = ColumnMeta{}
 	}
 	for i := range md.tables {
-		md.tables[i] = mdTable{}
+		md.tables[i] = TableMeta{}
 	}
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
@@ -128,21 +128,6 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) 
 	return true
 }
 
-// AddColumn assigns a new unique id to a column within the query and records
-// its label and type. If the label is empty, a "column<ID>" label is created.
-func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
-	if label == "" {
-		label = fmt.Sprintf("column%d", len(md.cols)+1)
-	}
-	md.cols = append(md.cols, mdColumn{label: label, typ: typ})
-	return ColumnID(len(md.cols))
-}
-
-// NumColumns returns the count of columns tracked by this Metadata instance.
-func (md *Metadata) NumColumns() int {
-	return len(md.cols)
-}
-
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query). All columns are added to the metadata. If mutation columns
@@ -150,40 +135,68 @@ func (md *Metadata) NumColumns() int {
 func (md *Metadata) AddTable(tab cat.Table) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
-		md.tables = make([]mdTable, 0, 4)
+		md.tables = make([]TableMeta, 0, 4)
 	}
-	md.tables = append(md.tables, mdTable{tab: tab})
+	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab})
+	tabMeta := md.TableMeta(tabID)
 
 	colCount := tab.ColumnCount()
 	if md.cols == nil {
-		md.cols = make([]mdColumn, 0, colCount)
+		md.cols = make([]ColumnMeta, 0, colCount)
 	}
 
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
-		md.cols = append(md.cols, mdColumn{
-			tabID: tabID,
-			label: string(col.ColName()),
-			typ:   col.DatumType(),
-		})
+		colID := md.AddColumn(string(col.ColName()), col.DatumType())
+		md.ColumnMeta(colID).TableMeta = tabMeta
 	}
 
 	return tabID
 }
 
+// TableMeta looks up the metadata for the table associated with the given table
+// id. The same table can be added multiple times to the query metadata and
+// associated with multiple table ids.
+func (md *Metadata) TableMeta(tabID TableID) *TableMeta {
+	return &md.tables[tabID.index()]
+}
+
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) cat.Table {
-	return md.tables[tabID.index()].tab
+	return md.TableMeta(tabID).Table
 }
 
 // TableByStableID looks up the catalog table associated with the given
 // StableID (unique across all tables and stable across queries).
 func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
 	for _, mdTab := range md.tables {
-		if mdTab.tab.ID() == id {
-			return mdTab.tab
+		if mdTab.Table.ID() == id {
+			return mdTab.Table
 		}
 	}
 	return nil
+}
+
+// AddColumn assigns a new unique id to a column within the query and records
+// its alias and type. If the alias is empty, a "column<ID>" alias is created.
+func (md *Metadata) AddColumn(alias string, typ types.T) ColumnID {
+	if alias == "" {
+		alias = fmt.Sprintf("column%d", len(md.cols)+1)
+	}
+	colID := ColumnID(len(md.cols) + 1)
+	md.cols = append(md.cols, ColumnMeta{MetaID: colID, Alias: alias, Type: typ, md: md})
+	return colID
+}
+
+// NumColumns returns the count of columns tracked by this Metadata instance.
+func (md *Metadata) NumColumns() int {
+	return len(md.cols)
+}
+
+// ColumnMeta looks up the metadata for the column associated with the given
+// column id. The same column can be added multiple times to the query metadata
+// and associated with multiple column ids.
+func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
+	return &md.cols[colID.index()]
 }
