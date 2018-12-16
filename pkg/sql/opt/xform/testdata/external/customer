@@ -382,15 +382,15 @@ group-by
  ├── key: (12)
  ├── fd: (12)-->(16)
  ├── inner-join (merge)
- │    ├── columns: vehicle_id:3(uuid!null) vehicles.id:9(uuid!null) owner_id:12(uuid)
+ │    ├── columns: vehicle_id:3(uuid!null) v.id:9(uuid!null) owner_id:12(uuid)
  │    ├── left ordering: +3
  │    ├── right ordering: +9
  │    ├── fd: (3)==(9), (9)==(3)
- │    ├── scan rides@rides_vehicle_id_idx
+ │    ├── scan r@rides_vehicle_id_idx
  │    │    ├── columns: vehicle_id:3(uuid)
  │    │    └── ordering: +3
- │    ├── scan vehicles@vehicles_id_idx
- │    │    ├── columns: vehicles.id:9(uuid!null) owner_id:12(uuid)
+ │    ├── scan v@vehicles_id_idx
+ │    │    ├── columns: v.id:9(uuid!null) owner_id:12(uuid)
  │    │    └── ordering: +9
  │    └── filters (true)
  └── aggregations

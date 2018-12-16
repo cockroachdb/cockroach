@@ -371,7 +371,7 @@ INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
 ----
 project
  ├── columns: "?column?":11(int) "?column?":12(int)
- ├── insert abcde
+ ├── insert foo
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
  │    ├── insert-mapping:
  │    │    ├──  "?column?":7 => a:1

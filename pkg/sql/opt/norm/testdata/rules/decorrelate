@@ -1097,20 +1097,20 @@ semi-join-apply
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
  │    ├── inner-join
- │    │    ├── columns: u:8(int!null) v:9(int) u:10(int!null) v:11(int)
+ │    │    ├── columns: uv.u:8(int!null) uv.v:9(int) uv2.u:10(int!null) uv2.v:11(int)
  │    │    ├── key: (8,10)
  │    │    ├── fd: (8)-->(9), (10)-->(11)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    │    ├── columns: uv.u:8(int!null) uv.v:9(int)
  │    │    │    ├── key: (8)
  │    │    │    └── fd: (8)-->(9)
- │    │    ├── scan uv
- │    │    │    ├── columns: u:10(int!null) v:11(int)
+ │    │    ├── scan uv2
+ │    │    │    ├── columns: uv2.u:10(int!null) uv2.v:11(int)
  │    │    │    ├── key: (10)
  │    │    │    └── fd: (10)-->(11)
  │    │    └── filters (true)
  │    └── filters
- │         └── u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         └── uv2.u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  └── filters (true)
 
 # --------------------------------------------------
@@ -4229,7 +4229,7 @@ limit
  │    │         │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string)
  │    │         │    │    ├── side-effects
  │    │         │    │    ├── fd: (1)-->(2-9)
- │    │         │    │    ├── scan articles
+ │    │         │    │    ├── scan a0
  │    │         │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    └── fd: (1)-->(2-9)

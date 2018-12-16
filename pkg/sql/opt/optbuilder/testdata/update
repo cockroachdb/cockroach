@@ -223,7 +223,7 @@ update abcde
 build
 UPDATE abcde AS foo SET a=foo.b, b=foo.c
 ----
-update abcde
+update foo
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  ├── update-mapping:
@@ -233,7 +233,7 @@ update abcde
  │    └──  b:8 => e:5
  └── project
       ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
+      ├── scan foo
       │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       └── projections
            └── plus [type=int]
@@ -479,7 +479,7 @@ UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
  ├── columns: "?column?":15(int) "?column?":16(int)
- ├── update abcde
+ ├── update foo
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
  │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  │    ├── update-mapping:
@@ -492,7 +492,7 @@ project
  │         │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
  │         │    ├── select
  │         │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
- │         │    │    ├── scan abcde
+ │         │    │    ├── scan foo
  │         │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
  │         │    │    └── filters
  │         │    │         └── eq [type=bool]
@@ -1015,41 +1015,43 @@ update xyz
 
 # SET expression contains correlated subquery + alias.
 build
-UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=abcde1.a)
+UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=abcde1.a) RETURNING *
 ----
-update abcde
- ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
- ├── update-mapping:
- │    ├──  column19:19 => b:2
- │    ├──  column20:20 => d:4
- │    └──  a:7 => e:5
- └── project
-      ├── columns: column20:20(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column19:19(int)
-      ├── project
-      │    ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      │    └── projections
-      │         └── subquery [type=int]
-      │              └── max1-row
-      │                   ├── columns: b:14(int)
-      │                   └── project
-      │                        ├── columns: b:14(int)
-      │                        └── select
-      │                             ├── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int) rowid:18(int!null)
-      │                             ├── scan abcde
-      │                             │    └── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int) rowid:18(int!null)
-      │                             └── filters
-      │                                  └── eq [type=bool]
-      │                                       ├── variable: rowid [type=int]
-      │                                       └── variable: a [type=int]
-      └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column19 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+project
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
+ └── update abcde1
+      ├── columns: abcde1.a:1(int!null) abcde1.b:2(int) abcde1.c:3(int) abcde1.d:4(int) abcde1.e:5(int!null) abcde1.rowid:6(int!null)
+      ├── fetch columns: abcde1.a:7(int) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int)
+      ├── update-mapping:
+      │    ├──  column19:19 => abcde1.b:2
+      │    ├──  column20:20 => abcde1.d:4
+      │    └──  abcde1.a:7 => abcde1.e:5
+      └── project
+           ├── columns: column20:20(int) abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null) column19:19(int)
+           ├── project
+           │    ├── columns: column19:19(int) abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    ├── scan abcde1
+           │    │    └── columns: abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    └── projections
+           │         └── subquery [type=int]
+           │              └── max1-row
+           │                   ├── columns: abcde2.b:14(int)
+           │                   └── project
+           │                        ├── columns: abcde2.b:14(int)
+           │                        └── select
+           │                             ├── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             ├── scan abcde2
+           │                             │    └── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             └── filters
+           │                                  └── eq [type=bool]
+           │                                       ├── variable: abcde2.rowid [type=int]
+           │                                       └── variable: abcde1.a [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: column19 [type=int]
+                     │    └── variable: abcde1.c [type=int]
+                     └── const: 1 [type=int]
 
 # Too many values.
 build
@@ -1234,29 +1236,29 @@ SELECT * FROM abcde AS mno(m, n, o) WHERE EXISTS(SELECT * FROM [UPDATE mutation 
 project
  ├── columns: m:1(int!null) n:2(int) o:3(int) d:4(int) e:5(int)
  └── select
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      ├── scan abcde
-      │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      ├── columns: mno.m:1(int!null) mno.n:2(int) mno.o:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      ├── scan mno
+      │    └── columns: mno.m:1(int!null) mno.n:2(int) mno.o:3(int) d:4(int) e:5(int) rowid:6(int!null)
       └── filters
            └── exists [type=bool]
                 └── update mutation
-                     ├── columns: m:7(int!null) n:8(int)
-                     ├── fetch columns: m:11(int) n:12(int) mutation.o:13(int) p:14(int)
+                     ├── columns: mutation.m:7(int!null) mutation.n:8(int)
+                     ├── fetch columns: mutation.m:11(int) mutation.n:12(int) mutation.o:13(int) p:14(int)
                      ├── update-mapping:
-                     │    ├──  o:15 => m:7
+                     │    ├──  o:15 => mutation.m:7
                      │    └──  column16:16 => p:10
                      └── project
-                          ├── columns: column16:16(int) m:11(int!null) n:12(int) mutation.o:13(int) p:14(int) o:15(int)
+                          ├── columns: column16:16(int) mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int) o:15(int)
                           ├── project
-                          │    ├── columns: o:15(int) m:11(int!null) n:12(int) mutation.o:13(int) p:14(int)
+                          │    ├── columns: o:15(int) mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int)
                           │    ├── scan mutation
-                          │    │    └── columns: m:11(int!null) n:12(int) mutation.o:13(int) p:14(int)
+                          │    │    └── columns: mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int)
                           │    └── projections
-                          │         └── variable: c [type=int]
+                          │         └── variable: mno.o [type=int]
                           └── projections
                                └── plus [type=int]
                                     ├── variable: mutation.o [type=int]
-                                    └── variable: n [type=int]
+                                    └── variable: mutation.n [type=int]
 
 # Try to return a mutation column.
 build

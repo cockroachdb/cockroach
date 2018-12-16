@@ -936,7 +936,7 @@ project
                 ├── columns: r:3(int!null)
                 ├── select
                 │    ├── columns: k:1(int!null) v:2(string)
-                │    ├── scan kv
+                │    ├── scan x
                 │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── filters
                 │         └── eq [type=bool]
@@ -1050,7 +1050,7 @@ SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
- ├── scan xyz
+ ├── scan foo
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── filters
       └── lt [type=bool]
@@ -1062,11 +1062,11 @@ SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
 ----
 select
  ├── columns: foo1:1(int!null) y:2(int) z:3(int)
- ├── scan xyz
- │    └── columns: x:1(int!null) y:2(int) z:3(int)
+ ├── scan foo
+ │    └── columns: foo1:1(int!null) y:2(int) z:3(int)
  └── filters
       └── lt [type=bool]
-           ├── variable: x [type=int]
+           ├── variable: foo1 [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1074,11 +1074,11 @@ SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE 
 ----
 select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
- ├── scan xyz
- │    └── columns: x:1(int!null) y:2(int) z:3(int)
+ ├── scan foo
+ │    └── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  └── filters
       └── lt [type=bool]
-           ├── variable: x [type=int]
+           ├── variable: foo1 [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1086,11 +1086,11 @@ SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo
 ----
 select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
- ├── scan xyz
- │    └── columns: x:1(int!null) y:2(int) z:3(int)
+ ├── scan foo
+ │    └── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  └── filters
       └── lt [type=bool]
-           ├── variable: x [type=int]
+           ├── variable: foo1 [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1100,12 +1100,12 @@ sort
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── ordering: -2
  └── select
-      ├── columns: x:1(int!null) y:2(int) z:3(int)
-      ├── scan xyz
-      │    └── columns: x:1(int!null) y:2(int) z:3(int)
+      ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
+      ├── scan foo
+      │    └── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
       └── filters
            └── lt [type=bool]
-                ├── variable: x [type=int]
+                ├── variable: foo1 [type=int]
                 └── const: 7 [type=int]
 
 build
@@ -1459,8 +1459,8 @@ SELECT (SELECT akv.k) FROM kv akv
 ----
 project
  ├── columns: k:4(int)
- ├── scan kv
- │    └── columns: kv.k:1(int!null) v:2(string)
+ ├── scan akv
+ │    └── columns: akv.k:1(int!null) v:2(string)
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -1470,7 +1470,7 @@ project
                      ├── values
                      │    └── tuple [type=tuple]
                      └── projections
-                          └── variable: kv.k [type=int]
+                          └── variable: akv.k [type=int]
 
 exec-ddl
 CREATE TABLE db1.kv (k INT PRIMARY KEY, v INT)
@@ -1488,9 +1488,9 @@ project
  ├── columns: k:6(int)
  ├── inner-join
  │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
- │    ├── scan kv
+ │    ├── scan db1.public.kv
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
- │    ├── scan kv
+ │    ├── scan t.public.kv
  │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
  │    └── filters (true)
  └── projections
@@ -1523,9 +1523,9 @@ project
  ├── columns: k:6(int)
  ├── inner-join
  │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
- │    ├── scan kv
+ │    ├── scan db1.public.kv
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
- │    ├── scan kv
+ │    ├── scan t.public.kv
  │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
  │    └── filters (true)
  └── projections
@@ -1546,7 +1546,7 @@ SELECT (SELECT kv.k FROM db1.kv) FROM kv
 ----
 project
  ├── columns: k:5(int)
- ├── scan kv
+ ├── scan t.public.kv
  │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(string)
  └── projections
       └── subquery [type=int]
@@ -1554,7 +1554,7 @@ project
                 ├── columns: db1.public.kv.k:3(int!null)
                 └── project
                      ├── columns: db1.public.kv.k:3(int!null)
-                     └── scan kv
+                     └── scan db1.public.kv
                           └── columns: db1.public.kv.k:3(int!null) db1.public.kv.v:4(int)
 
 # 2 nested scopes, mixed scope references.
@@ -1563,7 +1563,7 @@ SELECT (SELECT (SELECT t.kv.k + k AS r) FROM db1.kv) FROM kv
 ----
 project
  ├── columns: r:7(int)
- ├── scan kv
+ ├── scan t.public.kv
  │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(string)
  └── projections
       └── subquery [type=int]
@@ -1571,7 +1571,7 @@ project
                 ├── columns: r:6(int)
                 └── project
                      ├── columns: r:6(int)
-                     ├── scan kv
+                     ├── scan db1.public.kv
                      │    └── columns: db1.public.kv.k:3(int!null) db1.public.kv.v:4(int)
                      └── projections
                           └── subquery [type=int]
