@@ -540,7 +540,7 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
 		hidden.Remove(int(col.ID))
-		formatCol(f, col.Label, col.ID, notNullCols, false /* omitType */)
+		formatCol(f, col.Alias, col.ID, notNullCols, false /* omitType */)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
@@ -656,21 +656,21 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Don't output name of index if it's the primary index.
 		tab := f.Memo.metadata.Table(t.Table)
 		if t.Index == opt.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+			fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
+			fmt.Fprintf(f.Buffer, " %s@%s", tableName(f, t.Table), tab.Index(t.Index).Name())
 		}
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
 
 	case *VirtualScanPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tab.Name())
+		// Always fully qualify virtual table names.
+		tabMeta := f.Memo.metadata.TableMeta(t.Table)
+		fmt.Fprintf(f.Buffer, " %s", tabMeta.Table.Name())
 
 	case *MutationPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+		fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
 
 	case *RowNumberPrivate:
 		if !t.Ordering.Any() {
@@ -724,6 +724,15 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	default:
 		fmt.Fprintf(f.Buffer, " %v", private)
 	}
+}
+
+// tableName returns the alias for a table to be used for pretty-printing.
+func tableName(f *ExprFmtCtx, tabID opt.TableID) string {
+	if f.HasFlags(ExprFmtHideQualifications) {
+		tabMeta := f.Memo.metadata.TableMeta(tabID)
+		return tabMeta.Name()
+	}
+	return f.Memo.metadata.Table(tabID).Name().String()
 }
 
 // isSimpleColumnName returns true if the given label consists of only ASCII

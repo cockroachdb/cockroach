@@ -117,6 +117,10 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab opt.Table, alia
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab)
+	if alias != nil {
+		// Set the table alias for pretty-printing and EXPLAIN.
+		mb.md.TableMeta(mb.tabID).Alias = string(alias.TableName)
+	}
 }
 
 // addTargetNamedColsForInsert adds a list of user-specified column names to the
@@ -528,15 +532,12 @@ func (mb *mutationBuilder) buildInputForUpdate(inScope *scope, upd *tree.Update)
 	// FROM
 	mb.outScope = mb.b.buildScan(
 		mb.tab,
-		mb.tab.Name(),
+		mb.alias,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
 		inScope,
 	)
-
-	// Overwrite output properties with any alias information.
-	mb.outScope.setTableAlias(mb.alias.TableName)
 
 	// WHERE
 	mb.b.buildWhere(upd.Where, mb.outScope)

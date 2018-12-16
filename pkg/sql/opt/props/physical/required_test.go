@@ -32,8 +32,8 @@ func TestRequiredProps(t *testing.T) {
 
 	// Presentation props.
 	presentation := physical.Presentation{
-		opt.LabeledColumn{Label: "a", ID: 1},
-		opt.LabeledColumn{Label: "b", ID: 2},
+		opt.AliasedColumn{Alias: "a", ID: 1},
+		opt.AliasedColumn{Alias: "b", ID: 2},
 	}
 	phys = &physical.Required{Presentation: presentation}
 	testRequiredProps(t, phys, "[presentation: a:1,b:2]")

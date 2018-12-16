@@ -241,7 +241,7 @@ project
       │    ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
       │    └── project
       │         ├── columns: column5:5(int) t.public.kv.v:2(int)
-      │         ├── scan kv
+      │         ├── scan t.public.kv
       │         │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
       │         └── projections
       │              └── mult [type=int]
@@ -267,7 +267,7 @@ select
  │    ├── grouping columns: column6:6(string)
  │    ├── project
  │    │    ├── columns: column6:6(string) t.public.kv.s:4(string)
- │    │    ├── scan kv
+ │    │    ├── scan t.public.kv
  │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
  │    │    └── projections
  │    │         └── function: upper [type=string]

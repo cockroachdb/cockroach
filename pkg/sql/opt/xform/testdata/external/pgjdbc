@@ -127,21 +127,21 @@ project
  ├── columns: type_cat:71(unknown) type_schem:34(name!null) type_name:2(name!null) class_name:71(unknown) data_type:72(string) remarks:73(string) base_type:74(string)
  ├── fd: ()-->(71)
  ├── left-join-apply
- │    ├── columns: pg_type.oid:1(oid) typname:2(name!null) typnamespace:3(oid!null) typtype:7(string) typbasetype:25(oid) pg_namespace.oid:33(oid!null) nspname:34(name!null) case:70(string)
+ │    ├── columns: t.oid:1(oid) t.typname:2(name!null) t.typnamespace:3(oid!null) t.typtype:7(string) t.typbasetype:25(oid) n.oid:33(oid!null) nspname:34(name!null) case:70(string)
  │    ├── fd: (3)==(33), (33)==(3)
  │    ├── inner-join
- │    │    ├── columns: pg_type.oid:1(oid) typname:2(name!null) typnamespace:3(oid!null) typtype:7(string) typbasetype:25(oid) pg_namespace.oid:33(oid!null) nspname:34(name!null)
+ │    │    ├── columns: t.oid:1(oid) t.typname:2(name!null) t.typnamespace:3(oid!null) t.typtype:7(string) t.typbasetype:25(oid) n.oid:33(oid!null) nspname:34(name!null)
  │    │    ├── fd: (3)==(33), (33)==(3)
- │    │    ├── scan pg_type
- │    │    │    └── columns: pg_type.oid:1(oid) typname:2(name!null) typnamespace:3(oid) typtype:7(string) typbasetype:25(oid)
+ │    │    ├── scan t
+ │    │    │    └── columns: t.oid:1(oid) t.typname:2(name!null) t.typnamespace:3(oid) t.typtype:7(string) t.typbasetype:25(oid)
  │    │    ├── select
- │    │    │    ├── columns: pg_namespace.oid:33(oid) nspname:34(name!null)
- │    │    │    ├── scan pg_namespace
- │    │    │    │    └── columns: pg_namespace.oid:33(oid) nspname:34(name!null)
+ │    │    │    ├── columns: n.oid:33(oid) nspname:34(name!null)
+ │    │    │    ├── scan n
+ │    │    │    │    └── columns: n.oid:33(oid) nspname:34(name!null)
  │    │    │    └── filters
  │    │    │         └── nspname != 'pg_catalog' [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
  │    │    └── filters
- │    │         └── typnamespace = pg_namespace.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
+ │    │         └── t.typnamespace = n.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
  │    ├── max1-row
  │    │    ├── columns: case:70(string)
  │    │    ├── outer: (25)
@@ -152,18 +152,18 @@ project
  │    │         ├── columns: case:70(string)
  │    │         ├── outer: (25)
  │    │         ├── select
- │    │         │    ├── columns: pg_type.oid:38(oid!null) typname:39(name!null)
+ │    │         │    ├── columns: pg_type.oid:38(oid!null) pg_type.typname:39(name!null)
  │    │         │    ├── outer: (25)
  │    │         │    ├── fd: ()-->(38)
  │    │         │    ├── scan pg_type
- │    │         │    │    └── columns: pg_type.oid:38(oid) typname:39(name!null)
+ │    │         │    │    └── columns: pg_type.oid:38(oid) pg_type.typname:39(name!null)
  │    │         │    └── filters
- │    │         │         └── pg_type.oid = typbasetype [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
+ │    │         │         └── pg_type.oid = t.typbasetype [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
  │    │         └── projections
- │    │              └── CASE WHEN typname = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [type=string, outer=(39)]
+ │    │              └── CASE WHEN pg_type.typname = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [type=string, outer=(39)]
  │    └── filters (true)
  └── projections
       ├── null [type=unknown]
-      ├── CASE WHEN typtype = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [type=string, outer=(7)]
-      ├── obj_description(pg_type.oid, 'pg_type') [type=string, outer=(1)]
-      └── CASE WHEN typtype = 'd' THEN case END [type=string, outer=(7,70)]
+      ├── CASE WHEN t.typtype = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [type=string, outer=(7)]
+      ├── obj_description(t.oid, 'pg_type') [type=string, outer=(1)]
+      └── CASE WHEN t.typtype = 'd' THEN case END [type=string, outer=(7,70)]
