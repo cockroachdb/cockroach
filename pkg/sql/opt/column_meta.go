@@ -72,8 +72,8 @@ type ColumnMeta struct {
 //      original, fully qualified name of the table: tab.Name().FQString().
 //
 //   2. If there's another column in the metadata with the same column alias but
-//      a different table alias, then prefix the column alias with the table
-//      alias: "tabAlias.columnAlias".
+//      a different table name, then prefix the column alias with the table
+//      name: "tabName.columnAlias".
 //
 func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
 	if cm.TableMeta == nil {
@@ -83,32 +83,32 @@ func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
 	tab := cm.TableMeta.Table
 	md := cm.md
 
-	// If a fully qualified alias has not been requested, then only qualify it if
+	// If a fully qualified name has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
-	var tabAlias string
+	var tabName string
 	if !fullyQualify {
 		for i := range md.cols {
 			if i == int(cm.MetaID-1) {
 				continue
 			}
 
-			// If there are two columns with same name, then column is ambiguous.
+			// If there are two columns with same alias, then column is ambiguous.
 			cm2 := &md.cols[i]
 			if cm2.Alias == cm.Alias {
-				tabAlias = string(tab.Name().TableName)
+				tabName = cm.TableMeta.Name()
 				if cm2.TableMeta == nil {
 					fullyQualify = true
 				} else {
 					// Only qualify if the qualified names are actually different.
-					tabName2 := string(cm2.TableMeta.Table.Name().TableName)
-					if tabAlias != tabName2 {
+					tabName2 := cm2.TableMeta.Name()
+					if tabName != tabName2 {
 						fullyQualify = true
 					}
 				}
 			}
 		}
 	} else {
-		tabAlias = tab.Name().FQString()
+		tabName = tab.Name().FQString()
 	}
 
 	if !fullyQualify {
@@ -116,7 +116,7 @@ func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tabAlias)
+	sb.WriteString(tabName)
 	sb.WriteRune('.')
 	sb.WriteString(cm.Alias)
 	return sb.String()
@@ -169,8 +169,8 @@ func ColSetToList(set ColSet) ColList {
 // operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap
 
-// LabeledColumn specifies the label and id of a column.
-type LabeledColumn struct {
-	Label string
+// AliasedColumn specifies the label and id of a column.
+type AliasedColumn struct {
+	Alias string
 	ID    ColumnID
 }

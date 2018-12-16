@@ -212,7 +212,7 @@ project
                 │    │         │    │    │         ├── select
                 │    │         │    │    │         │    ├── columns: config_yaml:5(bytes!null)
                 │    │         │    │    │         │    ├── outer: (1)
-                │    │         │    │    │         │    ├── scan zones
+                │    │         │    │    │         │    ├── scan ref_1
                 │    │         │    │    │         │    │    └── columns: config_yaml:5(bytes!null)
                 │    │         │    │    │         │    └── filters
                 │    │         │    │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]

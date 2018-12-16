@@ -80,16 +80,16 @@ project
  ├── key: (3)
  ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (2)-->(11)
  ├── inner-join (lookup phone)
- │    ├── columns: phone_id:1(int!null) person_id:2(int!null) id:3(int!null) number:4(string) since:5(timestamp) type:6(int) id:7(int!null) since:9(timestamp)
+ │    ├── columns: phone_id:1(int!null) person_id:2(int!null) unidirecti1_.id:3(int!null) unidirecti1_.number:4(string) unidirecti1_.since:5(timestamp) unidirecti1_.type:6(int) a10.id:7(int!null) a10.since:9(timestamp)
  │    ├── key columns: [2] = [7]
  │    ├── key: (7)
  │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3,7), (3)==(2,7), (7)-->(9), (7)==(2,3)
  │    ├── inner-join (lookup phone)
- │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null) id:3(int!null) number:4(string) since:5(timestamp) type:6(int)
+ │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null) unidirecti1_.id:3(int!null) unidirecti1_.number:4(string) unidirecti1_.since:5(timestamp) unidirecti1_.type:6(int)
  │    │    ├── key columns: [2] = [3]
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- │    │    ├── scan phone_register
+ │    │    ├── scan phoneregis0_
  │    │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null)
  │    │    │    ├── constraint: /1/2: [/1 - /1]
  │    │    │    ├── key: (2)
@@ -97,7 +97,7 @@ project
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      └── variable: since [type=timestamp, outer=(9)]
+      └── variable: a10.since [type=timestamp, outer=(9)]
 
 exec-ddl
 drop table Person, Phone, phone_register;
@@ -240,35 +240,35 @@ inner-join
  ├── key: (1,14)
  ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6,12), (6)==(4,12), (12,14)-->(13), (12)==(4,6)
  ├── inner-join
- │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
+ │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int!null) person1_.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6), (6)==(4)
  │    ├── semi-join
- │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    ├── scan phone
- │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │    ├── scan phone0_
+ │    │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int)
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2-4)
- │    │    ├── scan phone_call
- │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+ │    │    ├── scan calls3_
+ │    │    │    ├── columns: calls3_.id:15(int!null) phone_id:18(int)
  │    │    │    ├── key: (15)
  │    │    │    └── fd: (15)-->(18)
  │    │    └── filters
- │    │         └── phone.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    ├── scan person
- │    │    ├── columns: person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
+ │    │         └── phone0_.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+ │    ├── scan person1_
+ │    │    ├── columns: person1_.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7-11)
  │    └── filters
- │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
- ├── scan person_addresses
- │    ├── columns: person_addresses.person_id:12(int!null) addresses:13(string) addresses_key:14(string!null)
+ │         └── phone0_.person_id = person1_.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+ ├── scan addresses2_
+ │    ├── columns: addresses2_.person_id:12(int!null) addresses:13(string) addresses_key:14(string!null)
  │    ├── key: (12,14)
  │    └── fd: (12,14)-->(13)
  └── filters
-      └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+      └── person1_.id = addresses2_.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
 
 opt
 select
@@ -298,35 +298,35 @@ project
  ├── columns: id1_6_:1(int!null) phone_nu2_6_:2(string) person_i4_6_:4(int!null) phone_ty3_6_:3(string)
  ├── fd: (1)-->(2-4)
  └── inner-join
-      ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) person_addresses.person_id:12(int!null)
+      ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int!null) person1_.id:6(int!null) addresses2_.person_id:12(int!null)
       ├── fd: (1)-->(2-4), (4)==(6,12), (6)==(4,12), (12)==(4,6)
       ├── inner-join
-      │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null)
+      │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int!null) person1_.id:6(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
       │    ├── semi-join
-      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+      │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── scan phone
-      │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+      │    │    ├── scan phone0_
+      │    │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) phone0_.person_id:4(int)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── scan phone_call
-      │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+      │    │    ├── scan calls3_
+      │    │    │    ├── columns: calls3_.id:15(int!null) phone_id:18(int)
       │    │    │    ├── key: (15)
       │    │    │    └── fd: (15)-->(18)
       │    │    └── filters
-      │    │         └── phone.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
-      │    ├── scan person
-      │    │    ├── columns: person.id:6(int!null)
+      │    │         └── phone0_.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+      │    ├── scan person1_
+      │    │    ├── columns: person1_.id:6(int!null)
       │    │    └── key: (6)
       │    └── filters
-      │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
-      ├── scan person_addresses
-      │    └── columns: person_addresses.person_id:12(int!null)
+      │         └── phone0_.person_id = person1_.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      ├── scan addresses2_
+      │    └── columns: addresses2_.person_id:12(int!null)
       └── filters
-           └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+           └── person1_.id = addresses2_.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
 
 opt
 select
@@ -366,39 +366,39 @@ inner-join
  ├── key: (1,7)
  ├── fd: ()-->(9), (1)-->(2-6), (7)-->(8)
  ├── semi-join
- │    ├── columns: person.id:1(int!null) address:2(string!null) createdon:3(timestamp) person.name:4(string) nickname:5(string) person.version:6(int!null)
+ │    ├── columns: person0_.id:1(int!null) address:2(string!null) createdon:3(timestamp) person0_.name:4(string) nickname:5(string) person0_.version:6(int!null)
  │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
  │    ├── select
- │    │    ├── columns: person.id:1(int!null) address:2(string!null) createdon:3(timestamp) person.name:4(string) nickname:5(string) person.version:6(int!null)
+ │    │    ├── columns: person0_.id:1(int!null) address:2(string!null) createdon:3(timestamp) person0_.name:4(string) nickname:5(string) person0_.version:6(int!null)
  │    │    ├── has-placeholder
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-6)
- │    │    ├── scan person
- │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) person.name:4(string) nickname:5(string) person.version:6(int!null)
+ │    │    ├── scan person0_
+ │    │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) person0_.name:4(string) nickname:5(string) person0_.version:6(int!null)
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2-6)
  │    │    └── filters
  │    │         └── address = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
- │    ├── scan phone
- │    │    ├── columns: phone.id:10(int!null) person_id:13(int)
+ │    ├── scan phones2_
+ │    │    ├── columns: phones2_.id:10(int!null) person_id:13(int)
  │    │    ├── key: (10)
  │    │    └── fd: (10)-->(13)
  │    └── filters
- │         └── person.id = person_id [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
+ │         └── person0_.id = person_id [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
  ├── select
- │    ├── columns: partner.id:7(int!null) partner.name:8(string!null) partner.version:9(int!null)
+ │    ├── columns: partner1_.id:7(int!null) partner1_.name:8(string!null) partner1_.version:9(int!null)
  │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: ()-->(9), (7)-->(8)
- │    ├── scan partner
- │    │    ├── columns: partner.id:7(int!null) partner.name:8(string) partner.version:9(int!null)
+ │    ├── scan partner1_
+ │    │    ├── columns: partner1_.id:7(int!null) partner1_.name:8(string) partner1_.version:9(int!null)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8,9)
  │    └── filters
- │         ├── partner.name LIKE $2 [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
- │         └── partner.version = 0 [type=bool, outer=(9), constraints=(/9: [/0 - /0]; tight), fd=()-->(9)]
+ │         ├── partner1_.name LIKE $2 [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
+ │         └── partner1_.version = 0 [type=bool, outer=(9), constraints=(/9: [/0 - /0]; tight), fd=()-->(9)]
  └── filters (true)
 
 exec-ddl
@@ -459,61 +459,61 @@ project
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-6)
  └── select
-      ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) created_on:4(timestamp) firstname:5(string) lastname:6(string) max:13(int!null)
+      ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null) defaultaud0_.revtype:3(int) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(string) defaultaud0_.lastname:6(string) max:13(int!null)
       ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-6,13), (2)==(13), (13)==(2)
       ├── group-by
-      │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) created_on:4(timestamp) firstname:5(string) lastname:6(string) max:13(int)
-      │    ├── grouping columns: id:1(int!null) rev:2(int!null)
+      │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null) defaultaud0_.revtype:3(int) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(string) defaultaud0_.lastname:6(string) max:13(int)
+      │    ├── grouping columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null)
       │    ├── has-placeholder
       │    ├── key: (1,2)
       │    ├── fd: (1,2)-->(3-6,13)
       │    ├── inner-join (merge)
-      │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int!null) created_on:4(timestamp) firstname:5(string) lastname:6(string) id:7(int!null) rev:8(int!null)
+      │    │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null) defaultaud0_.revtype:3(int!null) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(string) defaultaud0_.lastname:6(string) defaultaud1_.id:7(int!null) defaultaud1_.rev:8(int!null)
       │    │    ├── left ordering: +1
       │    │    ├── right ordering: +7
       │    │    ├── has-placeholder
       │    │    ├── key: (2,7,8)
       │    │    ├── fd: (1,2)-->(3-6), (1)==(7), (7)==(1)
       │    │    ├── select
-      │    │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int!null) created_on:4(timestamp) firstname:5(string) lastname:6(string)
+      │    │    │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null) defaultaud0_.revtype:3(int!null) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(string) defaultaud0_.lastname:6(string)
       │    │    │    ├── has-placeholder
       │    │    │    ├── key: (1,2)
       │    │    │    ├── fd: (1,2)-->(3-6)
       │    │    │    ├── ordering: +1
-      │    │    │    ├── scan customer_aud
-      │    │    │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) created_on:4(timestamp) firstname:5(string) lastname:6(string)
+      │    │    │    ├── scan defaultaud0_
+      │    │    │    │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int!null) defaultaud0_.revtype:3(int) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(string) defaultaud0_.lastname:6(string)
       │    │    │    │    ├── key: (1,2)
       │    │    │    │    ├── fd: (1,2)-->(3-6)
       │    │    │    │    └── ordering: +1
       │    │    │    └── filters
-      │    │    │         └── revtype != $2 [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+      │    │    │         └── defaultaud0_.revtype != $2 [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
       │    │    ├── select
-      │    │    │    ├── columns: id:7(int!null) rev:8(int!null)
+      │    │    │    ├── columns: defaultaud1_.id:7(int!null) defaultaud1_.rev:8(int!null)
       │    │    │    ├── has-placeholder
       │    │    │    ├── key: (7,8)
       │    │    │    ├── ordering: +7
-      │    │    │    ├── scan customer_aud
-      │    │    │    │    ├── columns: id:7(int!null) rev:8(int!null)
+      │    │    │    ├── scan defaultaud1_
+      │    │    │    │    ├── columns: defaultaud1_.id:7(int!null) defaultaud1_.rev:8(int!null)
       │    │    │    │    ├── key: (7,8)
       │    │    │    │    └── ordering: +7
       │    │    │    └── filters
-      │    │    │         └── rev <= $1 [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
+      │    │    │         └── defaultaud1_.rev <= $1 [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
       │    │    └── filters (true)
       │    └── aggregations
       │         ├── max [type=int, outer=(8)]
-      │         │    └── variable: rev [type=int]
+      │         │    └── variable: defaultaud1_.rev [type=int]
       │         ├── const-agg [type=int, outer=(3)]
-      │         │    └── variable: revtype [type=int]
+      │         │    └── variable: defaultaud0_.revtype [type=int]
       │         ├── const-agg [type=timestamp, outer=(4)]
-      │         │    └── variable: created_on [type=timestamp]
+      │         │    └── variable: defaultaud0_.created_on [type=timestamp]
       │         ├── const-agg [type=string, outer=(5)]
-      │         │    └── variable: firstname [type=string]
+      │         │    └── variable: defaultaud0_.firstname [type=string]
       │         └── const-agg [type=string, outer=(6)]
-      │              └── variable: lastname [type=string]
+      │              └── variable: defaultaud0_.lastname [type=string]
       └── filters
-           └── rev = max [type=bool, outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+           └── defaultaud0_.rev = max [type=bool, outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
 
 exec-ddl
 drop table Customer_AUD;
@@ -581,63 +581,63 @@ sort
  ├── fd: (1,2)-->(3-8)
  ├── ordering: +2
  └── project
-      ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int)
+      ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int)
       ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-8)
       └── select
-           ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int) max:17(int!null)
+           ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int) max:17(int!null)
            ├── has-placeholder
            ├── key: (1,2)
            ├── fd: (1,2)-->(3-8,17), (2)==(17), (17)==(2)
            ├── group-by
-           │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int) max:17(int)
-           │    ├── grouping columns: id:1(int!null) rev:2(int!null)
+           │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int) max:17(int)
+           │    ├── grouping columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null)
            │    ├── has-placeholder
            │    ├── key: (1,2)
            │    ├── fd: (1,2)-->(3-8,17)
            │    ├── inner-join (merge)
-           │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int!null) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int) id:9(int!null) rev:10(int!null)
+           │    │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int!null) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int) queryaudit1_.id:9(int!null) queryaudit1_.rev:10(int!null)
            │    │    ├── left ordering: +1
            │    │    ├── right ordering: +9
            │    │    ├── has-placeholder
            │    │    ├── key: (2,9,10)
            │    │    ├── fd: (1,2)-->(3-8), (1)==(9), (9)==(1)
            │    │    ├── select
-           │    │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int!null) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int)
+           │    │    │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int!null) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int)
            │    │    │    ├── has-placeholder
            │    │    │    ├── key: (1,2)
            │    │    │    ├── fd: (1,2)-->(3-8)
            │    │    │    ├── ordering: +1
-           │    │    │    ├── scan customer_aud
-           │    │    │    │    ├── columns: id:1(int!null) rev:2(int!null) revtype:3(int) revend:4(int) created_on:5(timestamp) firstname:6(string) lastname:7(string) address_id:8(int)
+           │    │    │    ├── scan queryaudit0_
+           │    │    │    │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int!null) queryaudit0_.revtype:3(int) queryaudit0_.revend:4(int) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(string) queryaudit0_.lastname:7(string) queryaudit0_.address_id:8(int)
            │    │    │    │    ├── key: (1,2)
            │    │    │    │    ├── fd: (1,2)-->(3-8)
            │    │    │    │    └── ordering: +1
            │    │    │    └── filters
-           │    │    │         └── revtype != $1 [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-           │    │    ├── scan customer_aud
-           │    │    │    ├── columns: id:9(int!null) rev:10(int!null)
+           │    │    │         └── queryaudit0_.revtype != $1 [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+           │    │    ├── scan queryaudit1_
+           │    │    │    ├── columns: queryaudit1_.id:9(int!null) queryaudit1_.rev:10(int!null)
            │    │    │    ├── key: (9,10)
            │    │    │    └── ordering: +9
            │    │    └── filters (true)
            │    └── aggregations
            │         ├── max [type=int, outer=(10)]
-           │         │    └── variable: rev [type=int]
+           │         │    └── variable: queryaudit1_.rev [type=int]
            │         ├── const-agg [type=int, outer=(3)]
-           │         │    └── variable: revtype [type=int]
+           │         │    └── variable: queryaudit0_.revtype [type=int]
            │         ├── const-agg [type=int, outer=(4)]
-           │         │    └── variable: revend [type=int]
+           │         │    └── variable: queryaudit0_.revend [type=int]
            │         ├── const-agg [type=timestamp, outer=(5)]
-           │         │    └── variable: created_on [type=timestamp]
+           │         │    └── variable: queryaudit0_.created_on [type=timestamp]
            │         ├── const-agg [type=string, outer=(6)]
-           │         │    └── variable: firstname [type=string]
+           │         │    └── variable: queryaudit0_.firstname [type=string]
            │         ├── const-agg [type=string, outer=(7)]
-           │         │    └── variable: lastname [type=string]
+           │         │    └── variable: queryaudit0_.lastname [type=string]
            │         └── const-agg [type=int, outer=(8)]
-           │              └── variable: address_id [type=int]
+           │              └── variable: queryaudit0_.address_id [type=int]
            └── filters
-                └── rev = max [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
+                └── queryaudit0_.rev = max [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
 
 exec-ddl
 drop table Customer_AUD;
@@ -779,41 +779,41 @@ where
 ----
 distinct-on
  ├── columns: id1_2_:10(int!null) address2_2_:11(string) createdo3_2_:12(timestamp) name4_2_:13(string) nickname5_2_:14(string) version6_2_:15(int)
- ├── grouping columns: person.id:10(int!null)
+ ├── grouping columns: person2_.id:10(int!null)
  ├── key: (10)
  ├── fd: (10)-->(11-15)
  ├── inner-join
- │    ├── columns: phone.id:1(int!null) person_id:4(int!null) phone_id:9(int!null) person.id:10(int!null) address:11(string) createdon:12(timestamp) name:13(string) nickname:14(string) version:15(int!null)
+ │    ├── columns: phone0_.id:1(int!null) person_id:4(int!null) calls1_.phone_id:9(int!null) person2_.id:10(int!null) address:11(string) createdon:12(timestamp) name:13(string) nickname:14(string) version:15(int!null)
  │    ├── fd: (1)-->(4), (1)==(9), (9)==(1), (10)-->(11-15), (4)==(10), (10)==(4)
  │    ├── inner-join
- │    │    ├── columns: phone.id:1(int!null) person_id:4(int) phone_id:9(int!null)
+ │    │    ├── columns: phone0_.id:1(int!null) person_id:4(int) calls1_.phone_id:9(int!null)
  │    │    ├── fd: (1)-->(4), (1)==(9), (9)==(1)
  │    │    ├── anti-join
- │    │    │    ├── columns: phone.id:1(int!null) person_id:4(int)
+ │    │    │    ├── columns: phone0_.id:1(int!null) person_id:4(int)
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(4)
- │    │    │    ├── scan phone
- │    │    │    │    ├── columns: phone.id:1(int!null) person_id:4(int)
+ │    │    │    ├── scan phone0_
+ │    │    │    │    ├── columns: phone0_.id:1(int!null) person_id:4(int)
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(4)
  │    │    │    ├── select
- │    │    │    │    ├── columns: duration:17(int!null) phone_id:19(int)
- │    │    │    │    ├── scan phone_call
- │    │    │    │    │    └── columns: duration:17(int!null) phone_id:19(int)
+ │    │    │    │    ├── columns: call3_.duration:17(int!null) call3_.phone_id:19(int)
+ │    │    │    │    ├── scan call3_
+ │    │    │    │    │    └── columns: call3_.duration:17(int!null) call3_.phone_id:19(int)
  │    │    │    │    └── filters
- │    │    │    │         └── (duration >= 50) IS NOT false [type=bool, outer=(17)]
+ │    │    │    │         └── (call3_.duration >= 50) IS NOT false [type=bool, outer=(17)]
  │    │    │    └── filters
- │    │    │         └── phone_id = phone.id [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
- │    │    ├── scan phone_call
- │    │    │    └── columns: phone_id:9(int)
+ │    │    │         └── call3_.phone_id = phone0_.id [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
+ │    │    ├── scan calls1_
+ │    │    │    └── columns: calls1_.phone_id:9(int)
  │    │    └── filters
- │    │         └── phone.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    ├── scan person
- │    │    ├── columns: person.id:10(int!null) address:11(string) createdon:12(timestamp) name:13(string) nickname:14(string) version:15(int!null)
+ │    │         └── phone0_.id = calls1_.phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    ├── scan person2_
+ │    │    ├── columns: person2_.id:10(int!null) address:11(string) createdon:12(timestamp) name:13(string) nickname:14(string) version:15(int!null)
  │    │    ├── key: (10)
  │    │    └── fd: (10)-->(11-15)
  │    └── filters
- │         └── person_id = person.id [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │         └── person_id = person2_.id [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
  └── aggregations
       ├── const-agg [type=string, outer=(11)]
       │    └── variable: address [type=string]
@@ -850,32 +850,32 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
-      ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) max:10(int!null)
+      ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) max:10(int!null)
       ├── has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
-      │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) max:10(int)
-      │    ├── grouping columns: phone.id:1(int!null)
+      │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) max:10(int)
+      │    ├── grouping columns: phone0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
       │    ├── inner-join
-      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int!null) phone_id:9(int!null)
+      │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) calls1_.id:6(int!null) phone_id:9(int!null)
       │    │    ├── key: (6)
       │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
-      │    │    ├── scan phone
-      │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
+      │    │    ├── scan phone0_
+      │    │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── scan phone_call
-      │    │    │    ├── columns: phone_call.id:6(int!null) phone_id:9(int)
+      │    │    ├── scan calls1_
+      │    │    │    ├── columns: calls1_.id:6(int!null) phone_id:9(int)
       │    │    │    ├── key: (6)
       │    │    │    └── fd: (6)-->(9)
       │    │    └── filters
-      │    │         └── phone.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      │    │         └── phone0_.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
       │    └── aggregations
       │         ├── max [type=int, outer=(6)]
-      │         │    └── variable: phone_call.id [type=int]
+      │         │    └── variable: calls1_.id [type=int]
       │         ├── const-agg [type=string, outer=(2)]
       │         │    └── variable: phone_number [type=string]
       │         ├── const-agg [type=string, outer=(3)]
@@ -910,25 +910,25 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) count:12(int!null)
+      ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) count:12(int!null)
       ├── key: (1)
       ├── fd: ()-->(12), (1)-->(2-6)
       ├── group-by
-      │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) count:12(int)
-      │    ├── grouping columns: person.id:1(int!null)
+      │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) count:12(int)
+      │    ├── grouping columns: person0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,12)
       │    ├── left-join
-      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int)
+      │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int)
       │    │    ├── fd: (1)-->(2-6)
-      │    │    ├── scan person
-      │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+      │    │    ├── scan person0_
+      │    │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-6)
-      │    │    ├── scan phone
+      │    │    ├── scan phones1_
       │    │    │    └── columns: person_id:10(int)
       │    │    └── filters
-      │    │         └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │    │         └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
       │         ├── count [type=int, outer=(10)]
       │         │    └── variable: person_id [type=int]
@@ -969,32 +969,32 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
-      ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) min:10(int!null)
+      ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) min:10(int!null)
       ├── has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
-      │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) min:10(int)
-      │    ├── grouping columns: phone.id:1(int!null)
+      │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) min:10(int)
+      │    ├── grouping columns: phone0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
       │    ├── inner-join
-      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int!null) phone_id:9(int!null)
+      │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) calls1_.id:6(int!null) phone_id:9(int!null)
       │    │    ├── key: (6)
       │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
-      │    │    ├── scan phone
-      │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
+      │    │    ├── scan phone0_
+      │    │    │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── scan phone_call
-      │    │    │    ├── columns: phone_call.id:6(int!null) phone_id:9(int)
+      │    │    ├── scan calls1_
+      │    │    │    ├── columns: calls1_.id:6(int!null) phone_id:9(int)
       │    │    │    ├── key: (6)
       │    │    │    └── fd: (6)-->(9)
       │    │    └── filters
-      │    │         └── phone.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      │    │         └── phone0_.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
       │    └── aggregations
       │         ├── min [type=int, outer=(6)]
-      │         │    └── variable: phone_call.id [type=int]
+      │         │    └── variable: calls1_.id [type=int]
       │         ├── const-agg [type=string, outer=(2)]
       │         │    └── variable: phone_number [type=string]
       │         ├── const-agg [type=string, outer=(3)]
@@ -1029,29 +1029,29 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) max:12(int!null)
+      ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) max:12(int!null)
       ├── key: (1)
       ├── fd: ()-->(12), (1)-->(2-6)
       ├── group-by
-      │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) max:12(int)
-      │    ├── grouping columns: person.id:1(int!null)
+      │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) max:12(int)
+      │    ├── grouping columns: person0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,12)
       │    ├── inner-join
-      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int!null) order_id:11(int!null)
+      │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int!null) order_id:11(int!null)
       │    │    ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
-      │    │    ├── scan person
-      │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+      │    │    ├── scan person0_
+      │    │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-6)
       │    │    ├── select
       │    │    │    ├── columns: person_id:10(int) order_id:11(int!null)
-      │    │    │    ├── scan phone
+      │    │    │    ├── scan phones1_
       │    │    │    │    └── columns: person_id:10(int) order_id:11(int)
       │    │    │    └── filters
       │    │    │         └── order_id IS NOT NULL [type=bool, outer=(11), constraints=(/11: (/NULL - ]; tight)]
       │    │    └── filters
-      │    │         └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │    │         └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
       │         ├── max [type=int, outer=(11)]
       │         │    └── variable: order_id [type=int]
@@ -1093,23 +1093,23 @@ semi-join
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  ├── select
- │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: (7)-->(10)
- │    ├── scan phone
- │    │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── scan phones1_
+ │    │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(10)
  │    └── filters
- │         └── phone.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │         └── phones1_.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  └── filters
-      └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 opt
 select
@@ -1136,23 +1136,23 @@ semi-join
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  ├── select
- │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: (7)-->(10)
- │    ├── scan phone
- │    │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── scan phones1_
+ │    │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(10)
  │    └── filters
- │         └── phone.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │         └── phones1_.id = $1::INT8 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  └── filters
-      └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 opt
 select
@@ -1178,16 +1178,16 @@ semi-join
  ├── columns: id1_2_:1(int!null) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- ├── scan phone
- │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ ├── scan phones1_
+ │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    ├── key: (7)
  │    └── fd: (7)-->(10)
  └── filters
-      └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 opt
 select
@@ -1212,14 +1212,14 @@ anti-join
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- ├── scan phone
+ ├── scan phone0_
  │    ├── columns: id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: phone_id:6(int!null) repairtimestamps:7(timestamp)
  │    ├── has-placeholder
- │    ├── scan phone_repairtimestamps
+ │    ├── scan repairtime1_
  │    │    └── columns: phone_id:6(int!null) repairtimestamps:7(timestamp)
  │    └── filters
  │         └── (repairtimestamps >= $1::DATE) IS NOT false [type=bool, outer=(7)]
@@ -1252,8 +1252,8 @@ semi-join (merge)
  ├── right ordering: +10
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
  │    └── ordering: +1
@@ -1264,7 +1264,7 @@ semi-join (merge)
  │    └── select
  │         ├── columns: person_id:10(int) order_id:11(int!null)
  │         ├── fd: ()-->(11)
- │         ├── scan phone
+ │         ├── scan phones1_
  │         │    └── columns: person_id:10(int) order_id:11(int)
  │         └── filters
  │              └── order_id = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
@@ -1298,46 +1298,46 @@ project
  ├── columns: id1_2_:1(int) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person.id:1(int) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phone.id:7(int!null) order_id:11(int!null) max:17(int!null)
+      ├── columns: person0_.id:1(int) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phones2_.id:7(int!null) phones2_.order_id:11(int!null) max:17(int!null)
       ├── key: (7)
       ├── fd: (1)-->(2-6), (7)-->(1-6,11,17), (11)==(17), (17)==(11)
       ├── group-by
-      │    ├── columns: person.id:1(int) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phone.id:7(int!null) order_id:11(int) max:17(int)
-      │    ├── grouping columns: phone.id:7(int!null)
+      │    ├── columns: person0_.id:1(int) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phones2_.id:7(int!null) phones2_.order_id:11(int) max:17(int)
+      │    ├── grouping columns: phones2_.id:7(int!null)
       │    ├── key: (7)
       │    ├── fd: (1)-->(2-6), (7)-->(1-6,11,17)
       │    ├── inner-join
-      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phone.id:7(int!null) phone_type:9(string!null) person_id:10(int!null) order_id:11(int) person_id:15(int!null) order_id:16(int!null)
+      │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phones2_.id:7(int!null) phones2_.phone_type:9(string!null) phones2_.person_id:10(int!null) phones2_.order_id:11(int) phones1_.person_id:15(int!null) phones1_.order_id:16(int!null)
       │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10,15), (10)==(1,15), (15)==(1,10)
       │    │    ├── select
-      │    │    │    ├── columns: person_id:15(int) order_id:16(int!null)
-      │    │    │    ├── scan phone
-      │    │    │    │    └── columns: person_id:15(int) order_id:16(int)
+      │    │    │    ├── columns: phones1_.person_id:15(int) phones1_.order_id:16(int!null)
+      │    │    │    ├── scan phones1_
+      │    │    │    │    └── columns: phones1_.person_id:15(int) phones1_.order_id:16(int)
       │    │    │    └── filters
-      │    │    │         └── order_id IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
+      │    │    │         └── phones1_.order_id IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
       │    │    ├── inner-join (lookup person)
-      │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phone.id:7(int!null) phone_type:9(string!null) person_id:10(int!null) order_id:11(int)
+      │    │    │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phones2_.id:7(int!null) phones2_.phone_type:9(string!null) phones2_.person_id:10(int!null) phones2_.order_id:11(int)
       │    │    │    ├── key columns: [10] = [1]
       │    │    │    ├── key: (7)
       │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10), (10)==(1)
       │    │    │    ├── select
-      │    │    │    │    ├── columns: phone.id:7(int!null) phone_type:9(string!null) person_id:10(int) order_id:11(int)
+      │    │    │    │    ├── columns: phones2_.id:7(int!null) phones2_.phone_type:9(string!null) phones2_.person_id:10(int) phones2_.order_id:11(int)
       │    │    │    │    ├── key: (7)
       │    │    │    │    ├── fd: ()-->(9), (7)-->(10,11)
-      │    │    │    │    ├── scan phone
-      │    │    │    │    │    ├── columns: phone.id:7(int!null) phone_type:9(string) person_id:10(int) order_id:11(int)
+      │    │    │    │    ├── scan phones2_
+      │    │    │    │    │    ├── columns: phones2_.id:7(int!null) phones2_.phone_type:9(string) phones2_.person_id:10(int) phones2_.order_id:11(int)
       │    │    │    │    │    ├── key: (7)
       │    │    │    │    │    └── fd: (7)-->(9-11)
       │    │    │    │    └── filters
-      │    │    │    │         └── phone_type = 'LAND_LINE' [type=bool, outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(9)]
+      │    │    │    │         └── phones2_.phone_type = 'LAND_LINE' [type=bool, outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(9)]
       │    │    │    └── filters (true)
       │    │    └── filters
-      │    │         └── person.id = person_id [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
+      │    │         └── person0_.id = phones1_.person_id [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
       │    └── aggregations
       │         ├── max [type=int, outer=(16)]
-      │         │    └── variable: order_id [type=int]
+      │         │    └── variable: phones1_.order_id [type=int]
       │         ├── const-agg [type=int, outer=(11)]
-      │         │    └── variable: order_id [type=int]
+      │         │    └── variable: phones2_.order_id [type=int]
       │         ├── const-agg [type=string, outer=(2)]
       │         │    └── variable: address [type=string]
       │         ├── const-agg [type=timestamp, outer=(3)]
@@ -1349,9 +1349,9 @@ project
       │         ├── const-agg [type=int, outer=(6)]
       │         │    └── variable: version [type=int]
       │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: person.id [type=int]
+      │              └── variable: person0_.id [type=int]
       └── filters
-           └── order_id = max [type=bool, outer=(11,17), constraints=(/11: (/NULL - ]; /17: (/NULL - ]), fd=(11)==(17), (17)==(11)]
+           └── phones2_.order_id = max [type=bool, outer=(11,17), constraints=(/11: (/NULL - ]; /17: (/NULL - ]), fd=(11)==(17), (17)==(11)]
 
 opt
 select
@@ -1375,16 +1375,16 @@ anti-join
  ├── columns: id1_2_:1(int!null) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- ├── scan phone
- │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ ├── scan phones1_
+ │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    ├── key: (7)
  │    └── fd: (7)-->(10)
  └── filters
-      └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 opt
 select
@@ -1410,16 +1410,16 @@ semi-join
  ├── columns: id1_2_:1(int!null) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
- │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
+ ├── scan person0_
+ │    ├── columns: person0_.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- ├── scan phone
- │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ ├── scan phones1_
+ │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
  │    ├── key: (7)
  │    └── fd: (7)-->(10)
  └── filters
-      └── person.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 opt
 select
@@ -1441,16 +1441,16 @@ anti-join
  ├── columns: id1_4_:1(int!null) phone_nu2_4_:2(string) person_i4_4_:4(int) phone_ty3_4_:3(string)
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- ├── scan phone
- │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
+ ├── scan phone0_
+ │    ├── columns: phone0_.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
- ├── scan phone_call
- │    ├── columns: phone_call.id:6(int!null) phone_id:9(int)
+ ├── scan calls1_
+ │    ├── columns: calls1_.id:6(int!null) phone_id:9(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(9)
  └── filters
-      └── phone.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      └── phone0_.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 opt
 select
@@ -1478,7 +1478,7 @@ semi-join (merge)
  ├── right ordering: +7
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
+ ├── scan person0_
  │    ├── columns: id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
@@ -1487,7 +1487,7 @@ semi-join (merge)
  │    ├── columns: person_id:7(int!null) addresses:8(string!null)
  │    ├── fd: ()-->(8)
  │    ├── ordering: +7 opt(8) [provided: +7]
- │    ├── scan person_addresses
+ │    ├── scan addresses1_
  │    │    ├── columns: person_id:7(int!null) addresses:8(string)
  │    │    └── ordering: +7 opt(8) [provided: +7]
  │    └── filters
@@ -1520,7 +1520,7 @@ anti-join (merge)
  ├── right ordering: +7
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- ├── scan person
+ ├── scan person0_
  │    ├── columns: id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
@@ -1528,7 +1528,7 @@ anti-join (merge)
  ├── select
  │    ├── columns: person_id:7(int!null) addresses:8(string)
  │    ├── ordering: +7
- │    ├── scan person_addresses
+ │    ├── scan addresses1_
  │    │    ├── columns: person_id:7(int!null) addresses:8(string)
  │    │    └── ordering: +7
  │    └── filters
@@ -1603,11 +1603,11 @@ project
       │    ├── left-join
       │    │    ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int) employee_id:4(int)
       │    │    ├── fd: (1)-->(2,3)
-      │    │    ├── scan employee
+      │    │    ├── scan componenti0_
       │    │    │    ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2,3)
-      │    │    ├── scan employee_phones
+      │    │    ├── scan phones1_
       │    │    │    └── columns: employee_id:4(int!null)
       │    │    └── filters
       │    │         └── id = employee_id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
@@ -1729,11 +1729,11 @@ left-join
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4,5)
  ├── anti-join
- │    ├── columns: company.id:1(int!null) location_id:2(int)
+ │    ├── columns: company0_.id:1(int!null) location_id:2(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    ├── scan company
- │    │    ├── columns: company.id:1(int!null) location_id:2(int)
+ │    ├── scan company0_
+ │    │    ├── columns: company0_.id:1(int!null) location_id:2(int)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── inner-join
@@ -1761,19 +1761,19 @@ left-join
  │    │    │         │    └── key: (10)
  │    │    │         └── projections
  │    │    │              └── const: 1 [type=int]
- │    │    ├── scan company_employee
+ │    │    ├── scan employees1_
  │    │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null)
  │    │    │    └── key: (6,7)
  │    │    └── filters
  │    │         └── employees_id = id [type=bool, outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
  │    └── filters
- │         └── company.id = company_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- ├── scan location
- │    ├── columns: location.id:3(int!null) address:4(string) zip:5(int!null)
+ │         └── company0_.id = company_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── scan location3_
+ │    ├── columns: location3_.id:3(int!null) address:4(string) zip:5(int!null)
  │    ├── key: (3)
  │    └── fd: (3)-->(4,5)
  └── filters
-      └── location_id = location.id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      └── location_id = location3_.id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
 
 exec-ddl
 drop table Company, Company_Employee, Employee, Manager, Location;
@@ -1851,16 +1851,16 @@ project
  ├── columns: newspape1_23_0_:1(int!null) news_new2_23_0_:2(int!null) formula140_0_:9(string) news_id1_21_1_:3(int!null) detail2_21_1_:4(string) title3_21_1_:5(string)
  ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2)
  ├── left-join (lookup news)
- │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null) news_id:3(int!null) detail:4(string) title:5(string) news_id:6(int) title:8(string)
+ │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null) news1_.news_id:3(int!null) news1_.detail:4(string) news1_.title:5(string) a0.news_id:6(int) a0.title:8(string)
  │    ├── key columns: [2] = [6]
  │    ├── key: (3,6)
  │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2), (6)-->(8)
  │    ├── inner-join (lookup news)
- │    │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null) news_id:3(int!null) detail:4(string) title:5(string)
+ │    │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null) news1_.news_id:3(int!null) news1_.detail:4(string) news1_.title:5(string)
  │    │    ├── key columns: [2] = [3]
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2)
- │    │    ├── scan newspaper_news
+ │    │    ├── scan news0_
  │    │    │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null)
  │    │    │    ├── constraint: /1/2: [/1 - /1]
  │    │    │    ├── key: (2)
@@ -1868,7 +1868,7 @@ project
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      └── variable: title [type=string, outer=(8)]
+      └── variable: a0.title [type=string, outer=(8)]
 
 exec-ddl
 drop table News, Newspaper, Newspaper_News;
@@ -1945,26 +1945,26 @@ project
  ├── columns: generati1_2_0_:1(int!null) ref_id2_2_0_:2(int!null) formula131_0_:19(string) formula132_0_:20(string) formula133_0_:21(string) id1_0_1_:3(int!null) age2_0_1_:4(string) culture3_0_1_:5(string) descript4_0_1_:6(string)
  ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
  ├── left-join (lookup generationgroup)
- │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) id:3(int!null) age:4(string) culture:5(string) description:6(string) id:7(int) age:8(string) id:11(int) culture:13(string) id:15(int) description:18(string)
+ │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generation1_.id:3(int!null) generation1_.age:4(string) generation1_.culture:5(string) generation1_.description:6(string) a13.id:7(int) a13.age:8(string) a15.id:11(int) a15.culture:13(string) a13.id:15(int) a13.description:18(string)
  │    ├── key columns: [2] = [15]
  │    ├── key: (3,7,11,15)
  │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13), (15)-->(18)
  │    ├── left-join (lookup generationgroup)
- │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) id:3(int!null) age:4(string) culture:5(string) description:6(string) id:7(int) age:8(string) id:11(int) culture:13(string)
+ │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generation1_.id:3(int!null) generation1_.age:4(string) generation1_.culture:5(string) generation1_.description:6(string) a13.id:7(int) a13.age:8(string) a15.id:11(int) a15.culture:13(string)
  │    │    ├── key columns: [2] = [11]
  │    │    ├── key: (3,7,11)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13)
  │    │    ├── left-join (lookup generationgroup)
- │    │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) id:3(int!null) age:4(string) culture:5(string) description:6(string) id:7(int) age:8(string)
+ │    │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generation1_.id:3(int!null) generation1_.age:4(string) generation1_.culture:5(string) generation1_.description:6(string) a13.id:7(int) a13.age:8(string)
  │    │    │    ├── key columns: [2] = [7]
  │    │    │    ├── key: (3,7)
  │    │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8)
  │    │    │    ├── inner-join (lookup generationgroup)
- │    │    │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) id:3(int!null) age:4(string) culture:5(string) description:6(string)
+ │    │    │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generation1_.id:3(int!null) generation1_.age:4(string) generation1_.culture:5(string) generation1_.description:6(string)
  │    │    │    │    ├── key columns: [2] = [3]
  │    │    │    │    ├── key: (3)
  │    │    │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- │    │    │    │    ├── scan generationuser_generationgroup
+ │    │    │    │    ├── scan ref0_
  │    │    │    │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null)
  │    │    │    │    │    ├── constraint: /1/2: [/1 - /1]
  │    │    │    │    │    ├── key: (2)
@@ -1974,9 +1974,9 @@ project
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      ├── variable: age [type=string, outer=(8)]
-      ├── variable: culture [type=string, outer=(13)]
-      └── variable: description [type=string, outer=(18)]
+      ├── variable: a13.age [type=string, outer=(8)]
+      ├── variable: a15.culture [type=string, outer=(13)]
+      └── variable: a13.description [type=string, outer=(18)]
 
 exec-ddl
 drop table GenerationGroup, GenerationUser, GenerationUser_GenerationGroup;
@@ -2045,35 +2045,35 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4,9)
  ├── group-by
- │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int) true_agg:11(bool)
- │    ├── grouping columns: tbid2.id:1(int!null)
+ │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int) true_agg:11(bool)
+ │    ├── grouping columns: bids0_.id:1(int!null)
  │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4,11)
  │    ├── right-join
- │    │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null) successfulbid:8(int) true:10(bool)
+ │    │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null) successfulbid:8(int) true:10(bool)
  │    │    ├── has-placeholder
  │    │    ├── fd: (1)-->(2-4), ()~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: true:10(bool!null) successfulbid:8(int)
  │    │    │    ├── fd: ()-->(10)
- │    │    │    ├── scan tauction2
+ │    │    │    ├── scan a
  │    │    │    │    └── columns: successfulbid:8(int)
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
  │    │    ├── select
- │    │    │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null)
+ │    │    │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null)
  │    │    │    ├── has-placeholder
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-4)
- │    │    │    ├── scan tbid2
- │    │    │    │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int)
+ │    │    │    ├── scan bids0_
+ │    │    │    │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int)
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2-4)
  │    │    │    └── filters
  │    │    │         └── auctionid = $1 [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
  │    │    └── filters
- │    │         └── successfulbid = tbid2.id [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │         └── successfulbid = bids0_.id [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │    └── aggregations
  │         ├── const-not-null-agg [type=bool, outer=(10)]
  │         │    └── variable: true [type=bool]
@@ -2198,67 +2198,67 @@ project
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18), ()~~>(4,5)
  ├── group-by
- │    ├── columns: customerorder.customerid:1(string) customerorder.ordernumber:2(int) orderdate:3(date) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int) sum:17(decimal)
- │    ├── grouping columns: lineitem.productid:6(string)
+ │    ├── columns: order0_.customerid:1(string) order0_.ordernumber:2(int) orderdate:3(date) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int) sum:17(decimal)
+ │    ├── grouping columns: lineitems1_.productid:6(string)
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17), ()~~>(4,5)
  │    ├── right-join
- │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int) lineitem.customerid:8(string) lineitem.ordernumber:9(int) column16:16(decimal)
+ │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int) li.customerid:8(string) li.ordernumber:9(int) column16:16(decimal)
  │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7), ()~~>(4,5)
  │    │    ├── project
- │    │    │    ├── columns: column16:16(decimal) lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null)
+ │    │    │    ├── columns: column16:16(decimal) li.customerid:8(string!null) li.ordernumber:9(int!null)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null) lineitem.productid:10(string!null) quantity:11(int) product.productid:12(string!null) cost:14(decimal)
+ │    │    │    │    ├── columns: li.customerid:8(string!null) li.ordernumber:9(int!null) li.productid:10(string!null) li.quantity:11(int) p.productid:12(string!null) cost:14(decimal)
  │    │    │    │    ├── key: (8,9,12)
  │    │    │    │    ├── fd: (8-10)-->(11), (12)-->(14), (10)==(12), (12)==(10)
- │    │    │    │    ├── scan lineitem
- │    │    │    │    │    ├── columns: lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null) lineitem.productid:10(string!null) quantity:11(int)
+ │    │    │    │    ├── scan li
+ │    │    │    │    │    ├── columns: li.customerid:8(string!null) li.ordernumber:9(int!null) li.productid:10(string!null) li.quantity:11(int)
  │    │    │    │    │    ├── key: (8-10)
  │    │    │    │    │    └── fd: (8-10)-->(11)
- │    │    │    │    ├── scan product
- │    │    │    │    │    ├── columns: product.productid:12(string!null) cost:14(decimal)
+ │    │    │    │    ├── scan p
+ │    │    │    │    │    ├── columns: p.productid:12(string!null) cost:14(decimal)
  │    │    │    │    │    ├── key: (12)
  │    │    │    │    │    └── fd: (12)-->(14)
  │    │    │    │    └── filters
- │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
+ │    │    │    │         └── li.productid = p.productid [type=bool, outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
  │    │    │    └── projections
- │    │    │         └── quantity * cost [type=decimal, outer=(11,14)]
+ │    │    │         └── li.quantity * cost [type=decimal, outer=(11,14)]
  │    │    ├── left-join (merge)
- │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int)
+ │    │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int)
  │    │    │    ├── left ordering: +1,+2
  │    │    │    ├── right ordering: +4,+5
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7), ()~~>(4,5)
- │    │    │    ├── scan customerorder
- │    │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null)
+ │    │    │    ├── scan order0_
+ │    │    │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null)
  │    │    │    │    ├── constraint: /1/2: [/'c111'/0 - /'c111'/0]
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    └── fd: ()-->(1-3)
- │    │    │    ├── scan lineitem
- │    │    │    │    ├── columns: lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null) lineitem.productid:6(string!null) quantity:7(int)
+ │    │    │    ├── scan lineitems1_
+ │    │    │    │    ├── columns: lineitems1_.customerid:4(string!null) lineitems1_.ordernumber:5(int!null) lineitems1_.productid:6(string!null) lineitems1_.quantity:7(int)
  │    │    │    │    ├── constraint: /4/5/6: [/'c111'/0 - /'c111'/0]
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: ()-->(4,5), (6)-->(7)
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         ├── lineitem.customerid = customerorder.customerid [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │    │         └── lineitem.ordernumber = customerorder.ordernumber [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │         ├── li.customerid = order0_.customerid [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │         └── li.ordernumber = order0_.ordernumber [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    └── aggregations
  │         ├── sum [type=decimal, outer=(16)]
  │         │    └── variable: column16 [type=decimal]
  │         ├── const-agg [type=string, outer=(1)]
- │         │    └── variable: customerorder.customerid [type=string]
+ │         │    └── variable: order0_.customerid [type=string]
  │         ├── const-agg [type=int, outer=(2)]
- │         │    └── variable: customerorder.ordernumber [type=int]
+ │         │    └── variable: order0_.ordernumber [type=int]
  │         ├── const-agg [type=date, outer=(3)]
  │         │    └── variable: orderdate [type=date]
  │         ├── const-agg [type=string, outer=(4)]
- │         │    └── variable: lineitem.customerid [type=string]
+ │         │    └── variable: lineitems1_.customerid [type=string]
  │         ├── const-agg [type=int, outer=(5)]
- │         │    └── variable: lineitem.ordernumber [type=int]
+ │         │    └── variable: lineitems1_.ordernumber [type=int]
  │         └── const-agg [type=int, outer=(7)]
- │              └── variable: quantity [type=int]
+ │              └── variable: lineitems1_.quantity [type=int]
  └── projections
       └── variable: sum [type=decimal, outer=(17)]
 
@@ -2319,80 +2319,80 @@ project
  ├── key: (1,4,5,7-9,11)
  ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,30,31)
  ├── group-by
- │    ├── columns: customer.customerid:1(string!null) name:2(string) address:3(string) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int) product.productid:11(string) description:12(string) cost:13(decimal) numberavailable:14(int) sum:24(decimal) sum:29(decimal)
- │    ├── grouping columns: customer.customerid:1(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) product.productid:11(string)
+ │    ├── columns: customer0_.customerid:1(string!null) name:2(string) address:3(string) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int) product3_.productid:11(string) product3_.description:12(string) product3_.cost:13(decimal) product3_.numberavailable:14(int) sum:24(decimal) sum:29(decimal)
+ │    ├── grouping columns: customer0_.customerid:1(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) product3_.productid:11(string)
  │    ├── key: (1,4,5,7-9,11)
  │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24,29)
  │    ├── left-join
- │    │    ├── columns: customer.customerid:1(string!null) name:2(string) address:3(string) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int) product.productid:11(string) description:12(string) cost:13(decimal) numberavailable:14(int) sum:24(decimal) lineitem.productid:27(string) quantity:28(int)
+ │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string) address:3(string) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int) product3_.productid:11(string) product3_.description:12(string) product3_.cost:13(decimal) product3_.numberavailable:14(int) sum:24(decimal) li.productid:27(string) li.quantity:28(int)
  │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
  │    │    ├── group-by
- │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string) address:3(string) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int) product.productid:11(string) description:12(string) cost:13(decimal) numberavailable:14(int) sum:24(decimal)
- │    │    │    ├── grouping columns: customer.customerid:1(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) product.productid:11(string)
+ │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string) address:3(string) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int) product3_.productid:11(string) product3_.description:12(string) product3_.cost:13(decimal) product3_.numberavailable:14(int) sum:24(decimal)
+ │    │    │    ├── grouping columns: customer0_.customerid:1(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) product3_.productid:11(string)
  │    │    │    ├── key: (1,4,5,7-9,11)
  │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
  │    │    │    ├── left-join
- │    │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string!null) address:3(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int) product.productid:11(string) description:12(string) cost:13(decimal) numberavailable:14(int) lineitem.customerid:15(string) lineitem.ordernumber:16(int) column23:23(decimal)
+ │    │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string!null) address:3(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int) product3_.productid:11(string) product3_.description:12(string) product3_.cost:13(decimal) product3_.numberavailable:14(int) li.customerid:15(string) li.ordernumber:16(int) column23:23(decimal)
  │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14)
  │    │    │    │    ├── left-join
- │    │    │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string!null) address:3(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int) product.productid:11(string) description:12(string) cost:13(decimal) numberavailable:14(int)
+ │    │    │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string!null) address:3(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int) product3_.productid:11(string) product3_.description:12(string) product3_.cost:13(decimal) product3_.numberavailable:14(int)
  │    │    │    │    │    ├── key: (1,4,5,7-9,11)
  │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14)
  │    │    │    │    │    ├── left-join
- │    │    │    │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string!null) address:3(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date) lineitem.customerid:7(string) lineitem.ordernumber:8(int) lineitem.productid:9(string) quantity:10(int)
+ │    │    │    │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string!null) address:3(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date) lineitems2_.customerid:7(string) lineitems2_.ordernumber:8(int) lineitems2_.productid:9(string) lineitems2_.quantity:10(int)
  │    │    │    │    │    │    ├── key: (1,4,5,7-9)
  │    │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10)
  │    │    │    │    │    │    ├── left-join (merge)
- │    │    │    │    │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string!null) address:3(string!null) customerorder.customerid:4(string) customerorder.ordernumber:5(int) orderdate:6(date)
+ │    │    │    │    │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string!null) address:3(string!null) orders1_.customerid:4(string) orders1_.ordernumber:5(int) orderdate:6(date)
  │    │    │    │    │    │    │    ├── left ordering: +1
  │    │    │    │    │    │    │    ├── right ordering: +4
  │    │    │    │    │    │    │    ├── key: (1,4,5)
  │    │    │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6)
- │    │    │    │    │    │    │    ├── scan customer
- │    │    │    │    │    │    │    │    ├── columns: customer.customerid:1(string!null) name:2(string!null) address:3(string!null)
+ │    │    │    │    │    │    │    ├── scan customer0_
+ │    │    │    │    │    │    │    │    ├── columns: customer0_.customerid:1(string!null) name:2(string!null) address:3(string!null)
  │    │    │    │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    │    │    │    ├── fd: (1)-->(2,3)
  │    │    │    │    │    │    │    │    └── ordering: +1
- │    │    │    │    │    │    │    ├── scan customerorder
- │    │    │    │    │    │    │    │    ├── columns: customerorder.customerid:4(string!null) customerorder.ordernumber:5(int!null) orderdate:6(date!null)
+ │    │    │    │    │    │    │    ├── scan orders1_
+ │    │    │    │    │    │    │    │    ├── columns: orders1_.customerid:4(string!null) orders1_.ordernumber:5(int!null) orderdate:6(date!null)
  │    │    │    │    │    │    │    │    ├── key: (4,5)
  │    │    │    │    │    │    │    │    ├── fd: (4,5)-->(6)
  │    │    │    │    │    │    │    │    └── ordering: +4
  │    │    │    │    │    │    │    └── filters (true)
- │    │    │    │    │    │    ├── scan lineitem
- │    │    │    │    │    │    │    ├── columns: lineitem.customerid:7(string!null) lineitem.ordernumber:8(int!null) lineitem.productid:9(string!null) quantity:10(int)
+ │    │    │    │    │    │    ├── scan lineitems2_
+ │    │    │    │    │    │    │    ├── columns: lineitems2_.customerid:7(string!null) lineitems2_.ordernumber:8(int!null) lineitems2_.productid:9(string!null) lineitems2_.quantity:10(int)
  │    │    │    │    │    │    │    ├── key: (7-9)
  │    │    │    │    │    │    │    └── fd: (7-9)-->(10)
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         ├── customerorder.customerid = lineitem.customerid [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
- │    │    │    │    │    │         └── customerorder.ordernumber = lineitem.ordernumber [type=bool, outer=(5,8), constraints=(/5: (/NULL - ]; /8: (/NULL - ]), fd=(5)==(8), (8)==(5)]
- │    │    │    │    │    ├── scan product
- │    │    │    │    │    │    ├── columns: product.productid:11(string!null) description:12(string!null) cost:13(decimal) numberavailable:14(int)
+ │    │    │    │    │    │         ├── orders1_.customerid = lineitems2_.customerid [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
+ │    │    │    │    │    │         └── orders1_.ordernumber = lineitems2_.ordernumber [type=bool, outer=(5,8), constraints=(/5: (/NULL - ]; /8: (/NULL - ]), fd=(5)==(8), (8)==(5)]
+ │    │    │    │    │    ├── scan product3_
+ │    │    │    │    │    │    ├── columns: product3_.productid:11(string!null) product3_.description:12(string!null) product3_.cost:13(decimal) product3_.numberavailable:14(int)
  │    │    │    │    │    │    ├── key: (11)
  │    │    │    │    │    │    └── fd: (11)-->(12-14)
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
+ │    │    │    │    │         └── lineitems2_.productid = product3_.productid [type=bool, outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column23:23(decimal) lineitem.customerid:15(string!null) lineitem.ordernumber:16(int!null)
+ │    │    │    │    │    ├── columns: column23:23(decimal) li.customerid:15(string!null) li.ordernumber:16(int!null)
  │    │    │    │    │    ├── inner-join
- │    │    │    │    │    │    ├── columns: lineitem.customerid:15(string!null) lineitem.ordernumber:16(int!null) lineitem.productid:17(string!null) quantity:18(int) product.productid:19(string!null) cost:21(decimal)
+ │    │    │    │    │    │    ├── columns: li.customerid:15(string!null) li.ordernumber:16(int!null) li.productid:17(string!null) li.quantity:18(int) p.productid:19(string!null) p.cost:21(decimal)
  │    │    │    │    │    │    ├── key: (15,16,19)
  │    │    │    │    │    │    ├── fd: (15-17)-->(18), (19)-->(21), (17)==(19), (19)==(17)
- │    │    │    │    │    │    ├── scan lineitem
- │    │    │    │    │    │    │    ├── columns: lineitem.customerid:15(string!null) lineitem.ordernumber:16(int!null) lineitem.productid:17(string!null) quantity:18(int)
+ │    │    │    │    │    │    ├── scan li
+ │    │    │    │    │    │    │    ├── columns: li.customerid:15(string!null) li.ordernumber:16(int!null) li.productid:17(string!null) li.quantity:18(int)
  │    │    │    │    │    │    │    ├── key: (15-17)
  │    │    │    │    │    │    │    └── fd: (15-17)-->(18)
- │    │    │    │    │    │    ├── scan product
- │    │    │    │    │    │    │    ├── columns: product.productid:19(string!null) cost:21(decimal)
+ │    │    │    │    │    │    ├── scan p
+ │    │    │    │    │    │    │    ├── columns: p.productid:19(string!null) p.cost:21(decimal)
  │    │    │    │    │    │    │    ├── key: (19)
  │    │    │    │    │    │    │    └── fd: (19)-->(21)
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(17,19), constraints=(/17: (/NULL - ]; /19: (/NULL - ]), fd=(17)==(19), (19)==(17)]
+ │    │    │    │    │    │         └── li.productid = p.productid [type=bool, outer=(17,19), constraints=(/17: (/NULL - ]; /19: (/NULL - ]), fd=(17)==(19), (19)==(17)]
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── quantity * cost [type=decimal, outer=(18,21)]
+ │    │    │    │    │         └── li.quantity * p.cost [type=decimal, outer=(18,21)]
  │    │    │    │    └── filters
- │    │    │    │         ├── lineitem.customerid = customerorder.customerid [type=bool, outer=(4,15), constraints=(/4: (/NULL - ]; /15: (/NULL - ]), fd=(4)==(15), (15)==(4)]
- │    │    │    │         └── lineitem.ordernumber = customerorder.ordernumber [type=bool, outer=(5,16), constraints=(/5: (/NULL - ]; /16: (/NULL - ]), fd=(5)==(16), (16)==(5)]
+ │    │    │    │         ├── li.customerid = orders1_.customerid [type=bool, outer=(4,15), constraints=(/4: (/NULL - ]; /15: (/NULL - ]), fd=(4)==(15), (15)==(4)]
+ │    │    │    │         └── li.ordernumber = orders1_.ordernumber [type=bool, outer=(5,16), constraints=(/5: (/NULL - ]; /16: (/NULL - ]), fd=(5)==(16), (16)==(5)]
  │    │    │    └── aggregations
  │    │    │         ├── sum [type=decimal, outer=(23)]
  │    │    │         │    └── variable: column23 [type=decimal]
@@ -2403,20 +2403,20 @@ project
  │    │    │         ├── const-agg [type=date, outer=(6)]
  │    │    │         │    └── variable: orderdate [type=date]
  │    │    │         ├── const-agg [type=int, outer=(10)]
- │    │    │         │    └── variable: quantity [type=int]
+ │    │    │         │    └── variable: lineitems2_.quantity [type=int]
  │    │    │         ├── const-agg [type=string, outer=(12)]
- │    │    │         │    └── variable: description [type=string]
+ │    │    │         │    └── variable: product3_.description [type=string]
  │    │    │         ├── const-agg [type=decimal, outer=(13)]
- │    │    │         │    └── variable: cost [type=decimal]
+ │    │    │         │    └── variable: product3_.cost [type=decimal]
  │    │    │         └── const-agg [type=int, outer=(14)]
- │    │    │              └── variable: numberavailable [type=int]
- │    │    ├── scan lineitem
- │    │    │    └── columns: lineitem.productid:27(string!null) quantity:28(int)
+ │    │    │              └── variable: product3_.numberavailable [type=int]
+ │    │    ├── scan li
+ │    │    │    └── columns: li.productid:27(string!null) li.quantity:28(int)
  │    │    └── filters
- │    │         └── lineitem.productid = product.productid [type=bool, outer=(11,27), constraints=(/11: (/NULL - ]; /27: (/NULL - ]), fd=(11)==(27), (27)==(11)]
+ │    │         └── li.productid = product3_.productid [type=bool, outer=(11,27), constraints=(/11: (/NULL - ]; /27: (/NULL - ]), fd=(11)==(27), (27)==(11)]
  │    └── aggregations
  │         ├── sum [type=decimal, outer=(28)]
- │         │    └── variable: quantity [type=int]
+ │         │    └── variable: li.quantity [type=int]
  │         ├── const-agg [type=string, outer=(2)]
  │         │    └── variable: name [type=string]
  │         ├── const-agg [type=string, outer=(3)]
@@ -2424,13 +2424,13 @@ project
  │         ├── const-agg [type=date, outer=(6)]
  │         │    └── variable: orderdate [type=date]
  │         ├── const-agg [type=int, outer=(10)]
- │         │    └── variable: quantity [type=int]
+ │         │    └── variable: lineitems2_.quantity [type=int]
  │         ├── const-agg [type=string, outer=(12)]
- │         │    └── variable: description [type=string]
+ │         │    └── variable: product3_.description [type=string]
  │         ├── const-agg [type=decimal, outer=(13)]
- │         │    └── variable: cost [type=decimal]
+ │         │    └── variable: product3_.cost [type=decimal]
  │         ├── const-agg [type=int, outer=(14)]
- │         │    └── variable: numberavailable [type=int]
+ │         │    └── variable: product3_.numberavailable [type=int]
  │         └── const-agg [type=decimal, outer=(24)]
  │              └── variable: sum [type=decimal]
  └── projections
@@ -2474,67 +2474,67 @@ project
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18), ()~~>(4,5)
  ├── group-by
- │    ├── columns: customerorder.customerid:1(string) customerorder.ordernumber:2(int) orderdate:3(date) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int) sum:17(decimal)
- │    ├── grouping columns: lineitem.productid:6(string)
+ │    ├── columns: order0_.customerid:1(string) order0_.ordernumber:2(int) orderdate:3(date) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int) sum:17(decimal)
+ │    ├── grouping columns: lineitems1_.productid:6(string)
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17), ()~~>(4,5)
  │    ├── right-join
- │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int) lineitem.customerid:8(string) lineitem.ordernumber:9(int) column16:16(decimal)
+ │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int) li.customerid:8(string) li.ordernumber:9(int) column16:16(decimal)
  │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7), ()~~>(4,5)
  │    │    ├── project
- │    │    │    ├── columns: column16:16(decimal) lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null)
+ │    │    │    ├── columns: column16:16(decimal) li.customerid:8(string!null) li.ordernumber:9(int!null)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null) lineitem.productid:10(string!null) quantity:11(int) product.productid:12(string!null) cost:14(decimal)
+ │    │    │    │    ├── columns: li.customerid:8(string!null) li.ordernumber:9(int!null) li.productid:10(string!null) li.quantity:11(int) p.productid:12(string!null) cost:14(decimal)
  │    │    │    │    ├── key: (8,9,12)
  │    │    │    │    ├── fd: (8-10)-->(11), (12)-->(14), (10)==(12), (12)==(10)
- │    │    │    │    ├── scan lineitem
- │    │    │    │    │    ├── columns: lineitem.customerid:8(string!null) lineitem.ordernumber:9(int!null) lineitem.productid:10(string!null) quantity:11(int)
+ │    │    │    │    ├── scan li
+ │    │    │    │    │    ├── columns: li.customerid:8(string!null) li.ordernumber:9(int!null) li.productid:10(string!null) li.quantity:11(int)
  │    │    │    │    │    ├── key: (8-10)
  │    │    │    │    │    └── fd: (8-10)-->(11)
- │    │    │    │    ├── scan product
- │    │    │    │    │    ├── columns: product.productid:12(string!null) cost:14(decimal)
+ │    │    │    │    ├── scan p
+ │    │    │    │    │    ├── columns: p.productid:12(string!null) cost:14(decimal)
  │    │    │    │    │    ├── key: (12)
  │    │    │    │    │    └── fd: (12)-->(14)
  │    │    │    │    └── filters
- │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
+ │    │    │    │         └── li.productid = p.productid [type=bool, outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
  │    │    │    └── projections
- │    │    │         └── quantity * cost [type=decimal, outer=(11,14)]
+ │    │    │         └── li.quantity * cost [type=decimal, outer=(11,14)]
  │    │    ├── left-join (merge)
- │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) lineitem.productid:6(string) quantity:7(int)
+ │    │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null) lineitems1_.customerid:4(string) lineitems1_.ordernumber:5(int) lineitems1_.productid:6(string) lineitems1_.quantity:7(int)
  │    │    │    ├── left ordering: +1,+2
  │    │    │    ├── right ordering: +4,+5
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7), ()~~>(4,5)
- │    │    │    ├── scan customerorder
- │    │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null)
+ │    │    │    ├── scan order0_
+ │    │    │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null)
  │    │    │    │    ├── constraint: /1/2: [/'c111'/0 - /'c111'/0]
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    └── fd: ()-->(1-3)
- │    │    │    ├── scan lineitem
- │    │    │    │    ├── columns: lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null) lineitem.productid:6(string!null) quantity:7(int)
+ │    │    │    ├── scan lineitems1_
+ │    │    │    │    ├── columns: lineitems1_.customerid:4(string!null) lineitems1_.ordernumber:5(int!null) lineitems1_.productid:6(string!null) lineitems1_.quantity:7(int)
  │    │    │    │    ├── constraint: /4/5/6: [/'c111'/0 - /'c111'/0]
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: ()-->(4,5), (6)-->(7)
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         ├── lineitem.customerid = customerorder.customerid [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │    │         └── lineitem.ordernumber = customerorder.ordernumber [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │         ├── li.customerid = order0_.customerid [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │         └── li.ordernumber = order0_.ordernumber [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    └── aggregations
  │         ├── sum [type=decimal, outer=(16)]
  │         │    └── variable: column16 [type=decimal]
  │         ├── const-agg [type=string, outer=(1)]
- │         │    └── variable: customerorder.customerid [type=string]
+ │         │    └── variable: order0_.customerid [type=string]
  │         ├── const-agg [type=int, outer=(2)]
- │         │    └── variable: customerorder.ordernumber [type=int]
+ │         │    └── variable: order0_.ordernumber [type=int]
  │         ├── const-agg [type=date, outer=(3)]
  │         │    └── variable: orderdate [type=date]
  │         ├── const-agg [type=string, outer=(4)]
- │         │    └── variable: lineitem.customerid [type=string]
+ │         │    └── variable: lineitems1_.customerid [type=string]
  │         ├── const-agg [type=int, outer=(5)]
- │         │    └── variable: lineitem.ordernumber [type=int]
+ │         │    └── variable: lineitems1_.ordernumber [type=int]
  │         └── const-agg [type=int, outer=(7)]
- │              └── variable: quantity [type=int]
+ │              └── variable: lineitems1_.quantity [type=int]
  └── projections
       └── variable: sum [type=decimal, outer=(17)]
 
@@ -2562,38 +2562,38 @@ project
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,14)
  ├── group-by
- │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date) sum:13(decimal)
- │    ├── grouping columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null)
+ │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date) sum:13(decimal)
+ │    ├── grouping columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null)
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3,13)
  │    ├── left-join
- │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) column12:12(decimal)
+ │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null) li.customerid:4(string) li.ordernumber:5(int) column12:12(decimal)
  │    │    ├── fd: (1,2)-->(3)
- │    │    ├── scan customerorder
- │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null)
+ │    │    ├── scan order0_
+ │    │    │    ├── columns: order0_.customerid:1(string!null) order0_.ordernumber:2(int!null) orderdate:3(date!null)
  │    │    │    ├── key: (1,2)
  │    │    │    └── fd: (1,2)-->(3)
  │    │    ├── project
- │    │    │    ├── columns: column12:12(decimal) lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null)
+ │    │    │    ├── columns: column12:12(decimal) li.customerid:4(string!null) li.ordernumber:5(int!null)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null) lineitem.productid:6(string!null) quantity:7(int) product.productid:8(string!null) cost:10(decimal)
+ │    │    │    │    ├── columns: li.customerid:4(string!null) li.ordernumber:5(int!null) li.productid:6(string!null) quantity:7(int) p.productid:8(string!null) cost:10(decimal)
  │    │    │    │    ├── key: (4,5,8)
  │    │    │    │    ├── fd: (4-6)-->(7), (8)-->(10), (6)==(8), (8)==(6)
- │    │    │    │    ├── scan lineitem
- │    │    │    │    │    ├── columns: lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null) lineitem.productid:6(string!null) quantity:7(int)
+ │    │    │    │    ├── scan li
+ │    │    │    │    │    ├── columns: li.customerid:4(string!null) li.ordernumber:5(int!null) li.productid:6(string!null) quantity:7(int)
  │    │    │    │    │    ├── key: (4-6)
  │    │    │    │    │    └── fd: (4-6)-->(7)
- │    │    │    │    ├── scan product
- │    │    │    │    │    ├── columns: product.productid:8(string!null) cost:10(decimal)
+ │    │    │    │    ├── scan p
+ │    │    │    │    │    ├── columns: p.productid:8(string!null) cost:10(decimal)
  │    │    │    │    │    ├── key: (8)
  │    │    │    │    │    └── fd: (8)-->(10)
  │    │    │    │    └── filters
- │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │    │    │    │         └── li.productid = p.productid [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │    │    │    └── projections
  │    │    │         └── quantity * cost [type=decimal, outer=(7,10)]
  │    │    └── filters
- │    │         ├── lineitem.customerid = customerorder.customerid [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │    │         └── lineitem.ordernumber = customerorder.ordernumber [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ │    │         ├── li.customerid = order0_.customerid [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │    │         └── li.ordernumber = order0_.ordernumber [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
  │    └── aggregations
  │         ├── sum [type=decimal, outer=(12)]
  │         │    └── variable: column12 [type=decimal]
@@ -2676,42 +2676,42 @@ WHERE
 ----
 group-by
  ├── columns: studenti1_26_0_:1(int!null) name2_26_0_:2(string) address_3_26_0_:3(string) address_4_26_0_:4(string) preferre5_26_0_:5(string)
- ├── grouping columns: student.studentid:1(int!null)
+ ├── grouping columns: this_.studentid:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── select
- │    ├── columns: student.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment.studentid:6(int!null) coursecode:7(string!null) year:9(int!null) max:14(int!null)
+ │    ├── columns: this_.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null) enrolment_.year:9(int!null) max:14(int!null)
  │    ├── key: (1,6,7)
  │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14), (9)==(14), (14)==(9)
  │    ├── group-by
- │    │    ├── columns: student.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment.studentid:6(int!null) coursecode:7(string!null) year:9(int) max:14(int)
- │    │    ├── grouping columns: student.studentid:1(int!null) enrolment.studentid:6(int!null) coursecode:7(string!null)
+ │    │    ├── columns: this_.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null) enrolment_.year:9(int) max:14(int)
+ │    │    ├── grouping columns: this_.studentid:1(int!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null)
  │    │    ├── key: (1,6,7)
  │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14)
  │    │    ├── inner-join
- │    │    │    ├── columns: student.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string!null) enrolment.studentid:6(int!null) coursecode:7(string!null) year:9(int!null) coursecode:11(string!null) year:13(int!null)
+ │    │    │    ├── columns: this_.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null) enrolment_.year:9(int!null) maxstudentenrolment_.coursecode:11(string!null) maxstudentenrolment_.year:13(int!null)
  │    │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (5)==(11), (11)==(5)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: enrolment.studentid:6(int!null) coursecode:7(string!null) year:9(int!null) coursecode:11(string!null) year:13(int!null)
+ │    │    │    │    ├── columns: enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null) enrolment_.year:9(int!null) maxstudentenrolment_.coursecode:11(string!null) maxstudentenrolment_.year:13(int!null)
  │    │    │    │    ├── fd: (6,7)-->(9)
- │    │    │    │    ├── scan enrolment
- │    │    │    │    │    ├── columns: enrolment.studentid:6(int!null) coursecode:7(string!null) year:9(int!null)
+ │    │    │    │    ├── scan enrolment_
+ │    │    │    │    │    ├── columns: enrolment_.studentid:6(int!null) enrolment_.coursecode:7(string!null) enrolment_.year:9(int!null)
  │    │    │    │    │    ├── key: (6,7)
  │    │    │    │    │    └── fd: (6,7)-->(9)
- │    │    │    │    ├── scan enrolment
- │    │    │    │    │    └── columns: coursecode:11(string!null) year:13(int!null)
+ │    │    │    │    ├── scan maxstudentenrolment_
+ │    │    │    │    │    └── columns: maxstudentenrolment_.coursecode:11(string!null) maxstudentenrolment_.year:13(int!null)
  │    │    │    │    └── filters (true)
- │    │    │    ├── scan student
- │    │    │    │    ├── columns: student.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string)
+ │    │    │    ├── scan this_
+ │    │    │    │    ├── columns: this_.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string)
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    └── filters
- │    │    │         └── preferredcoursecode = coursecode [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+ │    │    │         └── preferredcoursecode = maxstudentenrolment_.coursecode [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
  │    │    └── aggregations
  │    │         ├── max [type=int, outer=(13)]
- │    │         │    └── variable: year [type=int]
+ │    │         │    └── variable: maxstudentenrolment_.year [type=int]
  │    │         ├── const-agg [type=int, outer=(9)]
- │    │         │    └── variable: year [type=int]
+ │    │         │    └── variable: enrolment_.year [type=int]
  │    │         ├── const-agg [type=string, outer=(2)]
  │    │         │    └── variable: name [type=string]
  │    │         ├── const-agg [type=string, outer=(3)]
@@ -2721,7 +2721,7 @@ group-by
  │    │         └── const-agg [type=string, outer=(5)]
  │    │              └── variable: preferredcoursecode [type=string]
  │    └── filters
- │         └── year = max [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
+ │         └── enrolment_.year = max [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
  └── aggregations
       ├── const-agg [type=string, outer=(2)]
       │    └── variable: name [type=string]
@@ -2764,23 +2764,23 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2), (2)-->(6)
  ├── inner-join (merge)
- │    ├── columns: id:1(int!null) c_name:2(string) id:3(int!null)
+ │    ├── columns: this_.id:1(int!null) this_.c_name:2(string) t_name.id:3(int!null)
  │    ├── left ordering: +1
  │    ├── right ordering: +3
  │    ├── key: (3)
  │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
- │    ├── scan t_name
- │    │    ├── columns: id:1(int!null) c_name:2(string)
+ │    ├── scan this_
+ │    │    ├── columns: this_.id:1(int!null) this_.c_name:2(string)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    └── ordering: +1
  │    ├── scan t_name
- │    │    ├── columns: id:3(int!null)
+ │    │    ├── columns: t_name.id:3(int!null)
  │    │    ├── key: (3)
  │    │    └── ordering: +3
  │    └── filters (true)
  └── projections
-      └── length(c_name) [type=int, outer=(2)]
+      └── length(this_.c_name) [type=int, outer=(2)]
 
 exec-ddl
 drop table t_name

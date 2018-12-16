@@ -489,7 +489,7 @@ func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 func (h *hasher) HashPhysProps(val *physical.Required) {
 	for i := range val.Presentation {
 		col := &val.Presentation[i]
-		h.HashString(col.Label)
+		h.HashString(col.Alias)
 		h.HashColumnID(col.ID)
 	}
 	h.HashOrderingChoice(val.Ordering)
