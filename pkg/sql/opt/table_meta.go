@@ -117,8 +117,21 @@ type TableMeta struct {
 	// Table is a reference to the table in the catalog.
 	Table cat.Table
 
+	// Alias is an alternate name for the base table to be used for formatting,
+	// debugging, EXPLAIN output, etc. It is set to "" if no alias was specified.
+	Alias string
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+}
+
+// Name returns the table alias, if it was specified, or else the table's name
+// as a string.
+func (tm *TableMeta) Name() string {
+	if tm.Alias != "" {
+		return tm.Alias
+	}
+	return string(tm.Table.Name().TableName)
 }
 
 // IndexColumns returns the metadata IDs for the set of columns in the given

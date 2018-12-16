@@ -188,10 +188,9 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 
 // renameSource applies an AS clause to the columns in scope.
 func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
-	var tableAlias tree.TableName
-	colAlias := as.Cols
-
 	if as.Alias != "" {
+		colAlias := as.Cols
+
 		// Special case for Postgres compatibility: if a data source does not
 		// currently have a name, and it is a set-generating function or a scalar
 		// function with just one column, and the AS clause doesn't specify column
@@ -207,26 +206,40 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		}
 
 		// If an alias was specified, use that to qualify the column names.
-		tableAlias = tree.MakeUnqualifiedTableName(as.Alias)
+		tableAlias := tree.MakeUnqualifiedTableName(as.Alias)
 		scope.setTableAlias(as.Alias)
-	}
 
-	if len(colAlias) > 0 {
-		// The column aliases can only refer to explicit columns.
-		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
-			if colIdx >= len(scope.cols) {
-				srcName := tree.ErrString(&tableAlias)
-				panic(builderError{pgerror.NewErrorf(
-					pgerror.CodeInvalidColumnReferenceError,
-					"source %q has %d columns available but %d columns specified",
-					srcName, aliasIdx, len(colAlias),
-				)})
+		// If input expression is a ScanExpr, then override metadata aliases for
+		// pretty-printing.
+		scan, isScan := scope.expr.(*memo.ScanExpr)
+		if isScan {
+			tabMeta := b.factory.Metadata().TableMeta(scan.ScanPrivate.Table)
+			tabMeta.Alias = string(as.Alias)
+		}
+
+		if len(colAlias) > 0 {
+			// The column aliases can only refer to explicit columns.
+			for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
+				if colIdx >= len(scope.cols) {
+					srcName := tree.ErrString(&tableAlias)
+					panic(builderError{pgerror.NewErrorf(
+						pgerror.CodeInvalidColumnReferenceError,
+						"source %q has %d columns available but %d columns specified",
+						srcName, aliasIdx, len(colAlias),
+					)})
+				}
+				col := &scope.cols[colIdx]
+				if col.hidden {
+					continue
+				}
+				col.name = colAlias[aliasIdx]
+				if isScan {
+					// Override column metadata alias.
+					colMeta := b.factory.Metadata().ColumnMeta(col.id)
+					colMeta.Alias = string(colAlias[aliasIdx])
+				}
+				aliasIdx++
 			}
-			if scope.cols[colIdx].hidden {
-				continue
-			}
-			scope.cols[colIdx].name = colAlias[aliasIdx]
-			aliasIdx++
 		}
 	}
 }
@@ -274,12 +287,16 @@ func (b *Builder) buildScanFromTableRef(
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
-// given table with the given table name. If the ordinals slice is not nil, then
-// only columns with ordinals in that list are projected by the scan. Otherwise,
-// all columns from the table are projected.
+// given table with the given table name. Note that the table name is passed
+// separately in order to preserve knowledge of whether the catalog and schema
+// names were explicitly specified.
 //
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
+// If the ordinals slice is not nil, then only columns with ordinals in that
+// list are projected by the scan. Otherwise, all columns from the table are
+// projected.
+//
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
 func (b *Builder) buildScan(
 	tab cat.Table,
 	tn *tree.TableName,
@@ -290,6 +307,10 @@ func (b *Builder) buildScan(
 ) (outScope *scope) {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab)
+	if tn.CatalogName == "" {
+		// This is an unqualified name, so must be an alias.
+		md.TableMeta(tabID).Alias = string(tn.TableName)
+	}
 
 	colCount := len(ordinals)
 	if colCount == 0 {

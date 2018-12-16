@@ -1232,7 +1232,7 @@ func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execP
 	colNames := make([]string, len(pres))
 	for i := range pres {
 		colList[i] = pres[i].ID
-		colNames[i] = pres[i].Label
+		colNames[i] = pres[i].Alias
 	}
 	// The ordering is not useful for a top-level projection (it is used by the
 	// distsql planner for internal nodes); we might not even be able to represent
