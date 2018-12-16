@@ -982,3 +982,12 @@ SELECT parent_path FROM t32786 ORDER BY id
 ----
 3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/
 3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/5ae7eafd-8277-4f41-83de-0fd4b4482169/
+
+# Regression test for #32723.
+query I
+SELECT
+    generate_series(a + 1, a + 1)
+FROM
+    (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
+----
+2
