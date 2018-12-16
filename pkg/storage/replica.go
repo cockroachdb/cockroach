@@ -2172,14 +2172,19 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 	return mismatchErr
 }
 
-// checkBatchRequest verifies BatchRequest validity requirements. In
-// particular, timestamp, user, user priority and transactions must
-// all be set to identical values between the batch request header and
-// all constituent batch requests. Also, either all requests must be
+// checkBatchRequest verifies BatchRequest validity requirements. In particular,
+// the batch must have an assigned timestamp, and either all requests must be
 // read-only, or none.
+//
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+	if ba.Timestamp == (hlc.Timestamp{}) {
+		// For transactional requests, Store.Send sets the timestamp. For non-
+		// transactional requests, the client sets the timestamp. Either way, we
+		// need to have a timestamp at this point.
+		return errors.New("Replica.checkBatchRequest: batch does not have timestamp assigned")
+	}
 	consistent := ba.ReadConsistency == roachpb.CONSISTENT
 	if isReadOnly {
 		if !consistent && ba.Txn != nil {
@@ -2457,22 +2462,6 @@ func (r *Replica) beginCmds(
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
-	}
-
-	// Update the incoming timestamp if unset. Wait until after any
-	// preceding command(s) for key range are complete so that the node
-	// clock has been updated to the high water mark of any commands
-	// which might overlap this one in effect.
-	// TODO(spencer,tschottdorf): might remove this, but harder than it looks.
-	//   This isn't just unittests (which would require revamping the test
-	//   context sender), but also some of the scanner queues place batches
-	//   directly into the local range they're servicing.
-	if ba.Timestamp == (hlc.Timestamp{}) {
-		if txn := ba.Txn; txn != nil {
-			ba.Timestamp = txn.OrigTimestamp
-		} else {
-			ba.Timestamp = r.store.Clock().Now()
-		}
 	}
 
 	// Handle load-based splitting.

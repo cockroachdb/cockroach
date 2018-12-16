@@ -1922,6 +1922,7 @@ func TestQuotaPool(t *testing.T) {
 	const quota = 10000
 	const numReplicas = 3
 	const rangeID = 1
+	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
@@ -2005,8 +2006,12 @@ func TestQuotaPool(t *testing.T) {
 		// to be the same as what we started with.
 		key := roachpb.Key("k")
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
-		_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
-		if pErr != nil {
+		var ba roachpb.BatchRequest
+		ba.Add(putArgs(key, value))
+		if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+			t.Fatal(err)
+		}
+		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -2025,7 +2030,13 @@ func TestQuotaPool(t *testing.T) {
 		})
 
 		go func() {
-			_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+			var ba roachpb.BatchRequest
+			ba.Add(putArgs(key, value))
+			if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+				ch <- roachpb.NewError(err)
+				return
+			}
+			_, pErr := leaderRepl.Send(ctx, ba)
 			ch <- pErr
 		}()
 	}()
@@ -2105,8 +2116,12 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	ctx := context.Background()
 	key := roachpb.Key("k")
 	value := []byte("value")
-	req := putArgs(key, value)
-	if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
+	var ba roachpb.BatchRequest
+	ba.Add(putArgs(key, value))
+	if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+		t.Fatal(err)
+	}
+	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2126,7 +2141,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
-		if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
+		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 
