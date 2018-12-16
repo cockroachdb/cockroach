@@ -186,6 +186,9 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 		baWrite.Txn = &txn
 		baWrite.Add(r)
 		baWrite.RangeID = repls[0].RangeID
+		if err := baWrite.SetActiveTimestamp(tc.Server(0).Clock().Now); err != nil {
+			t.Fatal(err)
+		}
 
 		var found bool
 		for _, repl := range repls {
