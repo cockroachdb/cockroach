@@ -261,3 +261,29 @@ limit                                 ·            ·                          
                           └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
 ·                                     table        articles@primary           ·                                                                                        ·
 ·                                     spans        ALL                        ·                                                                                        ·
+
+# Regression test for #32723.
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        generate_series(a + 1, a + 1)
+    FROM
+        (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
+----
+render                      ·              ·                                (generate_series)         ·
+ │                          render 0       generate_series                  ·                         ·
+ └── project set            ·              ·                                (a, a, generate_series)   ·
+      │                     render 0       generate_series(@2 + 1, @2 + 1)  ·                         ·
+      └── union             ·              ·                                (a, a)                    ·
+           ├── render       ·              ·                                (a, a)                    ·
+           │    │           render 0       a                                ·                         ·
+           │    │           render 1       a                                ·                         ·
+           │    └── values  ·              ·                                (a)                       ·
+           │                size           1 column, 1 row                  ·                         ·
+           │                row 0, expr 0  1                                ·                         ·
+           └── render       ·              ·                                ("?column?", "?column?")  ·
+                │           render 0       "?column?"                       ·                         ·
+                │           render 1       "?column?"                       ·                         ·
+                └── values  ·              ·                                ("?column?")              ·
+·                           size           1 column, 1 row                  ·                         ·
+·                           row 0, expr 0  0                                ·                         ·
