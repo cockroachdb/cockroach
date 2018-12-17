@@ -105,7 +105,7 @@ func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 // conditional put operations.
 func mvccGetGo(
 	ctx context.Context, engine Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	if len(key) == 0 {
 		return nil, nil, emptyKeyError()
 	}
@@ -122,7 +122,7 @@ func mvccGetGo(
 		return nil, nil, err
 	}
 
-	value, intents, _, err := mvccGetInternal(ctx, iter, metaKey,
+	value, intent, _, err := mvccGetInternal(ctx, iter, metaKey,
 		timestamp, !opts.Inconsistent, safeValue, opts.Txn, buf)
 	if !value.IsPresent() {
 		value = nil
@@ -132,7 +132,7 @@ func mvccGetGo(
 		*value = buf.value
 		buf.value.Reset()
 	}
-	return value, intents, err
+	return value, intent, err
 }
 
 var mvccGetImpls = []struct {
@@ -143,7 +143,7 @@ var mvccGetImpls = []struct {
 		key roachpb.Key,
 		timestamp hlc.Timestamp,
 		opts MVCCGetOptions,
-	) (*roachpb.Value, []roachpb.Intent, error)
+	) (*roachpb.Value, *roachpb.Intent, error)
 }{
 	{"cpp", MVCCGet},
 	{"go", mvccGetGo},
@@ -1266,14 +1266,14 @@ func TestMVCCGetInconsistent(t *testing.T) {
 
 			// Inconsistent get will fetch value1 for any timestamp.
 			for _, ts := range []hlc.Timestamp{{WallTime: 1}, {WallTime: 2}} {
-				val, intents, err := mvccGet(ctx, engine, testKey1, ts, MVCCGetOptions{Inconsistent: true})
+				val, intent, err := mvccGet(ctx, engine, testKey1, ts, MVCCGetOptions{Inconsistent: true})
 				if ts.Less(hlc.Timestamp{WallTime: 2}) {
 					if err != nil {
 						t.Fatal(err)
 					}
 				} else {
-					if len(intents) == 0 || !intents[0].Key.Equal(testKey1) {
-						t.Fatalf("expected %v, but got %v", testKey1, intents)
+					if intent == nil || !intent.Key.Equal(testKey1) {
+						t.Fatalf("expected %v, but got %v", testKey1, intent)
 					}
 				}
 				if !bytes.Equal(val.RawBytes, value1.RawBytes) {
@@ -1285,9 +1285,9 @@ func TestMVCCGetInconsistent(t *testing.T) {
 			if err := MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 2}, value1, txn2); err != nil {
 				t.Fatal(err)
 			}
-			val, intents, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 2},
+			val, intent, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 2},
 				MVCCGetOptions{Inconsistent: true})
-			if len(intents) == 0 || !intents[0].Key.Equal(testKey2) {
+			if intent == nil || !intent.Key.Equal(testKey2) {
 				t.Fatal(err)
 			}
 			if val != nil {
