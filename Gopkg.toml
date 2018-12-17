@@ -117,3 +117,9 @@ ignored = [
 [[constraint]]
   branch = "master"
   name = "golang.org/x/crypto"
+
+# Newer releases of zipkin depend on unreleased bits from
+# github.com/apache/thrift.
+[[constraint]]
+  name = "github.com/openzipkin/zipkin-go-opentracing"
+  version = "=0.3.3"
