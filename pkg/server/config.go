@@ -74,7 +74,8 @@ const (
 
 	defaultSQLTableStatCacheSize = 256
 
-	defaultSQLQueryCacheSize = 1024 * 1024
+	// This comes out to 1024 cache entries.
+	defaultSQLQueryCacheSize = 8 * 1024 * 1024
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
