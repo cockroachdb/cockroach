@@ -2773,16 +2773,13 @@ func (r *Replica) limitTxnMaxTimestamp(
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intents, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+	_, intent, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
 		engine.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return err
-	} else if len(intents) == 0 {
+	} else if intent == nil {
 		return nil
-	} else if len(intents) > 1 {
-		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
 	}
-	intent := intents[0]
 	val, _, err := engine.MVCCGetAsTxn(
 		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
 	if err != nil {

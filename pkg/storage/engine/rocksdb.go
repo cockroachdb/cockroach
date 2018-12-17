@@ -1468,7 +1468,7 @@ func (r *batchIterator) FindSplitKey(
 
 func (r *batchIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCGet(key, timestamp, opts)
 }
@@ -2243,7 +2243,7 @@ func (r *rocksDBIterator) FindSplitKey(
 
 func (r *rocksDBIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	if opts.Inconsistent && opts.Txn != nil {
 		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -2271,8 +2271,15 @@ func (r *rocksDBIterator) MVCCGet(
 	if !opts.Inconsistent && len(intents) > 0 {
 		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
+
+	var intent *roachpb.Intent
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
 	if state.data.len == 0 {
-		return nil, intents, nil
+		return nil, intent, nil
 	}
 
 	count := state.data.count
@@ -2280,7 +2287,7 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, nil, errors.Errorf("expected 0 or 1 result, found %d", count)
 	}
 	if count == 0 {
-		return nil, intents, nil
+		return nil, intent, nil
 	}
 
 	// Extract the value from the batch data.
@@ -2293,7 +2300,7 @@ func (r *rocksDBIterator) MVCCGet(
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	}
-	return value, intents, nil
+	return value, intent, nil
 }
 
 func (r *rocksDBIterator) MVCCScan(

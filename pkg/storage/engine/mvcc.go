@@ -679,8 +679,8 @@ type MVCCGetOptions struct {
 // is returned instead.
 //
 // In tombstones mode, if the most recent value is a deletion tombstone, the
-// result will be a non-nil roachpb.Value whose RawBytes field is nil. Normally,
-// a deletion tombstone results in a nil roachpb.Value.
+// result will be a non-nil roachpb.Value whose RawBytes field is nil.
+// Otherwise, a deletion tombstone results in a nil roachpb.Value.
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
 // dedicated return parameter. By contrast, in consistent mode, an intent will
@@ -691,11 +691,11 @@ type MVCCGetOptions struct {
 // non-transactional gets may be inconsistent.
 func MVCCGet(
 	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intents, err := iter.MVCCGet(key, timestamp, opts)
+	value, intent, err := iter.MVCCGet(key, timestamp, opts)
 	iter.Close()
-	return value, intents, err
+	return value, intent, err
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -710,7 +710,7 @@ func MVCCGetAsTxn(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txnMeta enginepb.TxnMeta,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
@@ -1885,6 +1885,11 @@ type MVCCScanOptions struct {
 // will be included in the scan results. If a transaction is provided and the
 // scan encounters a value with a timestamp between the supplied timestamp and
 // the transaction's max timestamp, an uncertainty error will be returned.
+//
+// In tombstones mode, if the most recent value for a key is a deletion
+// tombstone, the scan result will contain a roachpb.KeyValue for that key whose
+// RawBytes field is nil. Otherwise, the key-value pair will be omitted from the
+// result entirely.
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
