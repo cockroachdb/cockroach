@@ -964,17 +964,14 @@ group                ·            ·             (array_agg)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ----
-group                ·            ·                 (string_agg)                    ·
- │                   aggregate 0  string_agg(s)     ·                               ·
- │                   scalar       ·                 ·                               ·
- └── nosort          ·            ·                 (s)                             ·
-      │              order        +k                ·                               ·
-      └── render     ·            ·                 (s, k)                          k!=NULL; key(k); +k
-           │         render 0     test.public.kv.s  ·                               ·
-           │         render 1     test.public.kv.k  ·                               ·
-           └── scan  ·            ·                 (k, v[omitted], w[omitted], s)  k!=NULL; key(k); +k
-·                    table        kv@primary        ·                               ·
-·                    spans        ALL               ·                               ·
+group           ·            ·              (string_agg)  ·
+ │              aggregate 0  string_agg(s)  ·             ·
+ │              scalar       ·              ·             ·
+ └── render     ·            ·              (s)           ·
+      │         render 0     s              ·             ·
+      └── scan  ·            ·              (k, s)        +k
+·               table        kv@primary     ·             ·
+·               spans        ALL            ·             ·
 
 # Verify that we project away all input columns for count(*).
 query TTTTT
@@ -1012,3 +1009,112 @@ group      ·            ·             (u, v, s)  ·
  └── scan  ·            ·             (u, v, w)  +u,+v,+w
 ·          table        uvw@uvw       ·          ·
 ·          spans        ALL           ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
+----
+group           ·            ·              (string_agg)  ·
+ │              aggregate 0  string_agg(s)  ·             ·
+ │              scalar       ·              ·             ·
+ └── render     ·            ·              (s)           ·
+      │         render 0     s              ·             ·
+      └── scan  ·            ·              (s)           ·
+·               table        kv@primary     ·             ·
+·               spans        ALL            ·             ·
+
+statement ok
+CREATE TABLE string_agg_test (
+  id INT PRIMARY KEY,
+  company_id INT,
+  employee STRING
+)
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        company_id, string_agg(employee, ',')
+    FROM
+        string_agg_test
+    GROUP BY
+        company_id
+    ORDER BY
+        company_id
+----
+sort            ·            ·                        (company_id, string_agg)  +company_id
+ │              order        +company_id              ·                         ·
+ └── group      ·            ·                        (company_id, string_agg)  ·
+      │         aggregate 0  company_id               ·                         ·
+      │         aggregate 1  string_agg(employee)     ·                         ·
+      │         group by     @1                       ·                         ·
+      └── scan  ·            ·                        (company_id, employee)    ·
+·               table        string_agg_test@primary  ·                         ·
+·               spans        ALL                      ·                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        company_id, string_agg(employee::BYTES, b',')
+    FROM
+        string_agg_test
+    GROUP BY
+        company_id
+    ORDER BY
+        company_id
+----
+sort                 ·            ·                        (company_id, string_agg)  +company_id
+ │                   order        +company_id              ·                         ·
+ └── group           ·            ·                        (company_id, string_agg)  ·
+      │              aggregate 0  company_id               ·                         ·
+      │              aggregate 1  string_agg(column4)      ·                         ·
+      │              group by     @2                       ·                         ·
+      └── render     ·            ·                        (column4, company_id)     ·
+           │         render 0     employee::BYTES          ·                         ·
+           │         render 1     company_id               ·                         ·
+           └── scan  ·            ·                        (company_id, employee)    ·
+·                    table        string_agg_test@primary  ·                         ·
+·                    spans        ALL                      ·                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        company_id, string_agg(employee, NULL)
+    FROM
+        string_agg_test
+    GROUP BY
+        company_id
+    ORDER BY
+        company_id
+----
+sort            ·            ·                        (company_id, string_agg)  +company_id
+ │              order        +company_id              ·                         ·
+ └── group      ·            ·                        (company_id, string_agg)  ·
+      │         aggregate 0  company_id               ·                         ·
+      │         aggregate 1  string_agg(employee)     ·                         ·
+      │         group by     @1                       ·                         ·
+      └── scan  ·            ·                        (company_id, employee)    ·
+·               table        string_agg_test@primary  ·                         ·
+·               spans        ALL                      ·                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        company_id, string_agg(employee::BYTES, NULL)
+    FROM
+        string_agg_test
+    GROUP BY
+        company_id
+    ORDER BY
+        company_id
+----
+sort                 ·            ·                        (company_id, string_agg)  +company_id
+ │                   order        +company_id              ·                         ·
+ └── group           ·            ·                        (company_id, string_agg)  ·
+      │              aggregate 0  company_id               ·                         ·
+      │              aggregate 1  string_agg(column4)      ·                         ·
+      │              group by     @2                       ·                         ·
+      └── render     ·            ·                        (column4, company_id)     ·
+           │         render 0     employee::BYTES          ·                         ·
+           │         render 1     company_id               ·                         ·
+           └── scan  ·            ·                        (company_id, employee)    ·
+·                    table        string_agg_test@primary  ·                         ·
+·                    spans        ALL                      ·                         ·

@@ -813,6 +813,15 @@ define JsonbAgg {
     Input ScalarExpr
 }
 
+[Scalar, Aggregate]
+define StringAgg {
+    Input ScalarExpr
+
+    # Sep is the constant expression which separates the input strings.
+    # Note that it must always be a constant expression.
+    Sep   ScalarExpr
+}
+
 # ConstAgg is used in the special case when the value of a column is known to be
 # constant within a grouping set; it returns that value. If there are no rows
 # in the grouping set, then ConstAgg returns NULL.

@@ -201,6 +201,10 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			}
 		}
 
+		if e.Op() == opt.StringAggOp && !CanExtractConstDatum(e.Child(1)) {
+			panic(fmt.Sprintf("second argument to StringAggOp must always be constant, but got %s", e.Child(1).Op()))
+		}
+
 		if opt.IsJoinOp(e) {
 			checkFilters(*e.Child(2).(*FiltersExpr))
 		}
