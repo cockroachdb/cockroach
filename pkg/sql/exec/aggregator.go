@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
@@ -84,6 +85,8 @@ type orderedAggregator struct {
 	aggCols [][]uint32
 	aggTyps [][]types.T
 
+	outputTyps []types.T
+
 	// scratch is the ColBatch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
 	scratch struct {
@@ -117,7 +120,7 @@ func NewOrderedAggregator(
 	input Operator,
 	groupCols []uint32,
 	groupTyps []types.T,
-	aggFns []int,
+	aggFns []distsqlpb.AggregatorSpec_Func,
 	aggCols [][]uint32,
 	aggTyps [][]types.T,
 ) (Operator, error) {
@@ -156,31 +159,43 @@ func NewOrderedAggregator(
 		}
 	}
 
+	outputTyps := make([]types.T, len(aggCols))
+	aggregateFuncs := make([]aggregateFunc, len(aggCols))
 	*a = orderedAggregator{
-		input:    op,
-		aggCols:  aggCols,
-		aggTyps:  aggTyps,
-		groupCol: groupCol,
+		input: op,
+
+		aggregateFuncs: aggregateFuncs,
+		aggCols:        aggCols,
+		aggTyps:        aggTyps,
+		outputTyps:     outputTyps,
+		groupCol:       groupCol,
 	}
-	a.aggregateFuncs = make([]aggregateFunc, len(aggCols))
 	for i := range aggFns {
-		if len(aggCols[i]) != 1 {
-			return nil, errors.Errorf(
-				"malformed input columns at index %d, expected 1 col got %d",
-				i, len(aggCols[i]),
-			)
-		}
 		var err error
 		switch aggFns[i] {
-		// AVG.
-		case 1:
+		case distsqlpb.AggregatorSpec_ANY_NOT_NULL:
+			a.aggregateFuncs[i], err = newAnyNotNullAgg(aggTyps[i][0])
+		case distsqlpb.AggregatorSpec_AVG:
 			a.aggregateFuncs[i], err = newAvgAgg(aggTyps[i][0])
-		// SUM, SUM_INT.
-		case 10, 11:
+		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
 			a.aggregateFuncs[i], err = newSumAgg(aggTyps[i][0])
+		case distsqlpb.AggregatorSpec_COUNT_ROWS:
+			a.aggregateFuncs[i] = newCountAgg()
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
 		}
+
+		// Set the output type of the aggregate.
+		switch aggFns[i] {
+		case distsqlpb.AggregatorSpec_COUNT_ROWS:
+			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
+			// should come with their own output types, somehow.
+			a.outputTyps[i] = types.Int64
+		default:
+			// Output types are the input types for now.
+			a.outputTyps[i] = a.aggTyps[i][0]
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -192,15 +207,10 @@ func NewOrderedAggregator(
 func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 	a.input.Init()
 
-	// Output types are the input types for now.
-	oTypes := make([]types.T, len(a.aggregateFuncs))
-	for i := range oTypes {
-		oTypes[i] = a.aggTyps[i][0]
-	}
 	// Twice the input batchSize is allocated to avoid having to check for
 	// overflow when outputting.
-	a.scratch.ColBatch = NewMemBatchWithSize(oTypes, inputSize*2)
-	for i := 0; i < len(oTypes); i++ {
+	a.scratch.ColBatch = NewMemBatchWithSize(a.outputTyps, inputSize*2)
+	for i := 0; i < len(a.outputTyps); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
@@ -219,20 +229,19 @@ func (a *orderedAggregator) Next() ColBatch {
 	if a.scratch.resumeIdx >= a.scratch.outputSize {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
-		for i := 0; i < len(a.aggTyps); i++ {
+		newResumeIdx := a.scratch.resumeIdx - a.scratch.outputSize
+		for i := 0; i < len(a.outputTyps); i++ {
 			// According to the aggregate function interface contract, the value at
 			// the current index must also be copied.
-			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i),
-				uint64(a.scratch.outputSize),
-				uint64(a.scratch.resumeIdx)+1,
-				a.aggTyps[i][0])
-			a.scratch.resumeIdx = a.scratch.resumeIdx - a.scratch.outputSize
-			if a.scratch.resumeIdx >= a.scratch.outputSize {
-				// We still have overflow output values.
-				a.scratch.SetLength(uint16(a.scratch.outputSize))
-				return a.scratch
-			}
-			a.aggregateFuncs[i].SetOutputIndex(a.scratch.resumeIdx)
+			a.scratch.ColVec(i).Copy(a.scratch.ColVec(i), uint64(a.scratch.outputSize),
+				uint64(a.scratch.resumeIdx+1), a.outputTyps[i])
+			a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
+		}
+		a.scratch.resumeIdx = newResumeIdx
+		if a.scratch.resumeIdx >= a.scratch.outputSize {
+			// We still have overflow output values.
+			a.scratch.SetLength(uint16(a.scratch.outputSize))
+			return a.scratch
 		}
 	}
 

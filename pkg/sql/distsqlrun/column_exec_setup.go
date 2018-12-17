@@ -83,7 +83,7 @@ func newColOperator(
 				return nil, errors.New("unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
-			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[i])
+			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[col])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
@@ -91,7 +91,7 @@ func newColOperator(
 
 		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
-		aggFns := make([]int, len(aggSpec.Aggregations))
+		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return nil, errors.New("distinct aggregation not supported")
@@ -102,16 +102,13 @@ func newColOperator(
 			if len(agg.Arguments) > 0 {
 				return nil, errors.New("aggregates with arguments not supported")
 			}
-			if len(agg.ColIdx) != 1 {
-				return nil, errors.New("non-single-arg aggregates not supported")
+			aggTyps[i] = make([]types.T, len(agg.ColIdx))
+			for j, colIdx := range agg.ColIdx {
+				aggTyps[i][j] = types.FromColumnType(spec.Input[0].ColumnTypes[colIdx])
 			}
-			colIdx := agg.ColIdx[0]
-			aggTyps[i] = []types.T{types.FromColumnType(spec.Input[0].ColumnTypes[colIdx])}
-			aggCols[i] = aggSpec.Aggregations[i].ColIdx
-
+			aggCols[i] = agg.ColIdx
+			aggFns[i] = agg.Func
 			switch agg.Func {
-			case distsqlpb.AggregatorSpec_AVG:
-			case distsqlpb.AggregatorSpec_SUM_INT:
 			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0] {
 				case types.Int8, types.Int16, types.Int32, types.Int64:
@@ -120,10 +117,7 @@ func newColOperator(
 					// issues, at first, we could plan SUM for all types besides Int64.
 					return nil, errors.New("sum on int cols not supported (use sum_int)")
 				}
-			default:
-				return nil, errors.Errorf("non-sum aggregation %s not supported", agg.Func)
 			}
-			aggFns[i] = int(agg.Func)
 		}
 		op, err = exec.NewOrderedAggregator(
 			inputs[0], aggSpec.GroupCols, groupTyps, aggFns, aggCols, aggTyps,
