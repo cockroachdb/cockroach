@@ -322,4 +322,8 @@ type AggInfo struct {
 	Distinct   bool
 	ResultType types.T
 	ArgCols    []ColumnOrdinal
+
+	// ConstArgs is the list of any constant arguments to the aggregate,
+	// for instance, the separator in string_agg.
+	ConstArgs []tree.Datum
 }

@@ -88,6 +88,16 @@ TABLE uvwz
       ├── w int not null
       └── rowid int not null (hidden) (storing)
 
+exec-ddl
+CREATE TABLE s (
+    s STRING PRIMARY KEY
+)
+----
+TABLE s
+ ├── s string not null
+ └── INDEX primary
+      └── s string not null
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -425,6 +435,28 @@ scalar-group-by
       └── sum [type=decimal, outer=(2)]
            └── agg-distinct [type=int]
                 └── variable: i [type=int]
+
+opt expect=EliminateAggDistinctForKeys
+SELECT string_agg(DISTINCT s, ', ') FROM s
+----
+scalar-group-by
+ ├── columns: string_agg:3(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── project
+ │    ├── columns: column2:2(string!null) s:1(string!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2)
+ │    ├── scan s
+ │    │    ├── columns: s:1(string!null)
+ │    │    └── key: (1)
+ │    └── projections
+ │         └── const: ', ' [type=string]
+ └── aggregations
+      └── string-agg [type=string, outer=(1)]
+           ├── variable: s [type=string]
+           └── const: ', ' [type=string]
 
 # GroupBy with key argument.
 opt expect=EliminateAggDistinctForKeys

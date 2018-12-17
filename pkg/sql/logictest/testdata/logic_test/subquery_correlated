@@ -861,6 +861,34 @@ WY
 NULL
 WA
 
+query T
+SELECT (SELECT string_agg(ship, ', ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA, CA, CA
+CA, TX
+NULL
+WY
+NULL
+WA
+
+query T
+SELECT (SELECT string_agg(DISTINCT ship, ', ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA
+CA, TX
+NULL
+WY
+NULL
+WA
+
 # ------------------------------------------------------------------------------
 # Subqueries in other interesting locations.
 # ------------------------------------------------------------------------------

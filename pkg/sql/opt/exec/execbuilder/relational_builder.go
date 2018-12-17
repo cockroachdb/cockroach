@@ -608,9 +608,10 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		name, overload := memo.FindAggregateOverload(item.Agg)
 
 		distinct := false
-		argIdx := make([]exec.ColumnOrdinal, item.Agg.ChildCount())
-		for j := range argIdx {
-			child := item.Agg.Child(j)
+		var argIdx []exec.ColumnOrdinal
+
+		if item.Agg.ChildCount() > 0 {
+			child := item.Agg.Child(0)
 
 			if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
 				distinct = true
@@ -620,8 +621,10 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			if !ok {
 				return execPlan{}, errors.Errorf("only VariableOp args supported")
 			}
-			argIdx[j] = input.getColumnOrdinal(v.Col)
+			argIdx = []exec.ColumnOrdinal{input.getColumnOrdinal(v.Col)}
 		}
+
+		constArgs := b.extractAggregateConstArgs(item.Agg)
 
 		aggInfos[i] = exec.AggInfo{
 			FuncName:   name,
@@ -629,6 +632,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			Distinct:   distinct,
 			ResultType: item.Agg.DataType(),
 			ArgCols:    argIdx,
+			ConstArgs:  constArgs,
 		}
 		ep.outputCols.Set(int(item.Col), len(groupingColIdx)+i)
 	}
@@ -649,6 +653,17 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
+}
+
+// extractAggregateConstArgs returns the list of constant arguments associated with a given aggregate
+// expression.
+func (b *Builder) extractAggregateConstArgs(agg opt.ScalarExpr) tree.Datums {
+	switch agg.Op() {
+	case opt.StringAggOp:
+		return tree.Datums{memo.ExtractConstDatum(agg.Child(1))}
+	default:
+		return nil
+	}
 }
 
 func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error) {
