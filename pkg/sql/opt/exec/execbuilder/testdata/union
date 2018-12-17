@@ -58,3 +58,46 @@ sort                 ·         ·            (a)     +a
            └── scan  ·         ·            (a, b)  ·
 ·                    table     abc@primary  ·       ·
 ·                    spans     ALL          ·       ·
+
+# Regression test for #32723.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
+----
+render                 ·              ·                (a)                       ·
+ │                     render 0       a                ·                         ·
+ └── union             ·              ·                (a, a)                    ·
+      ├── render       ·              ·                (a, a)                    ·
+      │    │           render 0       a                ·                         ·
+      │    │           render 1       a                ·                         ·
+      │    └── values  ·              ·                (a)                       ·
+      │                size           1 column, 1 row  ·                         ·
+      │                row 0, expr 0  ''               ·                         ·
+      └── render       ·              ·                ("?column?", "?column?")  ·
+           │           render 0       "?column?"       ·                         ·
+           │           render 1       "?column?"       ·                         ·
+           └── values  ·              ·                ("?column?")              ·
+·                      size           1 column, 1 row  ·                         ·
+·                      row 0, expr 0  ''               ·                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
+UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
+----
+render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
+ │                     render 0       "?column?"        ·                                     ·
+ │                     render 1       "?column?"        ·                                     ·
+ │                     render 2       "?column?"        ·                                     ·
+ └── union             ·              ·                 ("?column?", "?column?", "?column?")  ·
+      ├── render       ·              ·                 ("?column?", "?column?", "?column?")  ·
+      │    │           render 0       "?column?"        ·                                     ·
+      │    │           render 1       "?column?"        ·                                     ·
+      │    │           render 2       "?column?"        ·                                     ·
+      │    └── values  ·              ·                 ("?column?", "?column?")              ·
+      │                size           2 columns, 1 row  ·                                     ·
+      │                row 0, expr 0  ''                ·                                     ·
+      │                row 0, expr 1  'x'               ·                                     ·
+      └── values       ·              ·                 (column1, column2, column3)           ·
+·                      size           3 columns, 1 row  ·                                     ·
+·                      row 0, expr 0  ''                ·                                     ·
+·                      row 0, expr 1  ''                ·                                     ·
+·                      row 0, expr 2  'x'               ·                                     ·

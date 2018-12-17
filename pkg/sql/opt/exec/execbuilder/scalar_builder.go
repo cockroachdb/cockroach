@@ -486,7 +486,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	types := types.TTuple{Types: make([]types.T, plan.outputCols.Len())}
+	types := types.TTuple{Types: make([]types.T, plan.numOutputCols())}
 	plan.outputCols.ForEach(func(key, val int) {
 		types.Types[val] = b.mem.Metadata().ColumnType(opt.ColumnID(key))
 	})

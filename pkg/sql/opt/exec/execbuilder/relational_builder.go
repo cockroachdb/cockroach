@@ -54,19 +54,28 @@ type execPlan struct {
 	// example the output columns in increasing index order. However, this would
 	// require a lot of otherwise unnecessary projections.
 	//
-	// The number of entries set in the map is always the same with the number of
-	// columns emitted by Node.
-	//
 	// Note: conceptually, this could be a ColList; however, the map is more
 	// convenient when converting VariableOps to IndexedVars.
 	outputCols opt.ColMap
+}
+
+// numOutputCols returns the number of columns emitted by the execPlan's Node.
+// This will typically be equal to ep.outputCols.Len(), but might be different
+// if the node outputs the same optimizer ColumnID multiple times.
+// TODO(justin): we should keep track of this instead of computing it each time.
+func (ep *execPlan) numOutputCols() int {
+	max, ok := ep.outputCols.MaxValue()
+	if !ok {
+		return 0
+	}
+	return max + 1
 }
 
 // makeBuildScalarCtx returns a buildScalarCtx that can be used with expressions
 // that refer the output columns of this plan.
 func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 	return buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, ep.outputCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, ep.numOutputCols()),
 		ivarMap: ep.outputCols,
 	}
 }
@@ -1041,7 +1050,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	numColsPerGen := make([]int, len(zip))
 
 	ep := execPlan{outputCols: input.outputCols}
-	n := ep.outputCols.Len()
+	n := ep.numOutputCols()
 
 	for i := range zip {
 		item := &zip[i]
@@ -1155,7 +1164,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 func (b *Builder) needProjection(
 	input execPlan, colList opt.ColList,
 ) (_ []exec.ColumnOrdinal, needProj bool) {
-	if input.outputCols.Len() == len(colList) {
+	if input.numOutputCols() == len(colList) {
 		identity := true
 		for i, col := range colList {
 			if ord, ok := input.outputCols.Get(int(col)); !ok || ord != i {
