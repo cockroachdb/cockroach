@@ -979,18 +979,19 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:5564b3c197ed2d0da59e49e95d950c2ae0640dc5902cdf14204f342a817c9ec2"
+  digest = "1:078d0b47a888546a9f8810d64f76792f70b2fa564ad2bbe6dddd002c032ce7cf"
   name = "github.com/lightstep/lightstep-tracer-go"
   packages = [
     ".",
     "collectorpb",
+    "lightstep/rand",
     "lightstep_thrift",
     "lightsteppb",
     "thrift_0_9_2/lib/go/thrift",
   ]
   pruneopts = "UT"
-  revision = "ba38bae1f0ec1ece9092d35bbecbb497ee344cbc"
-  version = "v0.15.0"
+  revision = "87a8ccb2b6d479c7bc6c5ce556671aa194523655"
+  version = "v0.15.6"
 
 [[projects]]
   digest = "1:dcc04c4f8d4133c33153289cbf6b329b68518579a5ed9277640eb4b502e5d02b"
@@ -1146,7 +1147,7 @@
   version = "v1.0.2"
 
 [[projects]]
-  digest = "1:ccfa433e8af45dd142141e0b19ec3ebbabb7fb3b55dbb30fbf84681020b739c6"
+  digest = "1:ef06a435177b3b245740de74ea6e7116a3d43e5f21d5e84f3def995297a991a9"
   name = "github.com/openzipkin/zipkin-go-opentracing"
   packages = [
     ".",
@@ -1157,8 +1158,8 @@
     "wire",
   ]
   pruneopts = "UT"
-  revision = "45e90b00710a4c34a1a7d8a78d90f9b010b0bd4d"
-  version = "v0.3.2"
+  revision = "4c9fbcbd6d73a644fd17214fe475296780c68fb5"
+  version = "v0.3.3"
 
 [[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
