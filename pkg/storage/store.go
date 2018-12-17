@@ -1127,8 +1127,7 @@ func IterateIDPrefixKeys(
 		}
 
 		ok, err := engine.MVCCGetProto(
-			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, msg,
-		)
+			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, msg, engine.MVCCGetOptions{})
 		if err != nil {
 			return err
 		}
@@ -1190,7 +1189,7 @@ func IterateRangeDescriptors(
 func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := engine.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, true, nil, &ident)
+		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, engine.MVCCGetOptions{})
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
@@ -1830,8 +1829,8 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
-	ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{}, true, nil, &timestamp)
+	ok, err := engine.MVCCGetProto(ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{},
+		&timestamp, engine.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
 	} else if !ok {
@@ -1869,8 +1868,8 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 // If this value does not exist 0 is returned
 func ReadHLCUpperBound(ctx context.Context, e engine.Engine) (int64, error) {
 	var timestamp hlc.Timestamp
-	ok, err := engine.MVCCGetProto(
-		ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{}, true, nil, &timestamp)
+	ok, err := engine.MVCCGetProto(ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{},
+		&timestamp, engine.MVCCGetOptions{})
 	if err != nil {
 		return 0, err
 	} else if !ok {
@@ -4051,7 +4050,7 @@ func (s *Store) tryGetOrCreateReplica(
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
+		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 	); err != nil {
 		return nil, false, err
 	} else if ok {
@@ -4374,7 +4373,8 @@ func WriteClusterVersion(
 // ReadClusterVersion reads the the cluster version from the store-local version key.
 func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.ClusterVersion, error) {
 	var cv cluster.ClusterVersion
-	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv)
+	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
+		&cv, engine.MVCCGetOptions{})
 	return cv, err
 }
 

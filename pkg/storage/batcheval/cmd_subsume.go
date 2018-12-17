@@ -101,7 +101,7 @@ func Subsume(
 	// a deletion intent on the local range descriptor.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	_, intents, err := engine.MVCCGet(ctx, batch, descKey, cArgs.Header.Timestamp,
-		false /* consistent */, nil /* txn */)
+		engine.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return result.Result{}, fmt.Errorf("fetching local range descriptor: %s", err)
 	} else if len(intents) == 0 {

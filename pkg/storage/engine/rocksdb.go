@@ -1467,10 +1467,10 @@ func (r *batchIterator) FindSplitKey(
 }
 
 func (r *batchIterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent, tombstones bool,
+	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCGet(key, timestamp, txn, consistent, tombstones)
+	return r.iter.MVCCGet(key, timestamp, opts)
 }
 
 func (r *batchIterator) MVCCScan(
@@ -2242,9 +2242,9 @@ func (r *rocksDBIterator) FindSplitKey(
 }
 
 func (r *rocksDBIterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent, tombstones bool,
+	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	if !consistent && txn != nil {
+	if opts.Inconsistent && opts.Txn != nil {
 		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(key) == 0 {
@@ -2254,13 +2254,13 @@ func (r *rocksDBIterator) MVCCGet(
 	r.clearState()
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent), C.bool(tombstones),
+		goToCTxn(opts.Txn), C.bool(!opts.Inconsistent), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
 	}
-	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
 		return nil, nil, err
 	}
 
@@ -2268,7 +2268,7 @@ func (r *rocksDBIterator) MVCCGet(
 	if err != nil {
 		return nil, nil, err
 	}
-	if consistent && len(intents) > 0 {
+	if !opts.Inconsistent && len(intents) > 0 {
 		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 	if state.data.len == 0 {

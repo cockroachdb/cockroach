@@ -166,7 +166,7 @@ func (rsl StateLoader) Save(
 func (rsl StateLoader) LoadLease(ctx context.Context, reader engine.Reader) (roachpb.Lease, error) {
 	var lease roachpb.Lease
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, true, nil, &lease)
+		hlc.Timestamp{}, &lease, engine.MVCCGetOptions{})
 	return lease, err
 }
 
@@ -184,8 +184,8 @@ func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader engine.Reader,
 ) (*enginepb.RangeAppliedState, error) {
 	var as enginepb.RangeAppliedState
-	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &as)
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
+		engine.MVCCGetOptions{})
 	if !found {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	// index and the lease applied index keys. This is where these indices were
 	// stored before the range applied state was introduced.
 	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexLegacyKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, engine.MVCCGetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -230,7 +230,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	}
 	// TODO(tschottdorf): code duplication.
 	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexLegacyKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, engine.MVCCGetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -259,8 +259,8 @@ func (rsl StateLoader) LoadMVCCStats(
 	// key. This is where stats were stored before the range applied
 	// state was introduced.
 	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &ms)
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, &ms,
+		engine.MVCCGetOptions{})
 	return ms, err
 }
 
@@ -424,9 +424,9 @@ func (rsl StateLoader) LoadTruncatedState(
 	ctx context.Context, reader engine.Reader,
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, true,
-		nil, &truncState); err != nil {
+	if _, err := engine.MVCCGetProto(
+		ctx, reader, rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+	); err != nil {
 		return roachpb.RaftTruncatedState{}, err
 	}
 	return truncState, nil
@@ -452,7 +452,7 @@ func (rsl StateLoader) LoadGCThreshold(
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
-		hlc.Timestamp{}, true, nil, &t)
+		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
 	return &t, err
 }
 
@@ -473,7 +473,7 @@ func (rsl StateLoader) LoadTxnSpanGCThreshold(
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.Timestamp{}, true, nil, &t)
+		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
 	return &t, err
 }
 
@@ -545,7 +545,7 @@ func (rsl StateLoader) LoadReplicaDestroyedError(
 	var v roachpb.Error
 	found, err := engine.MVCCGetProto(ctx, reader,
 		rsl.RangeReplicaDestroyedErrorKey(),
-		hlc.Timestamp{}, true /* consistent */, nil, &v)
+		hlc.Timestamp{}, &v, engine.MVCCGetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -569,9 +569,8 @@ func (rsl StateLoader) LoadHardState(
 	ctx context.Context, reader engine.Reader,
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftHardStateKey(),
-		hlc.Timestamp{}, true, nil, &hs)
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RaftHardStateKey(),
+		hlc.Timestamp{}, &hs, engine.MVCCGetOptions{})
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
