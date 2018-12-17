@@ -691,11 +691,11 @@ type MVCCGetOptions struct {
 // non-transactional gets may be inconsistent.
 func MVCCGet(
 	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intents, err := iter.MVCCGet(key, timestamp, opts)
+	value, intent, err := iter.MVCCGet(key, timestamp, opts)
 	iter.Close()
-	return value, intents, err
+	return value, intent, err
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -710,7 +710,7 @@ func MVCCGetAsTxn(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txnMeta enginepb.TxnMeta,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
@@ -802,7 +802,7 @@ func mvccGetInternal(
 	allowedSafety valueSafety,
 	txn *roachpb.Transaction,
 	buf *getBuffer,
-) (*roachpb.Value, []roachpb.Intent, valueSafety, error) {
+) (*roachpb.Value, *roachpb.Intent, valueSafety, error) {
 	if !consistent && txn != nil {
 		return nil, nil, safeValue, errors.Errorf(
 			"cannot allow inconsistent reads within a transaction")
@@ -819,15 +819,18 @@ func mvccGetInternal(
 		}
 		return value, nil, safeValue, nil
 	}
-	var ignoredIntents []roachpb.Intent
+	var ignoredIntent *roachpb.Intent
 	metaTimestamp := hlc.Timestamp(meta.Timestamp)
 	if !consistent && meta.Txn != nil && !timestamp.Less(metaTimestamp) {
 		// If we're doing inconsistent reads and there's an intent, we
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
-		ignoredIntents = append(ignoredIntents,
-			roachpb.Intent{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn})
+		ignoredIntent = &roachpb.Intent{
+			Span:   roachpb.Span{Key: metaKey.Key},
+			Status: roachpb.PENDING,
+			Txn:    *meta.Txn,
+		}
 		timestamp = metaTimestamp.Prev()
 	}
 
@@ -888,7 +891,7 @@ func mvccGetInternal(
 		// would apply to.
 		seekKey.Timestamp = timestamp
 		if seekKey.Timestamp == (hlc.Timestamp{}) {
-			return nil, ignoredIntents, safeValue, nil
+			return nil, ignoredIntent, safeValue, nil
 		}
 	}
 
@@ -896,12 +899,12 @@ func mvccGetInternal(
 	if ok, err := iter.Valid(); err != nil {
 		return nil, nil, safeValue, err
 	} else if !ok {
-		return nil, ignoredIntents, safeValue, nil
+		return nil, ignoredIntent, safeValue, nil
 	}
 
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return nil, ignoredIntents, safeValue, nil
+		return nil, ignoredIntent, safeValue, nil
 	}
 	if !unsafeKey.IsValue() {
 		return nil, nil, safeValue, errors.Errorf(
@@ -933,7 +936,7 @@ func mvccGetInternal(
 	if err := value.Verify(metaKey.Key); err != nil {
 		return nil, nil, safeValue, err
 	}
-	return value, ignoredIntents, allowedSafety, nil
+	return value, ignoredIntent, allowedSafety, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling

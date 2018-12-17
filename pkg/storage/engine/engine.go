@@ -109,7 +109,7 @@ type Iterator interface {
 	// MVCCGet, or one of its variants, instead.
 	MVCCGet(
 		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-	) (*roachpb.Value, []roachpb.Intent, error)
+	) (*roachpb.Value, *roachpb.Intent, error)
 	// MVCCScan is the internal implementation of the family of package-level
 	// MVCCScan functions. The notable difference is that key/value pairs are
 	// returned raw, as a buffer of varint-prefixed slices, alternating from key
