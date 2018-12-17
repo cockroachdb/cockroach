@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -95,8 +96,9 @@ var (
 )
 
 const (
-	version30  = 196608
-	versionSSL = 80877103
+	version30     = 196608
+	versionSSL    = 80877103
+	versionCancel = 80877102
 )
 
 // cancelMaxWait is the amount of time a draining server gives to sessions to
@@ -248,7 +250,7 @@ func Match(rd io.Reader) bool {
 	if err != nil {
 		return false
 	}
-	return version == version30 || version == versionSSL
+	return version == version30 || version == versionSSL || version == versionCancel
 }
 
 // Start makes the Server ready for serving connections.
@@ -470,6 +472,11 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	}
 
 	if version != version30 {
+		if version == versionCancel {
+			telemetry.Count("pgwire.unimplemented.cancel_request")
+			_ = conn.Close()
+			return nil
+		}
 		return sendErr(fmt.Errorf("unknown protocol version %d", version))
 	}
 	if errSSLRequired {
