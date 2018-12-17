@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -75,7 +76,7 @@ func TestScan(t *testing.T) {
 		{ // group 1: primary index scan.
 			p: memo.ScanPrivate{
 				Table: tab,
-				Index: opt.PrimaryIndex,
+				Index: cat.PrimaryIndex,
 				Cols:  util.MakeFastIntSet(1, 2, 3, 4),
 			},
 			cases: []testCase{
@@ -113,7 +114,7 @@ func TestScan(t *testing.T) {
 		{ // group 3: scan with limit (forces forward scan).
 			p: memo.ScanPrivate{
 				Table:     tab,
-				Index:     opt.PrimaryIndex,
+				Index:     cat.PrimaryIndex,
 				Cols:      util.MakeFastIntSet(1, 2, 3, 4),
 				HardLimit: +10,
 			},
@@ -133,7 +134,7 @@ func TestScan(t *testing.T) {
 		{ // group 4: scan with reverse limit.
 			p: memo.ScanPrivate{
 				Table:     tab,
-				Index:     opt.PrimaryIndex,
+				Index:     cat.PrimaryIndex,
 				Cols:      util.MakeFastIntSet(1, 2, 3, 4),
 				HardLimit: -10,
 			},

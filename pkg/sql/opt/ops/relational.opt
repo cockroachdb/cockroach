@@ -38,12 +38,12 @@ define Scan {
 [Private]
 define ScanPrivate {
 	# Table identifies the table to scan. It is an id that can be passed to
-	# the Metadata.Table method in order to fetch opt.Table metadata.
+	# the Metadata.Table method in order to fetch cat.Table metadata.
 	Table TableID
 
 	# Index identifies the index to scan (whether primary or secondary). It
-	# can be passed to the opt.Table.Index(i int) method in order to fetch the
-	# opt.Index metadata.
+	# can be passed to the cat.Table.Index(i int) method in order to fetch the
+	# cat.Index metadata.
 	Index int
 
 	# Cols specifies the set of columns that the scan operator projects. This
@@ -86,7 +86,7 @@ define VirtualScan {
 define VirtualScanPrivate {
 	# Table identifies the virtual table to synthesize and scan. It is an id
 	# that can be passed to the Metadata.Table method in order to fetch
-	# opt.Table metadata.
+	# cat.Table metadata.
 	Table TableID
 
 	# Cols specifies the set of columns that the VirtualScan operator projects.
@@ -228,8 +228,8 @@ define LookupJoinPrivate {
 	Table TableID
 
 	# Index identifies the index to do lookups in (whether primary or secondary).
-	# It can be passed to the opt.Table.Index(i int) method in order to fetch the
-	# opt.Index metadata.
+	# It can be passed to the cat.Table.Index(i int) method in order to fetch the
+	# cat.Index metadata.
 	Index int
 
 	# KeyCols are the columns (produced by the input) used to create lookup keys.
@@ -314,8 +314,8 @@ define ZigzagJoinPrivate {
 	RightTable TableID
 
 	# LeftIndex and RightIndex identifies the index to do lookups in (whether
-	# primary or secondary). It can be passed to the opt.Table.Index(i int)
-	# method in order to fetch the opt.Index metadata.
+	# primary or secondary). It can be passed to the cat.Table.Index(i int)
+	# method in order to fetch the cat.Index metadata.
 	LeftIndex int
 	RightIndex int
 

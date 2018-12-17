@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -655,7 +656,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *ScanPrivate:
 		// Don't output name of index if it's the primary index.
 		tab := f.Memo.metadata.Table(t.Table)
-		if t.Index == opt.PrimaryIndex {
+		if t.Index == cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
@@ -689,7 +690,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *LookupJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
-		if t.Index == opt.PrimaryIndex {
+		if t.Index == cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
@@ -699,11 +700,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		leftTab := f.Memo.metadata.Table(t.LeftTable)
 		rightTab := f.Memo.metadata.Table(t.RightTable)
 		fmt.Fprintf(f.Buffer, " %s", leftTab.Name().TableName)
-		if t.LeftIndex != opt.PrimaryIndex {
+		if t.LeftIndex != cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).Name())
 		}
 		fmt.Fprintf(f.Buffer, " %s", rightTab.Name().TableName)
-		if t.RightIndex != opt.PrimaryIndex {
+		if t.RightIndex != cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).Name())
 		}
 

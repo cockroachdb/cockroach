@@ -25,7 +25,7 @@ import (
 
 // Statistics is a collection of measurements and statistics that is used by
 // the coster to estimate the cost of expressions. Statistics are collected
-// for tables and indexes and are exposed to the optimizer via opt.Catalog
+// for tables and indexes and are exposed to the optimizer via cat.Catalog
 // interfaces.
 //
 // As logical properties are derived bottom-up for each expression, the

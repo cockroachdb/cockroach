@@ -30,7 +30,7 @@ define Insert {
 [Private]
 define MutationPrivate {
     # Table identifies the table which is being mutated. It is an id that can be
-    # passed to the Metadata.Table method in order to fetch opt.Table metadata.
+    # passed to the Metadata.Table method in order to fetch cat.Table metadata.
     Table TableID
 
     # InsertCols are columns from the Input expression that will be inserted into

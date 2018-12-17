@@ -16,6 +16,7 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -52,7 +53,7 @@ func (c *CustomFuncs) Init(e *explorer) {
 // IsCanonicalScan returns true if the given ScanPrivate is an original
 // unaltered primary index Scan operator (i.e. unconstrained and not limited).
 func (c *CustomFuncs) IsCanonicalScan(scan *memo.ScanPrivate) bool {
-	return scan.Index == opt.PrimaryIndex &&
+	return scan.Index == cat.PrimaryIndex &&
 		scan.Constraint == nil &&
 		scan.HardLimit == 0
 }
@@ -74,7 +75,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
 		// Skip primary index.
-		if iter.indexOrdinal == opt.PrimaryIndex {
+		if iter.indexOrdinal == cat.PrimaryIndex {
 			continue
 		}
 
@@ -684,7 +685,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		if pkCols == nil {
-			pkIndex := iter.tab.Index(opt.PrimaryIndex)
+			pkIndex := iter.tab.Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
 				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
@@ -742,7 +743,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		)
 		indexJoin.JoinType = joinType
 		indexJoin.Table = scanPrivate.Table
-		indexJoin.Index = opt.PrimaryIndex
+		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
 
@@ -770,10 +771,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // See the comment in pkg/sql/distsqlrun/zigzag_joiner.go for more details
 // on the role eqCols and fixed cols play in zigzag joins.
 func eqColsForZigzag(
-	tab opt.Table,
+	tab cat.Table,
 	tabID opt.TableID,
-	leftIndex opt.Index,
-	rightIndex opt.Index,
+	leftIndex cat.Index,
+	rightIndex cat.Index,
 	fixedCols opt.ColSet,
 	leftEqCols opt.ColList,
 	rightEqCols opt.ColList,
@@ -879,7 +880,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	var iter, iter2 scanIndexIter
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
-		if iter.indexOrdinal == opt.PrimaryIndex {
+		if iter.indexOrdinal == cat.PrimaryIndex {
 			continue
 		}
 		// Short-circuit quickly if the first column in the index is not a fixed
@@ -934,7 +935,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// for output correctness; otherwise, we could be outputting more
 			// results than there should be (due to an equality on a non-unique
 			// non-required value).
-			pkIndex := iter.tab.Index(opt.PrimaryIndex)
+			pkIndex := iter.tab.Index(cat.PrimaryIndex)
 			pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
 			pkColsFound := true
 			for i := range pkCols {
@@ -1047,7 +1048,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			)
 			indexJoin.JoinType = opt.InnerJoinOp
 			indexJoin.Table = scanPrivate.Table
-			indexJoin.Index = opt.PrimaryIndex
+			indexJoin.Index = cat.PrimaryIndex
 			indexJoin.KeyCols = pkCols
 			indexJoin.Cols = scanPrivate.Cols
 
@@ -1176,9 +1177,9 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 type scanIndexIter struct {
 	mem          *memo.Memo
 	scanPrivate  *memo.ScanPrivate
-	tab          opt.Table
+	tab          cat.Table
 	indexOrdinal int
-	index        opt.Index
+	index        cat.Index
 	cols         opt.ColSet
 }
 

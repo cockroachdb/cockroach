@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -63,8 +63,8 @@ func (ef *execFactory) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScan(
-	table opt.Table,
-	index opt.Index,
+	table cat.Table,
+	index cat.Index,
 	cols exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
@@ -115,7 +115,7 @@ func (ef *execFactory) ConstructScan(
 }
 
 // ConstructVirtualScan is part of the exec.Factory interface.
-func (ef *execFactory) ConstructVirtualScan(table opt.Table) (exec.Node, error) {
+func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
 	tn := table.Name()
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
@@ -501,7 +501,7 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 
 // ConstructIndexJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructIndexJoin(
-	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node, table cat.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, cols)
@@ -554,8 +554,8 @@ func (ef *execFactory) ConstructIndexJoin(
 func (ef *execFactory) ConstructLookupJoin(
 	joinType sqlbase.JoinType,
 	input exec.Node,
-	table opt.Table,
-	index opt.Index,
+	table cat.Table,
+	index cat.Index,
 	keyCols []exec.ColumnOrdinal,
 	lookupCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
@@ -625,10 +625,10 @@ func (ef *execFactory) constructScanForZigzag(
 
 // ConstructZigzagJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructZigzagJoin(
-	leftTable opt.Table,
-	leftIndex opt.Index,
-	rightTable opt.Table,
-	rightIndex opt.Index,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	rightTable cat.Table,
+	rightIndex cat.Index,
 	leftEqCols []exec.ColumnOrdinal,
 	rightEqCols []exec.ColumnOrdinal,
 	leftCols exec.ColumnOrdinalSet,
@@ -867,7 +867,7 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 }
 
 func (ef *execFactory) ConstructInsert(
-	input exec.Node, table opt.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node, table cat.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	tabDesc := table.(*optTable).desc
@@ -932,7 +932,7 @@ func (ef *execFactory) ConstructInsert(
 }
 
 func (ef *execFactory) ConstructUpdate(
-	input exec.Node, table opt.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node, table cat.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	tabDesc := table.(*optTable).desc
@@ -1061,7 +1061,7 @@ func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 
 // makeColDescList returns a list of table column descriptors. Columns are
 // included if their ordinal position in the table schema is in the cols set.
-func makeColDescList(table opt.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
+func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
 	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
 	for i, n := 0, table.ColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
@@ -1075,7 +1075,7 @@ func makeColDescList(table opt.Table, cols exec.ColumnOrdinalSet) []sqlbase.Colu
 // makeScanColumnsConfig builds a scanColumnsConfig struct by constructing a
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
-func makeScanColumnsConfig(table opt.Table, cols exec.ColumnOrdinalSet) scanColumnsConfig {
+func makeScanColumnsConfig(table cat.Table, cols exec.ColumnOrdinalSet) scanColumnsConfig {
 	// Set visibility=publicAndNonPublicColumns, since all columns in the "cols"
 	// set should be projected, regardless of whether they're public or non-
 	// public. The caller decides which columns to include (or not include). Note
@@ -1093,10 +1093,10 @@ func makeScanColumnsConfig(table opt.Table, cols exec.ColumnOrdinalSet) scanColu
 }
 
 // extractColumnDescriptor extracts the underlying sqlbase.ColumnDescriptor from
-// the given opt.Column. If the column is a mutation column, this involves one
+// the given cat.Column. If the column is a mutation column, this involves one
 // level of indirection.
-func extractColumnDescriptor(col opt.Column) *sqlbase.ColumnDescriptor {
-	if mut, ok := col.(*opt.MutationColumn); ok {
+func extractColumnDescriptor(col cat.Column) *sqlbase.ColumnDescriptor {
+	if mut, ok := col.(*cat.MutationColumn); ok {
 		return mut.Column.(*sqlbase.ColumnDescriptor)
 	}
 	return col.(*sqlbase.ColumnDescriptor)

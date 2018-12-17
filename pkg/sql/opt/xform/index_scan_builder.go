@@ -16,6 +16,7 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 )
@@ -61,7 +62,7 @@ func (b *indexScanBuilder) init(c *CustomFuncs, tabID opt.TableID) {
 func (b *indexScanBuilder) primaryKeyCols() opt.ColSet {
 	// Ensure that pkCols set is initialized with the primary index columns.
 	if b.pkCols.Empty() {
-		primaryIndex := b.c.e.mem.Metadata().Table(b.tabID).Index(opt.PrimaryIndex)
+		primaryIndex := b.c.e.mem.Metadata().Table(b.tabID).Index(cat.PrimaryIndex)
 		for i, cnt := 0, primaryIndex.KeyColumnCount(); i < cnt; i++ {
 			b.pkCols.Add(int(b.tabID.ColumnID(primaryIndex.Column(i).Ordinal)))
 		}
