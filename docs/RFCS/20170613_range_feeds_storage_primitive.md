@@ -11,8 +11,8 @@ This RFC proposes a mechanism for subscribing to changes to a set of key ranges
 starting at an initial timestamp.
 
 It is for use by Cockroach-internal higher-level systems such as distributed
-SQL, change data capture, or a Kafka producer endpoint. ["Change Data Capture
-(CDC)"][cdc] is a "sister RFC" detailing these higher-level systems.
+SQL and change data capture. ["Change Data Capture (CDC)"][cdc] is a "sister RFC"
+detailing these higher-level systems.
 
 We propose to add a basic building block for range feeds: a command `RangeFeed`
 served by `*Replica` which, given an HLC timestamp and a set of key spans
@@ -221,9 +221,9 @@ split and/or adding backpressure, but this is out of scope for now.
 
 The timestamp provided by a `Checkpoint()` notification is called a "resolved
 timestamp". As discussed above, the receipt of one of these checkpoints with an
-associated resolved timestamp indicates to a downstream receiver that no
-`Value()` notifications with timestamps less than the resolved timestamp will
-later be emitted.
+associated resolved timestamp indicates to a downstream receiver that all
+subsequent `Value()` notifications will have timestamps strictly greater than
+the resolved timestamp.
 
 Because the `RangeFeed` is driven off the Raft log, we have an opportunity to
 reuse the "closed timestamp" proposed in the [follower reads RFC][followerreads],
@@ -282,16 +282,17 @@ specific keys of each intent. This is critical as it should prevent the queue's
 memory footprint from growing large enough to need to spill to disk.
 
 Still, it's conceivable that the queue could grow large enough that it needs to
-spill to disk. In this case, we'll use a temp storage engine to house the queue.
-The representation should be fairly straightforward, and will be organized into
-a two-level structure. Primarily, we'll maintain `<timestamp/txnID>` keys
-pointing to values with the associated `txn key` and `intent refcount`. This
-will allow us to use the RocksDB engine's internal sorting to quickly find the
-oldest transaction. On the side, we'll also need `<txnID>` keys pointing to
-`timestamp` values. This will allow us to forward a transaction's timestamp
-given its ID and a new timestamp. It's unclear how critical this disk spilling
-will be. The first iteration of the `UnresolvedIntentQueue` will just throw an
-error that shuts down the RangeFeed if it grows too large.
+spill to disk. In this case, we'll either use a temp storage engine to house the
+queue or break the rangefeed and force consumers to reconnect. The
+representation should be fairly straightforward, and will be organized into a
+two-level structure. Primarily, we'll maintain `<timestamp/txnID>` keys pointing
+to values with the associated `txn key` and `intent refcount`. This will allow
+us to use the RocksDB engine's internal sorting to quickly find the oldest
+transaction. On the side, we'll also need `<txnID>` keys pointing to `timestamp`
+values. This will allow us to forward a transaction's timestamp given its ID and
+a new timestamp. It's unclear how critical this disk spilling will be. The first
+iteration of the `UnresolvedIntentQueue` will just throw an error that shuts
+down the RangeFeed if it grows too large.
 
 The queue will be initially built using the RocksDB snapshot captured under lock
 when the first RangeFeed connected. It will then be incrementally maintained
@@ -365,13 +366,14 @@ to run into them later. This will be less of a problem if we persist the
 resolved timestamp and use a `TimeBoundIterator` to skip over the abandoned
 intents when re-building the `UnresolvedIntentQueue`.
 
-#### Decoding WriteBatches / 
+#### The Difficulty With Decoding WriteBatches
 
-The heart of this proposal relies on the ability to decode `WriteBatch`es
-present in Raft entries and accurately determine their intended effect on
-values, intents, and other MVCC-related state. To do this, it is important to
-understand what entries a WriteBatch will contain for a given MVCC operations.
-Below is a flow diagram of all mutating MVCC operations as of commit 396ea7e.
+The heart of this proposal originally relied on the ability to decode
+`WriteBatch`es present in Raft entries and accurately determine their intended
+effect on values, intents, and other MVCC-related state. To do this, it was
+important to understand what entries a WriteBatch will contain for a given MVCC
+operations. Below is a flow diagram of all mutating MVCC operations as of commit
+396ea7e.
 
 ```
 - MVCCPut
@@ -435,6 +437,8 @@ MVCC once we introduce this dependency, and there may be serious consequences to
 this. Issues like these were what prompted the proposer-evaluated kv refactor,
 and they should not be taken lightly.
 
+#### Logical MVCC Operations
+
 Because of this, we instead propose an alternative to decoding the `WriteBatch`
 in a Raft command directly. Instead, we propose the introduction of a logical
 list of higher-level MVCC operations to each Raft command. These higher-level
@@ -448,35 +452,66 @@ To start, the following field (alternate name "LogicalOps") will be added to the
 `RaftCommand` proto message:
 
 ```
-repeated MVCCOp mvcc_ops;
+repeated MVCCLogicalOp mvcc_ops;
 ```
 
-The definition of `MVCCOp` will be something like:
+The definition of `MVCCLogicalOp` will be something like:
 ```
-enum Bytes {
-    // The byte slice is provided inline.
-    Inline  { bytes: []byte },
-    // The byte slice is WriteBatch.data[offset:offset+len].
-    Pointer { offset: i32, len: i32 },
+message Bytes {
+    option (gogoproto.onlyone) = true;
+
+    bytes inline = 1;
+
+    message Pointer {
+        int32 offset = 1;
+        int32 len = 2;
+    }
+    Pointer pointer = 2;
 }
 
-enum MVCCOp {
-    WriteValue   { key: Bytes, timestamp: Option<Timestamp>, value: Option<Bytes> },
-    WriteIntent  { txnID: UUID, timestamp: Timestamp },
-    UpdateIntent { txnID: UUID, timestamp: Timestamp },
-    CommitIntent { txnID: UUID, key: Bytes, timestamp: Timestamp },
-    AbortIntent  { txnID: UUID },
+message MVCCWriteValueOp {
+    bytes key = 1;
+    util.hlc.Timestamp timestamp = 2;
+    bytes value = 3;
+}
 
-    // Probably won't be needed. Unclear whether they will ever be useful.
-    Merge          { key: Bytes, timestamp: Option<Timestamp>, value: Option<Bytes> },
-    ClearRange     { startKey: Bytes, endKey: Bytes },
-    GarbageCollect { key: Bytes, timestamp: Option<Timestamp> },
+message MVCCWriteIntentOp {
+    bytes txn_id = 1;
+    bytes txn_key = 2;
+    util.hlc.Timestamp timestamp = 3;
+}
+
+message MVCCUpdateIntentOp {
+    bytes txn_id = 1;
+    util.hlc.Timestamp timestamp = 2;
+}
+
+message MVCCCommitIntentOp {
+    bytes txn_id = 1;
+    bytes key = 2;
+    util.hlc.Timestamp timestamp = 3;
+    bytes value = 4;
+}
+
+message MVCCAbortIntentOp {
+    bytes txn_id = 1;
+}
+
+message MVCCLogicalOp {
+    option (gogoproto.onlyone) = true;
+
+    MVCCWriteValueOp   write_value   = 1;
+    MVCCWriteIntentOp  write_intent  = 2;
+    MVCCUpdateIntentOp update_intent = 3;
+    MVCCCommitIntentOp commit_intent = 4;
+    MVCCAbortIntentOp  abort_intent  = 5;
 }
 ```
 
 Notably, all byte slice values will optionally point into the WriteBatch itself,
 which will help limit the write amplification caused by replicating both physical
-and logical operations. This optimization can be introduced gradually.
+and logical operations. This optimization can be introduced gradually. We could
+also explore compression techniques, which could result in similar deduplication.
 
 Above Raft, the log of MVCCOps will be constructed side-by-side with the
 `WriteBatch` as each Request is processed within a BatchRequest.
@@ -501,9 +536,6 @@ for op in mvccOps {
             SendValueToMatchingFeeds(key, MVCCGet(key, ts), ts)
         },
         AbortIntent    => UnresolvedIntentQueue[txnID].refcount--,
-        Merge          => { error },
-        ClearRange     => { error },
-        GarbageCollect => { },
     }
 }
 ```
