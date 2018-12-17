@@ -185,15 +185,13 @@ func merge(e, ee ctpb.Entry) ctpb.Entry {
 	}
 	// The result is full if either operand is.
 	re.Full = e.Full || ee.Full
-
 	// Use the larger of both timestamps with the union of the MLAIs, preferring larger
 	// ones on conflict.
 	re.ClosedTimestamp.Forward(ee.ClosedTimestamp)
 	for rangeID, mlai := range ee.MLAI {
-		if re.MLAI[rangeID] < mlai {
+		if cur, found := re.MLAI[rangeID]; !found || cur < mlai {
 			re.MLAI[rangeID] = mlai
 		}
 	}
-
 	return re
 }
