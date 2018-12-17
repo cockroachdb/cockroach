@@ -45,9 +45,10 @@ func Refresh(
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
-	val, intents, err := engine.MVCCGetWithTombstone(
-		ctx, batch, args.Key, h.Txn.Timestamp, false /* consistent */, nil, /* txn */
-	)
+	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Txn.Timestamp, engine.MVCCGetOptions{
+		Inconsistent: true,
+		Tombstones:   true,
+	})
 
 	if err != nil {
 		return result.Result{}, err

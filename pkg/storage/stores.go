@@ -226,7 +226,8 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		s := (*Store)(v)
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, true, nil, &storeBI)
+		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+			engine.MVCCGetOptions{})
 		if err != nil {
 			return false
 		}
