@@ -47,4 +47,13 @@ func BenchmarkScanDecodeKeyValue(b *testing.B) {
 			}
 		}
 	})
+	b.Run("getTs=false", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var err error
+			key, val, o, err = enginepb.ScanDecodeKeyValueNoTS(rep)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }

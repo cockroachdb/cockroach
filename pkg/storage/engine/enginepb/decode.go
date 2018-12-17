@@ -79,17 +79,40 @@ func ScanDecodeKeyValue(
 	if len(repr) < 8 {
 		return key, ts, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
-	v := binary.LittleEndian.Uint64(repr)
-	keySize := v >> 32
-	valSize := v & ((1 << 32) - 1)
-	if (keySize + valSize) > uint64(len(repr)) {
+	valSize := binary.LittleEndian.Uint32(repr)
+	keySize := binary.LittleEndian.Uint32(repr[4:8])
+	if (8 + keySize + valSize) > uint32(len(repr)) {
 		return key, ts, nil, nil, errors.Errorf("expected %d bytes, but only %d remaining",
 			keySize+valSize, len(repr))
 	}
-	repr = repr[8:]
-	rawKey := repr[:keySize]
-	value = repr[keySize : keySize+valSize]
-	repr = repr[keySize+valSize:]
+	rawKey := repr[8 : 8+keySize]
+	value = repr[8+keySize : 8+keySize+valSize]
+	repr = repr[8+keySize+valSize:]
 	key, ts, err = DecodeKey(rawKey)
 	return key, ts, value, repr, err
+}
+
+// ScanDecodeKeyValue decodes a key/value pair from a binary stream, such as in
+// an MVCCScan "batch" (this is not the RocksDB batch repr format), returning
+// both the key/value and the suffix of data remaining in the batch.
+func ScanDecodeKeyValueNoTS(repr []byte) (key []byte, value []byte, orepr []byte, err error) {
+	if len(repr) < 8 {
+		return key, nil, repr, errors.Errorf("unexpected batch EOF")
+	}
+	valSize := binary.LittleEndian.Uint32(repr)
+	keySize := binary.LittleEndian.Uint32(repr[4:8])
+	if len(repr) < int(8+keySize+valSize) {
+		return key, nil, nil, errors.Errorf("expected %d bytes, but only %d remaining",
+			keySize+valSize, len(repr))
+	}
+
+	ret := repr[8+keySize+valSize:]
+	value = repr[8+keySize : 8+keySize+valSize]
+	var ok bool
+	rawKey := repr[8 : 8+keySize]
+	key, _, ok = SplitMVCCKey(rawKey)
+	if !ok {
+		return nil, nil, nil, errors.Errorf("invalid encoded mvcc key: %x", rawKey)
+	}
+	return key, value, ret, err
 }
