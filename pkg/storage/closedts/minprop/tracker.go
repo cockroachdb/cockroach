@@ -235,7 +235,7 @@ func (t *Tracker) Track(
 				return
 			}
 
-			if curLAI := t.mu.leftMLAI[rangeID]; curLAI < lai {
+			if curLAI, found := t.mu.leftMLAI[rangeID]; !found || curLAI < lai {
 				t.mu.leftMLAI[rangeID] = lai
 			}
 		} else if minProp == t.mu.next.Next() {
@@ -249,8 +249,7 @@ func (t *Tracker) Track(
 			if rangeID == 0 {
 				return
 			}
-
-			if curLAI := t.mu.rightMLAI[rangeID]; curLAI < lai {
+			if curLAI, found := t.mu.rightMLAI[rangeID]; !found || curLAI < lai {
 				t.mu.rightMLAI[rangeID] = lai
 			}
 		} else {
