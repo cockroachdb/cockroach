@@ -175,8 +175,8 @@ SELECT node_id AS id,
        sum((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
        sum((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
        sum((metrics->>'replicas')::DECIMAL)::INT AS ranges,
-       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
-       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
+       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable,
+       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
