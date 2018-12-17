@@ -278,7 +278,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if v, _, err := MVCCGet(ctx, eng, key, ts, true, nil); err != nil {
+		if v, _, err := MVCCGet(ctx, eng, key, ts, MVCCGetOptions{}); err != nil {
 			b.Fatalf("failed get: %s", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
@@ -555,7 +555,7 @@ func runMVCCMerge(
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, _, err := MVCCGet(ctx, eng, key, hlc.Timestamp{}, true, nil)
+		val, _, err := MVCCGet(ctx, eng, key, hlc.Timestamp{}, MVCCGetOptions{})
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {

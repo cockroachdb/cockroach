@@ -186,7 +186,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// result back, we'll see the (newly deleted) value (due to the
 			// failure mode above).
 			if v, _, err := MVCCGet(context.Background(), batch, key,
-				hlc.Timestamp{}, true, nil); err != nil {
+				hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected no value, got %+v", v)

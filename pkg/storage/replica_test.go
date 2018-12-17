@@ -3648,8 +3648,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			ok, err := engine.MVCCGetProto(
 				context.TODO(), tc.repl.store.Engine(),
-				txnKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-				&txnRecord,
+				txnKey, hlc.Timestamp{}, &txnRecord, engine.MVCCGetOptions{},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -3848,7 +3847,8 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 	// Verify txn record is cleaned.
 	var readTxn roachpb.Transaction
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &readTxn)
+	ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey,
+		hlc.Timestamp{}, &readTxn, engine.MVCCGetOptions{})
 	if err != nil || ok {
 		t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
 	}
@@ -3971,7 +3971,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
-			true /* consistent */, nil /* txn */, &readTxn)
+			&readTxn, engine.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -9567,7 +9567,8 @@ func assertRangeAppliedStateRelatedKeysExist(
 
 	assertHasKey := func(key roachpb.Key, expect bool) {
 		t.Helper()
-		val, _, err := engine.MVCCGet(ctx, repl.store.Engine(), key, hlc.Timestamp{}, true, nil)
+		val, _, err := engine.MVCCGet(ctx, repl.store.Engine(), key, hlc.Timestamp{},
+			engine.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

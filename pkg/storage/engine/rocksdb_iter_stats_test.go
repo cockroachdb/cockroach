@@ -78,9 +78,7 @@ func TestIterStats(t *testing.T) {
 
 			// Getting the key with the tombstone sees it.
 			for i := 0; i < 10; i++ {
-				if _, _, err := iter.MVCCGet(
-					k.Key, hlc.Timestamp{}, nil, true, false,
-				); err != nil {
+				if _, _, err := iter.MVCCGet(k.Key, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 					t.Fatal(err)
 				}
 				stats := iter.Stats()
@@ -90,9 +88,7 @@ func TestIterStats(t *testing.T) {
 			}
 			// Getting KeyMax doesn't see it.
 			for i := 0; i < 10; i++ {
-				if _, _, err := iter.MVCCGet(
-					roachpb.KeyMax, hlc.Timestamp{}, nil, true, false,
-				); err != nil {
+				if _, _, err := iter.MVCCGet(roachpb.KeyMax, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 					t.Fatal(err)
 				}
 				stats := iter.Stats()

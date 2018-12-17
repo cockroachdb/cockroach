@@ -42,15 +42,15 @@ func QueryIntent(
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.
-	ts := hlc.MaxTimestamp
-	// Perform an inconsistent read so that intents are returned instead of
-	// causing WriteIntentErrors.
-	consistent := false
-	// Even if the request header contains a txn, perform the engine lookup
-	// without a transaction so that intents for a matching transaction are
-	// not returned as values (i.e. we don't want to see our own writes).
-	txn := (*roachpb.Transaction)(nil)
-	_, intents, err := engine.MVCCGet(ctx, batch, args.Key, ts, consistent, txn)
+	_, intents, err := engine.MVCCGet(ctx, batch, args.Key, hlc.MaxTimestamp, engine.MVCCGetOptions{
+		// Perform an inconsistent read so that intents are returned instead of
+		// causing WriteIntentErrors.
+		Inconsistent: true,
+		// Even if the request header contains a txn, perform the engine lookup
+		// without a transaction so that intents for a matching transaction are
+		// not returned as values (i.e. we don't want to see our own writes).
+		Txn: nil,
+	})
 	if err != nil {
 		return result.Result{}, err
 	}
