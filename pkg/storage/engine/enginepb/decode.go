@@ -70,26 +70,55 @@ func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error)
 	return key, timestamp, nil
 }
 
+// kvLenSize is the number of bytes in the length prefix for each key/value
+// pair in a MVCCScan batch. The first 4 bytes are a little-endian uint32
+// containing the value size in bytes. The second 4 bytes are a little-endian
+// uint32 containing the key size in bytes.
+const kvLenSize = 8
+
 // ScanDecodeKeyValue decodes a key/value pair from a binary stream, such as in
 // an MVCCScan "batch" (this is not the RocksDB batch repr format), returning
-// both the key/value and the suffix of data remaining in the batch.
+// the key/value, the timestamp, and the suffix of data remaining in the batch.
 func ScanDecodeKeyValue(
 	repr []byte,
 ) (key []byte, ts hlc.Timestamp, value []byte, orepr []byte, err error) {
-	if len(repr) < 8 {
+	if len(repr) < kvLenSize {
 		return key, ts, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
-	v := binary.LittleEndian.Uint64(repr)
-	keySize := v >> 32
-	valSize := v & ((1 << 32) - 1)
-	if (keySize + valSize) > uint64(len(repr)) {
+	valSize := binary.LittleEndian.Uint32(repr)
+	keyEnd := binary.LittleEndian.Uint32(repr[4:kvLenSize]) + kvLenSize
+	if (keyEnd + valSize) > uint32(len(repr)) {
 		return key, ts, nil, nil, errors.Errorf("expected %d bytes, but only %d remaining",
-			keySize+valSize, len(repr))
+			keyEnd+valSize, len(repr))
 	}
-	repr = repr[8:]
-	rawKey := repr[:keySize]
-	value = repr[keySize : keySize+valSize]
-	repr = repr[keySize+valSize:]
+	rawKey := repr[kvLenSize:keyEnd]
+	value = repr[keyEnd : keyEnd+valSize]
+	repr = repr[keyEnd+valSize:]
 	key, ts, err = DecodeKey(rawKey)
 	return key, ts, value, repr, err
+}
+
+// ScanDecodeKeyValueNoTS decodes a key/value pair from a binary stream, such as
+// in an MVCCScan "batch" (this is not the RocksDB batch repr format), returning
+// the key/value and the suffix of data remaining in the batch.
+func ScanDecodeKeyValueNoTS(repr []byte) (key []byte, value []byte, orepr []byte, err error) {
+	if len(repr) < kvLenSize {
+		return key, nil, repr, errors.Errorf("unexpected batch EOF")
+	}
+	valSize := binary.LittleEndian.Uint32(repr)
+	keyEnd := binary.LittleEndian.Uint32(repr[4:kvLenSize]) + kvLenSize
+	if len(repr) < int(keyEnd+valSize) {
+		return key, nil, nil, errors.Errorf("expected %d bytes, but only %d remaining",
+			keyEnd+valSize, len(repr))
+	}
+
+	ret := repr[keyEnd+valSize:]
+	value = repr[keyEnd : keyEnd+valSize]
+	var ok bool
+	rawKey := repr[kvLenSize:keyEnd]
+	key, _, ok = SplitMVCCKey(rawKey)
+	if !ok {
+		return nil, nil, nil, errors.Errorf("invalid encoded mvcc key: %x", rawKey)
+	}
+	return key, value, ret, err
 }
