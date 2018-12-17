@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -331,6 +332,39 @@ func ExampleMultiStorage_epoch() {
 	//   r9                     18                     18
 	//   r10                    99                     99
 	// +-----+---------------------+----------------------+
+}
+
+func TestZeroValueGetsStored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test ensures that a zero values MLAI is stored for an epoch especially
+	// after we've already stored a non-zero MLAI for a different range in the
+	// same epoch. See #32904.
+	ms := NewMultiStorage(func() SingleStorage {
+		return NewMemStorage(time.Millisecond, 10)
+	})
+	e := ctpb.Entry{
+		Epoch:           1,
+		ClosedTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		MLAI:            map[roachpb.RangeID]ctpb.LAI{1: 1},
+	}
+	ms.Add(1, e)
+	e.ClosedTimestamp.WallTime++
+	r := roachpb.RangeID(2)
+	e.MLAI = map[roachpb.RangeID]ctpb.LAI{r: 0}
+	ms.Add(1, e)
+	var seen bool
+	ms.VisitDescending(1, func(e ctpb.Entry) (done bool) {
+		for rr, mlai := range e.MLAI {
+			if rr == r && mlai == 0 {
+				seen = true
+				return true
+			}
+		}
+		return false
+	})
+	if !seen {
+		t.Fatalf("Failed to see added zero value MLAI for range %v", r)
+	}
 }
 
 // TestConcurrent runs a very basic sanity check against a Storage, verifiying

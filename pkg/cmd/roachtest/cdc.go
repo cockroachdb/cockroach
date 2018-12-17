@@ -93,16 +93,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			sqlNodes:           crdbNodes,
 			workloadNodes:      workloadNode,
 			tpccWarehouseCount: args.tpccWarehouseCount,
-			// TODO(dan): Applying tolerateErrors to all tests is unfortunate, but we're
-			// seeing all sorts of "error in newOrder: missing stock row" from tpcc. I'm
-			// debugging it, but in the meantime, we need to be getting data from these
-			// roachtest runs. In ideal usage, this should only be enabled for tests
-			// with CRDB chaos enabled.
-			/* tolerateErrors */
-			tolerateErrors: true,
 		}
 		tpcc.install(ctx, c)
-
+		// TODO(dan,ajwerner): sleeping momentarily before running the workload
+		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
+		time.Sleep(2 * time.Second)
 		t.Status("initiating workload")
 		m.Go(func(ctx context.Context) error {
 			defer func() { close(workloadCompleteCh) }()
@@ -350,8 +345,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/rangefeed-unstable",
-		Skip:       `resolved timestamps are not yet reliable with RangeFeed`,
+		Name:       "cdc/rangefeed",
 		MinVersion: "v2.2.0",
 		Nodes:      nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -363,7 +357,7 @@ func registerCDC(r *registry) {
 				rangefeed:                true,
 				kafkaChaos:               false,
 				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+				targetSteadyLatency:      2 * time.Minute,
 			})
 		},
 	})
