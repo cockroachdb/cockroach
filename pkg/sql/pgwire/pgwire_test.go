@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgproto3"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -2305,3 +2308,35 @@ func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]inter
 
 // pgxTestLogger implements pgx.Logger.
 var _ pgx.Logger = pgxTestLogger{}
+
+func TestCancelRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{Insecure: true}
+	s, _, _ := serverutils.StartServer(t, params)
+
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", s.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	fe, err := pgproto3.NewFrontend(conn, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const versionCancel = 80877102
+	if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: versionCancel}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fe.Receive(); err != io.EOF {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if count := telemetry.GetFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+		t.Fatalf("expected 1 cancel request, got %d", count)
+	}
+}
