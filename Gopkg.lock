@@ -69,12 +69,12 @@
   revision = "4748e29d5718c2df4028a6543edf86fd8cc0f881"
 
 [[projects]]
-  digest = "1:20695cc3d37c69d8a95420452e9d1afd29cc67cf54934a5d5738404e0831aad8"
+  digest = "1:f9ae348e1f793dcf9ed930ed47136a67343dbd6809c5c91391322267f4476892"
   name = "github.com/Microsoft/go-winio"
   packages = ["."]
   pruneopts = "UT"
-  revision = "78439966b38d69bf38227fbf57ac8a6fee70f69a"
-  version = "v0.4.5"
+  revision = "97e4973ce50b2ff5f09635a57e2b88a037aae829"
+  version = "v0.4.11"
 
 [[projects]]
   branch = "master"
