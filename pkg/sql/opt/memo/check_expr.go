@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -169,7 +170,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		// Ensure that insert columns include all columns except for delete-only
 		// mutation columns (which do not need to be part of INSERT).
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			mut, ok := tab.Column(i).(*opt.MutationColumn)
+			mut, ok := tab.Column(i).(*cat.MutationColumn)
 			if !ok || !mut.IsDeleteOnly {
 				if t.InsertCols[i] == 0 {
 					panic("insert values not provided for all table columns")
@@ -226,7 +227,7 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 	tab := m.Metadata().Table(private.Table)
 	var mutCols opt.ColSet
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if _, ok := tab.Column(i).(*opt.MutationColumn); ok {
+		if _, ok := tab.Column(i).(*cat.MutationColumn); ok {
 			mutCols.Add(int(private.Table.ColumnID(i)))
 		}
 	}

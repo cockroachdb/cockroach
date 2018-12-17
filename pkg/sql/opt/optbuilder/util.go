@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -395,8 +396,8 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 // resolveTable returns the data source in the catalog with the given name. If
 // the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveTable raises an error.
-func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) opt.Table {
-	tab, ok := b.resolveDataSource(tn, priv).(opt.Table)
+func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) cat.Table {
+	tab, ok := b.resolveDataSource(tn, priv).(cat.Table)
 	if !ok {
 		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
 	}
@@ -406,7 +407,7 @@ func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) opt.Tabl
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveDataSource raises an error.
-func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt.DataSource {
+func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) cat.DataSource {
 	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
 	if err != nil {
 		panic(builderError{err})
@@ -419,8 +420,8 @@ func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt
 // the given TableRef spec. If no data source matches, or if the current user
 // does not have the given privilege, then resolveDataSourceFromRef raises an
 // error.
-func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) opt.DataSource {
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, opt.StableID(ref.TableID))
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
 	if err != nil {
 		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
@@ -432,7 +433,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 // access the given data source in the catalog. If not, then checkPrivilege
 // raises an error. It also adds the data source as a dependency to the
 // metadata, so that the privileges can be re-checked on reuse of the memo.
-func (b *Builder) checkPrivilege(ds opt.DataSource, priv privilege.Kind) {
+func (b *Builder) checkPrivilege(ds cat.DataSource, priv privilege.Kind) {
 	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {

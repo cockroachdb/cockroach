@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -81,7 +82,7 @@ func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
 
 // findIndexByName returns an index in the table with the given name. If the
 // name is empty the primary index is returned.
-func (b *Builder) findIndexByName(table opt.Table, name tree.UnrestrictedName) (opt.Index, error) {
+func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (cat.Index, error) {
 	if name == "" {
 		return table.Index(0), nil
 	}

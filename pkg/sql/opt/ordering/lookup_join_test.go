@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -107,7 +108,7 @@ func TestLookupJoinProvided(t *testing.T) {
 				nil, /* FiltersExpr */
 				&memo.LookupJoinPrivate{
 					Table:   tab,
-					Index:   opt.PrimaryIndex,
+					Index:   cat.PrimaryIndex,
 					KeyCols: tc.keyCols,
 					Cols:    tc.outCols,
 				},

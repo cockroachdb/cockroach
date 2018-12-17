@@ -1078,7 +1078,14 @@ func checkTxnMetricsOnce(
 // have a faster sample interval and returns a cleanup function to be
 // executed by callers.
 func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetrics, func()) {
-	s := createTestDB(t)
+	dbCtx := client.DefaultDBContext()
+	s := &localtestcluster.LocalTestCluster{
+		DBContext: &dbCtx,
+		// Liveness heartbeat txns mess up the metrics.
+		DontStartLivenessHeartbeat: true,
+	}
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+
 	metrics := MakeTxnMetrics(metric.TestSampleInterval)
 	s.DB.GetFactory().(*TxnCoordSenderFactory).metrics = metrics
 	return s, metrics, func() {
@@ -1121,6 +1128,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
+
 	value := []byte("value")
 
 	ctx := context.TODO()

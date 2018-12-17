@@ -62,6 +62,12 @@ type LocalTestCluster struct {
 	Latency                  time.Duration // sleep for each RPC sent
 	tester                   testing.TB
 	DontRetryPushTxnFailures bool
+	// DontStartLivenessHeartbeat, if set, inhibits the heartbeat loop. Some tests
+	// need this because, for example, the heartbeat loop increments some
+	// transaction metrics.
+	// However, note that without heartbeats, ranges with epoch-based leases
+	// cannot be accessed because the leases cannot be granted.
+	DontStartLivenessHeartbeat bool
 }
 
 // InitFactoryFn is a callback used to initiate the txn coordinator
@@ -163,6 +169,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if err := ltc.Store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
+
+	if !ltc.DontStartLivenessHeartbeat {
+		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.Stopper, nil /* alive */)
+	}
+
 	if err := ltc.Store.Start(ctx, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

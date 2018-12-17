@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -343,7 +344,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 
 	md := c.f.Metadata()
 
-	var leftTab, rightTab opt.Table
+	var leftTab, rightTab cat.Table
 	var leftTabID, rightTabID opt.TableID
 
 	// Any left columns that don't match conditions 1-4 end up in this set.
@@ -437,7 +438,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		// Find the index corresponding to fkRef.IndexID - the index
 		// on the right table that forms the destination end of
 		// the fk relation.
-		var fkIndex opt.Index
+		var fkIndex cat.Index
 		found := false
 		for j, cnt2 := 0, fkTable.IndexCount(); j < cnt2; j++ {
 			if fkTable.Index(j).ID() == fkRef.IndexID {

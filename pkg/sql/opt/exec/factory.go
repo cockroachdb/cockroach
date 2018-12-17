@@ -15,7 +15,7 @@
 package exec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -56,8 +56,8 @@ type Factory interface {
 	//   - If maxResults > 0, the scan is guaranteed to return at most maxResults
 	//     rows.
 	ConstructScan(
-		table opt.Table,
-		index opt.Index,
+		table cat.Table,
+		index cat.Index,
 		needed ColumnOrdinalSet,
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
@@ -69,7 +69,7 @@ type Factory interface {
 	// ConstructVirtualScan returns a node that represents the scan of a virtual
 	// table. Virtual tables are system tables that are populated "on the fly"
 	// with rows synthesized from system metadata and other state.
-	ConstructVirtualScan(table opt.Table) (Node, error)
+	ConstructVirtualScan(table cat.Table) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.
@@ -163,7 +163,7 @@ type Factory interface {
 	// The input must be created by ConstructScan for the same table; cols is the
 	// set of columns produced by the index join.
 	ConstructIndexJoin(
-		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrdering OutputOrdering,
+		input Node, table cat.Table, cols ColumnOrdinalSet, reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructLookupJoin returns a node that preforms a lookup join.
@@ -176,8 +176,8 @@ type Factory interface {
 	ConstructLookupJoin(
 		joinType sqlbase.JoinType,
 		input Node,
-		table opt.Table,
-		index opt.Index,
+		table cat.Table,
+		index cat.Index,
 		keyCols []ColumnOrdinal,
 		lookupCols ColumnOrdinalSet,
 		onCond tree.TypedExpr,
@@ -191,10 +191,10 @@ type Factory interface {
 	// {left,right}EqCols). The lengths of leftEqCols and rightEqCols
 	// must match.
 	ConstructZigzagJoin(
-		leftTable opt.Table,
-		leftIndex opt.Index,
-		rightTable opt.Table,
-		rightIndex opt.Index,
+		leftTable cat.Table,
+		leftIndex cat.Index,
+		rightTable cat.Table,
+		rightIndex cat.Index,
 		leftEqCols []ColumnOrdinal,
 		rightEqCols []ColumnOrdinal,
 		leftCols ColumnOrdinalSet,
@@ -245,7 +245,7 @@ type Factory interface {
 	// rowsNeeded parameter is true if a RETURNING clause needs the inserted
 	// row(s) as output.
 	ConstructInsert(
-		input Node, table opt.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node, table cat.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructUpdate creates a node that implements an UPDATE statement. The
@@ -261,7 +261,7 @@ type Factory interface {
 	// fetch columns first and the update columns second. The rowsNeeded parameter
 	// is true if a RETURNING clause needs the updated row(s) as output.
 	ConstructUpdate(
-		input Node, table opt.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node, table cat.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
 }
 

@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -55,7 +56,7 @@ type RuleSet = util.FastIntSet
 type OptTester struct {
 	Flags OptTesterFlags
 
-	catalog   opt.Catalog
+	catalog   cat.Catalog
 	sql       string
 	ctx       context.Context
 	semaCtx   tree.SemaContext
@@ -118,7 +119,7 @@ type OptTesterFlags struct {
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
 // statement. Metadata used by the SQL query is accessed via the catalog.
-func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
+func NewOptTester(catalog cat.Catalog, sql string) *OptTester {
 	ot := &OptTester{
 		catalog: catalog,
 		sql:     sql,
