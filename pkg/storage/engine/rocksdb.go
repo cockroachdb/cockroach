@@ -2254,7 +2254,7 @@ func (r *rocksDBIterator) MVCCGet(
 	r.clearState()
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(opts.Txn), C.bool(!opts.Inconsistent), C.bool(opts.Tombstones),
+		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2321,7 +2321,7 @@ func (r *rocksDBIterator) MVCCScan(
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
-		goToCTxn(opts.Txn), C.bool(!opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
