@@ -74,6 +74,10 @@ type ColVec interface {
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+
+	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
+	// It uses the reflect package and is not suitable for calling in hot paths.
+	PrettyValueAt(idx uint16, colType types.T) string
 }
 
 // Nulls represents a list of potentially nullable values.
