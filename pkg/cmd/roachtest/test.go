@@ -46,14 +46,57 @@ var (
 	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
-func makeFilterRE(filter []string) *regexp.Regexp {
+// testFilter holds the name and tag filters for filtering tests.
+type testFilter struct {
+	name   *regexp.Regexp
+	tag    *regexp.Regexp
+	rawTag []string
+}
+
+func newFilter(filter []string) *testFilter {
 	if len(filter) == 0 {
-		return regexp.MustCompile(`.`)
+		return &testFilter{
+			name: regexp.MustCompile(`.`),
+			tag:  regexp.MustCompile(`.`),
+		}
 	}
-	for i := range filter {
-		filter[i] = "(" + filter[i] + ")"
+
+	var name []string
+	var tag []string
+	var rawTag []string
+	for _, v := range filter {
+		if strings.HasPrefix(v, "tag:") {
+			tag = append(tag, strings.TrimPrefix(v, "tag:"))
+			rawTag = append(rawTag, v)
+		} else {
+			name = append(name, v)
+		}
 	}
-	return regexp.MustCompile(strings.Join(filter, "|"))
+
+	if len(tag) == 0 {
+		tag = []string{"default"}
+		rawTag = []string{"tag:default"}
+	}
+
+	makeRE := func(strs []string) *regexp.Regexp {
+		switch len(strs) {
+		case 0:
+			return regexp.MustCompile(`.`)
+		case 1:
+			return regexp.MustCompile(strs[0])
+		default:
+			for i := range strs {
+				strs[i] = "(" + strs[i] + ")"
+			}
+			return regexp.MustCompile(strings.Join(strs, "|"))
+		}
+	}
+
+	return &testFilter{
+		name:   makeRE(name),
+		tag:    makeRE(tag),
+		rawTag: rawTag,
+	}
 }
 
 type testSpec struct {
@@ -75,6 +118,10 @@ type testSpec struct {
 	// skipped.
 	MinVersion string
 	minVersion *version.Version
+	// Tags is a set of tags associated with the test that allow grouping
+	// tests. If no tags are specified, the set ["default"] is automatically
+	// given.
+	Tags []string
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
@@ -87,27 +134,49 @@ type testSpec struct {
 	SubTests []testSpec
 }
 
+// matchOrSkip returns true if the filter matches the test. If the filter does
+// not match the test because the tag filter does not match, the test is
+// matched, but marked as skipped.
+func (t *testSpec) matchOrSkip(filter *testFilter) bool {
+	if !filter.name.MatchString(t.Name) {
+		return false
+	}
+	if len(t.Tags) == 0 {
+		if !filter.tag.MatchString("default") {
+			t.Skip = fmt.Sprintf("%s does not match [default]", filter.rawTag)
+		}
+		return true
+	}
+	for _, t := range t.Tags {
+		if filter.tag.MatchString(t) {
+			return true
+		}
+	}
+	t.Skip = fmt.Sprintf("%s does not match %s", filter.rawTag, t.Tags)
+	return true
+}
+
 // matchRegex returns true if the regex matches the test's name or any of the
 // subtest names.
-func (t *testSpec) matchRegex(re *regexp.Regexp) bool {
-	if re.MatchString(t.Name) {
+func (t *testSpec) matchRegex(filter *testFilter) bool {
+	if t.matchOrSkip(filter) {
 		return true
 	}
 	for i := range t.SubTests {
-		if t.SubTests[i].matchRegex(re) {
+		if t.SubTests[i].matchRegex(filter) {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *testSpec) matchRegexRecursive(re *regexp.Regexp) []testSpec {
+func (t *testSpec) matchRegexRecursive(filter *testFilter) []testSpec {
 	var res []testSpec
-	if re.MatchString(t.Name) {
+	if t.matchOrSkip(filter) {
 		res = append(res, *t)
 	}
 	for i := range t.SubTests {
-		res = append(res, t.SubTests[i].matchRegexRecursive(re)...)
+		res = append(res, t.SubTests[i].matchRegexRecursive(filter)...)
 	}
 	return res
 }
@@ -290,10 +359,10 @@ func (r *registry) Add(spec testSpec) {
 
 // ListTopLevel lists the top level tests that match re, or that have a subtests
 // that matches re.
-func (r *registry) ListTopLevel(re *regexp.Regexp) []*testSpec {
+func (r *registry) ListTopLevel(filter *testFilter) []*testSpec {
 	var results []*testSpec
 	for _, t := range r.m {
-		if t.matchRegex(re) {
+		if t.matchRegex(filter) {
 			results = append(results, t)
 		}
 	}
@@ -307,11 +376,11 @@ func (r *registry) ListTopLevel(re *regexp.Regexp) []*testSpec {
 // ListAll lists all tests that match one of the filters. If a subtest matches
 // but a parent doesn't, only the subtest is returned. If a parent matches, all
 // subtests are returned.
-func (r *registry) ListAll(filter []string) []string {
-	filterRE := makeFilterRE(filter)
+func (r *registry) ListAll(filters []string) []string {
+	filter := newFilter(filters)
 	var tests []testSpec
 	for _, t := range r.m {
-		tests = append(tests, t.matchRegexRecursive(filterRE)...)
+		tests = append(tests, t.matchRegexRecursive(filter)...)
 	}
 	var names []string
 	for _, t := range tests {
@@ -325,6 +394,7 @@ func (r *registry) ListAll(filter []string) []string {
 		if t.Skip != "" {
 			name += " (skipped: " + t.Skip + ")"
 		}
+
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -336,10 +406,15 @@ func (r *registry) ListAll(filter []string) []string {
 // Args:
 // artifactsDir: The path to the dir where log files will be put. If empty, all
 //   logging will go to stdout/stderr.
-func (r *registry) Run(filter []string, parallelism int, artifactsDir string, user string) int {
-	filterRE := makeFilterRE(filter)
+func (r *registry) Run(filters []string, parallelism int, artifactsDir string, user string) int {
+	filter := newFilter(filters)
 	// Find the top-level tests to run.
-	tests := r.ListTopLevel(filterRE)
+	tests := r.ListTopLevel(filter)
+	if len(tests) == 0 {
+		fmt.Fprintf(r.out, "warning: no tests to run %s\n", filters)
+		fmt.Fprintf(r.out, "FAIL\n")
+		return 1
+	}
 
 	// Skip any tests for which the min-version is less than the build-version.
 	for _, t := range tests {
@@ -399,7 +474,7 @@ func (r *registry) Run(filter []string, parallelism int, artifactsDir string, us
 				}
 
 				r.runAsync(
-					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
+					ctx, tests[i], filter, nil /* parent */, nil, /* cluster */
 					runNum, teeOpt, runDir, user, func(failed bool) {
 						wg.Done()
 						<-sem
@@ -758,7 +833,7 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 func (r *registry) runAsync(
 	ctx context.Context,
 	spec *testSpec,
-	filter *regexp.Regexp,
+	filter *testFilter,
 	parent *test,
 	c *cluster,
 	runNum int,
