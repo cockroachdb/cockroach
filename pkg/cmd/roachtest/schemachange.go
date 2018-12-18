@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -311,6 +314,111 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
 						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
+				},
+				Duration: length,
+			})
+		},
+	}
+}
+
+func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
+	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Hour*2))
+}
+
+func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+	return testSpec{
+		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc-%d", warehouses),
+		Nodes:   nodes(numNodes),
+		Timeout: length * 2,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					notifyCommit := make(chan error)
+					jobID := make(chan int64)
+					gcTTL := 10 * time.Minute
+
+					go func() {
+						conn := c.Conn(ctx, 1)
+						defer conn.Close()
+
+						txn, err := conn.Begin()
+						if err != nil {
+							notifyCommit <- err
+							return
+						}
+						if _, err := txn.Exec(`CREATE INDEX foo ON tpcc.order (o_carrier_id);`); err != nil {
+							notifyCommit <- err
+							return
+						}
+						if _, err := txn.Exec("ALTER INDEX tpcc.order@foo CONFIGURE ZONE USING gc.ttlseconds = $1", int64(gcTTL.Seconds())); err != nil {
+							notifyCommit <- err
+							return
+						}
+						var id int64
+						if err := txn.QueryRow(`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&id); err != nil {
+							notifyCommit <- err
+							return
+						}
+						c.l.Printf("indexrollback: got schema change job ID %d\n", id)
+						notifyCommit <- nil
+						jobID <- id
+						notifyCommit <- txn.Commit()
+					}()
+
+					if err := <-notifyCommit; err != nil {
+						return err
+					}
+
+					conn := c.Conn(ctx, 1)
+					defer conn.Close()
+
+					createID := <-jobID
+					retryOpts := retry.Options{InitialBackoff: time.Millisecond, MaxBackoff: 10 * time.Second}
+					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+						var prog float32
+						if err := conn.QueryRow(`SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1`, createID).Scan(&prog); err != nil {
+							return err
+						}
+
+						c.l.Printf("indexrollback: got schema change progress %.2f\n", prog)
+						if prog >= 0.25 {
+							if _, err := conn.Exec(`CANCEL JOB $1`, createID); err != nil {
+								return err
+							}
+							c.l.Printf("indexrollback: canceled job %d\n", createID)
+							break
+						}
+					}
+
+					if schemaChangeErr := <-notifyCommit; !testutils.IsError(schemaChangeErr, "job canceled") {
+						return errors.Errorf("expected 'job canceled' error, but got %+v", schemaChangeErr)
+					}
+
+					c.l.Printf("indexrollback: rollback began\n", createID)
+					time.Sleep(gcTTL)
+
+					retryOpts = retry.Options{InitialBackoff: 5 * time.Second, Multiplier: 1, MaxRetries: 15 * 60 / 5 /* 15m */}
+					for r := retry.StartWithCtx(ctx, retryOpts); ; {
+						if !r.Next() {
+							return errors.Errorf("rollback timeout")
+						}
+
+						var rollbackID int64
+						var status string
+						if err := conn.QueryRow(`SELECT job_id, status FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&rollbackID, &status); err != nil {
+							return err
+						}
+
+						if rollbackID != createID && status == string(jobs.StatusSucceeded) {
+							c.l.Printf("indexrollback: rollback job succeeded\n")
+							break
+						}
+						c.l.Printf("indexrollback: rollback job running\n")
+					}
+
+					return nil
 				},
 				Duration: length,
 			})
