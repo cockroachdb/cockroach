@@ -309,6 +309,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if !*tolerateErrors {
 				return err
 			}
+			log.Infof(ctx, "retrying after error during init: %v", err)
 		}
 	}
 
@@ -324,9 +325,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
 	reg := histogram.NewRegistry()
-	ops, err := o.Ops(urls, reg)
-	if err != nil {
-		return err
+	var ops workload.QueryLoad
+	for {
+		ops, err = o.Ops(urls, reg)
+		if err == nil {
+			break
+		}
+		if !*tolerateErrors {
+			return err
+		}
+		log.Infof(ctx, "retrying after error while creating load: %v", err)
 	}
 
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
