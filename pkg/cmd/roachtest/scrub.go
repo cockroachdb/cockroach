@@ -19,49 +19,34 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var tpccTables = [...]string{
-	"customer",
-	"district",
-	"history",
-	"item",
-	"new_order",
-	"order",
-	"order_line",
-	"stock",
-	"warehouse",
-}
-
 func registerScrubIndexOnlyTPCC(r *registry) {
-	// TODO (lucy): increase numScrubRuns once we improve SCRUB performance
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*3, true, 2))
+	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "index-only", 3))
 }
 
 func registerScrubAllChecksTPCC(r *registry) {
-	// TODO (lucy): increase numScrubRuns once we improve SCRUB performance
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*3, false, 1))
+	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "all-checks", 2))
 }
 
 func makeScrubTPCCTest(
-	numNodes, warehouses int, length time.Duration, indexOnly bool, numScrubRuns int,
+	numNodes, warehouses int, length time.Duration, optionName string, numScrubRuns int,
 ) testSpec {
-	var optionName string
-	if indexOnly {
-		optionName = "index-only"
-	} else {
-		optionName = "all-checks"
-	}
-
-	stmts := make([]string, numScrubRuns*len(tpccTables))
-	for i := 0; i < len(stmts); i += len(tpccTables) {
-		for j, t := range tpccTables {
-			if indexOnly {
-				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s AS OF SYSTEM TIME '-0s' WITH OPTIONS INDEX ALL`, t)
-			} else {
-				stmts[i+j] = fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE tpcc.%s AS OF SYSTEM TIME '-0s'`, t)
-			}
-		}
+	var stmtOptions string
+	// SCRUB checks are run at -5s to avoid contention with TPCC traffic.
+	// By the time the SCRUB queries start, the tables will have been loaded for
+	// some time (since it takes some time to run the TPCC consistency checks),
+	// so using a timestamp in the past is fine.
+	switch optionName {
+	case "index-only":
+		stmtOptions = `AS OF SYSTEM TIME '-5s' WITH OPTIONS INDEX ALL`
+	case "all-checks":
+		stmtOptions = `AS OF SYSTEM TIME '-5s'`
+	default:
+		panic(fmt.Sprintf("Not a valid option: %s", optionName))
 	}
 
 	return testSpec{
@@ -72,7 +57,21 @@ func makeScrubTPCCTest(
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
-					return runAndLogStmts(ctx, t, c, "scrub", stmts)
+					conn := c.Conn(ctx, 1)
+					defer conn.Close()
+
+					c.l.Printf("Starting %d SCRUB checks", numScrubRuns)
+					for i := 0; i < numScrubRuns; i++ {
+						c.l.Printf("Running SCRUB check %d\n", i+1)
+						before := timeutil.Now()
+						err := sqlutils.RunScrubWithOptions(conn, "tpcc", "order", stmtOptions)
+						c.l.Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
+
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+					return nil
 				},
 				Duration: length,
 			})
