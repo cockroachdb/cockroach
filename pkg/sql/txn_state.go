@@ -45,9 +45,11 @@ type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
 	// session.
+	//
 	// Note that reads of mu.txn from the session's main goroutine do not require
 	// acquiring a read lock - since only that goroutine will ever write to
-	// mu.txn.
+	// mu.txn. Writes to mu.txn do require a write lock to guarantee safety with
+	// reads by other goroutines.
 	mu struct {
 		syncutil.RWMutex
 
@@ -246,7 +248,9 @@ func (ts *txnState) finishSQLTxn() {
 	ts.sp.Finish()
 	ts.sp = nil
 	ts.Ctx = nil
+	ts.mu.Lock()
 	ts.mu.txn = nil
+	ts.mu.Unlock()
 	ts.recordingThreshold = 0
 }
 
@@ -269,11 +273,16 @@ func (ts *txnState) finishExternalTxn() {
 	}
 	ts.sp = nil
 	ts.Ctx = nil
+	ts.mu.Lock()
 	ts.mu.txn = nil
+	ts.mu.Unlock()
 }
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
-	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
+	ts.mu.Lock()
+	err := ts.mu.txn.SetUserPriority(userPriority)
+	ts.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	ts.priority = userPriority

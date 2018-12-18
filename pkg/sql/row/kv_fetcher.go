@@ -58,7 +58,7 @@ func (f *kvFetcher) nextKV(
 		var key []byte
 		var rawBytes []byte
 		var err error
-		key, _, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
+		key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 		if err != nil {
 			return false, kv, false, err
 		}

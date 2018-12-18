@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,12 +55,8 @@ type cTableInfo struct {
 	// schema changes.
 	cols []sqlbase.ColumnDescriptor
 
-	// The set of ColumnIDs that are required.
-	neededCols util.FastIntSet
-
-	// The set of indexes into the cols array that are required for columns
-	// in the value part.
-	neededValueColsByIdx util.FastIntSet
+	// The ordered list of ColumnIDs that are required.
+	neededColsList []int
 
 	// The number of needed columns from the value part of the row. Once we've
 	// seen this number of value columns for a particular row, we can stop
@@ -67,7 +64,7 @@ type cTableInfo struct {
 	neededValueCols int
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap colIdxMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -88,6 +85,50 @@ type cTableInfo struct {
 
 	keyValTypes []sqlbase.ColumnType
 	extraTypes  []sqlbase.ColumnType
+}
+
+// colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
+// in the table to fetch. This map is used to figure out what index within a
+// row a particular value-component column goes into. Value-component columns
+// are encoded with a column id prefix, with the guarantee that within any
+// given row, the column ids are always increasing. Because of this guarantee,
+// we can store this map as two sorted lists that the fetcher keeps an index
+// into, giving fast access during decoding.
+//
+// It implements sort.Interface to be sortable on vals, while keeping ords
+// matched up to the order of vals.
+type colIdxMap struct {
+	// vals is the sorted list of sqlbase.ColumnIDs in the table to fetch.
+	vals sqlbase.ColumnIDs
+	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
+	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
+	// in colIdxVals.
+	ords []int
+}
+
+// Len implements sort.Interface.
+func (m colIdxMap) Len() int {
+	return len(m.vals)
+}
+
+// Less implements sort.Interface.
+func (m colIdxMap) Less(i, j int) bool {
+	return m.vals[i] < m.vals[j]
+}
+
+// Swap implements sort.Interface.
+func (m colIdxMap) Swap(i, j int) {
+	m.vals[i], m.vals[j] = m.vals[j], m.vals[i]
+	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
+}
+
+func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
+	for i, v := range m.vals {
+		if v == c {
+			return m.ords[i], true
+		}
+	}
+	return 0, false
 }
 
 // CFetcher handles fetching kvs and forming table rows for an
@@ -193,10 +234,19 @@ func (rf *CFetcher) Init(
 	tableArgs := tables[0]
 	oldTable := rf.table
 
+	m := colIdxMap{
+		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
+		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
+	}
+	for k, v := range tableArgs.ColIdxMap {
+		m.vals = append(m.vals, k)
+		m.ords = append(m.ords, v)
+	}
+	sort.Sort(m)
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
-		colIdxMap:        tableArgs.ColIdxMap,
+		colIdxMap:        m,
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
 		cols:             tableArgs.Cols,
@@ -218,21 +268,24 @@ func (rf *CFetcher) Init(
 
 	var err error
 
+	var neededCols util.FastIntSet
 	// Scan through the entire columns map to see which columns are
 	// required.
-	for col, idx := range table.colIdxMap {
+	table.neededColsList = make([]int, 0, tableArgs.ValNeededForCol.Len())
+	for col, idx := range tableArgs.ColIdxMap {
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.
-			table.neededCols.Add(int(col))
+			neededCols.Add(int(col))
+			table.neededColsList = append(table.neededColsList, int(col))
 		}
 	}
+	sort.Ints(table.neededColsList)
 
 	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
 	var indexColumnIDs []sqlbase.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
-	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 	neededIndexCols := 0
 	nIndexCols := len(indexColumnIDs)
 	if cap(table.indexColOrdinals) >= nIndexCols {
@@ -241,16 +294,15 @@ func (rf *CFetcher) Init(
 		table.indexColOrdinals = make([]int, nIndexCols)
 	}
 	for i, id := range indexColumnIDs {
-		colIdx, ok := table.colIdxMap[id]
+		colIdx, ok := tableArgs.ColIdxMap[id]
 		if ok {
 			table.indexColOrdinals[i] = colIdx
-			if table.neededCols.Contains(int(id)) {
+			if neededCols.Contains(int(id)) {
 				neededIndexCols++
-				table.neededValueColsByIdx.Remove(colIdx)
 			}
 		} else {
 			table.indexColOrdinals[i] = -1
-			if table.neededCols.Contains(int(id)) {
+			if neededCols.Contains(int(id)) {
 				panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
 			}
 		}
@@ -267,11 +319,11 @@ func (rf *CFetcher) Init(
 		// The number of columns we need to read from the value part of the key.
 		// It's the total number of needed columns minus the ones we read from the
 		// index key, except for composite columns.
-		table.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
+		table.neededValueCols = neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
 		if table.isSecondaryIndex {
 			for i := range table.cols {
-				if table.neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
+				if neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
 					return fmt.Errorf("requested column %s not in index", table.cols[i].Name)
 				}
 			}
@@ -296,8 +348,8 @@ func (rf *CFetcher) Init(
 				table.extraValColOrdinals = make([]int, nExtraColumns)
 			}
 			for i, id := range table.index.ExtraColumnIDs {
-				if table.neededCols.Contains(int(id)) {
-					table.extraValColOrdinals[i] = table.colIdxMap[id]
+				if neededCols.Contains(int(id)) {
+					table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
 				} else {
 					table.extraValColOrdinals[i] = -1
 				}
@@ -670,7 +722,7 @@ func (rf *CFetcher) processValue(
 		)
 	}
 
-	if table.neededCols.Empty() {
+	if len(table.neededColsList) == 0 {
 		// We don't need to decode any values.
 		if rf.traceKV {
 			prettyValue = tree.DNull.String()
@@ -778,8 +830,20 @@ func (rf *CFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	if rf.traceKV || table.neededCols.Contains(int(colID)) {
-		if idx, ok := table.colIdxMap[colID]; ok {
+	var needDecode bool
+	if rf.traceKV {
+		needDecode = true
+	} else {
+		for i := range table.neededColsList {
+			if table.neededColsList[i] == int(colID) {
+				needDecode = true
+				break
+			}
+		}
+	}
+
+	if needDecode {
+		if idx, ok := table.colIdxMap.get(colID); ok {
 			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 			}
@@ -809,7 +873,7 @@ func (rf *CFetcher) processValueSingle(
 	if debugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 	}
-	return prettyKey, prettyValue, nil
+	return "", "", nil
 }
 
 func (rf *CFetcher) processValueBytes(
@@ -823,10 +887,14 @@ func (rf *CFetcher) processValueBytes(
 		rf.machine.prettyValueBuf.Reset()
 	}
 
-	var colIDDiff uint32
-	var lastColID sqlbase.ColumnID
-	var typeOffset, dataOffset int
-	var typ encoding.Type
+	var (
+		colIDDiff              uint32
+		lastColID              sqlbase.ColumnID
+		typeOffset, dataOffset int
+		typ                    encoding.Type
+		lastColIDIndex         int
+		lastNeededColIndex     int
+	)
 	valueColsFound := 0
 	for len(valueBytes) > 0 && valueColsFound < table.neededValueCols {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
@@ -835,7 +903,17 @@ func (rf *CFetcher) processValueBytes(
 		}
 		colID := lastColID + sqlbase.ColumnID(colIDDiff)
 		lastColID = colID
-		if !table.neededCols.Contains(int(colID)) {
+		var colIsNeeded bool
+		for ; lastNeededColIndex < len(table.neededColsList); lastNeededColIndex++ {
+			nextNeededColID := table.neededColsList[lastNeededColIndex]
+			if nextNeededColID == int(colID) {
+				colIsNeeded = true
+				break
+			} else if nextNeededColID > int(colID) {
+				break
+			}
+		}
+		if !colIsNeeded {
 			// This column wasn't requested, so read its length and skip it.
 			len, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 			if err != nil {
@@ -847,7 +925,16 @@ func (rf *CFetcher) processValueBytes(
 			}
 			continue
 		}
-		idx := table.colIdxMap[colID]
+		idx := -1
+		for ; lastColIDIndex < len(table.colIdxMap.vals); lastColIDIndex++ {
+			if table.colIdxMap.vals[lastColIDIndex] == colID {
+				idx = table.colIdxMap.ords[lastColIDIndex]
+				break
+			}
+		}
+		if idx == -1 {
+			return "", "", errors.Errorf("missing colid %d", colID)
+		}
 
 		if rf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
