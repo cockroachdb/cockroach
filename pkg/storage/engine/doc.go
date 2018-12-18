@@ -62,6 +62,16 @@ the MVCC version using the metadata's most recent version timestamp.
 This avoids using an expensive merge iterator to scan the most recent
 version. It also allows us to leverage RocksDB's bloom filters.
 
+The following is an example of the sort order for MVCC key/value pairs:
+
+		...
+		keyA: MVCCMetadata of keyA
+		keyA_Timestamp_n: value of version_n
+		keyA_Timestamp_n-1: value of version_n-1
+		...
+		keyA_Timestamp_0: value of version_0
+		keyB: MVCCMetadata of keyB
+
 The binary encoding used on the MVCC keys allows arbitrary keys to be
 stored in the map (no restrictions on intermediate nil-bytes, for
 example), while still sorting lexicographically and guaranteeing that

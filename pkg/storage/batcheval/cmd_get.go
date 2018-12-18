@@ -35,10 +35,16 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp,
-		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, engine.MVCCGetOptions{
+		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:          h.Txn,
+	})
 	if err != nil {
 		return result.Result{}, err
+	}
+	var intents []roachpb.Intent
+	if intent != nil {
+		intents = append(intents, *intent)
 	}
 
 	reply.Value = val

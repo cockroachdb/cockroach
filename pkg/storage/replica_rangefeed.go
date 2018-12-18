@@ -316,8 +316,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 		// Read the value directly from the Engine. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		val, _, err := engine.MVCCGetWithTombstone(ctx, r.Engine(),
-			key, ts, true /* consistent */, nil /* txn */)
+		val, _, err := engine.MVCCGet(ctx, r.Engine(), key, ts, engine.MVCCGetOptions{Tombstones: true})
 		if val == nil && err == nil {
 			err = errors.New("value missing in engine")
 		}

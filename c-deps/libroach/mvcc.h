@@ -51,7 +51,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool consistent, bool tombstones)
+              DBTxn txn, bool inconsistent, bool tombstones)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -61,7 +61,7 @@ template <bool reverse> class mvccScanner {
         txn_id_(ToSlice(txn.id)),
         txn_epoch_(txn.epoch),
         txn_max_timestamp_(txn.max_timestamp),
-        consistent_(consistent),
+        inconsistent_(inconsistent),
         tombstones_(tombstones),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
@@ -235,7 +235,7 @@ template <bool reverse> class mvccScanner {
       return seekVersion(timestamp_, false);
     }
 
-    if (!consistent_) {
+    if (inconsistent_) {
       // 6. The key contains an intent and we're doing an inconsistent
       // read at a timestamp newer than the intent. We ignore the
       // intent by insisting that the timestamp we're reading at is a
@@ -594,7 +594,7 @@ template <bool reverse> class mvccScanner {
   const rocksdb::Slice txn_id_;
   const uint32_t txn_epoch_;
   const DBTimestamp txn_max_timestamp_;
-  const bool consistent_;
+  const bool inconsistent_;
   const bool tombstones_;
   const bool check_uncertainty_;
   DBScanResults results_;

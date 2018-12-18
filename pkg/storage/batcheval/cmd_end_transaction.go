@@ -173,7 +173,7 @@ func evalEndTransaction(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &existingTxn,
+		ctx, batch, key, hlc.Timestamp{}, &existingTxn, engine.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {

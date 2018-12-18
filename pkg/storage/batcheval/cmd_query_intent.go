@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -42,15 +41,15 @@ func QueryIntent(
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.
-	ts := hlc.MaxTimestamp
-	// Perform an inconsistent read so that intents are returned instead of
-	// causing WriteIntentErrors.
-	consistent := false
-	// Even if the request header contains a txn, perform the engine lookup
-	// without a transaction so that intents for a matching transaction are
-	// not returned as values (i.e. we don't want to see our own writes).
-	txn := (*roachpb.Transaction)(nil)
-	_, intents, err := engine.MVCCGet(ctx, batch, args.Key, ts, consistent, txn)
+	_, intent, err := engine.MVCCGet(ctx, batch, args.Key, hlc.MaxTimestamp, engine.MVCCGetOptions{
+		// Perform an inconsistent read so that intents are returned instead of
+		// causing WriteIntentErrors.
+		Inconsistent: true,
+		// Even if the request header contains a txn, perform the engine lookup
+		// without a transaction so that intents for a matching transaction are
+		// not returned as values (i.e. we don't want to see our own writes).
+		Txn: nil,
+	})
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -58,21 +57,16 @@ func QueryIntent(
 	// Determine if the request is querying an intent in its own transaction.
 	ownTxn := h.Txn != nil && h.Txn.ID == args.Txn.ID
 
-	var curIntent *roachpb.Intent
 	var curIntentPushed bool
-	switch len(intents) {
-	case 0:
-		reply.FoundIntent = false
-	case 1:
-		curIntent = &intents[0]
+	if intent != nil {
 		// See comment on QueryIntentRequest.Txn for an explanation of this
 		// comparison.
-		reply.FoundIntent = (args.Txn.ID == curIntent.Txn.ID) &&
-			(args.Txn.Epoch == curIntent.Txn.Epoch) &&
-			(args.Txn.Sequence <= curIntent.Txn.Sequence)
+		reply.FoundIntent = (args.Txn.ID == intent.Txn.ID) &&
+			(args.Txn.Epoch == intent.Txn.Epoch) &&
+			(args.Txn.Sequence <= intent.Txn.Sequence)
 
 		// Check whether the intent was pushed past its expected timestamp.
-		if reply.FoundIntent && args.Txn.Timestamp.Less(curIntent.Txn.Timestamp) {
+		if reply.FoundIntent && args.Txn.Timestamp.Less(intent.Txn.Timestamp) {
 			// The intent matched but was pushed to a later timestamp. Consider a
 			// pushed intent a missing intent.
 			curIntentPushed = true
@@ -83,11 +77,9 @@ func QueryIntent(
 			if ownTxn {
 				clonedTxn := h.Txn.Clone()
 				reply.Txn = &clonedTxn
-				reply.Txn.Timestamp.Forward(curIntent.Txn.Timestamp)
+				reply.Txn.Timestamp.Forward(intent.Txn.Timestamp)
 			}
 		}
-	default:
-		log.Fatalf(ctx, "more than 1 intent on single key: %v", intents)
 	}
 
 	if !reply.FoundIntent {
@@ -102,7 +94,7 @@ func QueryIntent(
 				// the txn use refresh spans more effectively.
 				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE)
 			}
-			return result.Result{}, roachpb.NewIntentMissingError(curIntent)
+			return result.Result{}, roachpb.NewIntentMissingError(intent)
 		case roachpb.QueryIntentRequest_PREVENT:
 			// The intent will be prevented by bumping the timestamp cache for
 			// the key to the txn timestamp in Replica.updateTimestampCache.

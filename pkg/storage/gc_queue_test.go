@@ -746,7 +746,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, true, nil, txn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, txn,
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -922,7 +923,8 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, true, nil, &ts)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, &ts,
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}

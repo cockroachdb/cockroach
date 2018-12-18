@@ -304,7 +304,9 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
-		if _, _, err := engine.MVCCGet(ctx, store1.Engine(), key, store1.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(
+			ctx, store1.Engine(), key, store1.Clock().Now(), engine.MVCCGetOptions{},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1575,7 +1577,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	var rhsTombstone1 roachpb.RaftTombstone
 	rhsTombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
 	ok, err = engine.MVCCGetProto(ctx, store1.Engine(), rhsTombstoneKey, hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &rhsTombstone1)
+		&rhsTombstone1, engine.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if !ok {

@@ -117,10 +117,10 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// have previously performed a consistent read at the lower time-bound to
 	// prove that there are no intents present that would be missed by the time-
 	// bound iterator.
-	if val, intents, err := engine.MVCCGet(ctx, db, k, ts1, true, nil); err != nil {
+	if val, intent, err := engine.MVCCGet(ctx, db, k, ts1, engine.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
-	} else if len(intents) > 0 {
-		t.Fatalf("got unexpected intents: %v", intents)
+	} else if intent != nil {
+		t.Fatalf("got unexpected intent: %v", intent)
 	} else if !val.EqualData(v) {
 		t.Fatalf("expected %s, got %s", v, val)
 	}

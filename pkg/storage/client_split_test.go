@@ -373,7 +373,9 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(
+			context.Background(), store.Engine(), key, store.Clock().Now(), engine.MVCCGetOptions{},
+		); err != nil {
 			t.Errorf("failed to read consistent range descriptor for key %s: %s", key, err)
 		}
 	}
@@ -637,7 +639,9 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(
+			context.Background(), store.Engine(), key, store.Clock().Now(), engine.MVCCGetOptions{},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2379,16 +2383,16 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	// Now verify that the meta2/splitKey meta2 record is present; do this
 	// within a SucceedSoon in order to give the intents time to resolve.
 	testutils.SucceedsSoon(t, func() error {
-		val, intents, err := engine.MVCCGet(context.Background(), store.Engine(),
-			keys.RangeMetaKey(splitKey).AsRawKey(), hlc.MaxTimestamp, true, nil)
+		val, intent, err := engine.MVCCGet(context.Background(), store.Engine(),
+			keys.RangeMetaKey(splitKey).AsRawKey(), hlc.MaxTimestamp, engine.MVCCGetOptions{})
 		if err != nil {
 			return err
 		}
 		if val == nil {
 			t.Errorf("expected meta2 record for %s", keys.RangeMetaKey(splitKey))
 		}
-		if len(intents) > 0 {
-			t.Errorf("expected no intents; got %+v", intents)
+		if intent != nil {
+			t.Errorf("expected no intents; got %+v", intent)
 		}
 		return nil
 	})

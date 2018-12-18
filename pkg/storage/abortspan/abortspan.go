@@ -100,7 +100,7 @@ func (sc *AbortSpan) Get(
 
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, entry)
+	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.Timestamp{}, entry, engine.MVCCGetOptions{})
 	return ok, err
 }
 

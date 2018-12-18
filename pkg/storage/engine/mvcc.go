@@ -596,18 +596,19 @@ func updateStatsOnGC(
 
 // MVCCGetProto fetches the value at the specified key and unmarshals it into
 // msg if msg is non-nil. Returns true on success or false if the key was not
-// found. The semantics of consistent are the same as in MVCCGet.
+// found.
+//
+// See the documentation for MVCCGet for the semantics of the MVCCGetOptions.
 func MVCCGetProto(
 	ctx context.Context,
 	engine Reader,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
 	msg protoutil.Message,
+	opts MVCCGetOptions,
 ) (bool, error) {
 	// TODO(tschottdorf): Consider returning skipped intents to the caller.
-	value, _, mvccGetErr := MVCCGet(ctx, engine, key, timestamp, consistent, txn)
+	value, _, mvccGetErr := MVCCGet(ctx, engine, key, timestamp, opts)
 	found := value != nil
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
@@ -665,61 +666,43 @@ func (b *getBuffer) release() {
 	getBufferPool.Put(b)
 }
 
-// MVCCGet returns the value for the key specified in the request,
-// while satisfying the given timestamp condition. The key may contain
-// arbitrary bytes. If no value for the key exists, or it has been
-// deleted returns nil for value.
+// MVCCGetOptions bundles options for the MVCCGet family of functions.
+type MVCCGetOptions struct {
+	// See the documentation for MVCCGet for information on these parameters.
+	Inconsistent bool
+	Tombstones   bool
+	Txn          *roachpb.Transaction
+}
+
+// MVCCGet returns the most recent value for the specified key whose timestamp
+// is less than or equal to the supplied timestamp. If no such value exists, nil
+// is returned instead.
 //
-// The values of multiple versions for the given key should
-// be organized as follows:
-// ...
-// keyA : MVCCMetadata of keyA
-// keyA_Timestamp_n : value of version_n
-// keyA_Timestamp_n-1 : value of version_n-1
-// ...
-// keyA_Timestamp_0 : value of version_0
-// keyB : MVCCMetadata of keyB
-// ...
+// In tombstones mode, if the most recent value is a deletion tombstone, the
+// result will be a non-nil roachpb.Value whose RawBytes field is nil.
+// Otherwise, a deletion tombstone results in a nil roachpb.Value.
 //
-// The consistent parameter indicates that intents should cause
-// WriteIntentErrors. If set to false, a possible intent on the key will be
-// ignored for reading the value (but returned via the roachpb.Intent slice);
-// the previous value (if any) is read instead.
+// In inconsistent mode, if an intent is encountered, it will be placed in the
+// dedicated return parameter. By contrast, in consistent mode, an intent will
+// generate a WriteIntentError with the intent embedded within, and the intent
+// result parameter will be nil.
+//
+// Note that transactional gets must be consistent. Put another way, only
+// non-transactional gets may be inconsistent.
 func MVCCGet(
-	ctx context.Context,
-	eng Reader,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-) (*roachpb.Value, []roachpb.Intent, error) {
+	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, false /* tombstones */)
+	value, intent, err := iter.MVCCGet(key, timestamp, opts)
 	iter.Close()
-	return value, intents, err
+	return value, intent, err
 }
 
-// MVCCGetWithTombstone is like MVCCGet (see comments above), but if
-// the value has been deleted, returns a non-nil value with RawBytes
-// set to nil for tombstones.
-func MVCCGetWithTombstone(
-	ctx context.Context,
-	eng Reader,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, true /* tombstones */)
-	iter.Close()
-	return value, intents, err
-}
-
-// MVCCGetAsTxn constructs a temporary Transaction from the given txn
+// MVCCGetAsTxn constructs a temporary transaction from the given transaction
 // metadata and calls MVCCGet as that transaction. This method is required
 // only for reading intents of a transaction when only its metadata is known
 // and should rarely be used.
+//
 // The read is carried out without the chance of uncertainty restarts.
 func MVCCGetAsTxn(
 	ctx context.Context,
@@ -727,15 +710,15 @@ func MVCCGetAsTxn(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txnMeta enginepb.TxnMeta,
-) (*roachpb.Value, []roachpb.Intent, error) {
-	txn := &roachpb.Transaction{
-		TxnMeta:       txnMeta,
-		Status:        roachpb.PENDING,
-		Writing:       true,
-		OrigTimestamp: txnMeta.Timestamp,
-		MaxTimestamp:  txnMeta.Timestamp,
-	}
-	return MVCCGet(ctx, engine, key, timestamp, true /* consistent */, txn)
+) (*roachpb.Value, *roachpb.Intent, error) {
+	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
+		Txn: &roachpb.Transaction{
+			TxnMeta:       txnMeta,
+			Status:        roachpb.PENDING,
+			Writing:       true,
+			OrigTimestamp: txnMeta.Timestamp,
+			MaxTimestamp:  txnMeta.Timestamp,
+		}})
 }
 
 // mvccGetMetadata returns or reconstructs the meta key for the given key.
@@ -819,7 +802,7 @@ func mvccGetInternal(
 	allowedSafety valueSafety,
 	txn *roachpb.Transaction,
 	buf *getBuffer,
-) (*roachpb.Value, []roachpb.Intent, valueSafety, error) {
+) (*roachpb.Value, *roachpb.Intent, valueSafety, error) {
 	if !consistent && txn != nil {
 		return nil, nil, safeValue, errors.Errorf(
 			"cannot allow inconsistent reads within a transaction")
@@ -836,15 +819,18 @@ func mvccGetInternal(
 		}
 		return value, nil, safeValue, nil
 	}
-	var ignoredIntents []roachpb.Intent
+	var ignoredIntent *roachpb.Intent
 	metaTimestamp := hlc.Timestamp(meta.Timestamp)
 	if !consistent && meta.Txn != nil && !timestamp.Less(metaTimestamp) {
 		// If we're doing inconsistent reads and there's an intent, we
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
-		ignoredIntents = append(ignoredIntents,
-			roachpb.Intent{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn})
+		ignoredIntent = &roachpb.Intent{
+			Span:   roachpb.Span{Key: metaKey.Key},
+			Status: roachpb.PENDING,
+			Txn:    *meta.Txn,
+		}
 		timestamp = metaTimestamp.Prev()
 	}
 
@@ -905,7 +891,7 @@ func mvccGetInternal(
 		// would apply to.
 		seekKey.Timestamp = timestamp
 		if seekKey.Timestamp == (hlc.Timestamp{}) {
-			return nil, ignoredIntents, safeValue, nil
+			return nil, ignoredIntent, safeValue, nil
 		}
 	}
 
@@ -913,12 +899,12 @@ func mvccGetInternal(
 	if ok, err := iter.Valid(); err != nil {
 		return nil, nil, safeValue, err
 	} else if !ok {
-		return nil, ignoredIntents, safeValue, nil
+		return nil, ignoredIntent, safeValue, nil
 	}
 
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return nil, ignoredIntents, safeValue, nil
+		return nil, ignoredIntent, safeValue, nil
 	}
 	if !unsafeKey.IsValue() {
 		return nil, nil, safeValue, errors.Errorf(
@@ -950,7 +936,7 @@ func mvccGetInternal(
 	if err := value.Verify(metaKey.Key); err != nil {
 		return nil, nil, safeValue, err
 	}
-	return value, ignoredIntents, allowedSafety, nil
+	return value, ignoredIntent, allowedSafety, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1902,6 +1888,11 @@ type MVCCScanOptions struct {
 // will be included in the scan results. If a transaction is provided and the
 // scan encounters a value with a timestamp between the supplied timestamp and
 // the transaction's max timestamp, an uncertainty error will be returned.
+//
+// In tombstones mode, if the most recent value for a key is a deletion
+// tombstone, the scan result will contain a roachpb.KeyValue for that key whose
+// RawBytes field is nil. Otherwise, the key-value pair will be omitted from the
+// result entirely.
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
