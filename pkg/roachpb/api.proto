@@ -377,7 +377,7 @@ message ScanResponse {
   // a buffer of varint-prefixed slices, alternating from key to value. There
   // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
   // be set and vice versa.
-  bytes batch_response = 4;
+  repeated bytes batch_response = 4;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -410,7 +410,7 @@ message ReverseScanResponse {
   // a buffer of varint-prefixed slices, alternating from key to value. There
   // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
   // be set and vice versa.
-  bytes batch_response = 4;
+  repeated bytes batch_response = 4;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
