@@ -74,6 +74,10 @@ type ColVec interface {
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+
+	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
+	// It uses the reflect package and is not suitable for calling in hot paths.
+	PrettyValueAt(idx uint16, colType types.T) string
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -87,16 +91,20 @@ type Nulls interface {
 	// SetNull sets the ith value of the column to null.
 	SetNull(i uint16)
 
-	// Rank returns the index of the ith non-null value in the column.
-	Rank(i uint16) uint16
+	// UnsetNulls sets the column to have 0 null values.
+	UnsetNulls()
 }
 
 var _ ColVec = &memColumn{}
+
+var emptyNulls [ColBatchSize / 8 / 8]int64
 
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
 	col column
+
+	nulls [ColBatchSize / 8 / 8]int64
 }
 
 // newMemColumn returns a new memColumn, initialized with a length.
@@ -125,60 +133,68 @@ func newMemColumn(t types.T, n int) *memColumn {
 	}
 }
 
-func (m memColumn) HasNulls() bool {
-	return false
+func (m *memColumn) HasNulls() bool {
+	sum := int64(0)
+	for i := range m.nulls {
+		sum += m.nulls[i]
+	}
+	return sum != 0
 }
 
-func (m memColumn) NullAt(i uint16) bool {
-	return false
+func (m *memColumn) NullAt(i uint16) bool {
+	intIdx := i >> 6
+	return ((m.nulls[intIdx] >> (i % 64)) & 1) == 1
 }
 
-func (m memColumn) SetNull(i uint16) {}
-
-func (m memColumn) Rank(i uint16) uint16 {
-	return i
+func (m *memColumn) SetNull(i uint16) {
+	intIdx := i >> 6
+	m.nulls[intIdx] |= 1 << (i % 64)
 }
 
-func (m memColumn) Bool() []bool {
+func (m *memColumn) UnsetNulls() {
+	copy(m.nulls[:], emptyNulls[:])
+}
+
+func (m *memColumn) Bool() []bool {
 	return m.col.([]bool)
 }
 
-func (m memColumn) Int8() []int8 {
+func (m *memColumn) Int8() []int8 {
 	return m.col.([]int8)
 }
 
-func (m memColumn) Int16() []int16 {
+func (m *memColumn) Int16() []int16 {
 	return m.col.([]int16)
 }
 
-func (m memColumn) Int32() []int32 {
+func (m *memColumn) Int32() []int32 {
 	return m.col.([]int32)
 }
 
-func (m memColumn) Int64() []int64 {
+func (m *memColumn) Int64() []int64 {
 	return m.col.([]int64)
 }
 
-func (m memColumn) Float32() []float32 {
+func (m *memColumn) Float32() []float32 {
 	return m.col.([]float32)
 }
 
-func (m memColumn) Float64() []float64 {
+func (m *memColumn) Float64() []float64 {
 	return m.col.([]float64)
 }
 
-func (m memColumn) Bytes() [][]byte {
+func (m *memColumn) Bytes() [][]byte {
 	return m.col.([][]byte)
 }
 
-func (m memColumn) Decimal() []apd.Decimal {
+func (m *memColumn) Decimal() []apd.Decimal {
 	return m.col.([]apd.Decimal)
 }
 
-func (m memColumn) Col() interface{} {
+func (m *memColumn) Col() interface{} {
 	return m.col
 }
 
-func (m memColumn) _TemplateType() []interface{} {
+func (m *memColumn) _TemplateType() []interface{} {
 	panic("don't call this from non template code")
 }
