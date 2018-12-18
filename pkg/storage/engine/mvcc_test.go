@@ -4615,13 +4615,35 @@ func TestMVCCIntentHistory(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ts1 := hlc.Timestamp{WallTime: 1E9}
-	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
+	ts0 := hlc.Timestamp{WallTime: 1E9}
+	ts1 := hlc.Timestamp{WallTime: 2 * 1E9}
+	ts2 := hlc.Timestamp{WallTime: 3 * 1E9}
 
 	key := roachpb.Key("a")
+	defaultValue := roachpb.MakeValueFromString("default")
 	value := roachpb.MakeValueFromString("first value")
 	newValue := roachpb.MakeValueFromString("second value")
 	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts0},
+		OrigTimestamp: ts0,
+	}
+	txn.Status = roachpb.PENDING
+
+	// Lay down a default value on the key.
+	if err := MVCCPut(ctx, engine, nil, key, ts0, defaultValue, txn); err != nil {
+		t.Fatal(err)
+	}
+	// Resolve the intent so we can use another transaction on this key.
+	if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+		Span:   roachpb.Span{Key: key},
+		Status: roachpb.COMMITTED,
+		Txn:    txn.TxnMeta,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a new transaction for the test.
+	txn = &roachpb.Transaction{
 		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
 		OrigTimestamp: ts1,
 	}
@@ -4736,6 +4758,47 @@ func TestMVCCIntentHistory(t *testing.T) {
 	}
 	if !meta.Equal(aggMeta) {
 		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Assert that the latest read should find the latest write.
+	foundVal, _, err := MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, value.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", value.RawBytes, foundVal.RawBytes)
+	}
+
+	// Assert than an older read sequence gets an older versioned intent.
+	txn.Sequence = 1
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, newValue.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", newValue.RawBytes, foundVal.RawBytes)
+	}
+
+	// Assert than an older read sequence gets no value if the value was deleted.
+	txn.Sequence = 2
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if foundVal != nil {
+		t.Fatalf("at this sequence %d, the value was deleted so shouldn't have been found",
+			txn.Sequence)
+	}
+
+	// Assert that the last committed value is found if the sequence is lower than any
+	// write from the current transaction.
+	txn.Sequence = -1
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, defaultValue.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", defaultValue.RawBytes, foundVal.RawBytes)
 	}
 
 	// Resolve the intent.

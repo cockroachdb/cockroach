@@ -307,6 +307,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 typedef struct {
   DBSlice id;
   uint32_t epoch;
+  int32_t sequence;
   DBTimestamp max_timestamp;
 } DBTxn;
 
