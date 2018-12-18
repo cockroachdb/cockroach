@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	// register some workloads for TestWorkload
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	"github.com/pkg/errors"
@@ -2334,7 +2335,6 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
-  debug/nodes/1/ranges/21
   debug/reports/problemranges
   debug/schema/defaultdb@details
   debug/schema/postgres@details

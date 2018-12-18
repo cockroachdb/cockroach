@@ -1679,7 +1679,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
-	expectedReplicas += 6
+	expectedReplicas += 4
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
 }
