@@ -1334,6 +1334,7 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 
 pkg/sql/exec/any_not_null_agg.eg.go: pkg/sql/exec/any_not_null_agg_tmpl.go
 pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
+pkg/sql/exec/colvec.eg.go: pkg/sql/exec/colvec_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/quicksort.eg.go: pkg/sql/exec/quicksort_tmpl.go
 pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
