@@ -365,6 +365,8 @@ message ScanRequest {
 
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
+  // Don't generate a typedecl, so we can add a slice of batch_responses.
+  option (gogoproto.typedecl) = false;
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
@@ -398,6 +400,9 @@ message ReverseScanRequest {
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
 message ReverseScanResponse {
+  // Don't generate a typedecl, so we can add a slice of batch_responses.
+  option (gogoproto.typedecl) = false;
+
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];

@@ -250,13 +250,35 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	return nil
 }
 
+// A ScanResponse is the return value from the Scan() method.
+type ScanResponse struct {
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Rows is empty if no rows were scanned. Will not be set if BatchResponse is.
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	// IntentRows are the rows seen when performing a scan at the READ_UNCOMMITTED
+	// consistency level. These rows do not count against the MaxSpanRequestKeys
+	// count.
+	IntentRows []KeyValue `protobuf:"bytes,3,rep,name=intent_rows,json=intentRows" json:"intent_rows"`
+	// BatchResponse, if set, is the results of the scan in batch format -
+	// the key/value pairs are a buffer of varint-prefixed slices, alternating
+	// from key to value. There are num_keys pairs, as defined by the
+	// ResponseHeader. If set, rows will not be set and vice versa.
+	BatchResponse []byte `protobuf:"bytes,4,opt,name=batch_response,json=batchResponse,proto3" json:"batch_response,omitempty"`
+
+	// BatchResponses is a non-serialized field that's used when combining
+	// responses. The batches on the right side of the combiner get appended to
+	// this field.
+	BatchResponses [][]byte
+}
+
 // combine implements the combinable interface.
 func (sr *ScanResponse) combine(c combinable) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
-		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponse)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -266,13 +288,35 @@ func (sr *ScanResponse) combine(c combinable) error {
 
 var _ combinable = &ScanResponse{}
 
+// A ReverseScanResponse is the return value from the ReverseScan() method.
+type ReverseScanResponse struct {
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Rows is empty if no rows were scanned. Will not be set if BatchResponse is.
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	// IntentRows are the rows seen when performing a scan at the READ_UNCOMMITTED
+	// consistency level. These rows do not count against the MaxSpanRequestKeys
+	// count.
+	IntentRows []KeyValue `protobuf:"bytes,3,rep,name=intent_rows,json=intentRows" json:"intent_rows"`
+	// BatchResponse, if set, is the results of the scan in batch format -
+	// the key/value pairs are a buffer of varint-prefixed slices, alternating
+	// from key to value. There are num_keys pairs, as defined by the
+	// ResponseHeader. If set, rows will not be set and vice versa.
+	BatchResponse []byte `protobuf:"bytes,4,opt,name=batch_response,json=batchResponse,proto3" json:"batch_response,omitempty"`
+
+	// BatchResponses is a non-serialized field that's used when combining
+	// responses. The batches on the right side of the combiner get appended to
+	// this field.
+	BatchResponses [][]byte
+}
+
 // combine implements the combinable interface.
 func (sr *ReverseScanResponse) combine(c combinable) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
-		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponse)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
