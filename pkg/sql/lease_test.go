@@ -1926,7 +1926,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 
 	// Assume server shuts down here and a new instance of the server starts up.
 	// All leases created prior to this time are declared orphaned.
-	now := timeutil.Now()
+	now := timeutil.Now().UnixNano()
 
 	// Acquire a lease on "after" by name after server startup.
 	afterTable, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "after")
