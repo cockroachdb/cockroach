@@ -226,12 +226,45 @@ var pgCatalog = virtualSchema{
 	validWithNoDatabaseContext: false,
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-am.html.
+// The catalog pg_am stores information about relation access methods.
+// It's important to note that this table changed drastically between Postgres
+// versions 9.5 and 9.6. We currently support both versions of this table.
+// See: https://www.postgresql.org/docs/9.5/static/catalog-pg-am.html and
+// https://www.postgresql.org/docs/9.6/static/catalog-pg-am.html.
 var pgCatalogAmTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_am (
 	oid OID,
 	amname NAME,
+	amstrategies INT,
+	amsupport INT,
+	amcanorder BOOL,
+	amcanorderbyop BOOL,
+	amcanbackward BOOL,
+	amcanunique BOOL,
+	amcanmulticol BOOL,
+	amoptionalkey BOOL,
+	amsearcharray BOOL,
+	amsearchnulls BOOL,
+	amstorage BOOL,
+	amclusterable BOOL,
+	ampredlocks BOOL,
+	amkeytype OID,
+	aminsert OID,
+	ambeginscan OID,
+	amgettuple OID,
+	amgetbitmap OID,
+	amrescan OID,
+	amendscan OID,
+	ammarkpos OID,
+	amrestrpos OID,
+	ambuild OID,
+	ambuildempty OID,
+	ambulkdelete OID,
+	amvacuumcleanup OID,
+	amcanreturn OID,
+	amcostestimate OID,
+	amoptions OID,
 	amhandler OID,
 	amtype CHAR
 )`,
@@ -239,10 +272,39 @@ CREATE TABLE pg_catalog.pg_am (
 		h := makeOidHasher()
 		h.writeStr(cockroachIndexEncoding)
 		return addRow(
-			h.getOid(),
-			tree.NewDName(cockroachIndexEncoding),
-			tree.DNull,
-			tree.NewDString("i"),
+			h.getOid(),                            // oid - all versions
+			tree.NewDName(cockroachIndexEncoding), // amname - all versions
+			zeroVal,              // amstrategies - < v9.6
+			zeroVal,              // amsupport - < v9.6
+			tree.DBoolTrue,       // amcanorder - < v9.6
+			tree.DBoolFalse,      // amcanorderbyop - < v9.6
+			tree.DBoolTrue,       // amcanbackward - < v9.6
+			tree.DBoolTrue,       // amcanunique - < v9.6
+			tree.DBoolTrue,       // amcanmulticol - < v9.6
+			tree.DBoolTrue,       // amoptionalkey - < v9.6
+			tree.DBoolTrue,       // amsearcharray - < v9.6
+			tree.DBoolTrue,       // amsearchnulls - < v9.6
+			tree.DBoolFalse,      // amstorage - < v9.6
+			tree.DBoolFalse,      // amclusterable - < v9.6
+			tree.DBoolFalse,      // ampredlocks - < v9.6
+			oidZero,              // amkeytype - < v9.6
+			tree.DNull,           // aminsert - < v9.6
+			tree.DNull,           // ambeginscan - < v9.6
+			oidZero,              // amgettuple - < v9.6
+			oidZero,              // amgetbitmap - < v9.6
+			tree.DNull,           // amrescan - < v9.6
+			tree.DNull,           // amendscan - < v9.6
+			tree.DNull,           // ammarkpos - < v9.6
+			tree.DNull,           // amrestrpos - < v9.6
+			tree.DNull,           // ambuild - < v9.6
+			tree.DNull,           // ambuildempty - < v9.6
+			tree.DNull,           // ambulkdelete - < v9.6
+			tree.DNull,           // amvacuumcleanup - < v9.6
+			tree.DNull,           // amcanreturn - < v9.6
+			tree.DNull,           // amcostestimate - < v9.6
+			tree.DNull,           // amoptions - < v9.6
+			tree.DNull,           // amhandler - > v9.6
+			tree.NewDString("i"), // amtype - > v9.6
 		)
 	},
 }

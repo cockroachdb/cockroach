@@ -257,7 +257,7 @@ sort                                       ·            ·
                      │    └── filter       ·            ·
                      │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │         └── values  ·            ·
-                     │                     size         20 columns, 929 rows
+                     │                     size         20 columns, 958 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
