@@ -96,6 +96,29 @@ func TestTrackerDoubleRelease(t *testing.T) {
 	}
 }
 
+func TestTrackerReleaseZero(t *testing.T) {
+	ctx := context.Background()
+	tracker := NewTracker()
+	trackedTs1, release1 := tracker.Track(ctx)
+	trackedTs2, release2 := tracker.Track(ctx)
+	release2(ctx, 2, 0)
+	leftTs, _ := tracker.Close(trackedTs2)
+	leftTs.Logical += 2
+	release1(ctx, 1, 0)
+	closedTs, mlais := tracker.Close(leftTs)
+	if closedTs != trackedTs1 {
+		t.Fatalf("expected to have closed %v, got %v %v", trackedTs1, closedTs, mlais)
+	} else if mlai1, found := mlais[1]; !found {
+		t.Fatalf("expected to find mlai for range 1")
+	} else if mlai1 != 0 {
+		t.Fatalf("expected to find zero mlai for range 1, got %v", mlai1)
+	} else if mlai2, found := mlais[2]; !found {
+		t.Fatalf("expected to find mlai for range 2")
+	} else if mlai2 != 0 {
+		t.Fatalf("expected to find zero mlai for range 2, got %v", mlai2)
+	}
+}
+
 type modelClient struct {
 	lai map[roachpb.RangeID]*int64 // read-only map, values accessed atomically
 	mu  struct {
