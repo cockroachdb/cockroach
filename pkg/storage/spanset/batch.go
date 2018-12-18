@@ -171,12 +171,12 @@ func (s *Iterator) FindSplitKey(
 
 // MVCCGet is part of the engine.Iterator interface.
 func (s *Iterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent, tombstones bool,
-) (*roachpb.Value, []roachpb.Intent, error) {
+	key roachpb.Key, timestamp hlc.Timestamp, opts engine.MVCCGetOptions,
+) (*roachpb.Value, *roachpb.Intent, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key}); err != nil {
 		return nil, nil, err
 	}
-	return s.i.MVCCGet(key, timestamp, txn, consistent, tombstones)
+	return s.i.MVCCGet(key, timestamp, opts)
 }
 
 // MVCCScan is part of the engine.Iterator interface.

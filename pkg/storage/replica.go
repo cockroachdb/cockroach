@@ -1920,7 +1920,8 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+		engine.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -1938,7 +1939,8 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
+		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+			engine.MVCCGetOptions{})
 		if err != nil {
 			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
 			return hlc.Timestamp{}, err
@@ -2771,16 +2773,13 @@ func (r *Replica) limitTxnMaxTimestamp(
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intents, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
-		false /* consistent */, nil /* txn */)
+	_, intent, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+		engine.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return err
-	} else if len(intents) == 0 {
+	} else if intent == nil {
 		return nil
-	} else if len(intents) > 1 {
-		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
 	}
-	intent := intents[0]
 	val, _, err := engine.MVCCGetAsTxn(
 		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
 	if err != nil {

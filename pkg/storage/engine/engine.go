@@ -102,15 +102,14 @@ type Iterator interface {
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
-	// MVCCGet retrieves the value for the key at the specified timestamp. The
-	// value is returned in batch repr format with the key being present as the
-	// empty string. If an intent exists at the specified key, it will be
-	// returned in batch repr format in the separate intent return value.
-	// Specify true for tombstones to return a value if the key has been
-	// deleted (Value.RawBytes will be empty).
-	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
-		txn *roachpb.Transaction, consistent, tombstones bool,
-	) (*roachpb.Value, []roachpb.Intent, error)
+	// MVCCGet is the internal implementation of the family of package-level
+	// MVCCGet functions.
+	//
+	// There is little reason to use this function directly. Use the package-level
+	// MVCCGet, or one of its variants, instead.
+	MVCCGet(
+		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+	) (*roachpb.Value, *roachpb.Intent, error)
 	// MVCCScan is the internal implementation of the family of package-level
 	// MVCCScan functions. The notable difference is that key/value pairs are
 	// returned raw, as a buffer of varint-prefixed slices, alternating from key

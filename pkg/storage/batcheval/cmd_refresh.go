@@ -45,9 +45,10 @@ func Refresh(
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
-	val, intents, err := engine.MVCCGetWithTombstone(
-		ctx, batch, args.Key, h.Txn.Timestamp, false /* consistent */, nil, /* txn */
-	)
+	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Txn.Timestamp, engine.MVCCGetOptions{
+		Inconsistent: true,
+		Tombstones:   true,
+	})
 
 	if err != nil {
 		return result.Result{}, err
@@ -57,16 +58,11 @@ func Refresh(
 		}
 	}
 
-	// Now, check intents slice for any which were written earlier than
-	// the command's timestamp, not owned by this transaction.
-	for _, i := range intents {
-		// Ignore our own intents.
-		if i.Txn.ID == h.Txn.ID {
-			continue
-		}
-		// Return an error if an intent was written to the span.
+	// Now, check if the intent was written earlier than the command's timestamp
+	// and was not owned by this transaction.
+	if intent != nil && intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			i.Span.Key, i.Txn.Timestamp)
+			intent.Span.Key, intent.Txn.Timestamp)
 	}
 
 	return result.Result{}, nil

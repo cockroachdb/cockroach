@@ -266,7 +266,8 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(repl.Desc().StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key,
+		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatalf("range descriptor key %s was not found", key)
@@ -278,7 +279,8 @@ func TestReplicateRange(t *testing.T) {
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); err != nil {
+			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(),
+				mtc.stores[0].Clock().Now(), &metaDesc, engine.MVCCGetOptions{}); err != nil {
 				return err
 			} else if !ok {
 				return errors.Errorf("failed to resolve %s", key.AsRawKey())
@@ -1643,7 +1645,8 @@ func TestProgressWithDownNode(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			values := []int64{}
 			for _, eng := range mtc.engines {
-				val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
+				val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(),
+					engine.MVCCGetOptions{})
 				if err != nil {
 					return err
 				}
@@ -1790,7 +1793,8 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		return func() error {
 			values := make([]int64, len(mtc.engines))
 			for i, eng := range mtc.engines {
-				val, _, err := engine.MVCCGet(context.Background(), eng, key, mtc.clock.Now(), true, nil)
+				val, _, err := engine.MVCCGet(context.Background(), eng, key, mtc.clock.Now(),
+					engine.MVCCGetOptions{})
 				if err != nil {
 					return err
 				}
@@ -2560,7 +2564,7 @@ func TestRaftRemoveRace(t *testing.T) {
 		var tombstone roachpb.RaftTombstone
 		if ok, err := engine.MVCCGetProto(
 			context.Background(), mtc.stores[2].Engine(), tombstoneKey,
-			hlc.Timestamp{}, true, nil, &tombstone,
+			hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		} else if ok {
@@ -3538,7 +3542,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	var desc roachpb.RangeDescriptor
 	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatal("expected range descriptor to be present")
@@ -3570,7 +3574,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	// And the data should no longer be on disk.
 	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatalf("expected range descriptor to be absent")

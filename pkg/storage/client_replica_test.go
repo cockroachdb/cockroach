@@ -81,7 +81,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
+			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(),
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -147,7 +148,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
 		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3, true, nil)
+	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3,
+		engine.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

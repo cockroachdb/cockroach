@@ -57,7 +57,9 @@ func HeartbeatTxn(
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
+	if ok, err := engine.MVCCGetProto(
+		ctx, batch, key, hlc.Timestamp{}, &txn, engine.MVCCGetOptions{},
+	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -100,16 +99,14 @@ func Subsume(
 	// Sanity check the caller has initiated a merge transaction by checking for
 	// a deletion intent on the local range descriptor.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intents, err := engine.MVCCGet(ctx, batch, descKey, cArgs.Header.Timestamp,
-		false /* consistent */, nil /* txn */)
+	_, intent, err := engine.MVCCGet(ctx, batch, descKey, cArgs.Header.Timestamp,
+		engine.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return result.Result{}, fmt.Errorf("fetching local range descriptor: %s", err)
-	} else if len(intents) == 0 {
+	} else if intent == nil {
 		return result.Result{}, errors.New("range missing intent on its local descriptor")
-	} else if len(intents) > 1 {
-		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
 	}
-	val, _, err := engine.MVCCGetAsTxn(ctx, batch, descKey, cArgs.Header.Timestamp, intents[0].Txn)
+	val, _, err := engine.MVCCGetAsTxn(ctx, batch, descKey, cArgs.Header.Timestamp, intent.Txn)
 	if err != nil {
 		return result.Result{}, fmt.Errorf("fetching local range descriptor as txn: %s", err)
 	} else if val != nil {

@@ -77,7 +77,7 @@ func BeginTransaction(
 	// Check whether the transaction record already exists. If it already
 	// exists, check its current status and react accordingly.
 	tmpTxn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &tmpTxn)
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, &tmpTxn, engine.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	}
