@@ -228,6 +228,9 @@ func TestReportUsage(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	ts := s.(*TestServer)
 
+	// make sure the test's generated activity is the only activity we measure.
+	telemetry.GetAndResetFeatureCounts(false)
+
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
 	}
@@ -546,6 +549,7 @@ func TestReportUsage(t *testing.T) {
 		"errorcodes." + pgerror.CodeFeatureNotSupportedError: 10,
 		"errorcodes." + pgerror.CodeDivisionByZeroError:      10,
 	}
+
 	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); expected != actual {
 		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
