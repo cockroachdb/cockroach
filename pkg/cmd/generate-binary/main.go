@@ -355,6 +355,7 @@ var inputs = map[string][]string{
 		`false`,
 		`null`,
 		`[[[[true, false, null]]]]`,
+		`["\u0001", "\u0041", "\u26a3", "\ud83e\udd37"]`,
 	},
 
 	"'%s'::uuid[]": {
