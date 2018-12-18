@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# LogicTest: local local-opt local-vec local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 # Grandparent table
 statement ok

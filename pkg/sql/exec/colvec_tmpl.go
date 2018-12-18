@@ -111,3 +111,17 @@ func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colT
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 }
+
+func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
+	if m.NullAt(colIdx) {
+		return "NULL"
+	}
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		return fmt.Sprintf("%v", m._TemplateType()[colIdx])
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
