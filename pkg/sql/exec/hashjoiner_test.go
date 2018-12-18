@@ -61,6 +61,39 @@ func TestHashJoinerInt64(t *testing.T) {
 			leftTypes:  []types.T{types.Int64},
 			rightTypes: []types.T{types.Int64},
 
+			leftTuples: tuples{
+				{0},
+				{1},
+				{2},
+				{3},
+				{4},
+			},
+			rightTuples: tuples{
+				{1},
+				{3},
+				{5},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			leftOuter:     true,
+			buildDistinct: true,
+
+			expectedTuples: tuples{
+				{1, 1},
+				{3, 3},
+				{0, nil},
+				{2, nil},
+				{4, nil},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
 			// Test right outer join.
 			leftTuples: tuples{
 				{0},

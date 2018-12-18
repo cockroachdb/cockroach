@@ -102,6 +102,8 @@ type Nulls interface {
 
 	// UnsetNulls sets the column to have 0 null values.
 	UnsetNulls()
+	// SetNulls sets the column to have only null values.
+	SetNulls()
 }
 
 var _ ColVec = &memColumn{}
@@ -168,6 +170,13 @@ func (m *memColumn) UnsetNulls() {
 	m.hasNulls = false
 	for i := range m.nulls {
 		m.nulls[i] = 0
+	}
+}
+
+func (m *memColumn) SetNulls() {
+	m.hasNulls = true
+	for i := range m.nulls {
+		m.nulls[i] = ^0
 	}
 }
 
