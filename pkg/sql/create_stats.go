@@ -132,6 +132,11 @@ func createStatsDefaultColumns(
 		}
 	}
 
+	// If there are still no columns, return an error.
+	if len(pn.columns) == 0 {
+		return nil, errors.New("CREATE STATISTICS called on a table with no visible columns")
+	}
+
 	return pn, nil
 }
 
