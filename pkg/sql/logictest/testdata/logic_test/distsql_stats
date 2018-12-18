@@ -253,3 +253,11 @@ WHERE statistics_name = '__auto__'
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
 {b}           10000      10              0
+
+# Regression test for #33195.
+statement ok
+CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
+
+# Ensure that creating stats on a table with no columns does not cause a panic.
+statement error pq: CREATE STATISTICS called on a table with no visible columns
+CREATE STATISTICS s FROM t
