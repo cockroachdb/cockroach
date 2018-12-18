@@ -232,6 +232,35 @@ var pgCatalogAmTable = virtualSchemaTable{
 CREATE TABLE pg_catalog.pg_am (
 	oid OID,
 	amname NAME,
+	amstrategies INT,
+	amsupport INT,
+	amcanorder BOOL,
+	amcanorderbyop BOOL,
+	amcanbackward BOOL,
+	amcanunique BOOL,
+	amcanmulticol BOOL,
+	amoptionalkey BOOL,
+	amsearcharray BOOL,
+	amsearchnulls BOOL,
+	amstorage BOOL,
+	amclusterable BOOL,
+	ampredlocks BOOL,
+	amkeytype OID,
+	aminsert OID,
+	ambeginscan OID,
+	amgettuple OID,
+	amgetbitmap OID,
+	amrescan OID,
+	amendscan OID,
+	ammarkpos OID,
+	amrestrpos OID,
+	ambuild OID,
+	ambuildempty OID,
+	ambulkdelete OID,
+	amvacuumcleanup OID,
+	amcanreturn OID,
+	amcostestimate OID,
+	amoptions OID,
 	amhandler OID,
 	amtype CHAR
 )`,
@@ -239,10 +268,39 @@ CREATE TABLE pg_catalog.pg_am (
 		h := makeOidHasher()
 		h.writeStr(cockroachIndexEncoding)
 		return addRow(
-			h.getOid(),
-			tree.NewDName(cockroachIndexEncoding),
-			tree.DNull,
-			tree.NewDString("i"),
+			h.getOid(),                            // oid
+			tree.NewDName(cockroachIndexEncoding), // amname
+			zeroVal,              // amstrategies
+			zeroVal,              // amsupport
+			tree.DBoolTrue,       // amcanorder
+			tree.DBoolTrue,       // amcanorderbyop
+			tree.DBoolTrue,       // amcanbackward
+			tree.DBoolTrue,       // amcanunique
+			tree.DBoolTrue,       // amcanmulticol
+			tree.DBoolTrue,       // amoptionalkey
+			tree.DBoolTrue,       // amsearcharray
+			tree.DBoolTrue,       // amsearchnulls
+			tree.DBoolTrue,       // amstorage
+			tree.DBoolFalse,      // amclusterable
+			tree.DBoolFalse,      // ampredlocks
+			oidZero,              // amkeytype
+			tree.DNull,           // aminsert
+			tree.DNull,           // ambeginscan
+			oidZero,              // amgettuple
+			oidZero,              // amgetbitmap
+			tree.DNull,           // amrescan
+			tree.DNull,           // amendscan
+			tree.DNull,           // ammarkpos
+			tree.DNull,           // amrestrpos
+			tree.DNull,           // ambuild
+			tree.DNull,           // ambuildempty
+			tree.DNull,           // ambulkdelete
+			tree.DNull,           // amvacuumcleanup
+			tree.DNull,           // amcanreturn
+			tree.DNull,           // amcostestimate
+			tree.DNull,           // amoptions
+			tree.DNull,           // amhandler
+			tree.NewDString("i"), // amtype
 		)
 	},
 }
