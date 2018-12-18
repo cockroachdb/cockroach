@@ -311,8 +311,7 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 }
 
 var staticSplits = []roachpb.RKey{
-	roachpb.RKey(keys.SystemPrefix),                 // end of meta records / start of system ranges
-	roachpb.RKey(keys.NodeLivenessPrefix),           // start of node liveness span
+	roachpb.RKey(keys.NodeLivenessPrefix),           // end of meta records / start of node liveness span
 	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
 	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span
 	roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), // end of timeseries span

@@ -363,8 +363,8 @@ func TestAdminAPINonTableStats(t *testing.T) {
 			NodeCount:    3,
 		},
 		InternalUseStats: &serverpb.TableStatsResponse{
-			RangeCount:   9,
-			ReplicaCount: 15,
+			RangeCount:   8,
+			ReplicaCount: 12,
 			NodeCount:    3,
 		},
 	}
