@@ -492,12 +492,12 @@ t3       c        text     1661428263    en-US
 
 ## pg_catalog.pg_am
 
-query OTOT colnames
+query OTIIBBBBBBBBBBBOOOOOOOOOOOOOOOOOT colnames
 SELECT *
 FROM pg_catalog.pg_am
 ----
-oid         amname  amhandler  amtype
-2631952481  prefix  NULL       i
+oid         amname  amstrategies  amsupport  amcanorder  amcanorderbyop  amcanbackward  amcanunique  amcanmulticol  amoptionalkey  amsearcharray  amsearchnulls  amstorage  amclusterable  ampredlocks  amkeytype  aminsert  ambeginscan  amgettuple  amgetbitmap  amrescan  amendscan  ammarkpos  amrestrpos  ambuild  ambuildempty  ambulkdelete  amvacuumcleanup  amcanreturn  amcostestimate  amoptions  amhandler  amtype
+2631952481  prefix  0             0          true        false           true           true         true           true           true           true           false      false          false        0          NULL      NULL         0           0            NULL      NULL       NULL       NULL        NULL     NULL          NULL          NULL             NULL         NULL            NULL       NULL       i
 
 ## pg_catalog.pg_attrdef
 
