@@ -72,11 +72,15 @@ func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrap
 // populateMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 	meta.CommandCount = s.commandCount
+	meta.Txn.Sequence = s.seqNumCounter
 }
 
 // augmentMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	s.commandCount += meta.CommandCount
+	if meta.Txn.Sequence > s.seqNumCounter {
+		s.seqNumCounter = meta.Txn.Sequence
+	}
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.
