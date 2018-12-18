@@ -15,9 +15,9 @@
 package tpcc
 
 import (
+	gosql "database/sql"
 	"fmt"
 
-	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -157,7 +157,7 @@ const (
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
 
-func scatterRanges(db *pgx.ConnPool) {
+func scatterRanges(db *gosql.DB) error {
 	tables := []string{
 		`customer`,
 		`district`,
@@ -180,7 +180,5 @@ func scatterRanges(db *pgx.ConnPool) {
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		panic(err)
-	}
+	return g.Wait()
 }
