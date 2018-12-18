@@ -74,6 +74,8 @@ func main() {
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
 
+	var listBench bool
+
 	var listCmd = &cobra.Command{
 		Use:   "list [tests]",
 		Short: "list tests matching the patterns",
@@ -82,7 +84,17 @@ func main() {
 If no pattern is passed, all tests are matched.
 Use --bench to list benchmarks instead of tests.
 
-Example: roachtest list acceptance copy/bank/.*false
+Each test has a set of tags. The tags are used to skip tests which don't match
+the tag filter. The tag filter is specified by specifying a pattern with the
+"tag:" prefix. The default tag filter is "tag:default" which matches any test
+that has the "default" tag. Note that tests are selected based on their name,
+and skipped based on their tag.
+
+Examples:
+
+   roachtest list acceptance copy/bank/.*false
+   roachtest list tag:acceptance
+   roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := newRegistry()
@@ -115,7 +127,8 @@ Example: roachtest list acceptance copy/bank/.*false
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
 roachtest run takes a list of regex patterns and runs all the matching tests.
-If no pattern is given, all tests are run.
+If no pattern is given, all tests are run. See "help list" for more details on
+the test tags.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if count <= 0 {

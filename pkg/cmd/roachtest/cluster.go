@@ -60,8 +60,6 @@ var (
 	clusterWipe bool
 	zonesF      string
 	teamCity    bool
-	// For the "list" command: list benchmarks instead of tests.
-	listBench bool
 )
 
 type encryptValue string

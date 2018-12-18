@@ -34,6 +34,38 @@ import (
 
 const defaultParallelism = 10
 
+func TestMatchOrSkip(t *testing.T) {
+	testCases := []struct {
+		filter       []string
+		name         string
+		tags         []string
+		expected     bool
+		expectedSkip string
+	}{
+		{nil, "foo", nil, true, ""},
+		{nil, "foo", []string{"bar"}, true, ""},
+		{[]string{"tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"tag:b"}, "foo", nil, true, "[tag:b] does not match [default]"},
+		{[]string{"tag:default"}, "foo", nil, true, ""},
+		{[]string{"tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+		{[]string{"f"}, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
+		{[]string{"f"}, "bar", []string{"bar"}, false, ""},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			f := newFilter(c.filter)
+			spec := &testSpec{Name: c.name, Tags: c.tags}
+			if value := spec.matchOrSkip(f); c.expected != value {
+				t.Fatalf("expected %t, but found %t", c.expected, value)
+			} else if value && c.expectedSkip != spec.Skip {
+				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
+			}
+		})
+	}
+}
+
 func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
@@ -56,9 +88,9 @@ func TestRegistryRun(t *testing.T) {
 		{nil, 1},
 		{[]string{"pass"}, 0},
 		{[]string{"fail"}, 1},
-		{[]string{"fail-unstable"}, 0},
 		{[]string{"pass|fail"}, 1},
 		{[]string{"pass", "fail"}, 1},
+		{[]string{"notests"}, 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -212,6 +244,26 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 	out := buf.String()
 	if !failedRE.MatchString(out) {
 		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunNoTests(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^warning: no tests to run \[notest\]\nFAIL$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name: "some-test",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+
+	r.Run([]string{"notest"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"warning: no tests to run\" message:\n%s", out)
 	}
 }
 
