@@ -166,7 +166,9 @@ func registerKVGracefulDraining(r *registry) {
 		Name:  "kv/gracefuldraining/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			var useHAProxy bool
 			if !c.isLocal() {
+				useHAProxy = true
 				c.RemountNoBarrier(ctx)
 			}
 
@@ -175,14 +177,25 @@ func registerKVGracefulDraining(r *registry) {
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 			c.Start(ctx, t, c.Range(1, nodes))
 
+			if useHAProxy {
+				haProxyNode := c.Node(nodes + 1)
+				t.Status("installing haproxy")
+				c.Install(ctx, haProxyNode, "haproxy")
+				c.Put(ctx, cockroach, "./cockroach", haProxyNode)
+				c.Run(ctx, haProxyNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
+				c.Run(ctx, haProxyNode, "haproxy -f haproxy.cfg -D")
+			}
+
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
+			t.Status("waiting for full replication")
 			waitForFullReplication(t, db)
 
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
+			t.Status("splitting ranges")
 			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
@@ -191,10 +204,16 @@ func registerKVGracefulDraining(r *registry) {
 			// Run kv for 5 minutes, during which we can gracefully kill nodes and
 			// determine whether doing so affects the cluster-wide qps.
 			const expectedQPS = 1000
+			var loadNodes nodeListOption
+			if useHAProxy {
+				loadNodes = c.Node(nodes + 1)
+			} else {
+				loadNodes = c.Range(1, nodes-1)
+			}
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./workload run kv --duration=5m --read-percent=0 --tolerate-errors --max-rate=%d {pgurl:1-%d}",
-					expectedQPS, nodes-1)
+					"./workload run kv --duration=5m --read-percent=0 --tolerate-errors --max-rate=%d {pgurl%s}",
+					expectedQPS, loadNodes)
 				t.WorkerStatus(cmd)
 				defer t.WorkerStatus()
 				return c.RunE(ctx, c.Node(nodes+1), cmd)
@@ -222,11 +241,13 @@ func registerKVGracefulDraining(r *registry) {
 			})
 
 			// Let the test run for nearly the entire duration of the kv command.
+			t.Status("running workload while periodically draining a node")
 			runDuration := 4*time.Minute + 30*time.Second
 			time.Sleep(runDuration)
 
 			// Check that the QPS has been at the expected max rate for the entire
 			// test duration, even as one of the nodes was being stopped and started.
+			t.Status("checking qps timeseries data")
 			adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
 			url := "http://" + adminURLs[0] + "/ts/query"
 			now := timeutil.Now()
@@ -270,6 +291,7 @@ func registerKVGracefulDraining(r *registry) {
 				}
 			}
 
+			t.Status("waiting for monitor workers to complete")
 			m.Wait()
 		},
 	})
