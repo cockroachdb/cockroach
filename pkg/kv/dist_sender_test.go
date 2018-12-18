@@ -2428,5 +2428,154 @@ func TestErrorIndexAlignment(t *testing.T) {
 			}
 		})
 	}
+}
 
+// TestMixedSuccessErrorWrapped tests that an internal MixedSuccessError
+// seen by a caller of Send() cannot wrap another MixedSuccessError.
+func TestMixedSuccessErrorWrapped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	// Fill MockRangeDescriptorDB with three descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor3 = roachpb.RangeDescriptor{
+		RangeID:  4,
+		StartKey: roachpb.RKey("c"),
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+		descriptor3,
+	)
+
+	reqNum := 0
+
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		reply := ba.CreateReply()
+		reqNum++
+		// Return an error on the third batch request.
+		if reqNum == 3 {
+			// The relative index is always 1 since
+			// we return an error for the second
+			// request of the 3rd batch.
+			index := &roachpb.ErrPosition{Index: 1}
+
+			// This will be the error that will be wrapped
+			// within a MixedSuccessError. Make this error itself a
+			// MixedSuccessError to test if it escapes the dist-sender.
+			// Set the wrapped index and the MixedSuccessError index to the
+			// same value because that's what the code does.
+			wrapped := roachpb.NewError(errors.Errorf("dummy error"))
+			wrapped.Index = index
+			reply.Error = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: wrapped})
+			reply.Error.Index = index
+		}
+		return reply, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(cfg, g)
+
+	// Create a batch request with 3 requests that will trigger a
+	// MixedSuccessError.
+	var ba roachpb.BatchRequest
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	// First batch has 1 request.
+	val := roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), val))
+	// Second batch has 2 requests.
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("b"), val))
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("bb"), val))
+	// Third batch has 2 request.
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("c"), val))
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("cc"), val))
+
+	_, pErr := ds.Send(context.Background(), ba)
+	if pErr == nil {
+		t.Fatalf("expected an error to be returned from distSender")
+	}
+	mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
+	if !ok {
+		t.Fatal("expected mixed success error")
+	}
+
+	wrapped := mse.Wrapped
+
+	// The error wrapped is not a MixedSuccessError and is the original
+	// wrapped error.
+	if _, ok := wrapped.GetDetail().(*roachpb.MixedSuccessError); ok {
+		t.Fatal("found another mixed success error")
+	}
+	if wrapped.Message != "dummy error" {
+		t.Fatalf("err = %s", wrapped.Message)
+	}
+
+	// The index is correctly set.
+	if wrapped.Index == nil {
+		t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
+	}
+	if wrapped.Index.Index != 4 {
+		t.Errorf("expected error index to be %d, instead got %d", 3, wrapped.Index.Index)
+	}
 }
