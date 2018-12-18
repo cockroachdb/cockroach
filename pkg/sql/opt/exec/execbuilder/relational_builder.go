@@ -249,8 +249,9 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 	md := b.mem.Metadata()
 	resultCols := make(sqlbase.ResultColumns, len(cols))
 	for i, col := range cols {
-		resultCols[i].Name = md.ColumnLabel(col)
-		resultCols[i].Typ = md.ColumnType(col)
+		colMeta := md.ColumnMeta(col)
+		resultCols[i].Name = colMeta.Alias
+		resultCols[i].Typ = colMeta.Type
 	}
 	node, err := b.factory.ConstructValues(rows, resultCols)
 	if err != nil {
@@ -428,13 +429,13 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		}
 		res.outputCols.Set(int(item.Col), i)
 		exprs = append(exprs, expr)
-		colNames = append(colNames, md.ColumnLabel(item.Col))
+		colNames = append(colNames, md.ColumnMeta(item.Col).Alias)
 	}
 	prj.Passthrough.ForEach(func(i int) {
 		colID := opt.ColumnID(i)
 		res.outputCols.Set(i, len(exprs))
 		exprs = append(exprs, b.indexedVar(&ctx, md, colID))
-		colNames = append(colNames, md.ColumnLabel(colID))
+		colNames = append(colNames, md.ColumnMeta(colID).Alias)
 	})
 	reqOrdering := res.reqOrdering(prj)
 	res.root, err = b.factory.ConstructRender(input.root, exprs, colNames, reqOrdering)
@@ -845,7 +846,7 @@ func (b *Builder) buildRowNumber(rowNum *memo.RowNumberExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	colName := b.mem.Metadata().ColumnLabel(rowNum.ColID)
+	colName := b.mem.Metadata().ColumnMeta(rowNum.ColID).Alias
 
 	node, err := b.factory.ConstructOrdinality(input.root, colName)
 	if err != nil {
@@ -971,11 +972,11 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftEqCols := make([]exec.ColumnOrdinal, len(join.LeftEqCols))
 	rightEqCols := make([]exec.ColumnOrdinal, len(join.RightEqCols))
 	for i := range join.LeftEqCols {
-		leftEqCols[i] = exec.ColumnOrdinal(md.ColumnOrdinal(join.LeftEqCols[i]))
-		rightEqCols[i] = exec.ColumnOrdinal(md.ColumnOrdinal(join.RightEqCols[i]))
+		leftEqCols[i] = exec.ColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
+		rightEqCols[i] = exec.ColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
 	}
-	leftCols := md.IndexColumns(join.LeftTable, join.LeftIndex).Intersection(join.Cols)
-	rightCols := md.IndexColumns(join.RightTable, join.RightIndex).Intersection(join.Cols)
+	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex).Intersection(join.Cols)
+	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex).Intersection(join.Cols)
 	// Remove duplicate columns, if any.
 	rightCols.DifferenceWith(leftCols)
 
@@ -1075,10 +1076,8 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 		}
 
 		for _, col := range item.Cols {
-			zipCols = append(zipCols, sqlbase.ResultColumn{
-				Name: md.ColumnLabel(col),
-				Typ:  md.ColumnType(col),
-			})
+			colMeta := md.ColumnMeta(col)
+			zipCols = append(zipCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
 
 			ep.outputCols.Set(int(col), n)
 			n++
@@ -1233,7 +1232,7 @@ func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execP
 	colNames := make([]string, len(pres))
 	for i := range pres {
 		colList[i] = pres[i].ID
-		colNames[i] = pres[i].Label
+		colNames[i] = pres[i].Alias
 	}
 	// The ordering is not useful for a top-level projection (it is used by the
 	// distsql planner for internal nodes); we might not even be able to represent

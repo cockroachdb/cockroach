@@ -1154,5 +1154,5 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) types.T {
-	return c.md.ColumnType(c.columns[offset].ID())
+	return c.md.ColumnMeta(c.columns[offset].ID()).Type
 }

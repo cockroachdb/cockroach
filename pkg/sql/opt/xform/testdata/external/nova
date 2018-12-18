@@ -386,12 +386,12 @@ left-join (merge)
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  ├── sort
- │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+ │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
  │    ├── key: (25)
  │    ├── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
  │    ├── ordering: +28
- │    └── scan flavor_extra_specs
- │         ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+ │    └── scan flavor_extra_specs_1
+ │         ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
  │         ├── key: (25)
  │         └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
  └── filters (true)
@@ -458,12 +458,12 @@ sort
  ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
  ├── ordering: +7 opt(11) [provided: +7]
  └── right-join
-      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:34(int) key:35(string) value:36(string) flavor_extra_specs.flavor_id:37(int) flavor_extra_specs.created_at:38(timestamp) flavor_extra_specs.updated_at:39(timestamp)
+      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:34(int) key:35(string) value:36(string) flavor_extra_specs_1.flavor_id:37(int) flavor_extra_specs_1.created_at:38(timestamp) flavor_extra_specs_1.updated_at:39(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,34)
       ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
-      ├── scan flavor_extra_specs
-      │    ├── columns: flavor_extra_specs.id:34(int!null) key:35(string!null) value:36(string) flavor_extra_specs.flavor_id:37(int!null) flavor_extra_specs.created_at:38(timestamp) flavor_extra_specs.updated_at:39(timestamp)
+      ├── scan flavor_extra_specs_1
+      │    ├── columns: flavor_extra_specs_1.id:34(int!null) key:35(string!null) value:36(string) flavor_extra_specs_1.flavor_id:37(int!null) flavor_extra_specs_1.created_at:38(timestamp) flavor_extra_specs_1.updated_at:39(timestamp)
       │    ├── key: (34)
       │    └── fd: (34)-->(35-39), (35,37)-->(34,36,38,39)
       ├── project
@@ -650,7 +650,7 @@ sort
       │         │    └── placeholder: $3 [type=int]
       │         └── placeholder: $4 [type=int]
       └── filters
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,37), constraints=(/1: (/NULL - ]; /37: (/NULL - ]), fd=(1)==(37), (37)==(1)]
+           └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,37), constraints=(/1: (/NULL - ]; /37: (/NULL - ]), fd=(1)==(37), (37)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -719,21 +719,21 @@ sort
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  └── right-join
-      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       ├── select
-      │    ├── columns: instance_type_extra_specs.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int!null) instance_type_extra_specs.deleted:32(bool!null) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      │    ├── columns: instance_type_extra_specs_1.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int!null) instance_type_extra_specs_1.deleted:32(bool!null) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       │    ├── has-placeholder
       │    ├── key: (28)
       │    ├── fd: (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
-      │    ├── scan instance_type_extra_specs
-      │    │    ├── columns: instance_type_extra_specs.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int!null) instance_type_extra_specs.deleted:32(bool) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      │    ├── scan instance_type_extra_specs_1
+      │    │    ├── columns: instance_type_extra_specs_1.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int!null) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       │    │    ├── key: (28)
       │    │    └── fd: (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       │    └── filters
-      │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+      │         └── instance_type_extra_specs_1.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
       ├── project
       │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │    ├── side-effects, has-placeholder
@@ -849,7 +849,7 @@ sort
       │         │    └── placeholder: $5 [type=int]
       │         └── placeholder: $6 [type=int]
       └── filters
-           └── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
+           └── instance_type_extra_specs_1.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
 
 opt
 select instance_types.created_at as instance_types_created_at,
@@ -896,21 +896,21 @@ sort
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (17)-->(18-24), (18,20,21)~~>(17,19,22-24)
  ├── ordering: +7,+1
  └── right-join
-      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:17(int) key:18(string) value:19(string) instance_type_extra_specs.instance_type_id:20(int) instance_type_extra_specs.deleted:21(bool) instance_type_extra_specs.deleted_at:22(timestamp) instance_type_extra_specs.created_at:23(timestamp) instance_type_extra_specs.updated_at:24(timestamp)
+      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:17(int) key:18(string) value:19(string) instance_type_extra_specs_1.instance_type_id:20(int) instance_type_extra_specs_1.deleted:21(bool) instance_type_extra_specs_1.deleted_at:22(timestamp) instance_type_extra_specs_1.created_at:23(timestamp) instance_type_extra_specs_1.updated_at:24(timestamp)
       ├── has-placeholder
       ├── key: (1,17)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (17)-->(18-24), (18,20,21)~~>(17,19,22-24)
       ├── select
-      │    ├── columns: instance_type_extra_specs.id:17(int!null) key:18(string) value:19(string) instance_type_extra_specs.instance_type_id:20(int!null) instance_type_extra_specs.deleted:21(bool!null) instance_type_extra_specs.deleted_at:22(timestamp) instance_type_extra_specs.created_at:23(timestamp) instance_type_extra_specs.updated_at:24(timestamp)
+      │    ├── columns: instance_type_extra_specs_1.id:17(int!null) key:18(string) value:19(string) instance_type_extra_specs_1.instance_type_id:20(int!null) instance_type_extra_specs_1.deleted:21(bool!null) instance_type_extra_specs_1.deleted_at:22(timestamp) instance_type_extra_specs_1.created_at:23(timestamp) instance_type_extra_specs_1.updated_at:24(timestamp)
       │    ├── has-placeholder
       │    ├── key: (17)
       │    ├── fd: (17)-->(18-24), (18,20,21)~~>(17,19,22-24)
-      │    ├── scan instance_type_extra_specs
-      │    │    ├── columns: instance_type_extra_specs.id:17(int!null) key:18(string) value:19(string) instance_type_extra_specs.instance_type_id:20(int!null) instance_type_extra_specs.deleted:21(bool) instance_type_extra_specs.deleted_at:22(timestamp) instance_type_extra_specs.created_at:23(timestamp) instance_type_extra_specs.updated_at:24(timestamp)
+      │    ├── scan instance_type_extra_specs_1
+      │    │    ├── columns: instance_type_extra_specs_1.id:17(int!null) key:18(string) value:19(string) instance_type_extra_specs_1.instance_type_id:20(int!null) instance_type_extra_specs_1.deleted:21(bool) instance_type_extra_specs_1.deleted_at:22(timestamp) instance_type_extra_specs_1.created_at:23(timestamp) instance_type_extra_specs_1.updated_at:24(timestamp)
       │    │    ├── key: (17)
       │    │    └── fd: (17)-->(18-24), (18,20,21)~~>(17,19,22-24)
       │    └── filters
-      │         └── instance_type_extra_specs.deleted = $1 [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
+      │         └── instance_type_extra_specs_1.deleted = $1 [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
       ├── project
       │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │    ├── has-placeholder
@@ -1004,7 +1004,7 @@ sort
       │         └── filters
       │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,34)]
       └── filters
-           └── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
+           └── instance_type_extra_specs_1.instance_type_id = instance_types.id [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -1070,7 +1070,7 @@ left-join (lookup instance_type_extra_specs)
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool)
  │    ├── key columns: [1] = [31]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,28)
@@ -1181,7 +1181,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -1248,7 +1248,7 @@ left-join (lookup instance_type_extra_specs)
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool)
  │    ├── key columns: [1] = [31]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,28)
@@ -1360,7 +1360,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -1416,8 +1416,8 @@ right-join
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- ├── scan flavor_extra_specs
- │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+ ├── scan flavor_extra_specs_1
+ │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
  │    ├── key: (25)
  │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── project
@@ -1520,7 +1520,7 @@ right-join
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters
-      └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+      └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
@@ -1575,8 +1575,8 @@ right-join
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- ├── scan flavor_extra_specs
- │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+ ├── scan flavor_extra_specs_1
+ │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
  │    ├── key: (25)
  │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── project
@@ -1679,7 +1679,7 @@ right-join
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters
-      └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+      └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
@@ -1740,12 +1740,12 @@ sort
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── right-join
-      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:25(int) key:26(string) value:27(string) flavor_extra_specs.flavor_id:28(int) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      ├── scan flavor_extra_specs
-      │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── scan flavor_extra_specs_1
+      │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       │    ├── key: (25)
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── project
@@ -1857,7 +1857,7 @@ sort
       │         │    └── placeholder: $5 [type=int]
       │         └── placeholder: $6 [type=int]
       └── filters
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+           └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -1925,21 +1925,21 @@ sort
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  └── right-join
-      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       ├── select
-      │    ├── columns: instance_type_extra_specs.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int!null) instance_type_extra_specs.deleted:32(bool!null) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      │    ├── columns: instance_type_extra_specs_1.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int!null) instance_type_extra_specs_1.deleted:32(bool!null) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       │    ├── has-placeholder
       │    ├── key: (28)
       │    ├── fd: (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
-      │    ├── scan instance_type_extra_specs
-      │    │    ├── columns: instance_type_extra_specs.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs.instance_type_id:31(int!null) instance_type_extra_specs.deleted:32(bool) instance_type_extra_specs.deleted_at:33(timestamp) instance_type_extra_specs.created_at:34(timestamp) instance_type_extra_specs.updated_at:35(timestamp)
+      │    ├── scan instance_type_extra_specs_1
+      │    │    ├── columns: instance_type_extra_specs_1.id:28(int!null) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int!null) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
       │    │    ├── key: (28)
       │    │    └── fd: (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       │    └── filters
-      │         └── instance_type_extra_specs.deleted = $6 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+      │         └── instance_type_extra_specs_1.deleted = $6 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
       ├── project
       │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │    ├── side-effects, has-placeholder
@@ -2054,7 +2054,7 @@ sort
       │         │    └── placeholder: $4 [type=int]
       │         └── placeholder: $5 [type=int]
       └── filters
-           └── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
+           └── instance_type_extra_specs_1.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -2120,7 +2120,7 @@ left-join (lookup instance_type_extra_specs)
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool)
  │    ├── key columns: [1] = [31]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,28)
@@ -2231,7 +2231,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -2272,12 +2272,12 @@ sort
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (16)-->(17-21), (17,19)-->(16,18,20,21)
  ├── ordering: +7
  └── right-join
-      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:16(int) key:17(string) value:18(string) flavor_extra_specs.flavor_id:19(int) flavor_extra_specs.created_at:20(timestamp) flavor_extra_specs.updated_at:21(timestamp)
+      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:16(int) key:17(string) value:18(string) flavor_extra_specs_1.flavor_id:19(int) flavor_extra_specs_1.created_at:20(timestamp) flavor_extra_specs_1.updated_at:21(timestamp)
       ├── has-placeholder
       ├── key: (1,16)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (16)-->(17-21), (17,19)-->(16,18,20,21)
-      ├── scan flavor_extra_specs
-      │    ├── columns: flavor_extra_specs.id:16(int!null) key:17(string!null) value:18(string) flavor_extra_specs.flavor_id:19(int!null) flavor_extra_specs.created_at:20(timestamp) flavor_extra_specs.updated_at:21(timestamp)
+      ├── scan flavor_extra_specs_1
+      │    ├── columns: flavor_extra_specs_1.id:16(int!null) key:17(string!null) value:18(string) flavor_extra_specs_1.flavor_id:19(int!null) flavor_extra_specs_1.created_at:20(timestamp) flavor_extra_specs_1.updated_at:21(timestamp)
       │    ├── key: (16)
       │    └── fd: (16)-->(17-21), (17,19)-->(16,18,20,21)
       ├── project
@@ -2360,7 +2360,7 @@ sort
       │         └── filters
       │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,29)]
       └── filters
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
+           └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -2432,7 +2432,7 @@ left-join (lookup instance_type_extra_specs)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool)
  │    ├── key columns: [1] = [31]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,28)
@@ -2555,7 +2555,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $7 [type=int]
  │    │         └── placeholder: $8 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $9 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $9 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -2614,12 +2614,12 @@ sort
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── right-join
-      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:25(int) key:26(string) value:27(string) flavor_extra_specs.flavor_id:28(int) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      ├── scan flavor_extra_specs
-      │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── scan flavor_extra_specs_1
+      │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       │    ├── key: (25)
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── project
@@ -2723,7 +2723,7 @@ sort
       │         │    └── placeholder: $2 [type=int]
       │         └── placeholder: $3 [type=int]
       └── filters
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+           └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
 
 opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
@@ -2800,7 +2800,7 @@ left-join (lookup instance_type_extra_specs)
  ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40-46), (40,42,43)~~>(39,41,44-46)
  ├── ordering: +7,+1 opt(11) [provided: +7,+1]
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:39(int) key:40(string) instance_type_extra_specs.instance_type_id:42(int) instance_type_extra_specs.deleted:43(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:39(int) key:40(string) instance_type_extra_specs_1.instance_type_id:42(int) instance_type_extra_specs_1.deleted:43(bool)
  │    ├── key columns: [1] = [42]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,39)
@@ -3005,7 +3005,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $7 [type=int]
  │    │         └── placeholder: $8 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $9 [type=bool, outer=(43), constraints=(/43: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $9 [type=bool, outer=(43), constraints=(/43: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -3076,7 +3076,7 @@ left-join (lookup instance_type_extra_specs)
  ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +13,+1
  ├── left-join (lookup instance_type_extra_specs@secondary)
- │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs.id:28(int) key:29(string) instance_type_extra_specs.instance_type_id:31(int) instance_type_extra_specs.deleted:32(bool)
+ │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:28(int) key:29(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool)
  │    ├── key columns: [1] = [31]
  │    ├── side-effects, has-placeholder
  │    ├── key: (1,28)
@@ -3199,7 +3199,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
  │    └── filters
- │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
+ │         └── instance_type_extra_specs_1.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── filters (true)
 
 opt
@@ -3255,8 +3255,8 @@ right-join
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- ├── scan flavor_extra_specs
- │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+ ├── scan flavor_extra_specs_1
+ │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
  │    ├── key: (25)
  │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── project
@@ -3360,7 +3360,7 @@ right-join
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters
-      └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+      └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
@@ -3419,12 +3419,12 @@ sort
  ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── right-join
-      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs.id:25(int) key:26(string) value:27(string) flavor_extra_specs.flavor_id:28(int) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      ├── scan flavor_extra_specs
-      │    ├── columns: flavor_extra_specs.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs.flavor_id:28(int!null) flavor_extra_specs.created_at:29(timestamp) flavor_extra_specs.updated_at:30(timestamp)
+      ├── scan flavor_extra_specs_1
+      │    ├── columns: flavor_extra_specs_1.id:25(int!null) key:26(string!null) value:27(string) flavor_extra_specs_1.flavor_id:28(int!null) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       │    ├── key: (25)
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── project
@@ -3522,4 +3522,4 @@ sort
       │         │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
       │         └── placeholder: $2 [type=int]
       └── filters
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
+           └── flavor_extra_specs_1.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]

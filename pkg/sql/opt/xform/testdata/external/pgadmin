@@ -125,7 +125,7 @@ project
  ├── inner-join-apply
  │    ├── columns: datname:2(name) pid:3(int) usesysid:4(oid) username:5(name) application_name:6(string) client_addr:7(inet) client_hostname:8(string) client_port:9(int) backend_start:10(timestamptz) xact_start:11(timestamptz) query_start:12(timestamptz) query:19(string) "?column?":36(bool)
  │    ├── fd: ()-->(36)
- │    ├── scan pg_stat_activity
+ │    ├── scan sa
  │    │    └── columns: datname:2(name) pid:3(int) usesysid:4(oid) username:5(name) application_name:6(string) client_addr:7(inet) client_hostname:8(string) client_port:9(int) backend_start:10(timestamptz) xact_start:11(timestamptz) query_start:12(timestamptz) query:19(string)
  │    ├── max1-row
  │    │    ├── columns: "?column?":36(bool)
@@ -138,7 +138,7 @@ project
  │    │         ├── outer: (4)
  │    │         ├── select
  │    │         │    ├── columns: oid:21(oid) rolname:22(name!null) rolsuper:23(bool)
- │    │         │    ├── scan pg_roles
+ │    │         │    ├── scan r
  │    │         │    │    └── columns: oid:21(oid) rolname:22(name) rolsuper:23(bool)
  │    │         │    └── filters
  │    │         │         └── rolname = current_user() [type=bool, outer=(22), constraints=(/22: (/NULL - ])]

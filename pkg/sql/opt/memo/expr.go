@@ -286,10 +286,8 @@ func (sf *ScanFlags) Empty() bool {
 // For the UpdateCols/FetchCols case, use the corresponding UpdateCol if it is
 // non-zero (meaning that column will be updated), else use the FetchCol (which
 // holds the existing value of the column).
-func (m *MutationPrivate) MapToInputIDs(
-	md *opt.Metadata, tabColID opt.ColumnID,
-) (a, b opt.ColumnID) {
-	ord := md.ColumnOrdinal(tabColID)
+func (m *MutationPrivate) MapToInputIDs(tabColID opt.ColumnID) (a, b opt.ColumnID) {
+	ord := m.Table.ColumnOrdinal(tabColID)
 	if m.FetchCols != nil {
 		if m.UpdateCols != nil && m.UpdateCols[ord] != 0 {
 			a = m.UpdateCols[ord]
@@ -310,10 +308,10 @@ func (m *MutationPrivate) MapToInputIDs(
 // MapToInputCols maps the given set of table columns to a corresponding set of
 // input columns using the MapToInputID function. This method should not be
 // called for Upsert ops, since the mapping is ambiguous.
-func (m *MutationPrivate) MapToInputCols(md *opt.Metadata, tabCols opt.ColSet) opt.ColSet {
+func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
 	tabCols.ForEach(func(t int) {
-		a, b := m.MapToInputIDs(md, opt.ColumnID(t))
+		a, b := m.MapToInputIDs(opt.ColumnID(t))
 		if b != 0 {
 			panic("MapToInputCols cannot be called for Upsert case")
 		}
@@ -328,7 +326,7 @@ func (m *MutationPrivate) MapToInputCols(md *opt.Metadata, tabCols opt.ColSet) o
 func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
 	for i, n := 0, md.Table(m.Table).ColumnCount(); i < n; i++ {
 		t := m.Table.ColumnID(i)
-		a, b := m.MapToInputIDs(md, t)
+		a, b := m.MapToInputIDs(t)
 		if b != 0 {
 			panic("AddEquivTableCols cannot be called for Upsert case")
 		}

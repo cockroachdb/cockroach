@@ -264,7 +264,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := b.mem.Metadata().ColumnType(opt.ColumnID(i))
+				typ := b.mem.Metadata().ColumnMeta(opt.ColumnID(i)).Type
 				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
 					composite = true
 					break
@@ -1006,7 +1006,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 		// Either one or two input columns can provide the source value for the
 		// mutation. If two are present, then both must be not-null in order to
 		// guarantee that the result will be not-null as well.
-		a, b := private.MapToInputIDs(md, tabColID)
+		a, b := private.MapToInputIDs(tabColID)
 		if inputProps.NotNullCols.Contains(int(a)) {
 			if b == 0 || inputProps.NotNullCols.Contains(int(b)) {
 				rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
@@ -1344,7 +1344,7 @@ func ensureInputPropsForIndex(
 	sb *statisticsBuilder,
 ) {
 	if relProps.OutputCols.Empty() {
-		relProps.OutputCols = md.IndexColumns(tabID, indexOrd)
+		relProps.OutputCols = md.TableMeta(tabID).IndexColumns(indexOrd)
 		relProps.OutputCols.IntersectionWith(outputCols)
 		relProps.NotNullCols = tableNotNullCols(md, tabID)
 		relProps.NotNullCols.IntersectionWith(relProps.OutputCols)

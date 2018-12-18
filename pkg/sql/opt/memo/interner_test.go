@@ -405,27 +405,27 @@ func TestInternerPhysProps(t *testing.T) {
 	var in interner
 
 	physProps1 := physical.Required{
-		Presentation: physical.Presentation{{Label: "c", ID: 1}},
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
 	physProps2 := physical.Required{
-		Presentation: physical.Presentation{{Label: "c", ID: 1}},
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
 	physProps3 := physical.Required{
-		Presentation: physical.Presentation{{Label: "d", ID: 1}},
+		Presentation: physical.Presentation{{Alias: "d", ID: 1}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
 	physProps4 := physical.Required{
-		Presentation: physical.Presentation{{Label: "d", ID: 2}},
+		Presentation: physical.Presentation{{Alias: "d", ID: 2}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
 	physProps5 := physical.Required{
-		Presentation: physical.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
+		Presentation: physical.Presentation{{Alias: "d", ID: 2}, {Alias: "e", ID: 3}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
 	}
 	physProps6 := physical.Required{
-		Presentation: physical.Presentation{{Label: "d", ID: 2}, {Label: "e", ID: 3}},
+		Presentation: physical.Presentation{{Alias: "d", ID: 2}, {Alias: "e", ID: 3}},
 		Ordering:     physical.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)"),
 	}
 

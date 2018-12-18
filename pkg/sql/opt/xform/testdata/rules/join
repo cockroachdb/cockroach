@@ -419,37 +419,37 @@ memo (optimized, ~9KB, required=[presentation: s:1,t:2,u:3,s:4,t:5,u:6])
  │    └── [presentation: s:1,t:2,u:3,s:4,t:5,u:6]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +4,+5,+6]" G5 inner-join,+1,+2,+3,+4,+5,+6)
  │         └── cost: 2140.04
- ├── G2: (scan stu) (scan stu@uts)
+ ├── G2: (scan l) (scan l@uts)
  │    ├── [ordering: +1,+2,+3]
- │    │    ├── best: (scan stu)
+ │    │    ├── best: (scan l)
  │    │    └── cost: 1060.01
  │    ├── [ordering: +3,+2,+1]
- │    │    ├── best: (scan stu@uts)
+ │    │    ├── best: (scan l@uts)
  │    │    └── cost: 1060.01
  │    └── []
- │         ├── best: (scan stu)
+ │         ├── best: (scan l)
  │         └── cost: 1060.01
- ├── G3: (scan stu) (scan stu@uts)
+ ├── G3: (scan r) (scan r@uts)
  │    ├── [ordering: +4,+5,+6]
- │    │    ├── best: (scan stu)
+ │    │    ├── best: (scan r)
  │    │    └── cost: 1060.01
  │    ├── [ordering: +6,+5,+4]
- │    │    ├── best: (scan stu@uts)
+ │    │    ├── best: (scan r@uts)
  │    │    └── cost: 1060.01
  │    └── []
- │         ├── best: (scan stu)
+ │         ├── best: (scan r)
  │         └── cost: 1060.01
  ├── G4: (filters G6 G7 G8)
  ├── G5: (filters)
  ├── G6: (eq G9 G10)
  ├── G7: (eq G11 G12)
  ├── G8: (eq G13 G14)
- ├── G9: (variable s)
- ├── G10: (variable s)
- ├── G11: (variable t)
- ├── G12: (variable t)
- ├── G13: (variable u)
- └── G14: (variable u)
+ ├── G9: (variable l.s)
+ ├── G10: (variable r.s)
+ ├── G11: (variable l.t)
+ ├── G12: (variable r.t)
+ ├── G13: (variable l.u)
+ └── G14: (variable r.u)
 
 exploretrace rule=GenerateMergeJoins
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
@@ -463,16 +463,16 @@ Source expression:
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    └── key: (1-3)
-   ├── scan stu
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    └── key: (4-6)
    └── filters
-        ├── s = s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-        ├── t = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
-        └── u = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+        ├── l.s = r.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── l.t = r.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── l.u = r.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
@@ -481,12 +481,12 @@ New expression 1 of 2:
    ├── right ordering: +4,+5,+6
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +1,+2,+3
-   ├── scan stu
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +4,+5,+6
    └── filters (true)
@@ -498,12 +498,12 @@ New expression 2 of 2:
    ├── right ordering: +6,+5,+4
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu@uts
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l@uts
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +3,+2,+1
-   ├── scan stu@uts
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r@uts
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +6,+5,+4
    └── filters (true)
@@ -516,16 +516,16 @@ Source expression:
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    └── key: (4-6)
-   ├── scan stu
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    └── key: (1-3)
    └── filters
-        ├── s = s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-        ├── t = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
-        └── u = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+        ├── l.s = r.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── l.t = r.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── l.u = r.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
@@ -534,12 +534,12 @@ New expression 1 of 2:
    ├── right ordering: +1,+2,+3
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +4,+5,+6
-   ├── scan stu
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +1,+2,+3
    └── filters (true)
@@ -551,12 +551,12 @@ New expression 2 of 2:
    ├── right ordering: +3,+2,+1
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
-   ├── scan stu@uts
-   │    ├── columns: s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── scan r@uts
+   │    ├── columns: r.s:4(int!null) r.t:5(int!null) r.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +6,+5,+4
-   ├── scan stu@uts
-   │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
+   ├── scan l@uts
+   │    ├── columns: l.s:1(int!null) l.t:2(int!null) l.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +3,+2,+1
    └── filters (true)
