@@ -60,6 +60,7 @@ template <bool reverse> class mvccScanner {
         timestamp_(timestamp),
         txn_id_(ToSlice(txn.id)),
         txn_epoch_(txn.epoch),
+        txn_sequence_(txn.sequence),
         txn_max_timestamp_(txn.max_timestamp),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
@@ -165,6 +166,28 @@ template <bool reverse> class mvccScanner {
     return results_;
   }
 
+  bool getFromIntentHistory(cockroach::storage::engine::enginepb::MVCCMetadata meta, int32_t seq) {
+    int32_t largestSeq = -1;
+    bool valFound = false;
+    rocksdb::Slice value;
+    for (auto &sequencedIntent: meta.intent_history()) {
+      int32_t intentSequence = sequencedIntent.sequence();
+      if ((intentSequence <= seq) && (intentSequence > largestSeq)) {
+        value = sequencedIntent.value();
+        largestSeq = intentSequence;
+        valFound = true;
+      }
+    }
+    if (valFound) {
+      // Don't include deleted versions (value.size() == 0), unless we've been
+      // instructed to include tombstones in the results.
+      if (value.size() > 0 || tombstones_) {
+        kvs_->Put(cur_raw_key_, value);
+      }
+    }
+    return valFound;
+  }
+
   bool uncertaintyError(DBTimestamp ts) {
     results_.uncertainty_timestamp = ts;
     kvs_->Clear();
@@ -264,15 +287,30 @@ template <bool reverse> class mvccScanner {
     }
 
     if (txn_epoch_ == meta_.txn().epoch()) {
-      // 8. We're reading our own txn's intent. Note that we read at
-      // the intent timestamp, not at our read timestamp as the intent
-      // timestamp may have been pushed forward by another
-      // transaction. Txn's always need to read their own writes.
-      return seekVersion(meta_timestamp, false);
+      if (txn_sequence_ >= meta_.txn().sequence()) {
+        // 8. We're reading our own txn's intent at a higher sequence.
+        // Note that we read at the intent timestamp, not at our read timestamp
+        // as the intent timestamp may have been pushed forward by another
+        // transaction. Txn's always need to read their own writes.
+        return seekVersion(meta_timestamp, false);
+      } else {
+        // 9. We're reading our own txn's intent at a lower sequence.
+        // This means the intent we're seeing was written after the read.
+        // So we try and read a value from the intent history that is
+        // appropriate instead. If no value is found still, read the value
+        // as though the intent was not present.
+        bool found = getFromIntentHistory(meta_, txn_sequence_);
+        if (!found) {
+          // We ignore the intent by insisting that the timestamp we're reading
+          // at is a historical timestamp < the intent timestamp.
+          return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+        }
+        return true;
+      }
     }
 
     if (txn_epoch_ < meta_.txn().epoch()) {
-      // 9. We're reading our own txn's intent but the current txn has
+      // 10. We're reading our own txn's intent but the current txn has
       // an earlier epoch than the intent. Return an error so that the
       // earlier incarnation of our transaction aborts (presumably
       // this is some operation that was retried).
@@ -280,7 +318,7 @@ template <bool reverse> class mvccScanner {
                                  txn_epoch_, meta_.txn().epoch()));
     }
 
-    // 10. We're reading our own txn's intent but the current txn has a
+    // 11. We're reading our own txn's intent but the current txn has a
     // later epoch than the intent. This can happen if the txn was
     // restarted and an earlier iteration wrote the value we're now
     // reading. In this case, we ignore the intent and read the
@@ -593,6 +631,7 @@ template <bool reverse> class mvccScanner {
   const DBTimestamp timestamp_;
   const rocksdb::Slice txn_id_;
   const uint32_t txn_epoch_;
+  int32_t txn_sequence_;
   const DBTimestamp txn_max_timestamp_;
   const bool inconsistent_;
   const bool tombstones_;
