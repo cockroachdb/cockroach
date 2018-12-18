@@ -727,3 +727,51 @@ INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.
 
 statement ok
 INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
+
+subtest regression_32834
+
+statement ok
+CREATE TABLE test_table (
+  id BIGINT PRIMARY KEY,
+  a BIGINT,
+  b BIGINT
+);
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 456), (123, 456)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  456
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 1)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  1
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 3)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  3
+
+statement ok
+DROP TABLE test_table;
