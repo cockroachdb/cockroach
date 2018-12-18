@@ -289,11 +289,11 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*3))
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
 }
 
 func registerSchemaChangeIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*10))
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
 }
 
 func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
@@ -308,8 +308,9 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 				During: func(ctx context.Context) error {
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
-						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
-						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
+						// TODO(vivek): Enable these once ADD INDEX performance has improved.
+						//	`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+						//	`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
 				},
 				Duration: length,
@@ -319,13 +320,14 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 }
 
 func runAndLogStmts(ctx context.Context, t *test, c *cluster, prefix string, stmts []string) error {
-	conn := c.Conn(ctx, 1)
+	db := c.Conn(ctx, 1)
+	defer db.Close()
 	c.l.Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()
 	for i, stmt := range stmts {
 		c.l.Printf("%s: running statement %d...\n", prefix, i+1)
 		before := timeutil.Now()
-		if _, err := conn.Exec(stmt); err != nil {
+		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 		c.l.Printf("%s: statement %d: %q took %v\n", prefix, i+1, stmt, timeutil.Since(before))
