@@ -415,7 +415,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 
 	case *VariableExpr:
 		// (x) is equivalent to (x = TRUE) if x is boolean.
-		if cb.md.ColumnType(t.Col).Equivalent(types.Bool) {
+		if cb.md.ColumnMeta(t.Col).Type.Equivalent(types.Bool) {
 			return cb.buildSingleColumnConstraintConst(t.Col, opt.EqOp, tree.DBoolTrue)
 		}
 		return unconstrained, false
@@ -423,7 +423,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 	case *NotExpr:
 		// (NOT x) is equivalent to (x = FALSE) if x is boolean.
 		if v, ok := t.Input.(*VariableExpr); ok {
-			if cb.md.ColumnType(v.Col).Equivalent(types.Bool) {
+			if cb.md.ColumnMeta(v.Col).Type.Equivalent(types.Bool) {
 				return cb.buildSingleColumnConstraintConst(v.Col, opt.EqOp, tree.DBoolFalse)
 			}
 		}
@@ -519,5 +519,5 @@ func (cb *constraintsBuilder) makeStringPrefixSpan(
 // mixed-type comparisons because if they become index constraints, we would
 // generate incorrect encodings (#4313).
 func (cb *constraintsBuilder) verifyType(col opt.ColumnID, typ types.T) bool {
-	return typ == types.Unknown || cb.md.ColumnType(col).Equivalent(typ)
+	return typ == types.Unknown || cb.md.ColumnMeta(col).Type.Equivalent(typ)
 }

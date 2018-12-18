@@ -173,7 +173,7 @@ func init() {
 // the query metadata and accessed by column id.
 func typeVariable(mem *Memo, e opt.ScalarExpr) types.T {
 	variable := e.(*VariableExpr)
-	typ := mem.Metadata().ColumnType(variable.Col)
+	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
 		panic(fmt.Sprintf("column %d does not have type", variable.Col))
 	}
@@ -204,7 +204,7 @@ func typeArrayFlatten(e opt.ScalarExpr) types.T {
 	colID, _ := input.Relational().OutputCols.Next(0)
 
 	return types.TArray{
-		Typ: input.Memo().Metadata().ColumnType(opt.ColumnID(colID)),
+		Typ: input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type,
 	}
 }
 
@@ -304,7 +304,7 @@ func typeCast(e opt.ScalarExpr) types.T {
 func typeSubquery(e opt.ScalarExpr) types.T {
 	input := e.Child(0).(RelExpr)
 	colID, _ := input.Relational().OutputCols.Next(0)
-	return input.Memo().Metadata().ColumnType(opt.ColumnID(colID))
+	return input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type
 }
 
 func typeColumnAccess(e opt.ScalarExpr) types.T {

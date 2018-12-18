@@ -263,7 +263,7 @@ SELECT t.kv.k FROM kv
 ----
 project
  ├── columns: k:1(int!null)
- └── scan kv
+ └── scan t.public.kv
       └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
 
 # Check that tuple type includes labels.

@@ -126,9 +126,9 @@ SELECT * FROM db1.a, db2.a
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(float) z:3(string) x:4(int!null) y:5(float)
- ├── scan a
+ ├── scan db1.public.a
  │    └── columns: db1.public.a.x:1(int!null) db1.public.a.y:2(float) db1.public.a.z:3(string)
- ├── scan a
+ ├── scan db2.public.a
  │    └── columns: db2.public.a.x:4(int!null) db2.public.a.y:5(float)
  └── filters (true)
 
@@ -147,9 +147,9 @@ SELECT * FROM t.a, a AS a
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
- ├── scan a
+ ├── scan t.public.a
  │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
- ├── scan a
+ ├── scan t.public.a
  │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
  └── filters (true)
 

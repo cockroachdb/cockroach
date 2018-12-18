@@ -541,7 +541,7 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
 		hidden.Remove(int(col.ID))
-		formatCol(f, col.Label, col.ID, notNullCols, false /* omitType */)
+		formatCol(f, col.Alias, col.ID, notNullCols, false /* omitType */)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
@@ -607,9 +607,10 @@ func formatCol(
 	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitType bool,
 ) {
 	md := f.Memo.metadata
+	colMeta := md.ColumnMeta(id)
 	if label == "" {
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label = md.QualifiedColumnLabel(id, fullyQualify)
+		label = colMeta.QualifiedAlias(fullyQualify)
 	}
 
 	if !isSimpleColumnName(label) {
@@ -618,14 +619,13 @@ func formatCol(
 		label = "\"" + label + "\""
 	}
 
-	typ := md.ColumnType(id)
 	f.Buffer.WriteByte(' ')
 	f.Buffer.WriteString(label)
 	f.Buffer.WriteByte(':')
 	fmt.Fprintf(f.Buffer, "%d", id)
 	if !omitType {
 		f.Buffer.WriteByte('(')
-		f.Buffer.WriteString(typ.String())
+		f.Buffer.WriteString(colMeta.Type.String())
 
 		if notNullCols.Contains(int(id)) {
 			f.Buffer.WriteString("!null")
@@ -647,7 +647,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	switch t := private.(type) {
 	case *opt.ColumnID:
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label := f.Memo.metadata.QualifiedColumnLabel(*t, fullyQualify)
+		label := f.Memo.metadata.ColumnMeta(*t).QualifiedAlias(fullyQualify)
 		fmt.Fprintf(f.Buffer, " %s", label)
 
 	case *TupleOrdinal:
@@ -657,21 +657,21 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Don't output name of index if it's the primary index.
 		tab := f.Memo.metadata.Table(t.Table)
 		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+			fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
+			fmt.Fprintf(f.Buffer, " %s@%s", tableName(f, t.Table), tab.Index(t.Index).Name())
 		}
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
 
 	case *VirtualScanPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tab.Name())
+		// Always fully qualify virtual table names.
+		tabMeta := f.Memo.metadata.TableMeta(t.Table)
+		fmt.Fprintf(f.Buffer, " %s", tabMeta.Table.Name())
 
 	case *MutationPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+		fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
 
 	case *RowNumberPrivate:
 		if !t.Ordering.Any() {
@@ -725,6 +725,15 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	default:
 		fmt.Fprintf(f.Buffer, " %v", private)
 	}
+}
+
+// tableName returns the alias for a table to be used for pretty-printing.
+func tableName(f *ExprFmtCtx, tabID opt.TableID) string {
+	if f.HasFlags(ExprFmtHideQualifications) {
+		tabMeta := f.Memo.metadata.TableMeta(tabID)
+		return tabMeta.Name()
+	}
+	return f.Memo.metadata.Table(tabID).Name().String()
 }
 
 // isSimpleColumnName returns true if the given label consists of only ASCII

@@ -228,8 +228,8 @@ func (s *scope) makePhysicalProps() *physical.Required {
 		for i := range s.cols {
 			col := &s.cols[i]
 			if !col.hidden {
-				p.Presentation = append(p.Presentation, opt.LabeledColumn{
-					Label: string(col.name),
+				p.Presentation = append(p.Presentation, opt.AliasedColumn{
+					Alias: string(col.name),
 					ID:    col.id,
 				})
 			}

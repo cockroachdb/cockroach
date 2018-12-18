@@ -109,7 +109,7 @@ func (p *Required) Equals(rhs *Required) bool {
 // duplicate and discard columns. If Presentation is not defined, then no
 // particular column presentation is required or provided. For example:
 //   a.y:2 a.x:1 a.y:2 column1:3
-type Presentation []opt.LabeledColumn
+type Presentation []opt.AliasedColumn
 
 // Any is true if any column presentation is allowed or can be provided.
 func (p Presentation) Any() bool {
@@ -142,6 +142,6 @@ func (p Presentation) format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		fmt.Fprintf(buf, "%s:%d", col.Label, col.ID)
+		fmt.Fprintf(buf, "%s:%d", col.Alias, col.ID)
 	}
 }

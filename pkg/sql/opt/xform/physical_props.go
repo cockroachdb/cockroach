@@ -78,9 +78,9 @@ func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *phy
 			// ArrayFlatten might have extra ordering columns. Use the Presentation property
 			// to get rid of them.
 			childProps.Presentation = physical.Presentation{
-				opt.LabeledColumn{
+				opt.AliasedColumn{
 					// Keep the existing label for the column.
-					Label: o.mem.Metadata().ColumnLabel(af.RequestedCol),
+					Alias: o.mem.Metadata().ColumnMeta(af.RequestedCol).Alias,
 					ID:    af.RequestedCol,
 				},
 			}

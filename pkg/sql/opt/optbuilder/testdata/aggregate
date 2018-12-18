@@ -891,11 +891,11 @@ scalar-group-by
  ├── columns: count:9(int)
  ├── project
  │    └── inner-join
- │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) k:5(int!null) v:6(int) w:7(int) s:8(string)
- │         ├── scan kv
- │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │         ├── scan kv
- │         │    └── columns: k:5(int!null) v:6(int) w:7(int) s:8(string)
+ │         ├── columns: a.k:1(int!null) a.v:2(int) a.w:3(int) a.s:4(string) b.k:5(int!null) b.v:6(int) b.w:7(int) b.s:8(string)
+ │         ├── scan a
+ │         │    └── columns: a.k:1(int!null) a.v:2(int) a.w:3(int) a.s:4(string)
+ │         ├── scan b
+ │         │    └── columns: b.k:5(int!null) b.v:6(int) b.w:7(int) b.s:8(string)
  │         └── filters (true)
  └── aggregations
       └── count-rows [type=int]
@@ -2126,7 +2126,7 @@ project
       ├── grouping columns: t.public.kv.v:2(int) column6:6(int)
       ├── project
       │    ├── columns: column6:6(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
-      │    ├── scan kv
+      │    ├── scan t.public.kv
       │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
       │    └── projections
       │         └── mult [type=int]
@@ -2146,7 +2146,7 @@ project
  │    ├── grouping columns: t.public.kv.v:2(int) column6:6(string) column7:7(int)
  │    ├── project
  │    │    ├── columns: column6:6(string) column7:7(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
- │    │    ├── scan kv
+ │    │    ├── scan t.public.kv
  │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
  │    │    └── projections
  │    │         ├── function: lower [type=string]
@@ -2169,30 +2169,30 @@ SELECT b1.b AND abc.c AND b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b A
 project
  ├── columns: r:10(bool)
  ├── group-by
- │    ├── columns: bools.b:3(bool) column9:9(bool)
- │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
+ │    ├── columns: b2.b:3(bool) column9:9(bool)
+ │    ├── grouping columns: b2.b:3(bool) column9:9(bool)
  │    └── project
- │         ├── columns: column9:9(bool) bools.b:3(bool)
+ │         ├── columns: column9:9(bool) b2.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: bools.b:1(bool) rowid:2(int!null) bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    ├── scan bools
- │         │    │    └── columns: bools.b:1(bool) rowid:2(int!null)
+ │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan b1
+ │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:3(bool) rowid:4(int!null)
+ │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── scan b2
+ │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
  │              └── and [type=bool]
- │                   ├── variable: bools.b [type=bool]
+ │                   ├── variable: b1.b [type=bool]
  │                   └── variable: c [type=bool]
  └── projections
       └── and [type=bool]
            ├── variable: column9 [type=bool]
-           └── variable: bools.b [type=bool]
+           └── variable: b2.b [type=bool]
 
 build
 SELECT b1.b AND abc.c AND abc.c FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
@@ -2205,30 +2205,30 @@ SELECT b1.b OR abc.c OR b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b OR 
 project
  ├── columns: r:10(bool)
  ├── group-by
- │    ├── columns: bools.b:3(bool) column9:9(bool)
- │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
+ │    ├── columns: b2.b:3(bool) column9:9(bool)
+ │    ├── grouping columns: b2.b:3(bool) column9:9(bool)
  │    └── project
- │         ├── columns: column9:9(bool) bools.b:3(bool)
+ │         ├── columns: column9:9(bool) b2.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: bools.b:1(bool) rowid:2(int!null) bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    ├── scan bools
- │         │    │    └── columns: bools.b:1(bool) rowid:2(int!null)
+ │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan b1
+ │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:3(bool) rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:3(bool) rowid:4(int!null)
+ │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── scan b2
+ │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
  │              └── or [type=bool]
- │                   ├── variable: bools.b [type=bool]
+ │                   ├── variable: b1.b [type=bool]
  │                   └── variable: c [type=bool]
  └── projections
       └── or [type=bool]
            ├── variable: column9 [type=bool]
-           └── variable: bools.b [type=bool]
+           └── variable: b2.b [type=bool]
 
 build
 SELECT b1.b OR abc.c OR abc.c FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
@@ -2331,27 +2331,27 @@ SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a
 project
  ├── columns: r:8(bool)
  ├── group-by
- │    ├── columns: baz:5(jsonb) column7:7(bool)
- │    ├── grouping columns: baz:5(jsonb) column7:7(bool)
+ │    ├── columns: b.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: b.baz:5(jsonb) column7:7(bool)
  │    └── project
- │         ├── columns: column7:7(bool) baz:5(jsonb)
+ │         ├── columns: column7:7(bool) b.baz:5(jsonb)
  │         ├── inner-join
- │         │    ├── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null) bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
- │         │    ├── scan foo
- │         │    │    └── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null)
- │         │    ├── scan foo
- │         │    │    └── columns: bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
+ │         │    ├── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null) b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
+ │         │    ├── scan a
+ │         │    │    └── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null)
+ │         │    ├── scan b
+ │         │    │    └── columns: b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
  │         │    └── filters (true)
  │         └── projections
  │              └── contains [type=bool]
- │                   ├── variable: bar [type=jsonb]
- │                   └── variable: baz [type=jsonb]
+ │                   ├── variable: a.bar [type=jsonb]
+ │                   └── variable: b.baz [type=jsonb]
  └── projections
       └── and [type=bool]
            ├── variable: column7 [type=bool]
            └── contains [type=bool]
-                ├── variable: baz [type=jsonb]
-                └── variable: baz [type=jsonb]
+                ├── variable: b.baz [type=jsonb]
+                └── variable: b.baz [type=jsonb]
 
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
@@ -2364,27 +2364,27 @@ SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b
 project
  ├── columns: r:8(bool)
  ├── group-by
- │    ├── columns: baz:5(jsonb) column7:7(bool)
- │    ├── grouping columns: baz:5(jsonb) column7:7(bool)
+ │    ├── columns: b.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: b.baz:5(jsonb) column7:7(bool)
  │    └── project
- │         ├── columns: column7:7(bool) baz:5(jsonb)
+ │         ├── columns: column7:7(bool) b.baz:5(jsonb)
  │         ├── inner-join
- │         │    ├── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null) bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
- │         │    ├── scan foo
- │         │    │    └── columns: bar:1(jsonb) baz:2(jsonb) rowid:3(int!null)
- │         │    ├── scan foo
- │         │    │    └── columns: bar:4(jsonb) baz:5(jsonb) rowid:6(int!null)
+ │         │    ├── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null) b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
+ │         │    ├── scan a
+ │         │    │    └── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null)
+ │         │    ├── scan b
+ │         │    │    └── columns: b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
  │         │    └── filters (true)
  │         └── projections
  │              └── contains [type=bool]
- │                   ├── variable: bar [type=jsonb]
- │                   └── variable: baz [type=jsonb]
+ │                   ├── variable: a.bar [type=jsonb]
+ │                   └── variable: b.baz [type=jsonb]
  └── projections
       └── and [type=bool]
            ├── variable: column7 [type=bool]
            └── contains [type=bool]
-                ├── variable: baz [type=jsonb]
-                └── variable: baz [type=jsonb]
+                ├── variable: b.baz [type=jsonb]
+                └── variable: b.baz [type=jsonb]
 
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
@@ -2406,19 +2406,19 @@ project
  │    └── project
  │         ├── columns: column3:3(interval) column4:4(interval)
  │         ├── inner-join
- │         │    ├── columns: t:1(time!null) t:2(time!null)
- │         │    ├── scan times
- │         │    │    └── columns: t:1(time!null)
- │         │    ├── scan times
- │         │    │    └── columns: t:2(time!null)
+ │         │    ├── columns: a.t:1(time!null) b.t:2(time!null)
+ │         │    ├── scan a
+ │         │    │    └── columns: a.t:1(time!null)
+ │         │    ├── scan b
+ │         │    │    └── columns: b.t:2(time!null)
  │         │    └── filters (true)
  │         └── projections
  │              ├── function: date_trunc [type=interval]
  │              │    ├── const: 'second' [type=string]
- │              │    └── variable: t [type=time]
+ │              │    └── variable: a.t [type=time]
  │              └── function: date_trunc [type=interval]
  │                   ├── const: 'minute' [type=string]
- │                   └── variable: t [type=time]
+ │                   └── variable: b.t [type=time]
  └── projections
       └── minus [type=interval]
            ├── variable: column3 [type=interval]

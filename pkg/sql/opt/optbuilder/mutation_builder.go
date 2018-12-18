@@ -118,6 +118,10 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab)
+	if alias != nil {
+		// Set the table alias for pretty-printing and EXPLAIN.
+		mb.md.TableMeta(mb.tabID).Alias = string(alias.TableName)
+	}
 }
 
 // addTargetNamedColsForInsert adds a list of user-specified column names to the
@@ -286,7 +290,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				desiredTypes := make([]types.T, len(expr.Names))
 				targetIdx := len(mb.targetColList) - len(expr.Names)
 				for i := range desiredTypes {
-					desiredTypes[i] = mb.md.ColumnType(mb.targetColList[targetIdx+i])
+					desiredTypes[i] = mb.md.ColumnMeta(mb.targetColList[targetIdx+i]).Type
 				}
 				outScope := mb.b.buildSelectStmt(t.Select, desiredTypes, mb.outScope)
 				mb.subqueries = append(mb.subqueries, outScope)
@@ -462,7 +466,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	if len(mb.targetColList) != 0 {
 		desiredTypes = make([]types.T, len(mb.targetColList))
 		for i, colID := range mb.targetColList {
-			desiredTypes[i] = mb.md.ColumnType(colID)
+			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
 		}
 	} else {
 		desiredTypes = make([]types.T, 0, mb.tab.ColumnCount())
@@ -492,14 +496,14 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	//   3. Add id of each column to the insertColList
 	for i := range mb.outScope.cols {
 		inCol := &mb.outScope.cols[i]
-		ord := mb.md.ColumnOrdinal(mb.targetColList[i])
+		ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
 
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
 		// Assign name of input column. Computed columns can refer to this column
 		// by its name.
-		inCol.name = tree.Name(mb.md.ColumnLabel(mb.targetColList[i]))
+		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
 		// Map the ordinal position of each table column to the id of the input
 		// column which will be inserted into that position.
@@ -529,15 +533,12 @@ func (mb *mutationBuilder) buildInputForUpdate(inScope *scope, upd *tree.Update)
 	// FROM
 	mb.outScope = mb.b.buildScan(
 		mb.tab,
-		mb.tab.Name(),
+		mb.alias,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
 		inScope,
 	)
-
-	// Overwrite output properties with any alias information.
-	mb.outScope.setTableAlias(mb.alias.TableName)
 
 	// WHERE
 	mb.b.buildWhere(upd.Where, mb.outScope)
@@ -596,7 +597,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
-		ord := mb.md.ColumnOrdinal(targetColID)
+		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
 		// Add new column ID to the list of columns to update.
@@ -618,7 +619,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		}
 
 		// Add new column to the projections scope.
-		desiredType := mb.md.ColumnType(targetColID)
+		desiredType := mb.md.ColumnMeta(targetColID).Type
 		texpr := inScope.resolveType(expr, desiredType)
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* label */, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
@@ -872,7 +873,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 	}
 
 	// Return expression from cache, if it was already parsed previously.
-	ord := mb.md.ColumnOrdinal(colID)
+	ord := mb.tabID.ColumnOrdinal(colID)
 	if mb.parsedExprs[ord] != nil {
 		return mb.parsedExprs[ord]
 	}

@@ -556,37 +556,37 @@ project
  ├── columns: "?column?":17(int!null)
  ├── fd: ()-->(17)
  ├── left-join-apply
- │    ├── columns: s:4(string) exists:16(bool)
- │    ├── scan a
- │    │    └── columns: s:4(string)
+ │    ├── columns: ref_0.s:4(string) exists:16(bool)
+ │    ├── scan ref_0
+ │    │    └── columns: ref_0.s:4(string)
  │    ├── project
  │    │    ├── columns: exists:16(bool)
  │    │    ├── outer: (4)
  │    │    ├── group-by
- │    │    │    ├── columns: k:5(int!null) true_agg:15(bool)
- │    │    │    ├── grouping columns: k:5(int!null)
+ │    │    │    ├── columns: ref_1.k:5(int!null) true_agg:15(bool)
+ │    │    │    ├── grouping columns: ref_1.k:5(int!null)
  │    │    │    ├── outer: (4)
  │    │    │    ├── key: (5)
  │    │    │    ├── fd: (5)-->(15)
  │    │    │    ├── left-join
- │    │    │    │    ├── columns: k:5(int!null) true:14(bool)
+ │    │    │    │    ├── columns: ref_1.k:5(int!null) true:14(bool)
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── fd: ()~~>(14)
- │    │    │    │    ├── scan a
- │    │    │    │    │    ├── columns: k:5(int!null)
+ │    │    │    │    ├── scan ref_1
+ │    │    │    │    │    ├── columns: ref_1.k:5(int!null)
  │    │    │    │    │    └── key: (5)
  │    │    │    │    ├── project
  │    │    │    │    │    ├── columns: true:14(bool!null)
  │    │    │    │    │    ├── outer: (4)
  │    │    │    │    │    ├── fd: ()-->(14)
  │    │    │    │    │    ├── select
- │    │    │    │    │    │    ├── columns: s:12(string!null)
+ │    │    │    │    │    │    ├── columns: a.s:12(string!null)
  │    │    │    │    │    │    ├── outer: (4)
  │    │    │    │    │    │    ├── fd: ()-->(12)
  │    │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    │    └── columns: s:12(string)
+ │    │    │    │    │    │    │    └── columns: a.s:12(string)
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── s = s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    │    │    │    │         └── a.s = ref_0.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
  │    │    │    │    │    └── projections
  │    │    │    │    │         └── true [type=bool]
  │    │    │    │    └── filters (true)
