@@ -2024,8 +2024,6 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/32062")
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
@@ -2040,8 +2038,19 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		t.Fatal(err)
 	}
 
-	// Make store2 the leaseholder for the RHS.
+	// Make store2 the leaseholder for the RHS and wait for the lease transfer to
+	// apply.
 	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 2)
+	testutils.SucceedsSoon(t, func() error {
+		rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
+		if err != nil {
+			return err
+		}
+		if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+			return errors.New("store2 does not own valid lease for rhs range")
+		}
+		return nil
+	})
 
 	// Start dropping all Raft traffic to the LHS replica on store2 so that it
 	// won't be aware that there is a merge in progress.
