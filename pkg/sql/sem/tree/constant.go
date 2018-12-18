@@ -530,10 +530,6 @@ var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
 	Bitor:    token.OR,
 	Bitxor:   token.XOR,
 }
-var binaryShiftOpToToken = map[BinaryOperator]token.Token{
-	LShift: token.SHL,
-	RShift: token.SHR,
-}
 var comparisonOpToToken = map[ComparisonOperator]token.Token{
 	EQ: token.EQL,
 	NE: token.NEQ,
@@ -594,13 +590,10 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 						}
 					}
 				}
-				if token, ok := binaryShiftOpToToken[t.Operator]; ok {
-					if lInt, ok := l.asConstantInt(); ok {
-						if rInt64, err := r.AsInt64(); err == nil && rInt64 >= 0 {
-							return &NumVal{Value: constant.Shift(lInt, token, uint(rInt64))}
-						}
-					}
-				}
+				// Explicitly ignore shift operators so the expression is evaluated as a
+				// non-const. This is because 1 << 63 as a 64-bit int (which is a negative
+				// number due to 2s complement) is different than 1 << 63 as constant,
+				// which is positive.
 			}
 		case *StrVal:
 			if r, ok := t.Right.(*StrVal); ok {
