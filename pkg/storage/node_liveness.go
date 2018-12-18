@@ -395,7 +395,7 @@ func (nl *NodeLiveness) IsHealthy(nodeID roachpb.NodeID) (bool, error) {
 	}
 	ls := liveness.LivenessStatus(
 		nl.clock.Now().GoTime(),
-		nl.GetLivenessThreshold(),
+		TimeUntilStoreDead.Get(&nl.st.SV),
 		nl.clock.MaxOffset(),
 	)
 	return ls == storagepb.NodeLivenessStatus_LIVE, nil
