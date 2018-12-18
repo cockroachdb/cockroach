@@ -358,7 +358,7 @@ message ScanRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The desired format for the response. If set to BATCH_RESPONSE, the server
-  // will set the batch_response field in the ScanResponse instead of the rows
+  // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
 }
@@ -373,11 +373,13 @@ message ScanResponse {
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
-  // If set, the results of the scan in batch format - the key/value pairs are
-  // a buffer of varint-prefixed slices, alternating from key to value. There
-  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
-  // be set and vice versa.
-  bytes batch_response = 4;
+  // If set, each item in this repeated bytes field contains part of the results
+  // in batch format - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is
+  // complete - there are no key/value pairs that are split across more than one
+  // entry. There are num_keys total pairs across all entries, as defined by the
+  // ResponseHeader. If set, rows will not be set and vice versa.
+  repeated bytes batch_responses = 4;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -391,7 +393,7 @@ message ReverseScanRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The desired format for the response. If set to BATCH_RESPONSE, the server
-  // will set the batch_response field in the ScanResponse instead of the rows
+  // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
 }
@@ -406,11 +408,13 @@ message ReverseScanResponse {
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
-  // If set, the results of the scan in batch format - the key/value pairs are
-  // a buffer of varint-prefixed slices, alternating from key to value. There
-  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
-  // be set and vice versa.
-  bytes batch_response = 4;
+  // If set, each item in this repeated bytes field contains part of the results
+  // in batch format - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is
+  // complete - there are no key/value pairs that are split across more than one
+  // entry. There are num_keys total pairs across all entries, as defined by the
+  // ResponseHeader. If set, rows will not be set and vice versa.
+  repeated bytes batch_responses = 4;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.

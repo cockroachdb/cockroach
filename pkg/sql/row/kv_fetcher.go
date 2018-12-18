@@ -29,7 +29,6 @@ type kvFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
-	batchNumKvs   int64
 	span          roachpb.Span
 	newSpan       bool
 }
@@ -53,8 +52,7 @@ func (f *kvFetcher) nextKV(
 		f.kvs = f.kvs[1:]
 		return true, kv, newSpan, nil
 	}
-	if f.batchNumKvs > 0 {
-		f.batchNumKvs--
+	if len(f.batchResponse) > 0 {
 		var key []byte
 		var rawBytes []byte
 		var err error
@@ -70,11 +68,7 @@ func (f *kvFetcher) nextKV(
 		}, newSpan, nil
 	}
 
-	var numKeys int64
-	ok, f.kvs, f.batchResponse, numKeys, f.span, err = f.nextBatch(ctx)
-	if f.batchResponse != nil {
-		f.batchNumKvs = numKeys
-	}
+	ok, f.kvs, f.batchResponse, f.span, err = f.nextBatch(ctx)
 	if err != nil {
 		return ok, kv, false, err
 	}
