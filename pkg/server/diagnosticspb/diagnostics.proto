@@ -27,12 +27,14 @@ message DiagnosticReport {
   repeated StoreInfo stores = 2  [(gogoproto.nullable) = false];
   repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
   repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
-  reserved 5;
   map<string, string> altered_settings = 6;
-  reserved 7;
   map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
   map<string, int32> feature_usage = 9 [(gogoproto.nullable) = false];
-}
+
+
+  map<string, int64> legacy_unimplemented_errors = 5;
+  map<string, int64> legacy_error_counts = 7;
+  }
 
 message NodeInfo {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
