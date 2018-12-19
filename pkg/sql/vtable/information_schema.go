@@ -37,6 +37,9 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_SET_CATALOG    STRING,
 	CHARACTER_SET_SCHEMA     STRING,
 	CHARACTER_SET_NAME       STRING,
+	DOMAIN_CATALOG           STRING,
+	DOMAIN_SCHEMA            STRING,
+	DOMAIN_NAME              STRING,
 	GENERATION_EXPRESSION    STRING,          -- MySQL/CockroachDB extension.
 	IS_HIDDEN                STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
 	CRDB_SQL_TYPE            STRING NOT NULL  -- CockroachDB extension for SHOW COLUMNS / dump.
