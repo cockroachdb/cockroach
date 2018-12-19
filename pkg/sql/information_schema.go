@@ -313,6 +313,9 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 					tree.DNull,                                                  // character_set_catalog
 					tree.DNull,                                                  // character_set_schema
 					tree.DNull,                                                  // character_set_name
+					tree.DNull,                                                  // domain_catalog
+					tree.DNull,                                                  // domain_schema
+					tree.DNull,                                                  // domain_name
 					dStringPtrOrEmpty(column.ComputeExpr),                       // generation_expression
 					yesOrNoDatum(column.Hidden),                                 // is_hidden
 					tree.NewDString(column.Type.SQLString()),                    // crdb_sql_type
