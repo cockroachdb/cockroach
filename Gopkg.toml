@@ -82,6 +82,10 @@ ignored = [
   name = "github.com/golang/dep"
   branch = "master"
 
+[[constraint]]
+  name = "golang.org/x/crypto"
+  branch = "master"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
@@ -90,6 +94,12 @@ ignored = [
 [[override]]
   name = "github.com/docker/distribution"
   branch = "master"
+
+# github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer
+# version of thrift than is currently present in a release.
+[[override]]
+  name = "github.com/apache/thrift"
+  revision = "2b7365c54f823013cc6a4760798051b22743c103"
 
 [prune]
   go-tests = true
@@ -113,13 +123,3 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
-
-[[constraint]]
-  branch = "master"
-  name = "golang.org/x/crypto"
-
-# Newer releases of zipkin depend on unreleased bits from
-# github.com/apache/thrift.
-[[constraint]]
-  name = "github.com/openzipkin/zipkin-go-opentracing"
-  version = "=0.3.3"
