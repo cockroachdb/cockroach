@@ -131,6 +131,14 @@ func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 	setFlagFromEnv(f, flagInfo)
 }
 
+// StringSlice creates a string slice flag and registers it with the FlagSet.
+func StringSlice(
+	f *pflag.FlagSet, valPtr *[]string, flagInfo cliflags.FlagInfo, defaultVal []string,
+) {
+	f.StringSliceVar(valPtr, flagInfo.Name, defaultVal, flagInfo.Usage())
+	setFlagFromEnv(f, flagInfo)
+}
+
 // aliasStrVar wraps a string configuration option and is meant
 // to be used in addition to / next to another flag that targets the
 // same option. It does not implement "default values" so that the
@@ -439,6 +447,15 @@ func init() {
 		f := seqWriteBench.Flags()
 		VarFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.writeSize), cliflags.WriteSize)
 		VarFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.syncInterval), cliflags.SyncInterval)
+	}
+
+	// Network Bench command.
+	{
+		f := networkBench.Flags()
+		BoolFlag(f, &networkBenchCtx.server, cliflags.BenchServer, networkBenchCtx.server)
+		IntFlag(f, &networkBenchCtx.port, cliflags.BenchPort, networkBenchCtx.port)
+		StringSlice(f, &networkBenchCtx.addresses, cliflags.BenchAddresses, networkBenchCtx.addresses)
+		BoolFlag(f, &networkBenchCtx.latency, cliflags.BenchLatency, networkBenchCtx.latency)
 	}
 
 	// Bench command.

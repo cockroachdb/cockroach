@@ -417,6 +417,7 @@ func TestLint(t *testing.T) {
 			":!rpc/context_test.go",
 			":!rpc/context.go",
 			":!util/grpcutil/grpc_util_test.go",
+			":!cli/systembench/network_test_server.go",
 		)
 		if err != nil {
 			t.Fatal(err)

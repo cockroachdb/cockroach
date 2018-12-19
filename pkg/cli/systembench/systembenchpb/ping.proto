@@ -1,0 +1,14 @@
+syntax = "proto2";
+package systembench;
+
+message PingRequest {
+  optional bytes payload = 1;
+}
+
+message PingResponse {
+  optional bytes payload = 1;
+}
+
+service Pinger {
+  rpc Ping (PingRequest) returns (PingResponse) {}
+}
