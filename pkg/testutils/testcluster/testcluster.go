@@ -172,6 +172,9 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			t.Fatal(err)
 		}
 	}
+
+	// Wait until a NodeStatus is persisted for every node (see #25488, #25649, #31574).
+	tc.WaitForNodeStatuses(t)
 	return tc
 }
 
@@ -596,12 +599,23 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 			return err
 		}
 
-		if len(response.Nodes) != tc.NumServers() {
+		if len(response.Nodes) < tc.NumServers() {
 			return fmt.Errorf("expected %d nodes registered, got %+v", tc.NumServers(), response)
 		}
+
+		// Check that all the nodes in the testcluster have a status. We tolerate
+		// other nodes having statuses (in some tests the cluster is configured with
+		// a pre-existing store).
+		nodeIDs := make(map[roachpb.NodeID]bool)
 		for _, node := range response.Nodes {
 			if len(node.StoreStatuses) == 0 {
 				return fmt.Errorf("missing StoreStatuses in NodeStatus: %+v", node)
+			}
+			nodeIDs[node.Desc.NodeID] = true
+		}
+		for _, s := range tc.Servers {
+			if id := s.GetNode().Descriptor.NodeID; !nodeIDs[id] {
+				return fmt.Errorf("missing n%d in NodeStatus: %+v", id, response)
 			}
 		}
 		return nil
