@@ -555,6 +555,29 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-SERVER-VERSION-NUM
 	`server_version_num`: makeReadOnlyVar(PgServerVersionNum),
 
+	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
+	`ssl_renegotiation_limit`: {
+		GetStringVal:  makeIntGetStringValFn(`ssl_renegotiation_limit`),
+		Get:           func(_ *extendedEvalContext) string { return "0" },
+		GlobalDefault: func(_ *settings.Values) string { return "0" },
+		Set: func(_ context.Context, _ *sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return wrapSetVarError("ssl_renegotiation_limit", s, "%v", err)
+			}
+			if i != 0 {
+				// TODO(knz): See discussion on #33074: we may discover that
+				// some clients cannot work unless we accept non-zero values,
+				// but do not really care about the outcome. If/when such
+				// evidence surfaces we can transform this error into
+				// a simple telemetry bump, warning and no-op.
+				return pgerror.Unimplemented(fmt.Sprintf("ssl_renegotiation_limit.%d", i),
+					`non-zero parameter "ssl_renegotiation_limit" is not supported`)
+			}
+			return nil
+		},
+	},
+
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVar(build.GetInfo().Short()),
 

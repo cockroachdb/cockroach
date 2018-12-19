@@ -53,6 +53,7 @@ server_version                     9.5.0
 server_version_num                 90500
 session_user                       root
 sql_safe_updates                   off
+ssl_renegotiation_limit            0
 standard_conforming_strings        on
 statement_timeout                  0
 timezone                           UTC
