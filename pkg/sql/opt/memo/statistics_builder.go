@@ -492,10 +492,9 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 			}
 		} else {
 			numUnappliedConjuncts = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
-		}
-
-		for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-			cols.Add(int(scan.Constraint.Columns.Get(i).ID()))
+			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+				cols.Add(int(scan.Constraint.Columns.Get(i).ID()))
+			}
 		}
 
 		// Calculate row count and selectivity
@@ -1286,13 +1285,18 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// Since filters on inverted index columns cannot be pushed down into the ON
 	// clause (due to them containing partial values), we need to explicitly
 	// increment numUnappliedConjuncts here for every constrained inverted index
-	// column.
+	// column. The multiplication by 2 is to mimic the logic in
+	// numConjunctsInConstraint, which counts an equality as 2 conjuncts. This
+	// comes from the intuition that a = 1 is probably more selective than a > 1
+	// and if we do not mimic a similar selectivity calculation here, the zigzag
+	// join ends up having a higher row count and therefore higher cost than
+	// a competing index join + constrained scan.
 	tab := sb.md.Table(zigzag.LeftTable)
 	if tab.Index(zigzag.LeftIndex).IsInverted() {
-		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) + len(zigzag.LeftEqCols))
+		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) * 2)
 	}
 	if tab.Index(zigzag.RightIndex).IsInverted() {
-		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) + len(zigzag.RightEqCols))
+		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) * 2)
 	}
 
 	// Try to reduce the number of columns used for selectivity
@@ -2120,7 +2124,13 @@ func (sb *statisticsBuilder) applyFilter(
 			if numPaths == 0 {
 				numUnappliedConjuncts++
 			} else {
-				numUnappliedConjuncts += float64(numPaths)
+				// Multiply the number of paths by 2 to mimic the logic in
+				// numConjunctsInConstraint, for constraints like
+				// /1: [/'{"a":"b"}' - /'{"a":"b"}'] . That function counts
+				// this as 2 conjuncts, and to keep row counts as consistent
+				// as possible between competing filtered selects and
+				// constrained scans, we apply the same logic here.
+				numUnappliedConjuncts += 2 * float64(numPaths)
 			}
 			return
 		}
