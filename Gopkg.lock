@@ -142,12 +142,11 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:e64acfe8cda1955db545ede8e863c54d69f1ac6cd058df4349be4040320840fd"
+  digest = "1:b39cf81d5f440b9c0757a25058432d33af867e5201109bf53621356d9dab4b73"
   name = "github.com/apache/thrift"
   packages = ["lib/go/thrift"]
   pruneopts = "UT"
-  revision = "327ebb6c2b6df8bf075da02ef45a2a034e9b79ba"
-  version = "0.11.0"
+  revision = "2b7365c54f823013cc6a4760798051b22743c103"
 
 [[projects]]
   branch = "master"
@@ -1147,8 +1146,8 @@
   version = "v1.0.2"
 
 [[projects]]
-  digest = "1:ef06a435177b3b245740de74ea6e7116a3d43e5f21d5e84f3def995297a991a9"
-  name = "github.com/openzipkin/zipkin-go-opentracing"
+  digest = "1:c28cdeafaa5fc255ce6f51b1ee800505dfe231431f9a036f6cca9382987e64ec"
+  name = "github.com/openzipkin-contrib/zipkin-go-opentracing"
   packages = [
     ".",
     "flag",
@@ -1158,8 +1157,8 @@
     "wire",
   ]
   pruneopts = "UT"
-  revision = "4c9fbcbd6d73a644fd17214fe475296780c68fb5"
-  version = "v0.3.3"
+  revision = "f0f479ad013a498e4cbfb369414e5d3880903779"
+  version = "v0.3.5"
 
 [[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
@@ -1776,7 +1775,7 @@
     "github.com/olekukonko/tablewriter",
     "github.com/opentracing/opentracing-go",
     "github.com/opentracing/opentracing-go/log",
-    "github.com/openzipkin/zipkin-go-opentracing",
+    "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
     "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
