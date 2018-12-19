@@ -553,7 +553,6 @@ func TestShowQueries(t *testing.T) {
 		if stmt == selectStmt {
 			found = true
 			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
-			const showVersionQuery = "SHOW CLUSTER SETTING version"
 
 			rows, err := conn1.Query(showQuery)
 			if err != nil {
@@ -561,27 +560,16 @@ func TestShowQueries(t *testing.T) {
 			}
 			defer rows.Close()
 
-			count := 0
+			var stmts []string
 			for rows.Next() {
-				count++
-
 				var nodeID int
-				var sql string
+				var stmt string
 				var delta float64
-				if err := rows.Scan(&nodeID, &delta, &sql); err != nil {
+				if err := rows.Scan(&nodeID, &delta, &stmt); err != nil {
 					failure = err
 					return
 				}
-				switch sql {
-				case showQuery, showVersionQuery, expectedSelectStmt:
-				default:
-					failure = fmt.Errorf(
-						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
-						sql,
-						expectedSelectStmt,
-					)
-					return
-				}
+				stmts = append(stmts, stmt)
 				if nodeID < 1 || nodeID > 2 {
 					failure = fmt.Errorf("invalid node ID: %d", nodeID)
 					return
@@ -596,14 +584,20 @@ func TestShowQueries(t *testing.T) {
 					return
 				}
 			}
+			fmt.Println("tf", stmts)
 			if err := rows.Err(); err != nil {
 				failure = err
 				return
 			}
 
-			if expectedCount := 2; count != expectedCount {
-				failure = fmt.Errorf("unexpected number of running queries: %d, expected %d", count, expectedCount)
-				return
+			foundSelect := false
+			for _, stmt := range stmts {
+				if stmt == expectedSelectStmt {
+					foundSelect = true
+				}
+			}
+			if !foundSelect {
+				failure = fmt.Errorf("original query not found in SHOW QUERIES. expected: %s\nactual: %v", selectStmt, stmts)
 			}
 		}
 	}
