@@ -4738,7 +4738,8 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		reply := resp.(*roachpb.PushTxnResponse)
-		expTxn := pushee.Clone()
+		expTxnRecord := pushee.AsRecord()
+		expTxn := expTxnRecord.AsTransaction()
 		expTxn.Priority = roachpb.MaxTxnPriority - 1
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.Timestamp = test.expTS
