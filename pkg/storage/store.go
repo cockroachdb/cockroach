@@ -127,7 +127,7 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
-	5,
+	3,
 )
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
@@ -832,8 +832,18 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.limiters.ConcurrentExports = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+	// On low-CPU instances, a default limit value may still allow ExportRequests
+	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
+	exportCores := runtime.NumCPU() - 1
+	if exportCores < 1 {
+		exportCores = 1
+	}
 	ExportRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
-		s.limiters.ConcurrentExports.SetLimit(int(ExportRequestsLimit.Get(&cfg.Settings.SV)))
+		limit := int(ExportRequestsLimit.Get(&cfg.Settings.SV))
+		if limit > exportCores {
+			limit = exportCores
+		}
+		s.limiters.ConcurrentExports.SetLimit(limit)
 	})
 
 	if s.cfg.Gossip != nil {
