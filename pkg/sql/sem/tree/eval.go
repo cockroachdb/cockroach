@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1249,7 +1250,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) << uint(MustBeDInt(right))), nil
+				rval := MustBeDInt(right)
+				if rval < 0 || rval >= 64 {
+					telemetry.Count("sql.large_lshift_argument")
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+				}
+				return NewDInt(MustBeDInt(left) << uint(rval)), nil
 			},
 		},
 		&BinOp{
@@ -1270,7 +1276,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) >> uint(MustBeDInt(right))), nil
+				rval := MustBeDInt(right)
+				if rval < 0 || rval >= 64 {
+					telemetry.Count("sql.large_rshift_argument")
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+				}
+				return NewDInt(MustBeDInt(left) >> uint(rval)), nil
 			},
 		},
 		&BinOp{
