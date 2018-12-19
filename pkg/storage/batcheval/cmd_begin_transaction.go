@@ -135,5 +135,6 @@ func BeginTransaction(
 	}
 
 	// Write the txn record.
-	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
+	txnRecord := reply.Txn.AsRecord()
+	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord)
 }
