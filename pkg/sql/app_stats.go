@@ -114,20 +114,8 @@ func (a *appStats) recordStatement(
 		return
 	}
 
-	// Extend the statement key with a character that indicated whether
-	// there was an error and/or whether the query was distributed, so
-	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optUsed}
-
-	if stmt.AnonymizedStr != "" {
-		// Use the cached anonymized string.
-		key.stmt = stmt.AnonymizedStr
-	} else {
-		key.stmt = anonymizeStmt(stmt)
-	}
-
 	// Get the statistics object.
-	s := a.getStatsForStmt(key)
+	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -150,12 +138,28 @@ func (a *appStats) recordStatement(
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
-func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
+func (a *appStats) getStatsForStmt(
+	stmt Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
+) *stmtStats {
+	// Extend the statement key with various characteristics, so
+	// that we use separate buckets for the different situations.
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed}
+	if stmt.AnonymizedStr != "" {
+		// Use the cached anonymized string.
+		key.stmt = stmt.AnonymizedStr
+	} else {
+		key.stmt = anonymizeStmt(stmt)
+	}
+
+	return a.getStatsForStmtWithKey(key, createIfNonexistent)
+}
+
+func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	s, ok := a.stmts[key]
-	if !ok {
+	if !ok && createIfNonexistent {
 		s = &stmtStats{}
 		a.stmts[key] = s
 	}

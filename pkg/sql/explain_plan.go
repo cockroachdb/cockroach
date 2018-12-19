@@ -277,37 +277,60 @@ func (p *planner) populateExplain(
 func (e *explainer) populateEntries(ctx context.Context, plan planNode, subqueryPlans []subquery) {
 	e.entries = nil
 	observer := e.observer()
+	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, observer, false /* returnError */)
+}
 
+func populateEntriesForObserver(
+	ctx context.Context,
+	plan planNode,
+	subqueryPlans []subquery,
+	observer planObserver,
+	returnError bool,
+) error {
 	// If there are any subqueries in the plan, we enclose both the main
 	// plan and the sub-queries as children of a virtual "root"
 	// node. This is not introduced in the common case where there are
 	// no subqueries.
 	if len(subqueryPlans) > 0 {
-		_, _ = e.enterNode(ctx, "root", plan)
+		if _, err := observer.enterNode(ctx, "root", plan); err != nil && returnError {
+			return err
+		}
 	}
 
 	// Explain the main plan.
-	_ = walkPlan(ctx, plan, observer)
+	if err := walkPlan(ctx, plan, observer); err != nil && returnError {
+		return err
+	}
 
 	// Explain the subqueries.
 	for i := range subqueryPlans {
-		_, _ = e.enterNode(ctx, "subquery", plan)
-		e.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
+		if _, err := observer.enterNode(ctx, "subquery", plan); err != nil && returnError {
+			return err
+		}
+		observer.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
-		e.attr("subquery", "original sql", subqueryPlans[i].subquery.String())
-		e.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
+		observer.attr("subquery", "original sql", subqueryPlans[i].subquery.String())
+		observer.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
-			_ = walkPlan(ctx, subqueryPlans[i].plan, observer)
+			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
+				return err
+			}
 		} else if subqueryPlans[i].started {
-			e.expr(observeAlways, "subquery", "result", -1, subqueryPlans[i].result)
+			observer.expr(observeAlways, "subquery", "result", -1, subqueryPlans[i].result)
 		}
-		_ = e.leaveNode("subquery", subqueryPlans[i].plan)
+		if err := observer.leaveNode("subquery", subqueryPlans[i].plan); err != nil && returnError {
+			return err
+		}
 	}
 
 	if len(subqueryPlans) > 0 {
-		_ = e.leaveNode("root", plan)
+		if err := observer.leaveNode("root", plan); err != nil && returnError {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // planToString uses explain() to build a string representation of the planNode.
