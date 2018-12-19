@@ -46,6 +46,7 @@ func registerTests(r *registry) {
 	registerInterleaved(r)
 	registerJepsen(r)
 	registerKV(r)
+	registerKVContention(r)
 	registerKVQuiescenceDead(r)
 	registerKVGracefulDraining(r)
 	registerKVScalability(r)
