@@ -321,11 +321,19 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	rowCount := join.Relational().Stats.RowCount
 
-	// Zigzag joins only scan columns in either index, the number of additional
-	// columns scanned is 0. Assume the upper bound on per-row cost to be the
-	// sum of the two scan costs.
-	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, 0)
-	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, 0)
+	// Assume the upper bound on scan cost to be the sum of the cost of
+	// scanning the two constituent indexes. To determine how many columns
+	// are returned from each scan, intersect the output column set join.Cols
+	// with each side's IndexColumns. Columns present in both indexes are
+	// projected from the left side only.
+	md := c.mem.Metadata()
+	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex)
+	leftCols.IntersectionWith(join.Cols)
+	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex)
+	rightCols.IntersectionWith(join.Cols)
+	rightCols.DifferenceWith(leftCols)
+	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, leftCols.Len())
+	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, rightCols.Len())
 
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.

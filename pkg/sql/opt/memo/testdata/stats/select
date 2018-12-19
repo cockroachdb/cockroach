@@ -821,6 +821,8 @@ WHERE
 inner-join (zigzag lineitem@l_sd lineitem@l_cd)
  ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null)
  ├── eq columns: [1 4] = [1 4]
+ ├── left fixed columns: [11] = ['1995-09-01']
+ ├── right fixed columns: [12] = ['1995-08-01']
  ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
  ├── key: (1,4)
  ├── fd: ()-->(11,12)
@@ -871,6 +873,8 @@ inner-join (lookup lineitem)
  ├── inner-join (zigzag lineitem@l_sd lineitem@l_cd)
  │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
  │    ├── eq columns: [1 4] = [1 4]
+ │    ├── left fixed columns: [11] = ['1995-09-01']
+ │    ├── right fixed columns: [12] = ['1995-08-01']
  │    ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
  │    ├── fd: ()-->(11,12)
  │    └── filters
@@ -898,6 +902,116 @@ select
  └── filters
       ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
       └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+# Create a table with an inverted index to test statistics around
+# JSON containment filter operators and zigzag joins.
+exec-ddl
+CREATE TABLE tjson (a INT PRIMARY KEY, b JSON, c JSON, INVERTED INDEX b_idx (b))
+----
+TABLE tjson
+ ├── a int not null
+ ├── b jsonb
+ ├── c jsonb
+ ├── INDEX primary
+ │    └── a int not null
+ └── INVERTED INDEX b_idx
+      ├── b jsonb
+      └── a int not null
+
+exec-ddl
+ALTER TABLE tjson INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
+  }
+]'
+----
+
+# Should generate a scan on the inverted index.
+opt
+SELECT * FROM tjson WHERE b @> '{"a":"b"}'
+----
+index-join tjson
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── stats: [rows=1666.66667, distinct(1)=1666.66667, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan tjson@b_idx
+      ├── columns: a:1(int!null)
+      ├── constraint: /2/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
+      └── key: (1)
+
+# Should generate a zigzag join on the inverted index. Row count should be
+# strictly lower than the above scan.
+opt
+SELECT * FROM tjson WHERE b @> '{"a":"b", "c":"d"}'
+----
+inner-join (lookup tjson)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── key columns: [1] = [1]
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── inner-join (zigzag tjson@b_idx tjson@b_idx)
+ │    ├── columns: a:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = ['{"a": "b"}']
+ │    ├── right fixed columns: [2] = ['{"c": "d"}']
+ │    ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
+ │    └── filters (true)
+ └── filters
+      └── b @> '{"a": "b", "c": "d"}' [type=bool, outer=(2)]
+
+# Should generate a select on the table with a JSON filter, since c does not
+# have an inverted index.
+opt
+SELECT * FROM tjson WHERE c @> '{"a":"b"}'
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── stats: [rows=1666.66667, distinct(1)=1666.66667, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan tjson
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── c @> '{"a": "b"}' [type=bool, outer=(3)]
+
+# Should have a lower row count than the above case, due to a containment query
+# on 2 json paths.
+opt
+SELECT * FROM tjson WHERE c @> '{"a":"b", "c":"d"}'
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan tjson
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── c @> '{"a": "b", "c": "d"}' [type=bool, outer=(3)]
 
 # Bump up null counts.
 exec-ddl
