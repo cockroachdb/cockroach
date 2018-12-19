@@ -947,7 +947,7 @@ SELECT * FROM tjson WHERE b @> '{"a":"b"}'
 ----
 index-join tjson
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
- ├── stats: [rows=1666.66667, distinct(1)=1666.66667, null(1)=0]
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  └── scan tjson@b_idx
@@ -964,7 +964,7 @@ SELECT * FROM tjson WHERE b @> '{"a":"b", "c":"d"}'
 inner-join (lookup tjson)
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
  ├── key columns: [1] = [1]
- ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
+ ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── inner-join (zigzag tjson@b_idx tjson@b_idx)
@@ -984,7 +984,7 @@ SELECT * FROM tjson WHERE c @> '{"a":"b"}'
 ----
 select
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
- ├── stats: [rows=1666.66667, distinct(1)=1666.66667, null(1)=0]
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan tjson
@@ -1002,7 +1002,7 @@ SELECT * FROM tjson WHERE c @> '{"a":"b", "c":"d"}'
 ----
 select
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
- ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0]
+ ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan tjson

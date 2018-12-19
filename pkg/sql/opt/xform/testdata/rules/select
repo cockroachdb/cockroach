@@ -658,7 +658,7 @@ memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 570.03
+ │         └── cost: 567.81
  ├── G2: (select G4 G5) (index-join G6 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G6 b,cols=(1,4))
