@@ -147,6 +147,8 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("#33268")
+
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, _, _ := serverutils.StartServer(t, params)
