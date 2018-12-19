@@ -154,7 +154,7 @@ func (w *kv) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
-				stride := (float64(math.MaxInt64) - float64(math.MinInt64)) / float64(w.splits+1)
+				stride := (float64(w.cycleLength) - float64(math.MinInt64)) / float64(w.splits+1)
 				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
 				return []interface{}{splitPoint}
 			},
