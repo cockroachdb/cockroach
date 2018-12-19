@@ -871,8 +871,8 @@ func verifyTxnPerSecond(
 		t.l.Printf("average txns per second: %f", avgTxnPerSec)
 	}
 
-	// Verify that less than 5% of individual one minute periods were underneath
-	// the target.
+	// Verify that less than the specified limit of each individual one minute
+	// period was underneath the target.
 	minutesBelowTarget := 0.0
 	for _, dp := range perMinute {
 		if dp.Value < txnTarget {

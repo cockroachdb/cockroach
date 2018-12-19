@@ -73,6 +73,55 @@ func registerKV(r *registry) {
 	}
 }
 
+func registerKVContention(r *registry) {
+	r.Add(testSpec{
+		Name:  fmt.Sprintf("kv/contention/nodes=4"),
+		Nodes: nodes(5),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			nodes := c.nodes - 1
+			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Start(ctx, t, c.Range(1, nodes))
+
+			// Enable request tracing, which is a good tool for understanding
+			// how different transactions are interacting.
+			c.Run(ctx, c.Node(1),
+				`./cockroach sql --insecure -e "SET CLUSTER SETTING trace.debug.enable = true"`)
+
+			t.Status("running workload")
+			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m.Go(func(ctx context.Context) error {
+				// Write to a small number of keys to generate a large amount of
+				// contention. Use a relatively high amount of concurrency and
+				// aim to average one concurrent write for each key in the keyspace.
+				const cycleLength = 512
+				const concurrency = 128
+				const avgConcPerKey = 1
+				const batchSize = avgConcPerKey * (cycleLength / concurrency)
+
+				// Split the table so that each node can have a single leaseholder.
+				splits := nodes
+
+				// Run the workload for an hour. Add a secondary index to avoid
+				// UPSERTs performing blind writes.
+				cmd := fmt.Sprintf("./workload run kv --init --secondary-index --duration=1h "+
+					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl:1-%d}",
+					cycleLength, concurrency, batchSize, splits, nodes)
+				start := timeutil.Now()
+				c.Run(ctx, c.Node(nodes+1), cmd)
+				end := timeutil.Now()
+
+				// Assert that the average throughput stayed above a certain
+				// threshold.
+				const minQPS = 10
+				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.05)
+				return nil
+			})
+			m.Wait()
+		},
+	})
+}
+
 func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
 		Name:       "kv/quiescence/nodes=3",
