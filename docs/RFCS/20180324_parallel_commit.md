@@ -1,6 +1,6 @@
 - Feature Name: parallel commit
 - Status: draft
-- Start Date: 2018-30-24
+- Start Date: 2018-03-24
 - Authors: Tobias Schottdorf, Nathan VanBenschoten
 - RFC PR: #24194
 - Cockroach Issue: #30999
