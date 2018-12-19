@@ -388,6 +388,7 @@ tar cvf certs.tar certs
 			`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
 		cmd += keyCmd +
 			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[i], c.Tag) +
+			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
 			c.Env + " " + binary + " start " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout 2>> " + logDir + "/cockroach.stderr" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr; exit $x)"
