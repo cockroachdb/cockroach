@@ -2618,6 +2618,74 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 }
 
+// TestReplicaTSCacheForwardsIntentTS verifies that the timestamp cache affects
+// the timestamps at which intents are written. That is, if a transactional
+// write is forwarded by the timestamp cache due to a more recent read, the
+// written intents must be left at the forwarded timestamp. See the comment on
+// the enginepb.TxnMeta.Timestamp field for rationale.
+func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	tsOld := tc.Clock().Now()
+	tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0)
+
+	// Read at tNew to populate the read timestamp cache.
+	// DeleteRange at tNew to populate the write timestamp cache.
+	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnNew.OrigTimestamp = tsNew
+	txnNew.Timestamp = tsNew
+	keyGet := roachpb.Key("get")
+	keyDeleteRange := roachpb.Key("delete-range")
+	gArgs := &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keyGet},
+	}
+	drArgs := &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keyDeleteRange, EndKey: keyDeleteRange.Next()},
+	}
+	assignSeqNumsForReqs(txnNew, gArgs, drArgs)
+	var ba roachpb.BatchRequest
+	ba.Header.Txn = txnNew
+	ba.Add(gArgs, drArgs)
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Write under the timestamp cache within the transaction, and verify that
+	// the intents are written above the timestamp cache.
+	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnOld.OrigTimestamp = tsOld
+	txnOld.Timestamp = tsOld
+	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
+		t.Run(string(key), func(t *testing.T) {
+			pArgs := putArgs(key, []byte("foo"))
+			assignSeqNumsForReqs(txnOld, &pArgs)
+			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			iter := tc.engine.NewIterator(engine.IterOptions{Prefix: true})
+			defer iter.Close()
+			mvccKey := engine.MakeMVCCMetadataKey(key)
+			iter.Seek(mvccKey)
+			var keyMeta enginepb.MVCCMetadata
+			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
+				t.Fatalf("missing mvcc metadata for %q: %v", mvccKey, err)
+			} else if err := iter.ValueProto(&keyMeta); err != nil {
+				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
+			}
+			if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
+				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
+					key, tsNext, keyMeta.Timestamp)
+			}
+		})
+	}
+}
+
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -8344,10 +8412,10 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
+		ba.Txn = txn
 		if err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
-		ba.Txn = txn
 		_, pErr := repl.Send(ctx, ba)
 		return pErr
 	}
@@ -8480,6 +8548,8 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			ba.RangeID = repl.RangeID
 			if c.useTxn {
 				ba.Txn = txn
+				ba.Txn.OrigTimestamp = markerTS
+				ba.Txn.Timestamp = markerTS
 				assignSeqNumsForReqs(txn, c.req)
 			}
 			ba.Add(c.req)

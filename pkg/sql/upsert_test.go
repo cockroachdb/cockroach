@@ -129,7 +129,7 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 }
 
-func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
+func TestConcurrentUpsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -138,9 +138,6 @@ func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
-	// TODO(andrei): This test is probably broken: it's setting a default
-	// isolation on a random connection, not on all connections.
-	sqlDB.Exec(t, `SET DEFAULT_TRANSACTION_ISOLATION TO SNAPSHOT`)
 
 	testCases := []struct {
 		name       string

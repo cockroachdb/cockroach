@@ -33,15 +33,61 @@ type TxnMeta struct {
 	Key []byte `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Incremented on txn retry.
 	Epoch uint32 `protobuf:"varint,4,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	// The proposed timestamp for the transaction. This starts as the
-	// current wall time on the txn coordinator. This is the timestamp
-	// at which all of the transaction's writes are performed: even if
-	// intents have been laid down at different timestamps, the process
-	// of resolving them (e.g. when the txn commits) will bump them to
-	// this timestamp. SERIALIZABLE transactions only commit when
-	// timestamp == orig_timestamp. SNAPSHOT transactions can commit
-	// even when they've performed their reads (at orig_timestamp) at a
-	// different timestamp than their writes (at timestamp).
+	// The proposed timestamp for the transaction. This starts as the current wall
+	// time on the txn coordinator, and is forwarded by the timestamp cache if the
+	// txn attempts to write "beneath" another txn's writes.
+	//
+	// Writes within the txn are performed using the most up-to-date value of this
+	// timestamp that is available. For example, suppose a txn starts at some
+	// timestamp, writes a key/value, and has its timestamp forwarded while doing
+	// so because a later version already exists at that key. As soon as the txn
+	// coordinator learns of the updated timestamp, it will begin performing
+	// writes at the updated timestamp. The coordinator may, however, continue
+	// issuing writes at the original timestamp before it learns about the
+	// forwarded timestamp. The process of resolving the intents when the txn
+	// commits will bump any intents written at an older timestamp to the final
+	// commit timestamp.
+	//
+	// Note that reads do not occur at this timestamp; they instead occur at
+	// OrigTimestamp, which is tracked in the containing roachpb.Transaction.
+	//
+	// Writes used to be performed at the txn's original timestamp, which was
+	// necessary to avoid lost update anomalies in snapshot isolation mode. We no
+	// longer support snapshot isolation mode, and there are now several important
+	// reasons that writes are performed at this timestamp instead of the txn's
+	// original timestamp:
+	//
+	//    1. This timestamp is forwarded by the timestamp cache when this
+	//       transaction attempts to write beneath a more recent read. Leaving the
+	//       intent at the original timestamp would write beneath that read, which
+	//       would violate an invariant that time-bound iterators rely on.
+	//
+	//       For example, consider a client that uses a time-bound iterator to
+	//       poll for changes to a key. The client reads (ts5, ts10], sees no
+	//       writes, and reports that no changes have occurred up to t10. Then a
+	//       txn writes an intent at its original timestamp ts7. The txn's
+	//       timestamp is forwarded to ts11 by the timestamp cache thanks to the
+	//       client's read. Meanwhile, the client reads (ts10, ts15] and, again
+	//       seeing no intents, reports that no changes have occurred to the key
+	//       up to t15. Now the txn commits at ts11 and bumps the intent to ts11.
+	//       But the client thinks it has seen all changes up to t15, and so never
+	//       sees the intent! We avoid this problem by writing intents at the
+	//       provisional commit timestamp insteadr. In this example, the intent
+	//       would instead be written at ts11 and picked up by the client's next
+	//       read from (ts10, ts15].
+	//
+	//    2. Unnecessary PushTxn roundtrips are avoided. If a transaction is
+	//       forwarded from ts5 to ts10, the rest of its intents will be written
+	//       at ts10. Reads at t < ts10 that encounter these intents can ignore
+	//       them; if the intents had instead been left at ts5, these reads would
+	//       have needed to send PushTxn requests just to find out that the txn
+	//       had, in fact, been forwarded to a non-conflicting time.
+	//
+	//    3. Unnecessary intent rewriting is avoided. Writing at the original
+	//       timestamp when this timestamp has been forwarded guarantees that the
+	//       value will need to be rewritten at the forwarded timestamp if the
+	//       transaction commits.
+	//
 	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
 	Priority  int32                        `protobuf:"varint,6,opt,name=priority,proto3" json:"priority,omitempty"`
 	// A one-indexed sequence number which is increased on each request
