@@ -45,16 +45,32 @@ var _ bytes.Buffer
 
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
-func _ASSIGN_HASH(_, _ string) uint64 {
+func _ASSIGN_HASH(_, _ interface{}) uint64 {
 	panic("")
 }
 
-func _CHECK_COL_MAIN(_SEL_IND uin64) { // */}}
+// _ASSIGN_NE is the template equality function for assigning the first input
+// to the result of the the second input != the third input.
+func _ASSIGN_NE(_, _, _ interface{}) uint64 {
+	panic("")
+}
+
+// _TYPES_T is the template type variable for types.T. It will be replaced by
+// types.Foo for each type Foo in the types.T type.
+const _TYPES_T = types.Unhandled
+
+// _SEL_IND is the template type variable for the loop variable that's either
+// i or sel[i] depending on whether we're in a selection or not.
+const _SEL_IND = 0
+
+func _CHECK_COL_MAIN(
+	prober *hashJoinProber, buildKeys, probeKeys []interface{}, keyID uint64, i uint16,
+) { // */}}
 	// {{define "checkColMain"}}
 	buildVal := buildKeys[keyID-1]
 	probeVal := probeKeys[_SEL_IND]
 	var unique bool
-	_ASSIGN_NE("unique", "buildVal", "probeVal")
+	_ASSIGN_NE(unique, buildVal, probeVal)
 
 	if unique {
 		prober.differs[prober.toCheck[i]] = true
@@ -64,7 +80,14 @@ func _CHECK_COL_MAIN(_SEL_IND uin64) { // */}}
 	// {{/*
 }
 
-func _CHECK_COL_BODY(_SEL_IND uint64, _PROBE_HAS_NULLS bool, BUILD_HAS_NULLS bool) { // */}}
+func _CHECK_COL_BODY(
+	prober *hashJoinProber,
+	probeVec, buildVec ColVec,
+	buildKeys, probeKeys []interface{},
+	nToCheck uint16,
+	_PROBE_HAS_NULLS bool,
+	_BUILD_HAS_NULLS bool,
+) { // */}}
 	// {{define "checkColBody"}}
 	for i := uint16(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
@@ -80,7 +103,7 @@ func _CHECK_COL_BODY(_SEL_IND uint64, _PROBE_HAS_NULLS bool, BUILD_HAS_NULLS boo
 			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.NullAt64(keyID - 1) {
 				prober.differs[prober.toCheck[i]] = true
 			} else /*{{end}} */ {
-				_CHECK_COL_MAIN(_SEL_IND)
+				_CHECK_COL_MAIN(prober, buildKeys, probeKeys, keyID, i)
 			}
 		}
 	}
@@ -88,31 +111,37 @@ func _CHECK_COL_BODY(_SEL_IND uint64, _PROBE_HAS_NULLS bool, BUILD_HAS_NULLS boo
 	// {{/*
 }
 
-func _CHECK_COL_WITH_NULLS(_SEL_IND uint64) { // */}}
+func _CHECK_COL_WITH_NULLS(
+	prober *hashJoinProber,
+	probeVec, buildVec ColVec,
+	buildKeys, probeKeys []interface{},
+	nToCheck uint16,
+	_SEL_STRING string,
+) { // */}}
 	// {{define "checkColWithNulls"}}
 	if probeVec.HasNulls() {
 		if buildVec.HasNulls() {
-			_CHECK_COL_BODY(_SEL_IND, true, true)
+			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
 		} else {
-			_CHECK_COL_BODY(_SEL_IND, true, false)
+			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
 		}
 	} else {
 		if buildVec.HasNulls() {
-			_CHECK_COL_BODY(_SEL_IND, false, true)
+			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
 		} else {
-			_CHECK_COL_BODY(_SEL_IND, false, false)
+			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
 		}
 	}
 	// {{end}}
 	// {{/*
 }
 
-func _REHASH_BODY(_ string) { // */}}
+func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _ string) { // */}}
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		v := keys[_SEL_IND]
 		var hash uint64
-		_ASSIGN_HASH("hash", "v")
+		_ASSIGN_HASH(hash, v)
 		buckets[i] = buckets[i]*31 + hash
 	}
 	// {{end}}
@@ -133,9 +162,9 @@ func (ht *hashTable) rehash(
 	case _TYPES_T:
 		keys := col._TemplateType()
 		if sel != nil {
-			_REHASH_BODY(sel[i])
+			_REHASH_BODY(buckets, keys, nKeys, "sel[i]")
 		} else {
-			_REHASH_BODY(i)
+			_REHASH_BODY(buckets, keys, nKeys, "i")
 		}
 
 	// {{end}}
@@ -159,11 +188,21 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 		probeKeys := probeVec._TemplateType()
 
 		if sel != nil {
-			_CHECK_COL_WITH_NULLS(sel[prober.toCheck[i]])
+			_CHECK_COL_WITH_NULLS(
+				prober,
+				probeVec, buildVec,
+				buildKeys, probeKeys,
+				nToCheck,
+				"sel[prober.toCheck[i]]")
 		} else {
-			_CHECK_COL_WITH_NULLS(prober.toCheck[i])
+			_CHECK_COL_WITH_NULLS(
+				prober,
+				probeVec, buildVec,
+				buildKeys, probeKeys,
+				nToCheck,
+				"prober.toCheck[i]")
 		}
-		// {{end}}
+	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
