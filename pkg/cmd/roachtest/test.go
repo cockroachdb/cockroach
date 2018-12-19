@@ -947,7 +947,10 @@ func (r *registry) runAsync(
 			if teamCity {
 				fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
 
-				if artifactsDir != "" {
+				// Only publish artifacts for failed tests. At the time of writing, a full roachtest
+				// suite results in ~6gb of artifacts which we can't retain for more than a few days
+				// (and this in turn delays the resolution of failures).
+				if t.Failed() && artifactsDir != "" {
 					escapedTestName := teamCityNameEscape(t.Name())
 					artifactsGlobPath := filepath.Join(artifactsDir, "**")
 					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
