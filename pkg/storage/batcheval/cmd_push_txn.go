@@ -146,7 +146,8 @@ func PushTxn(
 		reply.PusheeTxn.OrigTimestamp = args.Now
 		result := result.Result{}
 		result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
-		return result, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
+		txnRecord := reply.PusheeTxn.AsRecord()
+		return result, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord)
 	}
 	// Start with the persisted transaction record as final transaction.
 	reply.PusheeTxn = existTxn.Clone()
@@ -227,7 +228,8 @@ func PushTxn(
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn); err != nil {
+	txnRecord := reply.PusheeTxn.AsRecord()
+	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 		return result.Result{}, err
 	}
 	result := result.Result{}
