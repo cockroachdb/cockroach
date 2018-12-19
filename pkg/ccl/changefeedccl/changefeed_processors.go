@@ -166,13 +166,14 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
 	ca.pollerDoneCh = make(chan struct{})
-	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
+	stopper := ca.flowCtx.Stopper()
+	if err := stopper.RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.pollerDoneCh)
 		var err error
 		if storage.RangefeedEnabled.Get(&ca.flowCtx.Settings.SV) {
-			err = ca.poller.RunUsingRangefeeds(ctx)
+			err = ca.poller.RunUsingRangefeeds(ctx, stopper)
 		} else {
-			err = ca.poller.Run(ctx)
+			err = ca.poller.Run(ctx, stopper)
 		}
 
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in

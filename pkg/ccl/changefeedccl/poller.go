@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -119,7 +120,12 @@ func makePoller(
 // ExportRequests. It backpressures sending the requests such that some maximum
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
-func (p *poller) Run(ctx context.Context) error {
+func (p *poller) Run(ctx context.Context, stopper *stop.Stopper) error {
+	var shouldQuiesce <-chan struct{}
+	if stopper != nil {
+		shouldQuiesce = stopper.ShouldQuiesce()
+	}
+
 	for {
 		// Wait for polling interval
 		p.mu.Lock()
@@ -134,6 +140,10 @@ func (p *poller) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(pollDuration):
+			case <-shouldQuiesce:
+				// NB: We have to return an error in order tell the ctxgroup to
+				// initiate cancellation. Any error will do.
+				return context.Canceled
 			}
 		}
 
@@ -190,12 +200,22 @@ func (p *poller) Run(ctx context.Context) error {
 // RunUsingRangeFeeds performs the same task as the normal Run method, but uses
 // the experimental Rangefeed system to capture changes rather than the
 // poll-and-export method.  Note
-func (p *poller) RunUsingRangefeeds(ctx context.Context) error {
+func (p *poller) RunUsingRangefeeds(ctx context.Context, stopper *stop.Stopper) error {
 	// Start polling tablehistory, which must be done concurrently with
 	// the individual rangefeed routines.
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(p.pollTableHistory)
 	g.GoCtx(p.rangefeedImpl)
+	g.GoCtx(func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stopper.ShouldQuiesce():
+			// NB: We have to return an error in order tell the ctxgroup to initiate
+			// cancellation. Any error will do.
+			return context.Canceled
+		}
+	})
 	return g.Wait()
 }
 

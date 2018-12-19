@@ -142,7 +142,7 @@ func createBenchmarkChangefeed(
 		s.ClusterSettings(), details, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
-	go func() { _ = poller.Run(ctx) }()
+	go func() { _ = poller.Run(ctx, nil) }()
 	go func() { _ = thUpdater.PollTableDescs(ctx) }()
 
 	errCh := make(chan error, 1)
