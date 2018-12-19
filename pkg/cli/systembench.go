@@ -15,6 +15,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/cli/systembench"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +41,17 @@ Runs the prime finding cpu benchmark.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(RunCPUBench),
+}
+
+// A networkBench command runs network benchmarks on cockroach.
+var networkBench = &cobra.Command{
+	Use:   "network",
+	Short: "Runs network benchmarks.",
+	Long: `
+Runs network benchmarks..
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(RunNetworkBench),
 }
 
 // RunSeqWriteBench runs a sequential write I/O benchmark.
@@ -66,9 +79,29 @@ func RunCPUBench(cmd *cobra.Command, args []string) error {
 	return systembench.RunCPU(cpuOptions)
 }
 
+// RunNetworkBench runs the network benchmark.
+func RunNetworkBench(cmd *cobra.Command, args []string) error {
+	if networkBenchCtx.server {
+		serverOptions := systembench.ServerOptions{
+			Port: strconv.Itoa(networkBenchCtx.port),
+		}
+		return systembench.RunServer(serverOptions)
+	}
+
+	clientOptions := systembench.ClientOptions{
+		Concurrency: systemBenchCtx.concurrency,
+		Duration:    systemBenchCtx.duration,
+
+		Addresses:   networkBenchCtx.addresses,
+		LatencyMode: networkBenchCtx.latency,
+	}
+	return systembench.RunClient(clientOptions)
+}
+
 var systemBenchCmds = []*cobra.Command{
 	seqWriteBench,
 	cpuBench,
+	networkBench,
 }
 
 var systemBenchCmd = &cobra.Command{
