@@ -406,6 +406,12 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return shouldDistribute, nil
 
+	case *zigzagJoinNode:
+		if err := dsp.checkExpr(n.onCond); err != nil {
+			return cannotDistribute, err
+		}
+		return shouldDistribute, nil
+
 	case *groupNode:
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
@@ -2036,17 +2042,8 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// TODO(itsbilal): Add support for restricting the Zigzag joiner
 	// to a certain set of spans (similar to the InterleavedReaderJoiner)
 	// on one side. Once that's done, we can split this processor across
-	// multiple nodes here.
-	left := n.sides[0].scan
-	var nodeID roachpb.NodeID
-	if planCtx.isLocal {
-		nodeID = dsp.nodeDesc.NodeID
-	} else {
-		nodeID, err = dsp.getNodeIDForScan(planCtx, left.spans, left.reverse)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-	}
+	// multiple nodes here. Until then, schedule on the current node.
+	nodeID := dsp.nodeDesc.NodeID
 
 	stageID := plan.NewStageID()
 	// Set the ON condition.
