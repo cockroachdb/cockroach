@@ -58,7 +58,7 @@ type ReplicaState struct {
 	Stats       *cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
 	// txn_span_gc_threshold is the (maximum) timestamp below which transaction
 	// records may have been garbage collected (as measured by txn.LastActive()).
-	// Transaction at lower timestamps must not be allowed to write their initial
+	// Transactions at lower timestamps must not be allowed to write their initial
 	// transaction entry.
 	TxnSpanGCThreshold *cockroach_util_hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
 	// using_applied_state_key specifies whether the Range has been upgraded
