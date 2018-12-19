@@ -559,6 +559,61 @@ func TestTransactionClone(t *testing.T) {
 	}
 }
 
+func TestTransactionRecordRoundtrips(t *testing.T) {
+	// Verify that converting from a Transaction to a TransactionRecord
+	// strips out fields but is lossless for the desired fields.
+	txn := nonZeroTxn
+	txnRecord := txn.AsRecord()
+	if !reflect.DeepEqual(txnRecord.TxnMeta, txn.TxnMeta) {
+		t.Fatalf("txnRecord.TxnMeta = %v, txn.TxnMeta = %v", txnRecord.TxnMeta, txn.TxnMeta)
+	}
+	if !reflect.DeepEqual(txnRecord.Status, txn.Status) {
+		t.Fatalf("txnRecord.Status = %v, txn.Status = %v", txnRecord.Status, txn.Status)
+	}
+	if !reflect.DeepEqual(txnRecord.LastHeartbeat, txn.LastHeartbeat) {
+		t.Fatalf("txnRecord.LastHeartbeat = %v, txn.LastHeartbeat = %v", txnRecord.LastHeartbeat, txn.LastHeartbeat)
+	}
+	if !reflect.DeepEqual(txnRecord.Intents, txn.Intents) {
+		t.Fatalf("txnRecord.Intents = %v, txn.Intents = %v", txnRecord.Intents, txn.Intents)
+	}
+
+	// Verify that converting through a Transaction message and back
+	// to a TransactionRecord is a lossless round trip.
+	txn2 := txnRecord.AsTransaction()
+	txnRecord2 := txn2.AsRecord()
+	if !reflect.DeepEqual(txnRecord, txnRecord2) {
+		t.Fatalf("txnRecord = %v, txnRecord2 = %v", txnRecord, txnRecord2)
+	}
+
+	// Verify that encoded Transaction messages can be decoded as
+	// TransactionRecord messages.
+	txnBytes, err := protoutil.Marshal(&txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txnRecord3 TransactionRecord
+	if err := protoutil.Unmarshal(txnBytes, &txnRecord3); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(txnRecord, txnRecord3) {
+		t.Fatalf("txnRecord = %v, txnRecord3 = %v", txnRecord, txnRecord3)
+	}
+
+	// Verify that encoded TransactionRecord messages can be decoded
+	// as Transaction messages.
+	txnRecordBytes, err := protoutil.Marshal(&txnRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txn3 Transaction
+	if err := protoutil.Unmarshal(txnRecordBytes, &txn3); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(txn2, txn3) {
+		t.Fatalf("txn2 = %v, txn3 = %v", txn2, txn3)
+	}
+}
+
 // checkVal verifies if a value is close to an expected value, within a fraction (e.g. if
 // fraction=0.1, it checks if val is within 10% of expected).
 func checkVal(val, expected, errFraction float64) bool {

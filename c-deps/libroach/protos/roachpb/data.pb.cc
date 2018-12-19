@@ -97,6 +97,11 @@ class TransactionDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<Transaction>
       _instance;
 } _Transaction_default_instance_;
+class TransactionRecordDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<TransactionRecord>
+      _instance;
+} _TransactionRecord_default_instance_;
 class IntentDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<Intent>
@@ -296,6 +301,23 @@ static void InitDefaultsTransaction() {
       &protobuf_roachpb_2fdata_2eproto::scc_info_ObservedTimestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
 
+static void InitDefaultsTransactionRecord() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_TransactionRecord_default_instance_;
+    new (ptr) ::cockroach::roachpb::TransactionRecord();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::TransactionRecord::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<3> scc_info_TransactionRecord =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsTransactionRecord}, {
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
+
 static void InitDefaultsIntent() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -386,6 +408,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_InternalCommitTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ObservedTimestamp.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Transaction.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_TransactionRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Intent.base);
   ::google::protobuf::internal::InitSCC(&scc_info_SequencedWrite.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Lease.base);
@@ -3656,6 +3679,314 @@ void Transaction::InternalSwap(Transaction* other) {
 
 // ===================================================================
 
+void TransactionRecord::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_TransactionRecord_default_instance_._instance.get_mutable()->meta_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
+      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_TransactionRecord_default_instance_._instance.get_mutable()->last_heartbeat_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void TransactionRecord::clear_meta() {
+  if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
+    delete meta_;
+  }
+  meta_ = NULL;
+}
+void TransactionRecord::clear_last_heartbeat() {
+  if (GetArenaNoVirtual() == NULL && last_heartbeat_ != NULL) {
+    delete last_heartbeat_;
+  }
+  last_heartbeat_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int TransactionRecord::kMetaFieldNumber;
+const int TransactionRecord::kStatusFieldNumber;
+const int TransactionRecord::kLastHeartbeatFieldNumber;
+const int TransactionRecord::kIntentsFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+TransactionRecord::TransactionRecord()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fdata_2eproto::scc_info_TransactionRecord.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.TransactionRecord)
+}
+TransactionRecord::TransactionRecord(const TransactionRecord& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      intents_(from.intents_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_meta()) {
+    meta_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.meta_);
+  } else {
+    meta_ = NULL;
+  }
+  if (from.has_last_heartbeat()) {
+    last_heartbeat_ = new ::cockroach::util::hlc::Timestamp(*from.last_heartbeat_);
+  } else {
+    last_heartbeat_ = NULL;
+  }
+  status_ = from.status_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TransactionRecord)
+}
+
+void TransactionRecord::SharedCtor() {
+  ::memset(&meta_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&status_) -
+      reinterpret_cast<char*>(&meta_)) + sizeof(status_));
+}
+
+TransactionRecord::~TransactionRecord() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.TransactionRecord)
+  SharedDtor();
+}
+
+void TransactionRecord::SharedDtor() {
+  if (this != internal_default_instance()) delete meta_;
+  if (this != internal_default_instance()) delete last_heartbeat_;
+}
+
+void TransactionRecord::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const TransactionRecord& TransactionRecord::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_TransactionRecord.base);
+  return *internal_default_instance();
+}
+
+
+void TransactionRecord::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.TransactionRecord)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  intents_.Clear();
+  if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
+    delete meta_;
+  }
+  meta_ = NULL;
+  if (GetArenaNoVirtual() == NULL && last_heartbeat_ != NULL) {
+    delete last_heartbeat_;
+  }
+  last_heartbeat_ = NULL;
+  status_ = 0;
+  _internal_metadata_.Clear();
+}
+
+bool TransactionRecord::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.TransactionRecord)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_meta()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // .cockroach.roachpb.TransactionStatus status = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_status(static_cast< ::cockroach::roachpb::TransactionStatus >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_last_heartbeat()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 11: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_intents()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.TransactionRecord)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.TransactionRecord)
+  return false;
+#undef DO_
+}
+
+void TransactionRecord::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.TransactionRecord)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_meta()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_meta(), output);
+  }
+
+  // .cockroach.roachpb.TransactionStatus status = 4;
+  if (this->status() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      4, this->status(), output);
+  }
+
+  if (this->has_last_heartbeat()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_last_heartbeat(), output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      11,
+      this->intents(static_cast<int>(i)),
+      output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TransactionRecord)
+}
+
+size_t TransactionRecord::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.TransactionRecord)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->intents_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->intents(static_cast<int>(i)));
+    }
+  }
+
+  if (this->has_meta()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *meta_);
+  }
+
+  if (this->has_last_heartbeat()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *last_heartbeat_);
+  }
+
+  // .cockroach.roachpb.TransactionStatus status = 4;
+  if (this->status() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void TransactionRecord::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const TransactionRecord*>(&from));
+}
+
+void TransactionRecord::MergeFrom(const TransactionRecord& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.TransactionRecord)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  intents_.MergeFrom(from.intents_);
+  if (from.has_meta()) {
+    mutable_meta()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.meta());
+  }
+  if (from.has_last_heartbeat()) {
+    mutable_last_heartbeat()->::cockroach::util::hlc::Timestamp::MergeFrom(from.last_heartbeat());
+  }
+  if (from.status() != 0) {
+    set_status(from.status());
+  }
+}
+
+void TransactionRecord::CopyFrom(const TransactionRecord& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.TransactionRecord)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TransactionRecord::IsInitialized() const {
+  return true;
+}
+
+void TransactionRecord::Swap(TransactionRecord* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void TransactionRecord::InternalSwap(TransactionRecord* other) {
+  using std::swap;
+  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  swap(meta_, other->meta_);
+  swap(last_heartbeat_, other->last_heartbeat_);
+  swap(status_, other->status_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string TransactionRecord::GetTypeName() const {
+  return "cockroach.roachpb.TransactionRecord";
+}
+
+
+// ===================================================================
+
 void Intent::InitAsDefaultInstance() {
   ::cockroach::roachpb::_Intent_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
       ::cockroach::roachpb::Span::internal_default_instance());
@@ -5300,6 +5631,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ObservedTime
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Transaction* Arena::CreateMaybeMessage< ::cockroach::roachpb::Transaction >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Transaction >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TransactionRecord* Arena::CreateMaybeMessage< ::cockroach::roachpb::TransactionRecord >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::TransactionRecord >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Intent* Arena::CreateMaybeMessage< ::cockroach::roachpb::Intent >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Intent >(arena);

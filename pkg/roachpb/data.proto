@@ -255,6 +255,7 @@ message Transaction {
   storage.engine.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // A free-text identifier for debug purposes.
   string name = 2;
+  reserved 3;
   TransactionStatus status = 4;
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
@@ -358,6 +359,27 @@ message Transaction {
   // which commit at a higher timestamp without resorting to a
   // client-side retry.
   bool orig_timestamp_was_observed = 16;
+}
+
+// A TransactionRecord message contains the subset of the fields in a
+// Transaction message that must be persisted in a transaction record.
+//
+// The message type is wire-compatible with persisted Transaction protos,
+// but avoids the overhead of the fields in Transaction that don't need to
+// be persisted in a transaction record. It also serves as a specification
+// for the fields that must be present in a transaction record.
+message TransactionRecord {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // Fields on Transaction that are not present in a transaction record.
+  reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
+
+  // See comments on Transaction proto.
+	storage.engine.enginepb.TxnMeta meta = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+	TransactionStatus status             = 4;
+	util.hlc.Timestamp last_heartbeat    = 5  [(gogoproto.nullable) = false];
+	repeated Span intents                = 11 [(gogoproto.nullable) = false];
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.
