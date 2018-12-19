@@ -66,7 +66,7 @@ message ReplicaState {
   reserved 8;
   // txn_span_gc_threshold is the (maximum) timestamp below which transaction
   // records may have been garbage collected (as measured by txn.LastActive()).
-  // Transaction at lower timestamps must not be allowed to write their initial
+  // Transactions at lower timestamps must not be allowed to write their initial
   // transaction entry.
   util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.customname) = "TxnSpanGCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
   reserved 10;
