@@ -16,14 +16,19 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -131,6 +136,155 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	r, ok := row[0].(*tree.DString)
 	if !ok || string(*r) != expDB {
 		t.Fatalf("expected a DString == %s, got: %T: %s", expDB, r, r)
+	}
+}
+
+// TestInternalExecAppNameInitialization validates that the application name
+// is properly initialized for both kinds of internal executors: the "standalone"
+// internal executor and those that hang off client sessions ("session-bound").
+// In both cases it does so by checking the result of SHOW application_name,
+// the cancellability of the query, and the listing in the application statistics.
+func TestInternalExecAppNameInitialization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	t.Run("root internal exec", func(t *testing.T) {
+		testInternalExecutorAppNameInitialization(t,
+			sql.InternalAppNamePrefix+"internal-test-query",
+			s.InternalExecutor().(*sql.InternalExecutor))
+	})
+
+	ie := sql.MakeSessionBoundInternalExecutor(
+		context.TODO(),
+		&sessiondata.SessionData{
+			User:            security.RootUser,
+			Database:        "defaultdb",
+			ApplicationName: "appname_findme",
+			SequenceState:   &sessiondata.SequenceState{},
+		},
+		s.(*server.TestServer).Server.PGServer().SQLServer,
+		sql.MemoryMetrics{},
+		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+	)
+	t.Run("session bound exec", func(t *testing.T) {
+		testInternalExecutorAppNameInitialization(t,
+			"appname_findme",
+			&ie)
+	})
+}
+
+type testInternalExecutor interface {
+	Query(
+		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	) ([]tree.Datums, sqlbase.ResultColumns, error)
+	Exec(
+		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	) (int, error)
+}
+
+func testInternalExecutorAppNameInitialization(
+	t *testing.T, expectedAppName string, ie testInternalExecutor,
+) {
+	// Check that the application_name is set properly in the executor.
+	if rows, _, err := ie.Query(context.TODO(), "test-query", nil,
+		"SHOW application_name"); err != nil {
+		t.Fatal(err)
+	} else if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got: %+v", rows)
+	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+	}
+
+	// Start a background query using the internal executor. We want to
+	// have this keep running until we cancel it below.
+	sem := make(chan struct{})
+	errChan := make(chan error)
+	go func() {
+		sem <- struct{}{}
+		_, _, err := ie.Query(context.TODO(),
+			"test-query",
+			nil, /* txn */
+			"SELECT pg_sleep(1337666)")
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	<-sem
+
+	// We'll wait until the query appears in SHOW QUERIES.
+	// When it does, we capture the query ID.
+	var queryID string
+	testutils.SucceedsSoon(t, func() error {
+		rows, _, err := ie.Query(context.TODO(),
+			"find-query",
+			nil, /* txn */
+			// We need to assemble the magic string so that this SELECT
+			// does not find itself.
+			"SELECT query_id, application_name FROM [SHOW QUERIES] WHERE query LIKE '%337' || '666%'")
+		if err != nil {
+			return err
+		}
+		switch len(rows) {
+		case 0:
+			// The SucceedsSoon test may find this a couple of times before
+			// this succeeds.
+			return fmt.Errorf("query not started yet")
+		case 1:
+			appName := string(*rows[0][1].(*tree.DString))
+			if appName != expectedAppName {
+				return fmt.Errorf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+			}
+
+			// Good app name, retrieve query ID for later cancellation.
+			queryID = string(*rows[0][0].(*tree.DString))
+			return nil
+		default:
+			return fmt.Errorf("unexpected results: %+v", rows)
+		}
+	})
+
+	// Check that the query shows up in the internal tables without error.
+	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
+		"SELECT application_name FROM crdb_internal.node_queries WHERE query LIKE '%337' || '666%'"); err != nil {
+		t.Fatal(err)
+	} else if len(rows) != 1 {
+		t.Fatalf("expected 1 query, got: %+v", rows)
+	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+	}
+
+	// We'll want to look at statistics below, and finish the test with
+	// no goroutine leakage. To achieve this, cancel the query. and
+	// drain the goroutine.
+	if _, err := ie.Exec(context.TODO(), "cancel-query", nil, "CANCEL QUERY $1", queryID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-errChan:
+		if !isClientsideQueryCanceledErr(err) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second * 5):
+		t.Fatal("no error received from query supposed to be canceled")
+	}
+
+	// TODO(knz): remove this skip when we log internal queries in stats.
+	t.Skip("#32215")
+
+	// Now check that it was properly registered in statistics.
+	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
+		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep('"); err != nil {
+		t.Fatal(err)
+	} else if len(rows) != 1 {
+		t.Fatalf("expected 1 query, got: %+v", rows)
+	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 }
 
