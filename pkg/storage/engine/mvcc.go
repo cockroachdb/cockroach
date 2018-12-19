@@ -999,6 +999,10 @@ func (b *putBuffer) putMeta(
 // key metadata. The timestamp must be passed as a parameter; using
 // the Timestamp field on the value results in an error.
 //
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
+//
 // If the timestamp is specified as hlc.Timestamp{}, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
@@ -1032,6 +1036,10 @@ func MVCCPut(
 // exist in order for stats to be updated properly. If a previous version of
 // the key does exist it is up to the caller to properly account for their
 // existence in updating the stats.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindPut(
 	ctx context.Context,
 	engine Writer,
@@ -1046,6 +1054,10 @@ func MVCCBlindPut(
 
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCDelete(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1232,6 +1244,28 @@ func replayTransactionalWrite(
 // to write or an error. If valueFn is supplied, value should be nil
 // and vice versa. valueFn can delete by returning nil. Returning
 // []byte{} will write an empty value, not delete.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp parameter
+// is redundant. Specifically, the intent is written at the txn's
+// provisional commit timestamp, txn.Timestamp, unless it is
+// forwarded by an existing committed value beneath that timestamp.
+// However, reads (e.g., for a ConditionalPut) are performed at the
+// txn's original timestamp, txn.OrigTimestamp, to ensure that the
+// client sees a consistent snapshot of the database. Any existing
+// committed writes that are newer than txn.OrigTimestamp will thus
+// generate a WriteTooOld error. If txn.RefreshedTimestamp is set,
+// it is used in place of txn.OrigTimestamp.
+//
+// In an attempt to reduce confusion about which timestamp applies,
+// when writing transactionally, the timestamp parameter must be
+// equal to txn.OrigTimestamp. (One could imagine instead requiring
+// that the timestamp parameter be set to hlc.Timestamp{} when writing
+// transactionally, but hlc.Timestamp{} is already used as a sentinel
+// for inline puts.)
+//
+// TODO(andrei): explore alternate function signatures that reduce
+// confusion about which timestamp applies.
 func mvccPutInternal(
 	ctx context.Context,
 	engine Writer,
@@ -1287,6 +1321,19 @@ func mvccPutInternal(
 			})
 		}
 		return err
+	}
+
+	writeTimestamp := timestamp
+	if txn != nil {
+		txnReadTimestamp := txn.OrigTimestamp
+		txnReadTimestamp.Forward(txn.RefreshedTimestamp)
+		if txnReadTimestamp != timestamp {
+			return errors.Errorf("mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
+				txn.OrigTimestamp, timestamp)
+		}
+		// A txn writes intents at its provisional commit timestamp. See the
+		// comment on the txn.Timestamp field definition for rationale.
+		writeTimestamp = txn.Timestamp
 	}
 
 	// Determine what the logical operation is. Are we writing an intent
@@ -1361,7 +1408,7 @@ func mvccPutInternal(
 			// overwrite the existing intent; otherwise we must manually
 			// delete the old intent, taking care with MVCC stats.
 			logicalOp = MVCCUpdateIntentOpType
-			if metaTimestamp.Less(timestamp) {
+			if metaTimestamp.Less(writeTimestamp) {
 				{
 					// If the older write intent has a version underneath it, we need to
 					// read its size because its GCBytesAge contribution may change as we
@@ -1382,13 +1429,13 @@ func mvccPutInternal(
 				if err := engine.Clear(versionKey); err != nil {
 					return err
 				}
-			} else if timestamp.Less(metaTimestamp) {
+			} else if writeTimestamp.Less(metaTimestamp) {
 				// This case occurs when we're writing a key twice within a
 				// txn, and our timestamp has been pushed forward because of
 				// a write-too-old error on this key. For this case, we want
 				// to continue writing at the higher timestamp or else the
 				// MVCCMetadata could end up pointing *under* the newer write.
-				timestamp = metaTimestamp
+				writeTimestamp = metaTimestamp
 			}
 			// Since an intent with a smaller sequence number exists for the
 			// same transaction, we must add the previous value and sequence
@@ -1417,8 +1464,8 @@ func mvccPutInternal(
 			// error indicating what the timestamp ended up being. This
 			// timestamp can then be used to increment the txn timestamp and
 			// be returned with the response.
-			actualTimestamp := metaTimestamp.Next()
-			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
+			writeTimestamp = metaTimestamp.Next()
+			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: writeTimestamp}
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
@@ -1431,11 +1478,10 @@ func mvccPutInternal(
 				// the write timestamp to the latest value's timestamp + 1. The
 				// new timestamp is returned to the caller in maybeTooOldErr.
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, actualTimestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, metaKey, value, ok, writeTimestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			}
-			timestamp = actualTimestamp
 		} else {
 			if value, err = maybeGetValue(
 				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
@@ -1458,7 +1504,7 @@ func mvccPutInternal(
 			txnMeta = &txn.TxnMeta
 		}
 		buf.newMeta.Txn = txnMeta
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(timestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(writeTimestamp)
 	}
 	newMeta := &buf.newMeta
 
@@ -1492,7 +1538,7 @@ func mvccPutInternal(
 	// RocksDB's skiplist memtable implementation includes a fast-path for
 	// sequential insertion patterns.
 	versionKey := metaKey
-	versionKey.Timestamp = timestamp
+	versionKey.Timestamp = writeTimestamp
 	if err := engine.Put(versionKey, value); err != nil {
 		return err
 	}
@@ -1506,16 +1552,11 @@ func mvccPutInternal(
 	// Log the logical MVCC operation.
 	logicalOpDetails := MVCCLogicalOpDetails{
 		Key:       key,
-		Timestamp: timestamp,
+		Timestamp: writeTimestamp,
 		Safe:      true,
 	}
 	if txn := buf.newMeta.Txn; txn != nil {
 		logicalOpDetails.Txn = *txn
-		// The intent may be at a lower timestamp than the transaction's
-		// current timestamp, meaning that it will never actually commit
-		// at the timestamp it's written at. In that case, we can forward
-		// the timestamp of the logical operation to the txn's timestamp.
-		logicalOpDetails.Timestamp.Forward(txn.Timestamp)
 	}
 	engine.LogLogicalOp(logicalOp, logicalOpDetails)
 
@@ -1528,6 +1569,10 @@ func mvccPutInternal(
 //
 // An initial value is read from the key using the same operational
 // timestamp as we use to write a value.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCIncrement(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1577,6 +1622,10 @@ func MVCCIncrement(
 //
 // The condition check reads a value from the key using the same operational
 // timestamp as we use to write a value.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCConditionalPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1598,6 +1647,10 @@ func MVCCConditionalPut(
 // semantics. MVCCBlindConditionalPut skips retrieving the existing metadata
 // for the key requiring the caller to guarantee no versions for the key
 // currently exist.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindConditionalPut(
 	ctx context.Context,
 	engine Writer,
@@ -1646,6 +1699,10 @@ func mvccConditionalPutUsingIter(
 // an existing value that is different from the supplied value. If
 // failOnTombstones is set to true, tombstones count as mismatched values and
 // will cause a ConditionFailedError.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCInitPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1665,6 +1722,10 @@ func MVCCInitPut(
 // comments for details of the semantics. MVCCBlindInitPut skips
 // retrieving the existing metadata for the key requiring the caller
 // to guarantee no version for the key currently exist.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp paramater is
+// confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindInitPut(
 	ctx context.Context,
 	engine ReadWriter,
