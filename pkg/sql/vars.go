@@ -49,6 +49,9 @@ type getStringValFn = func(
 // sessionVar provides a unified interface for performing operations on
 // variables such as the selected database, or desired syntax.
 type sessionVar struct {
+	// Hidden indicates that the variable should not show up in the output of SHOW ALL.
+	Hidden bool
+
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) string
@@ -554,6 +557,25 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-SERVER-VERSION-NUM
 	`server_version_num`: makeReadOnlyVar(PgServerVersionNum),
+
+	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
+	`ssl_renegotiation_limit`: {
+		Hidden:        true,
+		GetStringVal:  makeIntGetStringValFn(`ssl_renegotiation_limit`),
+		Get:           func(_ *extendedEvalContext) string { return "0" },
+		GlobalDefault: func(_ *settings.Values) string { return "0" },
+		Set: func(_ context.Context, _ *sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return wrapSetVarError("ssl_renegotiation_limit", s, "%v", err)
+			}
+			if i != 0 {
+				// See pg src/backend/utils/misc/guc.c: non-zero values are not to be supported.
+				return newVarValueError("ssl_renegotiation_limit", s, "0")
+			}
+			return nil
+		},
+	},
 
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVar(build.GetInfo().Short()),

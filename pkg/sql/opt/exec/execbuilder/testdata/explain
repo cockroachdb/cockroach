@@ -186,7 +186,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'database'
       └── values  ·       ·
-·                 size    2 columns, 38 rows
+·                 size    3 columns, 39 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -195,7 +195,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'timezone'
       └── values  ·       ·
-·                 size    2 columns, 38 rows
+·                 size    3 columns, 39 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -204,7 +204,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'default_transaction_isolation'
       └── values  ·       ·
-·                 size    2 columns, 38 rows
+·                 size    3 columns, 39 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -213,7 +213,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_isolation'
       └── values  ·       ·
-·                 size    2 columns, 38 rows
+·                 size    3 columns, 39 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -222,7 +222,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_priority'
       └── values  ·       ·
-·                 size    2 columns, 38 rows
+·                 size    3 columns, 39 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -248,7 +248,7 @@ sort                                       ·            ·
                      │    └── filter       ·            ·
                      │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │         └── values  ·            ·
-                     │                     size         23 columns, 961 rows
+                     │                     size         23 columns, 962 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
