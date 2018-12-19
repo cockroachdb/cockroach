@@ -50,9 +50,14 @@ new engineers.
 2. Get the CockroachDB code:
 
    ```shell
-   git clone https://github.com/cockroachdb/cockroach $(go env GOPATH)/src/github.com/cockroachdb/cockroach
-   cd $(go env GOPATH)/src/github.com/cockroachdb/cockroach
+   mkdir -p $(go env GOPATH)/src/github.com/cockroachdb
+   cd $(go env GOPATH)/src/github.com/cockroachdb
+   git clone https://github.com/cockroachdb/cockroach
+   cd cockroach
    ```
+
+   **Note: it is important to ensure the CockroachDB sources are positioned
+   correctly relative to `$GOPATH`. Otherwise, the builds will fail.**
 
 3. Run `make build`, `make test`, or anything else our Makefile offers.
 
