@@ -626,8 +626,8 @@ func (rsl StateLoader) SynthesizeHardState(
 	}
 
 	if oldHS.Commit > newHS.Commit {
-		return errors.Errorf("can't decrease HardState.Commit from %d to %d",
-			oldHS.Commit, newHS.Commit)
+		return log.Safe(errors.Errorf("can't decrease HardState.Commit from %d to %d",
+			oldHS.Commit, newHS.Commit))
 	}
 	if oldHS.Term > newHS.Term {
 		// The existing HardState is allowed to be ahead of us, which is
