@@ -38,16 +38,16 @@ func genHashJoiner(wr io.Writer) error {
 	s = strings.Replace(s, "_SEL_IND", "{{.SelInd}}", -1)
 
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
+	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
 
 	assignHash := regexp.MustCompile(`_ASSIGN_HASH\((.*),(.*)\)`)
-	s = assignHash.ReplaceAllString(s, "{{.Global.UnaryAssign $1 $2}}")
+	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
 
-	rehash := regexp.MustCompile(`_REHASH_BODY\((.*)\)`)
-	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" "$1"}}`)
+	rehash := regexp.MustCompile(`_REHASH_BODY\(.*,(.*)\)`)
+	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" $1}}`)
 
-	checkCol := regexp.MustCompile(`_CHECK_COL_WITH_NULLS\((.*)\)`)
-	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" "$1"}}`)
+	checkCol := regexp.MustCompile(`(?s)_CHECK_COL_WITH_NULLS\(.*?,.*?,.*?,.*?,.*?,.*?,\s*(.*?)\)`)
+	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" $1}}`)
 
 	checkColMain := regexp.MustCompile(`_CHECK_COL_MAIN\((.*\))`)
 	s = checkColMain.ReplaceAllString(s, `{{template "checkColMain" .}}`)
