@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -483,6 +484,7 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 				args.SessionDefaults[key] = value
 			} else {
 				if !exists {
+					telemetry.Count("unimplemented.pgwire.parameter." + key)
 					log.Warningf(ctx, "unknown configuration parameter: %q", key)
 				} else {
 					return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
