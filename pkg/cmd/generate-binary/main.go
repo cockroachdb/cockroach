@@ -390,6 +390,8 @@ var inputs = map[string][]string{
 
 	"array[%s]::text[]": {
 		`NULL`,
+		`NULL,NULL`,
+		`1,NULL,2`,
 		`''`,
 		`'test'`,
 		`'test with spaces'`,
