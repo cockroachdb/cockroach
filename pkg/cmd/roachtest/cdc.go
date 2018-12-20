@@ -93,6 +93,9 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			sqlNodes:           crdbNodes,
 			workloadNodes:      workloadNode,
 			tpccWarehouseCount: args.tpccWarehouseCount,
+			// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
+			// if it attempts to use the node which was brought down by chaos.
+			tolerateErrors: args.crdbChaos,
 		}
 		tpcc.install(ctx, c)
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
