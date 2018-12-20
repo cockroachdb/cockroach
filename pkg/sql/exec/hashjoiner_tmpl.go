@@ -136,7 +136,7 @@ func _CHECK_COL_WITH_NULLS(
 	// {{/*
 }
 
-func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _ string) { // */}}
+func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRING string) { // */}}
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		v := keys[_SEL_IND]
@@ -150,7 +150,7 @@ func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _ string) 
 }
 
 func _COLLECT_RIGHT_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _ string,
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
 ) uint16 { // */}}
 	// {{define "collectRightOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
@@ -178,14 +178,13 @@ func _COLLECT_RIGHT_OUTER(
 		}
 	}
 	// {{end}}
-
+	// {{/*
 	// Dummy return value that is never used.
 	return 0
-	// {{/*
 }
 
 func _COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _ string,
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
 ) uint16 { // */}}
 	// {{define "collectNoOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
@@ -204,13 +203,12 @@ func _COLLECT_NO_OUTER(
 		}
 	}
 	// {{end}}
-
+	// {{/*
 	// Dummy return value that is never used.
 	return 0
-	// {{/*
 }
 
-func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _ string) { // */}}
+func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _SEL_STRING string) { // */}}
 	// {{define "distinctCollectRightOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
