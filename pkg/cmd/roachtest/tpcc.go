@@ -572,11 +572,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					}
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-
 					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
-						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s}",
+						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s} "+
+						"--histograms=logs/warehouses=%d/stats.json",
 						b.LoadWarehouses, activeWarehouses, rampDur,
-						loadDur, extraFlags, sqlGateways)
+						loadDur, extraFlags, sqlGateways, activeWarehouses)
 					out, err := c.RunWithBuffer(ctx, t.l, group.loadNodes, cmd)
 					loadDone <- timeutil.Now()
 					if err != nil {
