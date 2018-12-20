@@ -138,7 +138,7 @@ func (r *Replica) RangeFeed(
 	}
 
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
-	errC := make(chan *roachpb.Error)
+	errC := make(chan *roachpb.Error, 1)
 
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
 	// raftMu is held so that the catch-up iterator is captured in the same
