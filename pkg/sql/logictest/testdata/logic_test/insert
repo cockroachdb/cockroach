@@ -619,10 +619,10 @@ INSERT INTO t29494(x) VALUES (123) RETURNING *
 statement ok
 COMMIT
 
-subtest regression_32759
+subtest regression_32759_33012
 
 statement ok
-CREATE TABLE t32759(x INT, y INT NOT NULL DEFAULT(10), z INT)
+CREATE TABLE t32759(x INT, y STRING NOT NULL DEFAULT 'b', z INT)
 
 statement ok
 BEGIN; ALTER TABLE t32759 DROP COLUMN y
@@ -640,7 +640,7 @@ CREATE TABLE t32759 (
 # Check that values cannot be inserted into the dropped column.
 # HP and CBO return different errors, so accept both.
 statement error [column "y" does not exist | column "y" is being backfilled]
-INSERT INTO t32759(x, y, z) VALUES (2, 2, 2)
+INSERT INTO t32759(x, y, z) VALUES (2, 'c', 2)
 
 statement ok
 ROLLBACK
