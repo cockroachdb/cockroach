@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -116,31 +118,73 @@ func TestEncodings(t *testing.T) {
 
 	var conv sessiondata.DataConversionConfig
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(nil)
 	for _, tc := range tests {
 		t.Run(tc.SQL, func(t *testing.T) {
 			d := tc.Datum
+			t.Log(tc.SQL)
+			t.Log(d)
 
-			t.Run("text", func(t *testing.T) {
-				buf.reset()
-				buf.textFormatter.Buffer.Reset()
-				buf.writeTextDatum(ctx, d, conv)
-				if buf.err != nil {
-					t.Fatal(buf.err)
-				}
-				got := verifyLen(t)
-				if !bytes.Equal(got, tc.TextAsBinary) {
-					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
-				}
+			t.Run("encode", func(t *testing.T) {
+				t.Run(pgwirebase.FormatText.String(), func(t *testing.T) {
+					buf.reset()
+					buf.textFormatter.Buffer.Reset()
+					buf.writeTextDatum(ctx, d, conv)
+					if buf.err != nil {
+						t.Fatal(buf.err)
+					}
+					got := verifyLen(t)
+					if !bytes.Equal(got, tc.TextAsBinary) {
+						t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
+					}
+				})
+				t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
+					buf.reset()
+					buf.writeBinaryDatum(ctx, d, time.UTC)
+					if buf.err != nil {
+						t.Fatal(buf.err)
+					}
+					got := verifyLen(t)
+					if !bytes.Equal(got, tc.Binary) {
+						t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
+					}
+				})
 			})
-			t.Run("binary", func(t *testing.T) {
-				buf.reset()
-				buf.writeBinaryDatum(ctx, d, time.UTC)
-				if buf.err != nil {
-					t.Fatal(buf.err)
+			t.Run("decode", func(t *testing.T) {
+				switch tc.Datum.(type) {
+				case *tree.DFloat:
+					// Skip floats because postgres rounds them different than Go.
+					t.Skip()
+				case *tree.DTuple, *tree.DBitArray:
+					// Unsupported.
+					t.Skip()
 				}
-				got := verifyLen(t)
-				if !bytes.Equal(got, tc.Binary) {
-					t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
+				id := tc.Datum.ResolvedType().Oid()
+				var d tree.Datum
+				var err error
+				for code, value := range map[pgwirebase.FormatCode][]byte{
+					pgwirebase.FormatText:   tc.TextAsBinary,
+					pgwirebase.FormatBinary: tc.Binary,
+				} {
+					t.Logf("code: %s, value: %q (%[2]s)", code, value)
+					t.Run(code.String(), func(t *testing.T) {
+						if darr, ok := tc.Datum.(*tree.DArray); ok && code == pgwirebase.FormatText {
+							var typ coltypes.T
+							typ, err = coltypes.DatumTypeToColumnType(darr.ParamTyp)
+							if err != nil {
+								t.Fatal(err)
+							}
+							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), typ)
+						} else {
+							d, err = pgwirebase.DecodeOidDatum(nil, id, code, value)
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						if d.Compare(&evalCtx, tc.Datum) != 0 {
+							t.Fatalf("%v != %v", d, tc.Datum)
+						}
+					})
 				}
 			})
 		})
