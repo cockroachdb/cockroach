@@ -857,6 +857,31 @@ func eqColsForZigzag(
 	return leftEqPrefix, rightEqPrefix
 }
 
+// fixedColsForZigzag is a helper function to generate FixedCols lists for the
+// zigzag join expression. It takes in a fixedValMap mapping column IDs to
+// constant values they are constrained to. This function iterates through
+// the columns of the specified index in order until it comes across the first
+// column ID not in fixedValMap.
+func (c *CustomFuncs) fixedColsForZigzag(
+	index cat.Index, tabID opt.TableID, fixedValMap map[opt.ColumnID]tree.Datum,
+) (opt.ColList, memo.ScalarListExpr, []types.T) {
+	vals := make(memo.ScalarListExpr, 0, len(fixedValMap))
+	types := make([]types.T, 0, len(fixedValMap))
+	fixedCols := make(opt.ColList, 0, len(fixedValMap))
+
+	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
+		colID := tabID.ColumnID(index.Column(i).Ordinal)
+		val, ok := fixedValMap[colID]
+		if !ok {
+			break
+		}
+		vals = append(vals, c.e.f.ConstructConstVal(val))
+		types = append(types, index.Column(i).Column.DatumType())
+		fixedCols = append(fixedCols, colID)
+	}
+	return fixedCols, vals, types
+}
+
 // GenerateZigzagJoins generates zigzag joins for all pairs of indexes of the
 // Scan table which contain one of the constant columns in the FiltersExpr as
 // its prefix.
@@ -998,38 +1023,21 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			// Fixed values are represented as tuples consisting of the
 			// fixed segment of that side's index.
-			zigzagJoin.FixedVals = make(memo.ScalarListExpr, 2)
-			leftVals := make(memo.ScalarListExpr, 0, fixedCols.Len())
-			leftTypes := make([]types.T, 0, fixedCols.Len())
-			rightVals := make(memo.ScalarListExpr, 0, fixedCols.Len())
-			rightTypes := make([]types.T, 0, fixedCols.Len())
-
-			zigzagJoin.LeftFixedCols = make(opt.ColList, 0, fixedCols.Len())
-			zigzagJoin.RightFixedCols = make(opt.ColList, 0, fixedCols.Len())
 			fixedValMap := memo.ExtractValuesFromFilter(filters, fixedCols)
+			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
+				iter.index, scanPrivate.Table, fixedValMap,
+			)
+			rightFixedCols, rightVals, rightTypes := c.fixedColsForZigzag(
+				iter2.index, scanPrivate.Table, fixedValMap,
+			)
 
-			for i, cnt := 0, iter.index.ColumnCount(); i < cnt; i++ {
-				colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
-				val, ok := fixedValMap[colID]
-				if !ok {
-					break
-				}
-				leftVals = append(leftVals, c.e.f.ConstructConstVal(val))
-				leftTypes = append(leftTypes, iter.index.Column(i).Column.DatumType())
-				zigzagJoin.LeftFixedCols = append(zigzagJoin.LeftFixedCols, colID)
+			zigzagJoin.LeftFixedCols = leftFixedCols
+			zigzagJoin.RightFixedCols = rightFixedCols
+
+			zigzagJoin.FixedVals = memo.ScalarListExpr{
+				c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes}),
+				c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes}),
 			}
-			for i, cnt := 0, iter2.index.ColumnCount(); i < cnt; i++ {
-				colID := scanPrivate.Table.ColumnID(iter2.index.Column(i).Ordinal)
-				val, ok := fixedValMap[colID]
-				if !ok {
-					break
-				}
-				rightVals = append(rightVals, c.e.f.ConstructConstVal(val))
-				rightTypes = append(rightTypes, iter2.index.Column(i).Column.DatumType())
-				zigzagJoin.RightFixedCols = append(zigzagJoin.RightFixedCols, colID)
-			}
-			zigzagJoin.FixedVals[0] = c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes})
-			zigzagJoin.FixedVals[1] = c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes})
 
 			zigzagJoin.On = memo.ExtractRemainingJoinFilters(
 				filters,
