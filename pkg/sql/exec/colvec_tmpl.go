@@ -35,6 +35,10 @@ import (
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
+// _TYPES_T is the template type variable for types.T. It will be replaced by
+// types.Foo for each type Foo in the types.T type.
+const _TYPES_T = types.Unhandled
+
 // */}}
 
 func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
@@ -152,6 +156,45 @@ func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colT
 			}
 		}
 		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+func (m *memColumn) CopyWithSelAndNilsInt64(
+	vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T,
+) {
+	m.UnsetNulls()
+
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		toCol := m._TemplateType()
+		fromCol := vec._TemplateType()
+
+		if vec.HasNulls() {
+			// TODO(jordan): copy the null arrays in batch.
+			for i := uint16(0); i < nSel; i++ {
+				if nils[i] {
+					m.SetNull(i)
+				} else {
+					if vec.NullAt64(sel[i]) {
+						m.SetNull(i)
+					} else {
+						toCol[i] = fromCol[sel[i]]
+					}
+				}
+			}
+		} else {
+			for i := uint16(0); i < nSel; i++ {
+				if nils[i] {
+					m.SetNull(i)
+				} else {
+					toCol[i] = fromCol[sel[i]]
+				}
+			}
+		}
+	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
