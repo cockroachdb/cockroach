@@ -1761,11 +1761,11 @@ memo (optimized, ~10KB, required=[presentation: a:1])
  ├── G1: (project G2 G3 a)
  │    └── [presentation: a:1]
  │         ├── best: (project G2 G3 a)
- │         └── cost: 191.63
+ │         └── cost: 87.93
  ├── G2: (select G4 G5) (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2)) (select G7 G5)
  │    └── []
  │         ├── best: (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2))
- │         └── cost: 190.51
+ │         └── cost: 87.80
  ├── G3: (projections)
  ├── G4: (scan t5,cols=(1,2))
  │    └── []
