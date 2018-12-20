@@ -671,7 +671,10 @@ type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	Txn          *roachpb.Transaction
+	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
+	// in 2.3.
+	IgnoreSequence bool
+	Txn            *roachpb.Transaction
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -712,6 +715,7 @@ func MVCCGetAsTxn(
 	txnMeta enginepb.TxnMeta,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
+		IgnoreSequence: true,
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
 			Status:        roachpb.PENDING,
@@ -1929,8 +1933,11 @@ type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	Reverse      bool
-	Txn          *roachpb.Transaction
+	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
+	// in 2.3.
+	IgnoreSequence bool
+	Reverse        bool
+	Txn            *roachpb.Transaction
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided engine up to some

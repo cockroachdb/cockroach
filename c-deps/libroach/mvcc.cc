@@ -274,26 +274,26 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 }
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool inconsistent, bool tombstones) {
+                      bool inconsistent, bool tombstones, bool ignore_sequence) {
   // Get is implemented as a scan where we retrieve a single key. We specify an
   // empty key for the end key which will ensure we don't retrieve a key
   // different than the start key. This is a bit of a hack.
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
   mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, txn, inconsistent,
-                             tombstones);
+                             tombstones, ignore_sequence);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones) {
+                       bool tombstones, bool ignore_sequence) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones, ignore_sequence);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones, ignore_sequence);
     return scanner.scan();
   }
 }
