@@ -35,6 +35,10 @@ import (
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
+// _TYPES_T is the template type variable for types.T. It will be replaced by
+// types.Foo for each type Foo in the types.T type.
+const _TYPES_T = types.Unhandled
+
 // */}}
 
 func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
