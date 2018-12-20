@@ -372,7 +372,12 @@ func (p *Processor) Register(
 		if catchUpIter != nil {
 			catchUpIter.Close() // clean up
 		}
-		errC <- roachpb.NewErrorf("rangefeed processor closed")
+		// errC has a capacity of 1. If it is already full, we don't need to send
+		// another error.
+		select {
+		case errC <- roachpb.NewErrorf("rangefeed processor closed"):
+		default:
+		}
 	}
 }
 
