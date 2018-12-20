@@ -173,8 +173,8 @@ function noConnectionTable(noConnections: NoConnection[]) {
 }
 
 // createHeaderCell creates and decorates a header cell.
-function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string) {
-  const node = `n${id.nodeID.toString()}`;
+function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string, titlePrefix: string) {
+  const node = titlePrefix + `n${id.nodeID.toString()}`;
   const title = _.join([node, id.address, id.locality], "\n");
   const className = classNames(
     "network-table__cell",
@@ -285,6 +285,7 @@ class Network extends React.Component<NetworkProps, {}> {
                   staleIDs,
                   identity,
                   `0-${identity.nodeID}`,
+                  `to `,
                 ))
               }
             </tr>
@@ -292,7 +293,7 @@ class Network extends React.Component<NetworkProps, {}> {
               _.map(displayIdentities, (identityA) => (
                 <tr key={identityA.nodeID} className="network-table__row">
                   {
-                    createHeaderCell(staleIDs, identityA, `${identityA.nodeID}-0`)
+                    createHeaderCell(staleIDs, identityA, `${identityA.nodeID}-0`, ``)
                   }
                   {
                     _.map(displayIdentities, (identityB) => getLatencyCell(
