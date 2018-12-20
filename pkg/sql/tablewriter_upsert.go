@@ -56,6 +56,10 @@ type tableUpserterBase struct {
 	// Contains all the rows to be inserted.
 	insertRows sqlbase.RowContainer
 
+	// existingRows is used to store rows in a batch when checking for conflicts
+	// with rows earlier in the batch. Is is reused per batch.
+	existingRows *sqlbase.RowContainer
+
 	// For allocation avoidance.
 	indexKeyPrefix []byte
 }
@@ -125,6 +129,9 @@ func (tu *tableUpserterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
+	if tu.existingRows != nil {
+		tu.existingRows.Clear(ctx)
+	}
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
 
@@ -144,6 +151,9 @@ func (tu *tableUpserterBase) curBatchSize() int { return tu.insertRows.Len() }
 // close is part of the tableWriter interface.
 func (tu *tableUpserterBase) close(ctx context.Context) {
 	tu.insertRows.Close(ctx)
+	if tu.existingRows != nil {
+		tu.existingRows.Close(ctx)
+	}
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
 	}
@@ -248,6 +258,10 @@ type tableUpserter struct {
 	// allocations.
 	updateValues tree.Datums
 
+	// cleanedRow is a temporary buffer reused from one row to the next in
+	// appendKnownConflictingRow to limit allocations.
+	cleanedRow tree.Datums
+
 	// Set by init.
 	fkTables              row.TableLookupsByID // for fk checks in update case
 	ru                    row.Updater
@@ -315,16 +329,28 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		ValNeededForCol: valNeededForCol,
 	}
 
-	return tu.fetcher.Init(
+	if err := tu.fetcher.Init(
 		false /* reverse */, false /*returnRangeInfo*/, false /* isCheck */, tu.alloc, tableArgs,
+	); err != nil {
+		return err
+	}
+
+	tu.cleanedRow = make(tree.Datums, len(tu.fetchColIDtoRowIndex))
+	pkColTypeInfo, err := sqlbase.MakeColTypeInfo(tu.tableDesc(), tu.fetchColIDtoRowIndex)
+	if err != nil {
+		return err
+	}
+	tu.existingRows = sqlbase.NewRowContainer(
+		tu.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, tu.insertRows.Len(),
 	)
+	return nil
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
 func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 	// Fetch the information about which rows in tu.insertRows currently
 	// conflict with rows in-db.
-	existingRows, pkToRowIdx, conflictingPKs, err := tu.fetchExisting(ctx, traceKV)
+	pkToRowIdx, conflictingPKs, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
 		return err
 	}
@@ -375,8 +401,9 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 		// Do we have a conflict?
 		if conflictingRowIdx == -1 {
 			// We don't have a conflict. This is a new row in KV. Create it.
-			resultRow, existingRows, err = tu.insertNonConflictingRow(
-				ctx, tu.b, insertRow, conflictingRowPK, existingRows, pkToRowIdx, tableDesc, traceKV)
+			resultRow, err = tu.insertNonConflictingRow(
+				ctx, tu.b, insertRow, conflictingRowPK, pkToRowIdx, tableDesc, traceKV,
+			)
 			if err != nil {
 				return err
 			}
@@ -412,11 +439,10 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 			// existingRow carries the values previously seen in
 			// KV or newly inserted earlier in this batch.
-			existingRow := existingRows[conflictingRowIdx]
+			existingRow := tu.existingRows.At(conflictingRowIdx)
 
 			// Check the ON CONFLICT DO UPDATE WHERE ... clause.
-			conflictingRowValues := existingRow[:len(tu.ru.FetchCols)]
-			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, conflictingRowValues)
+			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, existingRow)
 			if err != nil {
 				return err
 			}
@@ -429,11 +455,11 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 			}
 
 			// We know there was a row already, and we know we need to update it. Do it.
-			resultRow, existingRows, err = tu.updateConflictingRow(
+			resultRow, err = tu.updateConflictingRow(
 				ctx, tu.b, insertRow,
-				conflictingRowPK, conflictingRowIdx, conflictingRowValues,
-				existingRows, pkToRowIdx,
-				tableDesc, traceKV)
+				conflictingRowPK, conflictingRowIdx, existingRow,
+				pkToRowIdx, tableDesc, traceKV,
+			)
 			if err != nil {
 				return err
 			}
@@ -463,8 +489,9 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 	return nil
 }
 
-// updateConflictingRow updates the existing row
-// in the table, when there was a conflict.
+// updateConflictingRow updates the existing row in the table, when there was a
+// conflict. existingRows contains the previously seen rows, and is modified
+// or extended depending on how the PK columns are updated by the SET clauses.
 // Inputs:
 // - b is the KV batch to use for the insert.
 // - insertRow is the new row to upsert, containing the "excluded" values.
@@ -477,9 +504,6 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 //   descriptor. This may be different than the shape of insertRow if there are
 //   nullable columns. This is only returned if collectRows is true.
 // Input/Outputs:
-// - existingRows contains the previously seen rows, and is modified
-//   or extended depending on how the PK columns are updated by the SET
-//   clauses.
 // - pkToRowIdx is extended with the index of the new entry in existingRows.
 func (tu *tableUpserter) updateConflictingRow(
 	ctx context.Context,
@@ -488,17 +512,16 @@ func (tu *tableUpserter) updateConflictingRow(
 	conflictingRowPK roachpb.Key,
 	conflictingRowIdx int,
 	conflictingRowValues tree.Datums,
-	existingRows []tree.Datums,
 	pkToRowIdx map[string]int,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
-) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
+) (resultRow tree.Datums, err error) {
 	// First compute all the updates via SET (or the pseudo-SET generated
 	// for UPSERT statements).
 
 	updateValues, err := tu.evaler.eval(insertRow, conflictingRowValues, tu.updateValues)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
@@ -535,7 +558,7 @@ func (tu *tableUpserter) updateConflictingRow(
 		// of updateValues.
 		updateValues, err = tu.evaler.evalComputedCols(newValues, updateValues)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		if len(checkHelper.Exprs) > 0 {
@@ -549,10 +572,10 @@ func (tu *tableUpserter) updateConflictingRow(
 
 			// Check CHECK constraints.
 			if err := checkHelper.LoadRow(tu.ru.FetchColIDtoRowIndex, newValues, false); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if err := checkHelper.Check(tu.evalCtx); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		}
 	}
@@ -564,7 +587,7 @@ func (tu *tableUpserter) updateConflictingRow(
 		ctx, b, conflictingRowValues, updateValues, row.CheckFKs, traceKV,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Keep the slice for reuse.
@@ -577,7 +600,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	updatedConflictingRowPK, _, err := sqlbase.EncodeIndexKey(
 		tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// It's possible that the PK for the updated values is different
@@ -595,7 +618,7 @@ func (tu *tableUpserter) updateConflictingRow(
 		//
 		// We need to update that known copy, so that subsequent
 		// iterations can find it.
-		copy(existingRows[updatedConflictingRowIdx], updatedRow)
+		copy(tu.existingRows.At(updatedConflictingRowIdx), updatedRow)
 
 		// The following line is meant to read:
 		//
@@ -610,7 +633,11 @@ func (tu *tableUpserter) updateConflictingRow(
 		pkChanged = true
 
 		// Now add the new one.
-		existingRows = appendKnownConflictingRow(updatedRow, updatedConflictingRowPK, existingRows, pkToRowIdx)
+		if err := tu.appendKnownConflictingRow(
+			ctx, updatedRow, updatedConflictingRowPK, pkToRowIdx,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	if pkChanged {
@@ -620,11 +647,11 @@ func (tu *tableUpserter) updateConflictingRow(
 
 	// We only need a result row if we're collecting rows.
 	if !tu.collectRows {
-		return nil, existingRows, nil
+		return nil, nil
 	}
 
 	// We now need a row that has the shape of the result row.
-	return tu.makeResultFromRow(updatedRow, tu.evaler.ccIvarContainer.Mapping), existingRows, nil
+	return tu.makeResultFromRow(updatedRow, tu.evaler.ccIvarContainer.Mapping), nil
 }
 
 // insertNonConflictingRow inserts the source row insertRow
@@ -639,22 +666,20 @@ func (tu *tableUpserter) updateConflictingRow(
 //   descriptor. This may be different than the shape of insertRow if there are
 //   nullable columns. This is only returned if collectRows is true.
 // Input/Outputs:
-// - existingRows is extended with resultRow to produce newExistingRows.
 // - pkToRowIdx is extended with the index of the new entry in existingRows.
 func (tu *tableUpserter) insertNonConflictingRow(
 	ctx context.Context,
 	b *client.Batch,
 	insertRow tree.Datums,
 	conflictingRowPK roachpb.Key,
-	existingRows []tree.Datums,
 	pkToRowIdx map[string]int,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
-) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
+) (resultRow tree.Datums, err error) {
 	// Perform the insert proper.
 	if err := tu.ri.InsertRow(
 		ctx, b, insertRow, false /* ignoreConflicts */, row.CheckFKs, traceKV); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// We may not know the conflictingRowPK yet for the new row, for
@@ -664,31 +689,44 @@ func (tu *tableUpserter) insertNonConflictingRow(
 		conflictingRowPK, _, err = sqlbase.EncodeIndexKey(
 			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	// Then remember it for further upserts.
-	existingRows = appendKnownConflictingRow(insertRow, conflictingRowPK, existingRows, pkToRowIdx)
+	if err := tu.appendKnownConflictingRow(ctx, insertRow, conflictingRowPK, pkToRowIdx); err != nil {
+		return nil, err
+	}
 
 	if !tu.collectRows {
-		return nil, existingRows, nil
+		return nil, nil
 	}
 
 	// Reshape the row if needed.
 	if tu.insertReorderingRequired {
-		return tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex), existingRows, nil
+		return tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex), nil
 	}
-	return insertRow, existingRows, nil
+	return insertRow, nil
 }
 
-// appendKnownConflictingRow adds a new row to existingRows and
-// remembers its position in pkToRowIdx.
-func appendKnownConflictingRow(
-	newRow tree.Datums, newRowPK roachpb.Key, existingRows []tree.Datums, pkToRowIdx map[string]int,
-) (newExistingRows []tree.Datums) {
-	pkToRowIdx[string(newRowPK)] = len(existingRows)
-	return append(existingRows, newRow)
+// appendKnownConflictingRow adds a new row to existingRows and remembers its
+// position in pkToRowIdx.
+func (tu *tableUpserter) appendKnownConflictingRow(
+	ctx context.Context, newRow tree.Datums, newRowPK roachpb.Key, pkToRowIdx map[string]int,
+) error {
+	pkToRowIdx[string(newRowPK)] = tu.existingRows.Len()
+	// We need to convert the new row to match the fetch columns required for
+	// checking if there is a conflict.
+	for fetchColID, fetchRowIndex := range tu.fetchColIDtoRowIndex {
+		insertRowIndex, ok := tu.ri.InsertColIDtoRowIndex[fetchColID]
+		if ok {
+			tu.cleanedRow[fetchRowIndex] = newRow[insertRowIndex]
+		} else {
+			tu.cleanedRow[fetchRowIndex] = tree.DNull
+		}
+	}
+	_, err := tu.existingRows.AddRow(ctx, tu.cleanedRow)
+	return err
 }
 
 // getConflictingRowPK returns the primary key of the row that may
@@ -822,7 +860,6 @@ func (tu *tableUpserter) upsertRowPKs(
 // fetchExisting returns any existing rows in the table that conflict with the
 // ones in tu.insertRows.
 // Outputs:
-// - existingRows contains data for conflicting rows.
 // - pkToRowIdx relates the primary key values in the
 //   data source to which entry in the returned slice contain data
 //   for that primary key.
@@ -831,18 +868,13 @@ func (tu *tableUpserter) upsertRowPKs(
 //   conflicts found and the conflict index was a secondary index.
 func (tu *tableUpserter) fetchExisting(
 	ctx context.Context, traceKV bool,
-) (
-	existingRows []tree.Datums,
-	pkToRowIdx map[string]int,
-	conflictingPKs map[int]roachpb.Key,
-	err error,
-) {
+) (pkToRowIdx map[string]int, conflictingPKs map[int]roachpb.Key, err error) {
 	tableDesc := tu.tableDesc()
 
 	// primaryKeys contains the PK values to check for conflicts.
 	primaryKeys, conflictingPKs, err := tu.upsertRowPKs(ctx, traceKV)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// pkToRowIdx maps the PK values to positions in existingRows.
@@ -850,7 +882,7 @@ func (tu *tableUpserter) fetchExisting(
 
 	if len(primaryKeys) == 0 {
 		// We know already there is no conflicting row, so there's nothing to fetch.
-		return existingRows, pkToRowIdx, conflictingPKs, nil
+		return pkToRowIdx, conflictingPKs, nil
 	}
 
 	// pkSpans will contain the spans for every entry in primaryKeys.
@@ -862,14 +894,14 @@ func (tu *tableUpserter) fetchExisting(
 	// Start retrieving the PKs.
 	// We don't limit batches here because the spans are unordered.
 	if err := tu.fetcher.StartScan(ctx, tu.txn, pkSpans, false /* no batch limits */, 0, traceKV); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Populate existingRows and pkToRowIdx.
 	for {
 		row, _, _, err := tu.fetcher.NextRowDecoded(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		if row == nil {
 			break // Done
@@ -878,20 +910,16 @@ func (tu *tableUpserter) fetchExisting(
 		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
 			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
-		// The rows returned by rowFetcher are invalidated after the call to
-		// NextRow, so we have to copy them to save them.
-		// TODO(knz/nathan): try to reuse a large slice instead
-		// of making many small slices.
-		rowCopy := make(tree.Datums, len(row))
-		copy(rowCopy, row)
 
-		pkToRowIdx[string(rowPrimaryKey)] = len(existingRows)
-		existingRows = append(existingRows, rowCopy)
+		pkToRowIdx[string(rowPrimaryKey)] = tu.existingRows.Len()
+		if _, err := tu.existingRows.AddRow(ctx, row); err != nil {
+			return nil, nil, err
+		}
 	}
 
-	return existingRows, pkToRowIdx, conflictingPKs, nil
+	return pkToRowIdx, conflictingPKs, nil
 }
 
 // tableDesc is part of the tableWriter interface.
