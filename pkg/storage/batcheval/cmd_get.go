@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,9 +36,15 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
+	var ignoreSeq bool
+	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionSequencedReads) {
+		ignoreSeq = true
+	}
+
 	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, engine.MVCCGetOptions{
-		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:          h.Txn,
+		Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+		IgnoreSequence: ignoreSeq,
+		Txn:            h.Txn,
 	})
 	if err != nil {
 		return result.Result{}, err

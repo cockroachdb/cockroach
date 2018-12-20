@@ -330,10 +330,10 @@ typedef struct {
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool inconsistent, bool tombstones);
+                      bool inconsistent, bool tombstones, bool ignore_sequence);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones);
+                       bool tombstones, bool ignore_sequence);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
