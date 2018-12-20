@@ -739,7 +739,8 @@ EXECUTE change_view
 statement ok
 ALTER VIEW otherview RENAME TO otherview2
 
-query error pq: relation "otherview" does not exist
+# HP and CBO return slightly different errors, so accept both.
+query error pq: relation "(otherdb.public.)?otherview" does not exist
 EXECUTE change_view
 
 statement ok
