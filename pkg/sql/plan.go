@@ -439,7 +439,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
-		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+		if ok, err := stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog); err != nil {
+			return 0, err
+		} else if !ok {
 			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 			if err != nil {
 				return 0, err
@@ -451,7 +453,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
 		if ok {
-			if cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+			if ok, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog); err != nil {
+				return 0, err
+			} else if !ok {
 				cachedData.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 				if err != nil {
 					return 0, err
