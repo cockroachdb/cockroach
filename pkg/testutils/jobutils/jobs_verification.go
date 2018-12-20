@@ -224,3 +224,56 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.P
 	}
 	return ret
 }
+
+// QueryRecentJobID queries a particular job's ID ordered by latest creation time.
+func QueryRecentJobID(db *gosql.DB, offset int) (int64, error) {
+	var jobID int64
+	err := db.QueryRow(
+		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1 OFFSET $1`, offset,
+	).Scan(&jobID)
+	return jobID, err
+}
+
+// WaitForFractionalProgress waits for a job to progress past a certain point.
+func WaitForFractionalProgress(
+	ctx context.Context, db *gosql.DB, jobID int64, fractionalProgress float32, options retry.Options,
+) error {
+	var currProg float32
+	var currStatus string
+	for r := retry.StartWithCtx(ctx, options); r.Next(); {
+		if err := db.QueryRow(
+			`SELECT fraction_completed, status FROM [SHOW JOBS] WHERE job_id = $1`,
+			jobID,
+		).Scan(&currProg, &currStatus); err != nil {
+			return err
+		}
+
+		if status := jobs.Status(currStatus); status.Terminal() && status != jobs.StatusSucceeded {
+			return errors.Errorf("got non-success terminal status %q", status)
+		}
+
+		if currProg >= fractionalProgress {
+			return nil
+		}
+	}
+
+	return errors.Errorf("timeout with current progress: %.2f", currProg)
+}
+
+// WaitForStatus waits for a job to have a certain status.
+func WaitForStatus(
+	ctx context.Context, db *gosql.DB, jobID int64, status jobs.Status, options retry.Options,
+) error {
+	var currStatus string
+	for r := retry.StartWithCtx(ctx, options); r.Next(); {
+		if err := db.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&currStatus); err != nil {
+			return err
+		}
+
+		if currStatus == string(status) {
+			return nil
+		}
+	}
+
+	return errors.Errorf("timeout with current status: %q", currStatus)
+}
