@@ -136,7 +136,7 @@ func _CHECK_COL_WITH_NULLS(
 	// {{/*
 }
 
-func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _ string) { // */}}
+func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRING string) { // */}}
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		v := keys[_SEL_IND]
@@ -146,6 +146,94 @@ func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _ string) 
 	}
 	// {{end}}
 
+	// {{/*
+}
+
+func _COLLECT_RIGHT_OUTER(
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
+) uint16 { // */}}
+	// {{define "collectRightOuter"}}
+	for i := uint16(0); i < batchSize; i++ {
+		currentID := prober.head[i]
+
+		if currentID == 0 {
+			prober.probeRowUnmatched[nResults] = true
+		}
+
+		for {
+			if nResults >= ColBatchSize {
+				prober.prevBatch = batch
+				return nResults
+			}
+
+			prober.buildIdx[nResults] = currentID - 1
+			prober.probeIdx[nResults] = _SEL_IND
+			currentID = prober.ht.same[currentID]
+			prober.head[i] = currentID
+			nResults++
+
+			if currentID == 0 {
+				break
+			}
+		}
+	}
+	// {{end}}
+	// {{/*
+	// Dummy return value that is never used.
+	return 0
+}
+
+func _COLLECT_NO_OUTER(
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
+) uint16 { // */}}
+	// {{define "collectNoOuter"}}
+	for i := uint16(0); i < batchSize; i++ {
+		currentID := prober.head[i]
+		for currentID != 0 {
+			if nResults >= ColBatchSize {
+				prober.prevBatch = batch
+				return nResults
+			}
+
+			prober.buildIdx[nResults] = currentID - 1
+			prober.probeIdx[nResults] = _SEL_IND
+			currentID = prober.ht.same[currentID]
+			prober.head[i] = currentID
+			nResults++
+		}
+	}
+	// {{end}}
+	// {{/*
+	// Dummy return value that is never used.
+	return 0
+}
+
+func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _SEL_STRING string) { // */}}
+	// {{define "distinctCollectRightOuter"}}
+	for i := uint16(0); i < batchSize; i++ {
+		// Index of keys and outputs in the hash table is calculated as ID - 1.
+		prober.buildIdx[i] = prober.groupID[i] - 1
+		prober.probeIdx[i] = _SEL_IND
+
+		prober.probeRowUnmatched[i] = prober.groupID[i] == 0
+	}
+	// {{end}}
+	// {{/*
+}
+
+func _DISTINCT_COLLECT_NO_OUTER(
+	prober *hashJoinProber, batchSize uint16, nResults uint16, _ string,
+) { // */}}
+	// {{define "distinctCollectNoOuter"}}
+	for i := uint16(0); i < batchSize; i++ {
+		if prober.groupID[i] != 0 {
+			// Index of keys and outputs in the hash table is calculated as ID - 1.
+			prober.buildIdx[nResults] = prober.groupID[i] - 1
+			prober.probeIdx[nResults] = _SEL_IND
+			nResults++
+		}
+	}
+	// {{end}}
 	// {{/*
 }
 
@@ -206,4 +294,54 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
+}
+
+// collect prepares the buildIdx and probeIdx arrays where the buildIdx and
+// probeIdx at each index are joined to make an output row. The total number of
+// resulting rows is returned.
+func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []uint16) uint16 {
+	nResults := uint16(0)
+
+	if prober.spec.outer {
+		if sel != nil {
+			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, "sel[i]")
+		} else {
+			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, "i")
+		}
+	} else {
+		if sel != nil {
+			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, "sel[i]")
+		} else {
+			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, "i")
+		}
+	}
+
+	return nResults
+}
+
+// distinctCollect prepares the batch with the joined output columns where the build
+// row index for each probe row is given in the groupID slice. This function
+// requires assumes a N-1 hash join.
+func (prober *hashJoinProber) distinctCollect(
+	batch ColBatch, batchSize uint16, sel []uint16,
+) uint16 {
+	nResults := uint16(0)
+
+	if prober.spec.outer {
+		nResults = batchSize
+
+		if sel != nil {
+			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, "sel[i]")
+		} else {
+			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, "i")
+		}
+	} else {
+		if sel != nil {
+			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, "sel[i]")
+		} else {
+			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, "i")
+		}
+	}
+
+	return nResults
 }

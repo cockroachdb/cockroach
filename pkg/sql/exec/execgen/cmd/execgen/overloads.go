@@ -17,6 +17,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -404,4 +405,20 @@ func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
 	}
 
 	return allOverloads
+}
+
+// makeFunctionRegex makes a regexp representing a function with a specified
+// number of arguments. For example, a function with 3 arguments looks like
+// `(?s)funcName\(\s*(.*?),\s*(.*?),\s*(.*?)\)`.
+func makeFunctionRegex(funcName string, numArgs int) *regexp.Regexp {
+	argsRegex := ""
+
+	for i := 0; i < numArgs; i++ {
+		if argsRegex != "" {
+			argsRegex += ","
+		}
+		argsRegex += `\s*(.*?)`
+	}
+
+	return regexp.MustCompile(`(?s)` + funcName + `\(` + argsRegex + `\)`)
 }
