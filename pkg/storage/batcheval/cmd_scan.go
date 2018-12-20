@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
@@ -46,11 +47,16 @@ func Scan(
 	case roachpb.BATCH_RESPONSE:
 		var kvData []byte
 		var numKvs int64
+		var ignoreSeq bool
+		if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionSequencedReads) {
+			ignoreSeq = true
+		}
 		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
 			engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
+				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+				IgnoreSequence: ignoreSeq,
+				Txn:            h.Txn,
 			})
 		if err != nil {
 			return result.Result{}, err
@@ -59,10 +65,15 @@ func Scan(
 		reply.BatchResponses = [][]byte{kvData}
 	case roachpb.KEY_VALUES:
 		var rows []roachpb.KeyValue
+		var ignoreSeq bool
+		if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionSequencedReads) {
+			ignoreSeq = true
+		}
 		rows, resumeSpan, intents, err = engine.MVCCScan(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
+				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+				IgnoreSequence: ignoreSeq,
+				Txn:            h.Txn,
 			})
 		if err != nil {
 			return result.Result{}, err
