@@ -728,6 +728,23 @@ INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.
 statement ok
 INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
 
+subtest regression_33313
+
+statement ok
+CREATE TABLE ex33313(foo INT PRIMARY KEY, bar INT UNIQUE, baz INT);
+  INSERT INTO ex33313 VALUES (1,1,1);
+
+statement count 1
+INSERT INTO ex33313(foo,bar,baz) VALUES (1,2,1), (3,2,2) ON CONFLICT DO NOTHING;
+
+query III colnames
+SELECT * FROM ex33313 ORDER BY foo
+----
+foo  bar  baz
+1    1    1
+3    2    2
+
+
 subtest regression_32834
 
 statement ok
