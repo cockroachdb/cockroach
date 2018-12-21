@@ -317,7 +317,9 @@ func (f *fkBatchChecker) reset() {
 }
 
 // addCheck adds a check for the given row and baseFKHelper to the batch.
-func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
+func (f *fkBatchChecker) addCheck(
+	ctx context.Context, row tree.Datums, source *baseFKHelper, traceKV bool,
+) error {
 	span, err := source.spanForValues(row)
 	if err != nil {
 		return err
@@ -325,6 +327,9 @@ func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 	r := roachpb.RequestUnion{}
 	scan := roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(span),
+	}
+	if traceKV {
+		log.VEventf(ctx, 2, "FKScan %s", span)
 	}
 	r.MustSetInner(&scan)
 	f.batch.Requests = append(f.batch.Requests, r)
@@ -437,12 +442,12 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
+func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums, traceKV bool) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
 	for idx := range h.fks {
-		if err := checkIdx(ctx, h.checker, h.fks, idx, row); err != nil {
+		if err := checkIdx(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
 			return err
 		}
 	}
@@ -465,6 +470,7 @@ func checkIdx(
 	fks map[sqlbase.IndexID][]baseFKHelper,
 	idx sqlbase.IndexID,
 	row tree.Datums,
+	traceKV bool,
 ) error {
 outer:
 	for i, fk := range fks[idx] {
@@ -482,7 +488,7 @@ outer:
 					continue outer
 				}
 			}
-			if err := checker.addCheck(row, &fks[idx][i]); err != nil {
+			if err := checker.addCheck(ctx, row, &fks[idx][i], traceKV); err != nil {
 				return err
 			}
 		case sqlbase.ForeignKeyReference_FULL:
@@ -509,7 +515,7 @@ outer:
 			if nulls {
 				continue
 			}
-			if err := checker.addCheck(row, &fks[idx][i]); err != nil {
+			if err := checker.addCheck(ctx, row, &fks[idx][i], traceKV); err != nil {
 				return err
 			}
 		default:
@@ -564,12 +570,12 @@ func makeFKDeleteHelper(
 	return h, nil
 }
 
-func (h fkDeleteHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
+func (h fkDeleteHelper) addAllIdxChecks(ctx context.Context, row tree.Datums, traceKV bool) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
 	for idx := range h.fks {
-		if err := checkIdx(ctx, h.checker, h.fks, idx, row); err != nil {
+		if err := checkIdx(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
 			return err
 		}
 	}
@@ -624,13 +630,13 @@ func (fks fkUpdateHelper) addCheckForIndex(
 }
 
 func (fks fkUpdateHelper) addIndexChecks(
-	ctx context.Context, oldValues, newValues tree.Datums,
+	ctx context.Context, oldValues, newValues tree.Datums, traceKV bool,
 ) error {
 	for indexID := range fks.indexIDsToCheck {
-		if err := checkIdx(ctx, fks.checker, fks.inbound.fks, indexID, oldValues); err != nil {
+		if err := checkIdx(ctx, fks.checker, fks.inbound.fks, indexID, oldValues, traceKV); err != nil {
 			return err
 		}
-		if err := checkIdx(ctx, fks.checker, fks.outbound.fks, indexID, newValues); err != nil {
+		if err := checkIdx(ctx, fks.checker, fks.outbound.fks, indexID, newValues, traceKV); err != nil {
 			return err
 		}
 	}
