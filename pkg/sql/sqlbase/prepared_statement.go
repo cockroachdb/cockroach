@@ -15,7 +15,10 @@
 package sqlbase
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -39,4 +42,21 @@ type PrepareMetadata struct {
 	// InTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
 	InTypes []oid.Oid
+}
+
+// MemoryEstimate returns an estimation (in bytes) of how much memory is used by
+// the prepare metadata.
+func (pm *PrepareMetadata) MemoryEstimate() int64 {
+	res := int64(unsafe.Sizeof(PrepareMetadata{}))
+	res += int64(len(pm.AnonymizedStr))
+	// We don't have a good way of estimating the size of the AST. Just assume
+	// it's a small multiple of the anonymized string length.
+	res += 2 * int64(len(pm.AnonymizedStr))
+
+	res += int64(len(pm.TypeHints)+len(pm.Types)) *
+		int64(unsafe.Sizeof(types.PlaceholderIdx(0))+unsafe.Sizeof(types.T(nil)))
+
+	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
+	res += int64(len(pm.InTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
+	return res
 }
