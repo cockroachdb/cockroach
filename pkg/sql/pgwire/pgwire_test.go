@@ -697,6 +697,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
+			baseTest.SetArgs(pq.Array([]gosql.NullString{{String: "a", Valid: true}, {Valid: false}, {String: "c", Valid: true}})).Results(gosql.NullBool{Valid: false}),
 		}},
 		{"SET application_name = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),

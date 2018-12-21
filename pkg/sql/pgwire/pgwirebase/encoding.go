@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
@@ -283,32 +283,55 @@ func DecodeOidDatum(
 			}
 			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
-			var arr pq.Int64Array
-			if err := (&arr).Scan(b); err != nil {
-				return nil, err
+			var arr pgtype.Int8Array
+			if err := arr.DecodeText(nil, b); err != nil {
+				return nil, errors.Wrapf(err, "could not parse string %q as int array", b)
+			}
+			if arr.Status != pgtype.Present {
+				return tree.DNull, nil
+			}
+			if len(arr.Dimensions) != 1 {
+				return nil, errors.Errorf("only 1-dimension arrays supported")
 			}
 			out := tree.NewDArray(types.Int)
-			for _, v := range arr {
-				if err := out.Append(tree.NewDInt(tree.DInt(v))); err != nil {
+			var d tree.Datum
+			for _, v := range arr.Elements {
+				if v.Status != pgtype.Present {
+					d = tree.DNull
+				} else {
+					d = tree.NewDInt(tree.DInt(v.Int))
+				}
+				if err := out.Append(d); err != nil {
 					return nil, err
 				}
 			}
 			return out, nil
 		case oid.T__text, oid.T__name:
-			var arr pq.StringArray
-			if err := (&arr).Scan(b); err != nil {
-				return nil, err
+			var arr pgtype.TextArray
+			if err := arr.DecodeText(nil, b); err != nil {
+				return nil, errors.Wrapf(err, "could not parse string %q as text array", b)
+			}
+			if arr.Status != pgtype.Present {
+				return tree.DNull, nil
+			}
+			if len(arr.Dimensions) != 1 {
+				return nil, errors.Errorf("only 1-dimension arrays supported")
 			}
 			out := tree.NewDArray(types.String)
 			if id == oid.T__name {
 				out.ParamTyp = types.Name
 			}
-			for _, v := range arr {
-				var s tree.Datum = tree.NewDString(v)
-				if id == oid.T__name {
-					s = tree.NewDNameFromDString(s.(*tree.DString))
+			var d tree.Datum
+			for _, v := range arr.Elements {
+				if v.Status != pgtype.Present {
+					d = tree.DNull
+				} else {
+					d = tree.NewDString(v.String)
+					if id == oid.T__name {
+						d = tree.NewDNameFromDString(d.(*tree.DString))
+					}
 				}
-				if err := out.Append(s); err != nil {
+				if err := out.Append(d); err != nil {
 					return nil, err
 				}
 			}

@@ -409,6 +409,14 @@ var inputs = map[string][]string{
 		`'name'::NAME`,
 	},
 
+	"%s": {
+		`array[1,NULL]::int8[]`,
+		`array[0.1,NULL]::float8[]`,
+		`array[1,NULL]::numeric[]`,
+		`array['test',NULL]::text[]`,
+		`array['test',NULL]::name[]`,
+	},
+
 	"(%s,null)": {
 		`1::int8,2::int8,3::int8,4::int8`,
 		`'test with spaces'::BYTEA`,
