@@ -42,7 +42,7 @@ func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
 // We don't implement this because tu.ru.UpdateRow wants two slices
 // and it would be a shame to split the incoming slice on every call.
 // Instead provide a separate rowForUpdate() below.
-func (tu *tableUpdater) row(context.Context, tree.Datums, bool) (tree.Datums, error) {
+func (tu *tableUpdater) row(context.Context, tree.Datums, bool) error {
 	panic("unimplemented")
 }
 

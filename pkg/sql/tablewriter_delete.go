@@ -65,11 +65,9 @@ func (td *tableDeleter) finalize(
 // atBatchEnd is part of the extendedTableWriter interface.
 func (td *tableDeleter) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
-func (td *tableDeleter) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
-) (tree.Datums, error) {
+func (td *tableDeleter) row(ctx context.Context, values tree.Datums, traceKV bool) error {
 	td.batchSize++
-	return nil, td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -233,8 +231,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 			resume = roachpb.Span{}
 			break
 		}
-		_, err = td.row(ctx, datums, traceKV)
-		if err != nil {
+		if err = td.row(ctx, datums, traceKV); err != nil {
 			return resume, err
 		}
 	}
