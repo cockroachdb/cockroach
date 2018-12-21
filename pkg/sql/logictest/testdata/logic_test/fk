@@ -149,6 +149,16 @@ CREATE TABLE "user content"."customer reviews" (
 statement ok
 INSERT INTO orders VALUES (1, 1, '780', 2)
 
+statement error foreign key violation: value \['fake'\] not found in products@primary
+SET tracing = on,kv,results; INSERT INTO orders VALUES (2, 2, 'fake', 2); SET tracing = off
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE 'FKScan%'
+----
+FKScan /Table/53/1/{2-3}
+FKScan /Table/54/1/"fake"{-/PrefixEnd}
+
 statement error pgcode 23503 foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
 DELETE FROM products
 

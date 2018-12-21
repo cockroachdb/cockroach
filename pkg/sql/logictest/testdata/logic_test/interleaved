@@ -587,8 +587,10 @@ r1: sending batch 1 Del, 1 BeginTxn to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/1/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/1/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/1/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/1/#/80/{1-2}
 querying next range at /Table/79/1/1/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/2 -> NULL
@@ -604,8 +606,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/2/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/2/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/2/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/2/#/80/{1-2}
 querying next range at /Table/79/1/2/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/3 -> NULL
@@ -621,8 +625,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/3/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/3/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/3/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/3/#/80/{1-2}
 querying next range at /Table/79/1/3/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/4 -> NULL
@@ -638,8 +644,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/4/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/4/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/4/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/4/#/80/{1-2}
 querying next range at /Table/79/1/4/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/5 -> NULL
@@ -655,8 +663,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/5/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/5/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/5/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/5/#/80/{1-2}
 querying next range at /Table/79/1/5/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/6 -> NULL
@@ -672,8 +682,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/6/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/6/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/6/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/6/#/80/{1-2}
 querying next range at /Table/79/1/6/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/7 -> NULL
@@ -689,8 +701,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/7/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/7/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/7/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/7/#/80/{1-2}
 querying next range at /Table/79/1/7/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/8 -> NULL
@@ -706,8 +720,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/8/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/8/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/8/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/8/#/80/{1-2}
 querying next range at /Table/79/1/8/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/9 -> NULL
@@ -723,8 +739,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/9/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/9/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/9/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/9/#/80/{1-2}
 querying next range at /Table/79/1/9/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 fetched: /a/primary/10 -> NULL
@@ -740,8 +758,10 @@ r1: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 81 using index: 1
 querying next range at /Table/79/1/10/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/10/#/80/1/1/#/81/{1-2}
 querying next range at /Table/79/1/10/#/80/1/1/#/81/1
 r1: sending batch 1 Scan to (n1,s1):1
+FKScan /Table/79/1/10/#/80/{1-2}
 querying next range at /Table/79/1/10/#/80/1
 r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
 querying next range at /Table/79/1/1/0
