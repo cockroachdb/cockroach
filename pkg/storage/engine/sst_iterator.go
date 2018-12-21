@@ -118,6 +118,8 @@ func (r *sstIterator) Valid() (bool, error) {
 // Next implements the SimpleIterator interface.
 func (r *sstIterator) Next() {
 	if r.valid = r.iter.Next(); !r.valid {
+		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
+		r.iter = nil
 		return
 	}
 
