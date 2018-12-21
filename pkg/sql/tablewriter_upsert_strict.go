@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // strictTableUpserter implements the conflict-intolerant path for an upsert. See
@@ -51,7 +53,7 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 
 // atBatchEnd is part of the extendedTableWriter interface.
 func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
-	conflictingRows, err := tu.getConflictingRows(ctx, false)
+	conflictingRows, err := tu.getConflictingRows(ctx, traceKV)
 	if err != nil {
 		return err
 	}
@@ -112,18 +114,26 @@ func (tu *strictTableUpserter) getUniqueIndexes() (err error) {
 // The return value is a set of all the rows (by their place in tu.InsertRows)
 // that are in conflict with either an existing row in the table or another insert row.
 func (tu *strictTableUpserter) getConflictingRows(
-	ctx context.Context, _ bool,
+	ctx context.Context, traceKV bool,
 ) (conflictingRows map[int]struct{}, err error) {
 	tableDesc := tu.tableDesc()
 
+	// conflictingRows will indicate to the caller whether the row needs
+	// to be inserted (conflictingRows = false) or omitted
+	// (conflictingRows = true).
 	conflictingRows = make(map[int]struct{})
 
+	// seenKeys below handles the case where the row did not exist yet
+	// in the table but is mentioned two times in the data source.  In
+	// that case, we must ensure that the first occurrence gets
+	// conflictingRows = false, but the second occurrence gets
+	// conflictingRows = true.
 	seenKeys := make(map[string]struct{})
-
-	b := tu.txn.NewBatch()
 
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		row := tu.insertRows.At(i)
+		b := tu.txn.NewBatch()
+		requestIdx := 0
 
 		// Get the primary key of the insert row.
 		upsertRowPK, _, err := sqlbase.EncodeIndexKey(
@@ -134,20 +144,39 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 		upsertRowPK = keys.MakeFamilyKey(upsertRowPK, 0)
 
-		// If the primary key of the insert row has already been seen among the insert rows,
-		// mark this row as conflicting.
+		// If the primary key of the insert row has already been seen
+		// among the input (data source) to be inserted, it will not exist
+		// in storage but we must not insert it twice either.
+		// In that case we use seenKeys (prior insertion seen in data source)
+		// to determine what to do and skip the KV Get.
 		if _, ok := seenKeys[string(upsertRowPK)]; ok {
+			// Here we have seen the same values earlier in the data source, and we
+			// discovered the tuple did not exist in the table (ie it must be inserted).
+			// This entails two things:
+			// - a 2nd Get will serve no purpose, because if it failed the first time it won't succeed any better the 2nd time.
+			// - we must forbid marking the new tuple for insertion (otherwise it would be a duplicate).
+
+			// So we mark it as "conflicting" (insert ignored in caller) and skip the KV Get.
 			conflictingRows[i] = struct{}{}
+			if traceKV {
+				log.VEventfDepth(ctx, 1, 2, "Get seen PK row, omitting request")
+			}
+		} else {
+			// Here we have not seen the same values earlier in the data source.
+			// We need to check if they exist in storage.
+			key := roachpb.Key(upsertRowPK)
+			if traceKV {
+				log.VEventf(ctx, 2, "Get %s", key)
+			}
+			b.Get(key)
+
+			requestIdx++
 		}
-
-		b.Get(roachpb.Key(upsertRowPK))
-		seenKeys[string(upsertRowPK)] = struct{}{}
-
-		// Otherwise, check the primary key against the table.
 
 		// For each secondary index that has a unique constraint, do something similar:
 		// check if the secondary index key has already been seen among the insert rows,
 		// and if not, mark the key to be checked against the table.
+
 		for _, idx := range tu.conflictIndexes {
 			entries, err := sqlbase.EncodeSecondaryIndex(
 				tableDesc.TableDesc(), &idx, tu.ri.InsertColIDtoRowIndex, row)
@@ -155,32 +184,69 @@ func (tu *strictTableUpserter) getConflictingRows(
 				return nil, err
 			}
 
-			for _, entry := range entries {
-				if _, ok := seenKeys[string(entry.Key)]; ok {
-					conflictingRows[i] = struct{}{}
+			// Conflict indexes are unique and thus cannot be inverted indexes.
+			if len(entries) != 1 {
+				return nil, pgerror.NewAssertionErrorf(
+					"conflict index for INSERT ON CONFLICT DO NOTHING does not have a single encoding")
+			}
+
+			entry := entries[0]
+			if _, ok := seenKeys[string(entry.Key)]; ok {
+				// Entry seen earlier in data source; mark as conflicting
+				// (prevent 2nd insert) and omit KV request.
+				conflictingRows[i] = struct{}{}
+				if traceKV {
+					log.VEventfDepth(ctx, 1, 2, "Get seen index row, omitting request")
+				}
+			} else {
+				// Entry not seen earlier in data source; need to check in storage.
+				if traceKV {
+					log.VEventf(ctx, 2, "Get %s", entry.Key)
 				}
 				b.Get(entry.Key)
-				seenKeys[string(entry.Key)] = struct{}{}
+
+				requestIdx++
 			}
 		}
-	}
 
-	// Run a transaction to see if any of the rows conflict with any existing rows in the table or with other insert rows.
-	if err := tu.txn.Run(ctx, b); err != nil {
-		return nil, err
-	}
+		if requestIdx == 0 {
+			// We have skipped the row entirely. No batch to run.
+			continue
+		}
 
-	numIndexes := 1 + len(tu.conflictIndexes)
-	for i, result := range b.Results {
-		// There are (1 + len(tu.conflictIndexes)) * len(tu.InsertRows) results.
-		// All the results that correspond to a particular insertRow are next to each other.
-		// By this logic, the division computes the insertRow that is being queried for.
-		insertRowIndex := i / numIndexes
+		// Now run the batch to verify the row.
+		if err := tu.txn.Run(ctx, b); err != nil {
+			return nil, err
+		}
 
-		for _, row := range result.Rows {
-			// If any of the result values are not nil, then that means that the insert row is in conflict and should be marked as such.
+		for _, result := range b.Results {
+			row := result.Rows[0]
+			// If any of the result values are not nil, the row exists in storage.
+			// Mark it as "conflicting" so that the caller knows to not insert it.
 			if row.Value != nil {
-				conflictingRows[insertRowIndex] = struct{}{}
+				conflictingRows[i] = struct{}{}
+				if traceKV {
+					log.VEventf(ctx, 2, "Get %s -> row exists", row.Key)
+				}
+			}
+		}
+
+		// Now we must handle the case where a row was not found in
+		// storage, but may be found in a later iteration in the data
+		// source: in that case we must also prevent the duplicate
+		// but there will be no row in storage. The loop above
+		// uses seenKeys for this purpose, which we must populate here.
+		//
+		// Note: we cannot populate seenKeys "as we go" any earlier than this point:
+		// - we cannot do it as the key gets encoded next to the b.Get() calls
+		//   (this was bug #33313 - see bug description + regression test for case)
+		// - we cannot do it in the first loop over b.Results above,
+		//   because it's possible the conflict is only detected on a secondary index.
+		if _, ok := conflictingRows[i]; !ok {
+			for _, result := range b.Results {
+				// seenKeys is needed in case we are inserting the row two times.
+				// The 2nd time must be handled like a conflict.
+				seenKeys[string(result.Rows[0].Key)] = struct{}{}
 			}
 		}
 	}
