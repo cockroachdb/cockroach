@@ -361,6 +361,10 @@ func NewEntryDecoder(in io.Reader) *EntryDecoder {
 	return d
 }
 
+// MessageTimeFormat is the format of the timestamp in log message headers as
+// used in time.Parse and time.Format.
+const MessageTimeFormat = "060102 15:04:05.999999"
+
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *EntryDecoder) Decode(entry *Entry) error {
 	for {
@@ -376,7 +380,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			continue
 		}
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
-		t, err := time.Parse("060102 15:04:05.999999", string(m[2]))
+		t, err := time.Parse(MessageTimeFormat, string(m[2]))
 		if err != nil {
 			return err
 		}
