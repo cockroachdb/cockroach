@@ -34,21 +34,49 @@ import (
 //  - Types
 //  - Memo (for reuse during exec, if appropriate).
 //
+// On success, the returned flags always have planFlagOptUsed set.
+//
 // isCorrelated is set in error cases if we detect a correlated subquery; it is
 // used in the fallback case to create a better error.
 func (p *planner) prepareUsingOptimizer(
 	ctx context.Context, stmt Statement,
-) (isCorrelated bool, _ error) {
+) (_ planFlags, isCorrelated bool, _ error) {
 	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
-		return false, err
+		return 0, false, err
 	}
 
 	var opc optPlanningCtx
 	opc.init(p, stmt)
 
+	if opc.useCache {
+		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
+		if ok && cachedData.PrepareMetadata != nil {
+			pm := cachedData.PrepareMetadata
+			// Check that the type hints match (the type hints affect type checking).
+			if !pm.TypeHints.Equals(p.semaCtx.Placeholders.TypeHints) {
+				opc.log(ctx, "query cache hit but type hints don't match")
+			} else {
+				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog)
+				if err != nil {
+					return 0, false, err
+				}
+				if !isStale {
+					opc.log(ctx, "query cache hit (prepare)")
+					opc.flags.Set(planFlagOptCacheHit)
+					stmt.Prepared.Columns = pm.Columns
+					stmt.Prepared.Types = pm.Types
+					stmt.Prepared.Memo = cachedData.Memo
+					return opc.flags, false, nil
+				}
+				opc.log(ctx, "query cache hit but datasources don't match (prepare)")
+			}
+		}
+		opc.flags.Set(planFlagOptCacheMiss)
+	}
+
 	memo, isCorrelated, err := opc.buildReusableMemo(ctx)
 	if err != nil {
-		return isCorrelated, err
+		return 0, isCorrelated, err
 	}
 
 	md := memo.Metadata()
@@ -58,15 +86,26 @@ func (p *planner) prepareUsingOptimizer(
 		resultCols[i].Name = col.Alias
 		resultCols[i].Typ = md.ColumnMeta(col.ID).Type
 		if err := checkResultType(resultCols[i].Typ); err != nil {
-			return false, err
+			return 0, false, err
 		}
 	}
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
 		stmt.Prepared.Memo = memo
+		if opc.useCache {
+			cachedData := querycache.CachedData{
+				SQL:  stmt.SQL,
+				Memo: memo,
+				// We rely on stmt.Prepared.PrepareMetadata not being subsequently modified.
+				// TODO(radu): this also holds on to the memory referenced by other
+				// PreparedStatement fields.
+				PrepareMetadata: &stmt.Prepared.PrepareMetadata,
+			}
+			p.execCfg.QueryCache.Add(&cachedData)
+		}
 	}
-	return false, nil
+	return opc.flags, false, nil
 }
 
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
@@ -268,7 +307,9 @@ func (opc *optPlanningCtx) buildExecMemo(
 				if err != nil {
 					return nil, false, err
 				}
-				// Update the plan in the cache.
+				// Update the plan in the cache. If the cache entry had PrepareMetadata
+				// populated, it may no longer be valid.
+				cachedData.PrepareMetadata = nil
 				p.execCfg.QueryCache.Add(&cachedData)
 				opc.log(ctx, "query cache hit but needed update")
 				opc.flags.Set(planFlagOptCacheMiss)

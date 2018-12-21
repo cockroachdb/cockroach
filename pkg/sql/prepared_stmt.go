@@ -53,7 +53,7 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	if p.Memo != nil {
 		size += p.Memo.MemoryEstimate()
 	}
-	// TODO(radu): account for more fields.
+	size += p.PrepareMetadata.MemoryEstimate()
 	return size
 }
 
