@@ -332,7 +332,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
 	// Queue the deletion in the KV batch.
-	if _, err := d.run.td.row(params.ctx, sourceVals, d.run.traceKV); err != nil {
+	if err := d.run.td.row(params.ctx, sourceVals, d.run.traceKV); err != nil {
 		return err
 	}
 

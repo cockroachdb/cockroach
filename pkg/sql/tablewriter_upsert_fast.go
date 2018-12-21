@@ -46,13 +46,10 @@ func (tu *fastTableUpserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 }
 
 // row is part of the tableWriter interface.
-func (tu *fastTableUpserter) row(
-	ctx context.Context, d tree.Datums, traceKV bool,
-) (tree.Datums, error) {
+func (tu *fastTableUpserter) row(ctx context.Context, d tree.Datums, traceKV bool) error {
 	tu.batchSize++
 	// Use the fast path, ignore conflicts.
-	return nil, tu.ri.InsertRow(
-		ctx, tu.b, d, true /* ignoreConflicts */, row.CheckFKs, traceKV)
+	return tu.ri.InsertRow(ctx, tu.b, d, true /* ignoreConflicts */, row.CheckFKs, traceKV)
 }
 
 // batchedCount is part of the batchedTableWriter interface.

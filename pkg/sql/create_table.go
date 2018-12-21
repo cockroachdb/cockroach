@@ -265,7 +265,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			_, err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+			err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 			if err != nil {
 				return err
 			}

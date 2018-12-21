@@ -39,11 +39,9 @@ func (ti *tableInserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 }
 
 // row is part of the tableWriter interface.
-func (ti *tableInserter) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
-) (tree.Datums, error) {
+func (ti *tableInserter) row(ctx context.Context, values tree.Datums, traceKV bool) error {
 	ti.batchSize++
-	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, row.CheckFKs, traceKV)
+	return ti.ri.InsertRow(ctx, ti.b, values, false /* overwrite */, row.CheckFKs, traceKV)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
