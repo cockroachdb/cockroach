@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -145,8 +146,10 @@ func (ex *connExecutor) prepare(
 	}
 
 	prepared := &PreparedStatement{
-		PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-			TypeHints: placeholderHints,
+		PrepareMetadata: sqlbase.PrepareMetadata{
+			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+				TypeHints: placeholderHints,
+			},
 		},
 		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
