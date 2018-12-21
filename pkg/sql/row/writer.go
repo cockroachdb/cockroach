@@ -165,7 +165,7 @@ func (ri *Inserter) InsertRow(
 	}
 
 	if ri.Fks.checker != nil && checkFKs == CheckFKs {
-		if err := ri.Fks.addAllIdxChecks(ctx, values); err != nil {
+		if err := ri.Fks.addAllIdxChecks(ctx, values, traceKV); err != nil {
 			return err
 		}
 		if err := ri.Fks.checker.runCheck(ctx, nil, values); err != nil {
@@ -696,7 +696,7 @@ func (ru *Updater) UpdateRow(
 		}
 
 		if checkFKs == CheckFKs {
-			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
 				return nil, err
 			}
 			if !ru.Fks.hasFKs() {
@@ -799,7 +799,7 @@ func (ru *Updater) UpdateRow(
 	}
 
 	if checkFKs == CheckFKs {
-		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
 			return nil, err
 		}
 		if !ru.Fks.hasFKs() {
@@ -980,7 +980,7 @@ func (rd *Deleter) DeleteRow(
 		}
 	}
 	if rd.Fks.checker != nil && checkFKs == CheckFKs {
-		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+		if err := rd.Fks.addAllIdxChecks(ctx, values, traceKV); err != nil {
 			return err
 		}
 		return rd.Fks.checker.runCheck(ctx, values, nil)
@@ -998,7 +998,7 @@ func (rd *Deleter) DeleteIndexRow(
 	traceKV bool,
 ) error {
 	if rd.Fks.checker != nil {
-		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+		if err := rd.Fks.addAllIdxChecks(ctx, values, traceKV); err != nil {
 			return err
 		}
 		if err := rd.Fks.checker.runCheck(ctx, values, nil); err != nil {

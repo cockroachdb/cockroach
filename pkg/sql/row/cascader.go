@@ -1145,7 +1145,7 @@ func (c *cascader) cascadeAll(
 			return pgerror.NewAssertionErrorf("could not find row deleter for table %d", tableID)
 		}
 		for deletedRows.Len() > 0 {
-			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
+			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0), traceKV); err != nil {
 				return err
 			}
 			if err := rowDeleter.Fks.checker.runCheck(ctx, deletedRows.At(0), nil); err != nil {
@@ -1187,7 +1187,7 @@ func (c *cascader) cascadeAll(
 			// If there's only a single change, which is quite often the case, there
 			// is no need to worry about intermediate states.  Just run the check and
 			// avoid a bunch of allocations.
-			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0), traceKV); err != nil {
 				return err
 			}
 			if !rowUpdater.Fks.hasFKs() {
@@ -1228,7 +1228,7 @@ func (c *cascader) cascadeAll(
 				}
 			}
 
-			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow, traceKV); err != nil {
 				return err
 			}
 			if !rowUpdater.Fks.hasFKs() {
