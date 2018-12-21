@@ -411,7 +411,7 @@ func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration
 						return errors.Errorf("expected 'job canceled' error, but got %+v", schemaChangeErr)
 					}
 
-					c.l.Printf("%s: rollback began\n", prefix, createID)
+					c.l.Printf("%s: rollback began %d\n", prefix, createID)
 					rollbackID, err := jobutils.QueryRecentJobID(conn, 0)
 					if err != nil {
 						return err
