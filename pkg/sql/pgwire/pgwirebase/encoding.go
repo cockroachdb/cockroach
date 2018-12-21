@@ -441,6 +441,9 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			case PGNumericPos:
 			case PGNumericNeg:
 				alloc.dd.Neg(&alloc.dd.Decimal)
+			case 0xc000:
+				// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+				return tree.ParseDDecimal("NaN")
 			default:
 				return nil, errors.Errorf("unsupported numeric sign: %d", alloc.pgNum.Sign)
 			}
@@ -640,6 +643,12 @@ func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {
 			return nil, err
+		}
+		if vlen < 0 {
+			if err := arr.Append(tree.DNull); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		buf := r.Next(int(vlen))
 		elem, err := DecodeOidDatum(elemOid, code, buf)
