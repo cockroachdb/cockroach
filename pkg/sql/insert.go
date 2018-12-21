@@ -535,8 +535,7 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the insert in the KV batch.
-	_, err = n.run.ti.row(params.ctx, rowVals, n.run.traceKV)
-	if err != nil {
+	if err = n.run.ti.row(params.ctx, rowVals, n.run.traceKV); err != nil {
 		return err
 	}
 
