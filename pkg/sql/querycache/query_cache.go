@@ -16,6 +16,7 @@ package querycache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -45,10 +46,17 @@ const maxCachedSize = 8192
 type CachedData struct {
 	SQL  string
 	Memo *memo.Memo
+	// PrepareMetadata is set for prepare queries. In this case the memo contains
+	// unassigned placeholders. For non-prepared queries, it is nil.
+	PrepareMetadata *sqlbase.PrepareMetadata
 }
 
 func (cd *CachedData) memoryEstimate() int64 {
-	return int64(len(cd.SQL)) + cd.Memo.MemoryEstimate()
+	res := int64(len(cd.SQL)) + cd.Memo.MemoryEstimate()
+	if cd.PrepareMetadata != nil {
+		res += cd.PrepareMetadata.MemoryEstimate()
+	}
+	return res
 }
 
 // entry in a circular linked list.
@@ -110,6 +118,9 @@ func New(memorySize int) *C {
 }
 
 // Find returns the entry for the given query, if it is in the cache.
+//
+// If any cached data needs to be updated, it must be done via Add. In
+// particular, PrepareMetadata in the returned CachedData must not be modified.
 func (c *C) Find(sql string) (_ CachedData, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -124,6 +135,7 @@ func (c *C) Find(sql string) (_ CachedData, ok bool) {
 
 // Add adds an entry to the cache (possibly evicting some other entry). If the
 // cache already has a corresponding entry for d.SQL, it is updated.
+// Note: d.PrepareMetadata cannot be modified once this method is called.
 func (c *C) Add(d *CachedData) {
 	if d.memoryEstimate() > maxCachedSize {
 		return

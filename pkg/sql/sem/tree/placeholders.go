@@ -28,6 +28,20 @@ import (
 // PlaceholderTypes relates placeholder names to their resolved type.
 type PlaceholderTypes map[types.PlaceholderIdx]types.T
 
+// Equals returns true if two PlaceholderTypes contain the same types.
+func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
+	if len(pt) != len(other) {
+		return false
+	}
+	for i, t := range pt {
+		otherT, ok := other[i]
+		if !ok || !t.Equivalent(otherT) {
+			return false
+		}
+	}
+	return true
+}
+
 // QueryArguments relates placeholder names to their provided query argument.
 //
 // A nil value represents a NULL argument.
