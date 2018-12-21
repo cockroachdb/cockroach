@@ -67,12 +67,15 @@ func init() {
 
 // providerOpts implements the vm.ProviderFlags interface for aws.Provider.
 type providerOpts struct {
-	AMI            []string
-	MachineType    string
-	SecurityGroups []string
-	SSDMachineType string
-	Subnets        []string
-	RemoteUserName string
+	AMI                []string
+	MachineType        string
+	SecurityGroups     []string
+	SSDMachineType     string
+	Subnets            []string
+	RemoteUserName     string
+	EBSVolumeType      string
+	EBSVolumeSize      int
+	EBSProvisionedIOPs int
 }
 
 // ConfigureCreateFlags is part of the vm.ProviderFlags interface.
@@ -127,6 +130,14 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	// AWS images generally use "ubuntu" or "ec2-user"
 	flags.StringVar(&o.RemoteUserName, ProviderName+"-user",
 		"ubuntu", "Name of the remote user to SSH as")
+
+	flags.StringVar(&o.EBSVolumeType, ProviderName+"-ebs-volume-type",
+		"gp2", "Type of the EBS volume, only used if local-ssd=false")
+	flags.IntVar(&o.EBSVolumeSize, ProviderName+"-ebs-volume-size",
+		500, "Size in GB of EBS volume, only used if local-ssd=false")
+	flags.IntVar(&o.EBSProvisionedIOPs, ProviderName+"-ebs-iops",
+		1000, "Number of IOPs to provision, only used if "+ProviderName+
+			"-ebs-volume-type=io2")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
@@ -598,10 +609,21 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
+		var ebsParams string
+		switch t := p.opts.EBSVolumeType; t {
+		case "gp2":
+			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,DeleteOnTermination=true}",
+				p.opts.EBSVolumeSize, t)
+		case "io1":
+			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,Iops=%d,DeleteOnTermination=true}",
+				p.opts.EBSVolumeSize, t, p.opts.EBSProvisionedIOPs)
+		default:
+			return errors.Errorf("Unknown EBS volume type %s", t)
+		}
 		args = append(args,
 			"--block-device-mapping",
 			// Size is measured in GB.  gp2 type derives guaranteed iops from size.
-			"DeviceName=/dev/sdd,Ebs={VolumeSize=500,VolumeType=gp2,DeleteOnTermination=true}",
+			"DeviceName=/dev/sdd,Ebs="+ebsParams,
 		)
 	}
 
