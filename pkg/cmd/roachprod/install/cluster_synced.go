@@ -18,6 +18,7 @@ package install
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -36,8 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
+	clog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // ClusterImpl TODO(peter): document
@@ -841,6 +845,148 @@ func (c *SyncedCluster) Put(src, dest string) {
 	if haveErr {
 		log.Fatalf("put %s failed", src)
 	}
+}
+
+// Logs will sync the logs from c to dest with each nodes logs under dest in
+// directories per node and stream the merged logs to out.
+// For example, if dest is "tpcc-test.logs" then the logs for each node will be
+// stored like:
+//
+//  tpcc-test.logs/1.logs/...
+//  tpcc-test.logs/2.logs/...
+//  ...
+//
+// Log file syncing uses rsync which attempts to be efficient when deciding
+// which files to update. The logs are merged by calling
+// `cockroach debug merge-logs <dest>/*/*` with the optional flag for filter.
+// The syncing and merging happens in a loop which pauses <interval> between
+// iterations and takes some care with the from/to flags in merge-logs to make
+// new logs appear to be streamed. If <from> is zero streaming begins from now.
+// If to is non-zero, when the stream of logs passes to, the function returns.
+// <user> allows retrieval of logs from a roachprod cluster being run by another
+// user and assumes that the current user used to create c has the ability to
+// sudo into <user>.
+func (c *SyncedCluster) Logs(
+	src, dest, user, filter string, interval time.Duration, from, to time.Time, out io.Writer,
+) error {
+	rsyncNodeLogs := func(ctx context.Context, idx int) error {
+		base := fmt.Sprintf("%d.logs", c.Nodes[idx-1])
+		local := filepath.Join(dest, base) + "/"
+		sshUser := c.user(c.Nodes[idx-1])
+		rsyncArgs := []string{"-az", "--size-only"}
+		var remote string
+		if c.IsLocal() {
+			// This here is a bit of a hack to guess that the parent of the log dir is
+			// the "home" for the local node and that the srcBase is relative to that.
+			localHome := filepath.Dir(c.Impl.LogDir(c, idx))
+			remote = filepath.Join(localHome, src) + "/"
+		} else {
+			logDir := src
+			if !filepath.IsAbs(logDir) && user != "" && user != sshUser {
+				logDir = "~" + user + "/" + logDir
+			}
+			remote = fmt.Sprintf("%s@%s:%s/", c.user(c.Nodes[idx-1]),
+				c.host(c.Nodes[idx-1]), logDir)
+			// Use control master to mitigate SSH connection setup cost.
+			rsyncArgs = append(rsyncArgs, "--rsh", "ssh "+
+				"-o StrictHostKeyChecking=no "+
+				"-o ControlMaster=auto "+
+				"-o ControlPath=~/.ssh/%r@%h:%p "+
+				"-o UserKnownHostsFile=/dev/null "+
+				"-o ControlPersist=2m")
+			// Use rsync-path flag to sudo into user if different from sshUser.
+			if user != "" && user != sshUser {
+				rsyncArgs = append(rsyncArgs, "--rsync-path",
+					fmt.Sprintf("sudo -u %s rsync", user))
+			}
+		}
+		rsyncArgs = append(rsyncArgs, remote, local)
+		cmd := exec.CommandContext(ctx, "rsync", rsyncArgs...)
+		var stderrBuf bytes.Buffer
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return errors.Errorf("failed to rsync from %v to %v: %v\n%s",
+				src, dest, err, stderrBuf.String())
+		}
+		return nil
+	}
+	rsyncLogs := func(ctx context.Context) error {
+		g, gctx := errgroup.WithContext(ctx)
+		for i := range c.Nodes {
+			idx := c.Nodes[i]
+			g.Go(func() error {
+				return rsyncNodeLogs(gctx, idx)
+			})
+		}
+		return g.Wait()
+	}
+	mergeLogs := func(ctx context.Context, prev, t time.Time) error {
+		cmd := exec.CommandContext(ctx, "cockroach", "debug", "merge-logs",
+			dest+"/*/*",
+			"--from", prev.Format(time.RFC3339),
+			"--to", t.Format(time.RFC3339))
+		if filter != "" {
+			cmd.Args = append(cmd.Args, "--filter", filter)
+		}
+		// For local clusters capture the cluster ID from the sync path because the
+		// host information is useless.
+		if c.IsLocal() {
+			cmd.Args = append(cmd.Args,
+				"--file-pattern", "^(?:.*/)?(?P<id>[0-9]+).*/"+clog.FileNamePattern+"$",
+				"--prefix", "${id}> ")
+		}
+		cmd.Stdout = out
+		var errBuf bytes.Buffer
+		cmd.Stderr = &errBuf
+		if err := cmd.Run(); err != nil && ctx.Err() == nil {
+			return fmt.Errorf("failed to run cockroach debug merge-logs:%v\n%v",
+				err, errBuf.String())
+		}
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return errors.Errorf("failed to create destination directory: %v", err)
+	}
+	// Cancel context upon signaling.
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer func() { signal.Stop(ch); close(ch) }()
+	go func() { <-ch; cancel() }()
+	// TODO(ajwerner): consider SIGHUP-ing cockroach before the rsync to avoid the delays
+	prev := from
+	if prev.IsZero() {
+		prev = timeutil.Now().Add(-2 * time.Second).Truncate(time.Microsecond)
+	}
+	for to.IsZero() || prev.Before(to) {
+		// Subtract ~1 second to deal with the flush delay in util/log.
+		t := timeutil.Now().Add(-1100 * time.Millisecond).Truncate(time.Microsecond)
+		if err := rsyncLogs(ctx); err != nil {
+			return errors.Errorf("failed to sync logs: %v", err)
+		}
+		if !to.IsZero() && t.After(to) {
+			t = to
+		}
+		if err := mergeLogs(ctx, prev, t); err != nil {
+			return err
+		}
+		prev = t
+		if !to.IsZero() && !prev.Before(to) {
+			return nil
+		}
+		select {
+		case <-time.After(interval):
+		case <-ctx.Done():
+			return nil
+		}
+	}
+	return nil
 }
 
 // Get TODO(peter): document

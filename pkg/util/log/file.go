@@ -109,15 +109,26 @@ func (l *DirName) IsSet() bool {
 // DirSet returns true of the log directory has been changed from its default.
 func DirSet() bool { return logging.logDir.IsSet() }
 
-// logFileRE matches log files to avoid exposing non-log files accidentally
-// and it splits the details of the filename into groups for easy parsing.
-// The log file format is {process}.{host}.{username}.{timestamp}.{pid}.log
-// cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
+// FileNamePattern matches log files to avoid exposing non-log files
+// accidentally and it splits the details of the filename into groups for easy
+// parsing. The log file format is
+//
+//   {program}.{host}.{username}.{timestamp}.{pid}.log
+//   cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
+//
 // All underscore in process, host and username are escaped to double
 // underscores and all periods are escaped to an underscore.
 // For compatibility with Windows filenames, all colons from the timestamp
-// (RFC3339) are converted from underscores.
-var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.log$`)
+// (RFC3339) are converted from underscores (see FileTimePattern).
+// Note this pattern is unanchored and becomes anchored through its use in
+// LogFilePattern.
+const FileNamePattern = `(?P<program>[^/.]+)\.(?P<host>[^/\.]+)\.` +
+	`(?P<user>[^/\.]+)\.(?P<ts>[^/\.]+)\.(?P<pid>\d+)\.log`
+
+// FilePattern matches log file paths.
+const FilePattern = "^(?:.*/)?" + FileNamePattern + "$"
+
+var fileRE = regexp.MustCompile(FilePattern)
 
 // MakeFileInfo constructs a FileInfo from FileDetails and os.FileInfo.
 func MakeFileInfo(details FileDetails, info os.FileInfo) FileInfo {
@@ -167,18 +178,19 @@ func removePeriods(s string) string {
 	return strings.Replace(s, ".", "", -1)
 }
 
+// FileTimeFormat is RFC3339 with the colons replaced with underscores.
+// It is the format used for timestamps in log file names.
+// This removal of colons creates log files safe for Windows file systems.
+const FileTimeFormat = "2006-01-02T15_04_05Z07:00"
+
 // logName returns a new log file name with start time t, and the name
 // for the symlink.
 func logName(prefix string, t time.Time) (name, link string) {
-	// Replace the ':'s in the time format with '_'s to allow for log files in
-	// Windows.
-	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
-
 	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
 		removePeriods(prefix),
 		removePeriods(host),
 		removePeriods(userName),
-		tFormatted,
+		t.Format(FileTimeFormat),
 		pid)
 	return name, removePeriods(prefix) + ".log"
 }
@@ -189,14 +201,12 @@ var errMalformedName = errors.New("malformed log filename")
 // for log files. If the filename does not match the log file pattern, an error
 // is returned.
 func ParseLogFilename(filename string) (FileDetails, error) {
-	matches := logFileRE.FindStringSubmatch(filename)
+	matches := fileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 6 {
 		return FileDetails{}, errMalformedName
 	}
 
-	// Replace the '_'s with ':'s to restore the correct time format.
-	fixTime := strings.Replace(matches[4], "_", ":", -1)
-	time, err := time.Parse(time.RFC3339, fixTime)
+	time, err := time.Parse(FileTimeFormat, matches[4])
 	if err != nil {
 		return FileDetails{}, err
 	}
