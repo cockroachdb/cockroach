@@ -43,7 +43,7 @@ type tableUpserterBase struct {
 
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
-	// colllectRows is true.
+	// collectRows is true.
 	colIDToReturnIndex map[sqlbase.ColumnID]int
 
 	// Do the result rows have a different order than insert rows. Only set if
@@ -117,11 +117,10 @@ func (tu *tableUpserterBase) tableDesc() *sqlbase.ImmutableTableDescriptor {
 }
 
 // row is part of the tableWriter interface.
-func (tu *tableUpserterBase) row(
-	ctx context.Context, row tree.Datums, traceKV bool,
-) (tree.Datums, error) {
+func (tu *tableUpserterBase) row(ctx context.Context, row tree.Datums, traceKV bool) error {
 	tu.batchSize++
-	return tu.insertRows.AddRow(ctx, row)
+	_, err := tu.insertRows.AddRow(ctx, row)
+	return err
 }
 
 // flushAndStartNewBatch is part of the extendedTableWriter interface.

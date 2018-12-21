@@ -387,8 +387,7 @@ func (n *upsertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	_, err = n.run.tw.row(params.ctx, rowVals, n.run.traceKV)
-	return err
+	return n.run.tw.row(params.ctx, rowVals, n.run.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.

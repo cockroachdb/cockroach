@@ -51,14 +51,13 @@ type tableWriter interface {
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
-	// The passed Datums is not used after `row` returns. The returned Datums is
-	// suitable for use with returningHelper.
+	// The passed Datums is not used after `row` returns.
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. We use a separate argument here instead
 	// of a Value field on the context because Value access in context.Context
 	// is rather expensive and the tableWriter interface is used on the
 	// inner loop of table accesses.
-	row(context.Context, tree.Datums, bool /* traceKV */) (tree.Datums, error)
+	row(context.Context, tree.Datums, bool /* traceKV */) error
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
