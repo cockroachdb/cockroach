@@ -509,6 +509,9 @@ type Index struct {
 	// NULL. See the cat.Index.LaxKeyColumnCount for more details.
 	LaxKeyCount int
 
+	// Unique is true if this index is declared as UNIQUE in the schema.
+	Unique bool
+
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
@@ -530,13 +533,18 @@ func (ti *Index) ID() cat.StableID {
 }
 
 // Name is part of the cat.Index interface.
-func (ti *Index) Name() string {
-	return ti.IdxName
+func (ti *Index) Name() tree.Name {
+	return tree.Name(ti.IdxName)
 }
 
 // Table is part of the cat.Index interface.
 func (ti *Index) Table() cat.Table {
 	return ti.table
+}
+
+// IsUnique is part of the cat.Index interface.
+func (ti *Index) IsUnique() bool {
+	return ti.Unique
 }
 
 // IsInverted is part of the cat.Index interface.
