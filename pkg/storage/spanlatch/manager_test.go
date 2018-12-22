@@ -104,7 +104,7 @@ func (m *Manager) MustAcquireChCtx(
 	ch := make(chan *Guard)
 	lg, snap := m.sequence(spans, ts)
 	go func() {
-		err := m.wait(ctx, lg, snap)
+		err := m.wait(ctx, lg, &snap)
 		if err != nil {
 			m.Release(lg)
 			lg = nil
