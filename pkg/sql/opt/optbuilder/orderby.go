@@ -89,7 +89,7 @@ func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (
 
 	for i, n := 0, table.IndexCount(); i < n; i++ {
 		idx := table.Index(i)
-		if string(name) == idx.Name() {
+		if tree.Name(name) == idx.Name() {
 			return idx, nil
 		}
 	}

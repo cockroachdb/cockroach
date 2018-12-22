@@ -316,17 +316,11 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 	for _, name := range names {
 		// Determine the ordinal position of the named column in the table and
 		// add it as a target column.
-		found := false
-		for ord, n := 0, mb.tab.ColumnCount(); ord < n; ord++ {
-			if mb.tab.Column(ord).ColName() == name {
-				mb.addTargetCol(ord)
-				found = true
-				break
-			}
+		if ord := cat.FindTableColumnByName(mb.tab, name); ord != -1 {
+			mb.addTargetCol(ord)
+			continue
 		}
-		if !found {
-			panic(builderError{sqlbase.NewUndefinedColumnError(string(name))})
-		}
+		panic(builderError{sqlbase.NewUndefinedColumnError(string(name))})
 	}
 }
 
