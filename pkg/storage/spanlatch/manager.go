@@ -204,7 +204,7 @@ func (m *Manager) Acquire(
 	lg, snap := m.sequence(spans, ts)
 	defer snap.close()
 
-	err := m.wait(ctx, lg, snap)
+	err := m.wait(ctx, lg, &snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -331,7 +331,7 @@ func ifGlobal(ts hlc.Timestamp, s spanset.SpanScope) hlc.Timestamp {
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
-func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
+func (m *Manager) wait(ctx context.Context, lg *Guard, snap *snapshot) error {
 	timer := timeutil.NewTimer()
 	timer.Reset(base.SlowRequestThreshold)
 	defer timer.Stop()
