@@ -50,6 +50,7 @@ type kv struct {
 	cycleLength                          int64
 	readPercent                          int
 	spanPercent                          int
+	spanLimit                            int
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
@@ -97,6 +98,8 @@ var kvMeta = workload.Meta{
 			`Percent (0-100) of operations that are reads of existing keys.`)
 		g.flags.IntVar(&g.spanPercent, `span-percent`, 0,
 			`Percent (0-100) of operations that are spanning queries of all ranges.`)
+		g.flags.IntVar(&g.spanLimit, `span-limit`, 0,
+			`LIMIT count for each spanning query, or 0 for no limit`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
@@ -239,7 +242,13 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 	writeStmtStr := buf.String()
 
 	// Span statement
-	spanStmtStr := "SELECT count(v) FROM kv"
+	buf.Reset()
+	buf.WriteString(`SELECT count(v) FROM [SELECT v FROM kv`)
+	if w.spanLimit > 0 {
+		fmt.Fprintf(&buf, ` WHERE k >= $1 LIMIT %d`, w.spanLimit)
+	}
+	buf.WriteString(`]`)
+	spanStmtStr := buf.String()
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: int64(writeSeq)}
@@ -308,10 +317,18 @@ func (o *kvOp) run(ctx context.Context) error {
 	statementProbability -= o.config.readPercent
 	if statementProbability < o.config.spanPercent {
 		start := timeutil.Now()
-		_, err := o.spanStmt.Exec(ctx)
+		var args []interface{}
+		if o.config.spanLimit > 0 {
+			args = append(args, o.g.readKey())
+		}
+		rows, err := o.spanStmt.Query(ctx, args...)
+		if err != nil {
+			return err
+		}
+		rows.Close()
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
-		return err
+		return rows.Err()
 	}
 	const argCount = 2
 	args := make([]interface{}, argCount*o.config.batchSize)
