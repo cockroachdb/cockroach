@@ -502,8 +502,13 @@ func (oi *optIndex) ID() cat.StableID {
 }
 
 // Name is part of the cat.Index interface.
-func (oi *optIndex) Name() string {
-	return oi.desc.Name
+func (oi *optIndex) Name() tree.Name {
+	return tree.Name(oi.desc.Name)
+}
+
+// IsIndex is part of the cat.Index interface.
+func (oi *optIndex) IsUnique() bool {
+	return oi.desc.Unique
 }
 
 // IsInverted is part of the cat.Index interface.

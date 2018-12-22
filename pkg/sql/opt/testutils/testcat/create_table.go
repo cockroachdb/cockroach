@@ -266,6 +266,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
 		IdxName:  tt.makeIndexName(def.Name, typ),
+		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
 		table:    tt,
 	}
