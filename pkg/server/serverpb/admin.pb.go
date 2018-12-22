@@ -115,6 +115,8 @@
 		SpanStatsResponse
 		ProblemRangesRequest
 		ProblemRangesResponse
+		HotRangesRequest
+		HotRangesResponse
 		RangeRequest
 		RangeResponse
 		DiagnosticsRequest

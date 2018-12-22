@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -490,6 +491,43 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
+func TestHotRangesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	var hotRangesResp serverpb.HotRangesResponse
+	if err := getStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(hotRangesResp.HotRangesByNodeID) == 0 {
+		t.Fatalf("didn't get hot range responses from any nodes")
+	}
+
+	for nodeID, nodeResp := range hotRangesResp.HotRangesByNodeID {
+		if len(nodeResp.Stores) == 0 {
+			t.Errorf("didn't get any stores in hot range response from n%d: %v",
+				nodeID, nodeResp.ErrorMessage)
+		}
+		storeResp := nodeResp.Stores[0]
+		lastQPS := math.MaxFloat64
+		if len(storeResp.HotRanges) == 0 {
+			t.Errorf("didn't get any hot ranges in response from n%d,s%d: %v",
+				nodeID, storeResp.StoreID, nodeResp.ErrorMessage)
+		}
+		for _, r := range storeResp.HotRanges {
+			if r.Desc.RangeID == 0 || (len(r.Desc.StartKey) == 0 && len(r.Desc.EndKey) == 0) {
+				t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
+			}
+			if r.QueriesPerSecond > lastQPS {
+				t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f, desc=%v",
+					lastQPS, r.QueriesPerSecond, r.Desc)
+			}
+			lastQPS = r.QueriesPerSecond
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.EnableLeaseHistory(100)()
@@ -894,7 +932,8 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Check that keys are properly omitted from the Ranges and RangeLog endpoints.
+	// Check that keys are properly omitted from the Ranges, HotRanges, and
+	// RangeLog endpoints.
 	var rangesResp serverpb.RangesResponse
 	if err := getStatusJSONProto(ts, "ranges/local", &rangesResp); err != nil {
 		t.Fatal(err)
@@ -906,6 +945,30 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		if ri.Span.StartKey != omittedKeyStr || ri.Span.EndKey != omittedKeyStr ||
 			ri.State.ReplicaState.Desc.StartKey != nil || ri.State.ReplicaState.Desc.EndKey != nil {
 			t.Errorf("unexpected key value found in RangeInfo: %+v", ri)
+		}
+	}
+
+	var hotRangesResp serverpb.HotRangesResponse
+	if err := getStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(hotRangesResp.HotRangesByNodeID) == 0 {
+		t.Errorf("didn't get hot range responses from any nodes")
+	}
+	for nodeID, nodeResp := range hotRangesResp.HotRangesByNodeID {
+		if len(nodeResp.Stores) == 0 {
+			t.Errorf("didn't get any stores in hot range response from n%d: %v",
+				nodeID, nodeResp.ErrorMessage)
+		}
+		storeResp := nodeResp.Stores[0]
+		if len(storeResp.HotRanges) == 0 {
+			t.Errorf("didn't get any hot ranges in response from n%d,s%d: %v",
+				nodeID, storeResp.StoreID, nodeResp.ErrorMessage)
+		}
+		for _, r := range storeResp.HotRanges {
+			if r.Desc.StartKey != nil || r.Desc.EndKey != nil {
+				t.Errorf("unexpected key value found in hot ranges range descriptor: %+v", r.Desc)
+			}
 		}
 	}
 
