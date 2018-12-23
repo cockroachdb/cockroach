@@ -89,6 +89,12 @@ define MutationPrivate {
     # then UpdateCols would contain [0, id-b, id-c].
     UpdateCols ColList
 
+    # CanaryCol is used only with the Upsert operator. It identifies the column
+    # that the execution engine uses to decide whether to insert or to update.
+    # If the canary column value is null for a particular input row, then a new
+    # row is inserted into the table. Otherwise, the existing row is updated.
+    CanaryCol ColumnID
+
     # NeedResults is true if the Insert operator returns output rows. One output
     # row will be returned for each input row. The output row contains all
     # columns in the table, including hidden columns, but not including any
@@ -110,6 +116,31 @@ define MutationPrivate {
 # columns that are computed.
 [Relational, Mutation]
 define Update {
+    Input RelExpr
+
+    _ MutationPrivate
+}
+
+# Upsert evaluates a relational input expression that tries to insert a new row
+# into a target table. If a conflicting row already exists, then Upsert will
+# instead update the existing row. The Upsert operator uses insertion, existing,
+# and new values constructed by the input to insert rows, update indexes, and to
+# evaluate check constraints, foreign keys, and computed columns. The Upsert
+# operator is used for all of these syntactic variants:
+#
+#   INSERT..ON CONFLICT DO UPDATE
+#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
+#
+#   INSERT..ON CONFLICT DO NOTHING
+#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT DO NOTHING
+#
+#   UPSERT
+#     UPSERT INTO abc VALUES (1, 2, 3)
+#
+# The Update operator will also insert/update any computed columns, including
+# mutation columns that are computed.
+[Relational, Mutation]
+define Upsert {
     Input RelExpr
 
     _ MutationPrivate

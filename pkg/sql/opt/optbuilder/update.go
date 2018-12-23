@@ -212,6 +212,7 @@ func (mb *mutationBuilder) buildInputForUpdate(inScope *scope, upd *tree.Update)
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
+	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
 	for i := range mb.outScope.cols {
 		mb.fetchColList[i] = mb.outScope.cols[i].id
 	}
@@ -236,6 +237,8 @@ func (mb *mutationBuilder) buildInputForUpdate(inScope *scope, upd *tree.Update)
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
 func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
+	mb.updateColList = make(opt.ColList, cap(mb.targetColList))
+
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
@@ -257,12 +260,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		// Add new column ID to the list of columns to update.
 		mb.updateColList[ord] = sourceCol.id
 
-		// "Shadow" the existing column of the same name, since any future
-		// references (like computed expressions) should point to the new column
-		// containing the updated value rather than the old column containing the
-		// original value. The old columns need to be retained in the projection
-		// because some original values are needed to formulate the update keys.
-		projectionsScope.cols[ord].name = ""
+		// Rename the column to match the target column being updated.
 		sourceCol.name = mb.tab.Column(ord).ColName()
 	}
 
@@ -275,7 +273,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		// Add new column to the projections scope.
 		desiredType := mb.md.ColumnMeta(targetColID).Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := mb.b.addColumn(projectionsScope, "" /* label */, texpr)
+		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
 		checkCol(scopeCol, targetColID)
@@ -335,12 +333,39 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 // operator containing any computed columns that need to be updated. This
 // includes write-only mutation columns that are computed.
 func (mb *mutationBuilder) addComputedColsForUpdate() {
-	// Allow mutation columns to be referenced by other computed mutation columns
-	// (otherwise the scope will raise an error if a mutation column is
-	// referenced). These do not need to be set back to true again because
+	// Allow mutation columns to be referenced by other computed mutation
+	// columns (otherwise the scope will raise an error if a mutation column
+	// is referenced). These do not need to be set back to true again because
 	// mutation columns are not projected by the Update operator.
 	for i := range mb.outScope.cols {
 		mb.outScope.cols[i].mutation = false
+	}
+
+	// Disambiguate any existing columns of the same name so that computed
+	// expressions will refer to the updated value rather than the old column
+	// containing the original value (or even the column containing a value to
+	// be inserted in case of upsert).
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		colName := mb.tab.Column(i).ColName()
+		colID := mb.fetchColList[i]
+		if mb.updateColList[i] != 0 {
+			colID = mb.updateColList[i]
+		}
+
+		for i := range mb.outScope.cols {
+			col := &mb.outScope.cols[i]
+			if col.name == colName {
+				if col.id == colID {
+					// Use table name, not alias name, since computed column
+					// expressions will not reference aliases.
+					col.table = *mb.tab.Name()
+				} else {
+					// Clear name so that it will never match.
+					col.table = tree.TableName{}
+					col.name = ""
+				}
+			}
+		}
 	}
 
 	mb.addSynthesizedCols(
