@@ -240,11 +240,16 @@ TRUNCATE t
 statement ok
 DROP TABLE t
 
-# Grant INSERT privilege.
+# Grant SELECT and INSERT privilege.
+# TODO(andyk): The SELECT privilege is required by the optimizer to fetch
+# existing columns. This matches PG behavior, but differs from planner behavior.
 user root
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT SELECT ON t TO testuser
 
 statement ok
 GRANT INSERT ON t TO testuser

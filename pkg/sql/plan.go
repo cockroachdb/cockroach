@@ -366,11 +366,20 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
 
+	//s := stmt.String()
+
 	// Start with fast check to see if top-level statement is supported.
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
 		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
 		*tree.Insert, *tree.Update:
+
+	//case *tree.Insert, *tree.Update:
+	//	if !strings.Contains(s, "ex") && !strings.Contains(s, "kv") {
+	//		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+	//	}
+	//
+	//	fmt.Println(s)
 
 	default:
 		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))

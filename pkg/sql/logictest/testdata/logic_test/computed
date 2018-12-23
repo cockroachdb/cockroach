@@ -731,11 +731,13 @@ statement error could not parse "foo" as type int: strconv.ParseInt: parsing "fo
 UPDATE error_check SET s = 'foo' WHERE k = 1
 
 # Upsert -> update
-statement error computed column i:
+# NOTE: The CBO cannot show the name of the computed column in the error message
+# because the computation is part of an overall SQL statement.
+statement error could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 UPSERT INTO error_check VALUES (1, 'foo')
 
 # Upsert -> insert
-statement error computed column i:
+statement error could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 UPSERT INTO error_check VALUES (3, 'foo')
 
 statement ok
