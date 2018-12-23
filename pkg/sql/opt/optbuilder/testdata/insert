@@ -3,7 +3,7 @@ CREATE TABLE abcde (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (b + c + 1) STORED,
+    d INT AS (abcde.b + c + 1) STORED,
     e INT AS (a) STORED
 )
 ----
