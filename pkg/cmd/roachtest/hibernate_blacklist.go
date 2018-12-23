@@ -326,7 +326,6 @@ var hibernateBlackList2_2 = blacklist{
 	"org.hibernate.test.proxy.ProxyTest.testRefreshLockInitializedProxy":                                                                                                             "6583",
 	"org.hibernate.test.quote.QuoteTest.testUnionSubclassEntityQuoting":                                                                                                              "5807",
 	"org.hibernate.test.quote.TableGeneratorQuotingTest.testTableGeneratorQuoting":                                                                                                   "16769",
-	"org.hibernate.test.schemaupdate.MigrationTest.testIndexCreationViaSchemaUpdate":                                                                                                 "31761",
 	"org.hibernate.test.schemaupdate.PostgreSQLMultipleSchemaSequenceTest.test":                                                                                                      "26443",
 	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[0]":                                                                                              "24062",
 	"org.hibernate.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[1]":                                                                                              "24062",
