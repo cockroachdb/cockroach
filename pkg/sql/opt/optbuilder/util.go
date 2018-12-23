@@ -38,7 +38,7 @@ func checkFrom(expr tree.Expr, inScope *scope) {
 // corresponds to a "*", "<table>.*" or "(Expr).*".
 func (b *Builder) expandStar(
 	expr tree.Expr, inScope *scope,
-) (labels []string, exprs []tree.TypedExpr) {
+) (aliases []string, exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
@@ -69,7 +69,7 @@ func (b *Builder) expandStar(
 		//     -- (and we hope a later opt will merge the subqueries)
 		tTuple, isTuple := texpr.(*tree.Tuple)
 
-		labels = tType.Labels
+		aliases = tType.Labels
 		exprs = make([]tree.TypedExpr, len(tType.Types))
 		for i := range tType.Types {
 			if isTuple {
@@ -88,24 +88,24 @@ func (b *Builder) expandStar(
 			panic(builderError{err})
 		}
 		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
-		labels = make([]string, 0, len(inScope.cols))
+		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
 			col := &inScope.cols[i]
 			if col.table == *src && !col.hidden {
 				exprs = append(exprs, col)
-				labels = append(labels, string(col.name))
+				aliases = append(aliases, string(col.name))
 			}
 		}
 
 	case tree.UnqualifiedStar:
 		checkFrom(expr, inScope)
 		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
-		labels = make([]string, 0, len(inScope.cols))
+		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
 			col := &inScope.cols[i]
 			if !col.hidden {
 				exprs = append(exprs, col)
-				labels = append(labels, string(col.name))
+				aliases = append(aliases, string(col.name))
 			}
 		}
 
@@ -113,7 +113,7 @@ func (b *Builder) expandStar(
 		panic(fmt.Sprintf("unhandled type: %T", expr))
 	}
 
-	return labels, exprs
+	return aliases, exprs
 }
 
 // expandStarAndResolveType expands expr into a list of columns if
@@ -149,7 +149,7 @@ func (b *Builder) expandStarAndResolveType(
 //
 // scope  The scope is passed in so it can can be updated with the newly bound
 //        variable.
-// label  This is an optional label for the new column (e.g., if specified with
+// alias  This is an optional alias for the new column (e.g., if specified with
 //        the AS keyword).
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
@@ -158,10 +158,10 @@ func (b *Builder) expandStarAndResolveType(
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
+	scope *scope, alias string, typ types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
 ) *scopeColumn {
-	name := tree.Name(label)
-	colID := b.factory.Metadata().AddColumn(label, typ)
+	name := tree.Name(alias)
+	colID := b.factory.Metadata().AddColumn(alias, typ)
 	scope.cols = append(scope.cols, scopeColumn{
 		name:   name,
 		typ:    typ,
@@ -199,11 +199,11 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	dst.id = src.id
 }
 
-// addColumn adds a column to scope with the given label, type, and
+// addColumn adds a column to scope with the given alias, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.
-func (b *Builder) addColumn(scope *scope, label string, expr tree.TypedExpr) *scopeColumn {
-	name := tree.Name(label)
+func (b *Builder) addColumn(scope *scope, alias string, expr tree.TypedExpr) *scopeColumn {
+	name := tree.Name(alias)
 	scope.cols = append(scope.cols, scopeColumn{
 		name: name,
 		typ:  expr.ResolvedType(),

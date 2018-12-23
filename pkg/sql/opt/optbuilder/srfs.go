@@ -88,7 +88,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
-		_, label, err := tree.ComputeColNameInternal(b.semaCtx.SearchPath, expr)
+		_, alias, err := tree.ComputeColNameInternal(b.semaCtx.SearchPath, expr)
 		if err != nil {
 			panic(builderError{err})
 		}
@@ -104,7 +104,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
 		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
-			outCol = b.addColumn(outScope, label, texpr)
+			outCol = b.addColumn(outScope, alias, texpr)
 		}
 		zip[i].Func = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 		zip[i].Cols = make(opt.ColList, len(outScope.cols)-startCols)
@@ -131,7 +131,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 		b.populateSynthesizedColumn(outCol, fn)
 	} else {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
-		// as column labels.
+		// as column aliases.
 		typ := f.ResolvedType()
 		tType := typ.(types.TTuple)
 		for i := range tType.Types {
