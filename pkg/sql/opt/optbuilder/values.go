@@ -82,8 +82,8 @@ func (b *Builder) buildValuesClause(
 	outScope = inScope.push()
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
-		label := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, label, colTypes[i], nil, nil /* scalar */)
+		alias := fmt.Sprintf("column%d", i+1)
+		b.synthesizeColumn(outScope, alias, colTypes[i], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)
