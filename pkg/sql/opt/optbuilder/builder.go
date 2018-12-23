@@ -63,7 +63,7 @@ type Builder struct {
 
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
-	// the table name in all column labels before adding them to the metadata.
+	// the table name in all column aliases before adding them to the metadata.
 	// This flag allows us to test that name resolution works correctly, and
 	// avoids cluttering test output with schema and catalog names in the general
 	// case.
