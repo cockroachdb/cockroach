@@ -374,10 +374,10 @@ func (b *Builder) buildGrouping(
 	// Check whether the GROUP BY clause refers to a column in the SELECT list
 	// by index, e.g. `SELECT a, SUM(b) FROM y GROUP BY 1`.
 	col := colIndex(len(selects), groupBy, "GROUP BY")
-	label := ""
+	alias := ""
 	if col != -1 {
 		groupBy = selects[col].Expr
-		label = string(selects[col].As)
+		alias = string(selects[col].As)
 	}
 
 	// We need to save and restore the previous value of the field in semaCtx
@@ -397,7 +397,7 @@ func (b *Builder) buildGrouping(
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
-		col := b.addColumn(outScope, label, e)
+		col := b.addColumn(outScope, alias, e)
 		b.buildScalar(e, inScope, outScope, col, nil)
 		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
 	}
@@ -440,7 +440,7 @@ func (b *Builder) buildAggregateFunction(
 		// simple VariableOp.
 		texpr := pexpr.(tree.TypedExpr)
 
-		col := b.addColumn(tempScope, "" /* label */, texpr)
+		col := b.addColumn(tempScope, "" /* alias */, texpr)
 		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		if col.scalar != nil {
 			info.args[i] = col.scalar

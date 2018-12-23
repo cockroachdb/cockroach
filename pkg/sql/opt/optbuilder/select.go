@@ -563,7 +563,7 @@ func (b *Builder) buildSelect(
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := b.addColumn(projectionsScope, "" /* label */, expr)
+			col := b.addColumn(projectionsScope, "" /* alias */, expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)

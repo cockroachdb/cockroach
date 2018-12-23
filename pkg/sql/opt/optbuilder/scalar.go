@@ -416,8 +416,6 @@ func (b *Builder) buildAnyScalar(
 // expression.
 //
 // f        The given function expression.
-// label    If a new column is synthesized, it will be labeled with this
-//          string.
 // outCol   The output column of the function being built.
 // colRefs  The set of columns referenced so far by the scalar expression
 //          being built. If not nil, it is updated with any columns seen in

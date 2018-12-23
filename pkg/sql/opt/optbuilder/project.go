@@ -62,7 +62,7 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 }
 
 // analyzeProjectionList analyzes the given list of SELECT clause expressions,
-// and adds the resulting labels and typed expressions to outScope. See the
+// and adds the resulting aliases and typed expressions to outScope. See the
 // header comment for analyzeSelectList.
 func (b *Builder) analyzeProjectionList(
 	selects tree.SelectExprs, desiredTypes []types.T, inScope, outScope *scope,
@@ -81,7 +81,7 @@ func (b *Builder) analyzeProjectionList(
 }
 
 // analyzeReturningList analyzes the given list of RETURNING clause expressions,
-// and adds the resulting labels and typed expressions to outScope. See the
+// and adds the resulting aliases and typed expressions to outScope. See the
 // header comment for analyzeSelectList.
 func (b *Builder) analyzeReturningList(
 	returning tree.ReturningExprs, desiredTypes []types.T, inScope, outScope *scope,
@@ -127,12 +127,12 @@ func (b *Builder) analyzeSelectList(
 							"%q cannot be aliased", tree.ErrString(v))})
 					}
 
-					labels, exprs := b.expandStar(e.Expr, inScope)
+					aliases, exprs := b.expandStar(e.Expr, inScope)
 					if outScope.cols == nil {
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for j, e := range exprs {
-						b.addColumn(outScope, labels[j], e)
+						b.addColumn(outScope, aliases[j], e)
 					}
 					continue
 				}
@@ -152,8 +152,8 @@ func (b *Builder) analyzeSelectList(
 		if outScope.cols == nil {
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
-		label := b.getColName(e)
-		b.addColumn(outScope, label, texpr)
+		alias := b.getColName(e)
+		b.addColumn(outScope, alias, texpr)
 	}
 }
 
@@ -206,10 +206,8 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 //           expression except for a bare variable or aggregate (those are
 //           handled separately in buildVariableProjection and
 //           buildFunction).
-// group     The memo group that has already been built for the given
-//           expression.
-// label     If a new column is synthesized, it will be labeled with this
-//           string.
+// scalar    The memo expression that has already been built for the given
+//           typed expression.
 // outCol    The output column of the scalar which is being built. It can be
 //           nil if outScope is nil.
 //
@@ -241,8 +239,6 @@ func (b *Builder) finishBuildScalar(
 // the input scope), or a variable expression.
 //
 // col      Column containing the scalar expression that's been referenced.
-// label    If passthrough column is added, it will optionally be labeled with
-//          this string (if not empty).
 // outCol   The output column which is being built. It can be nil if outScope is
 //          nil.
 // colRefs  The set of columns referenced so far by the scalar expression being
