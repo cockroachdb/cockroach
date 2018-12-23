@@ -29,7 +29,7 @@ import (
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
 // Upsert, and Delete operators in stages.
-// TODO(andyk): Add support for Upsert and Delete.
+// TODO(andyk): Add support for Delete.
 type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
@@ -78,6 +78,11 @@ type mutationBuilder struct {
 	// clause.
 	updateColList opt.ColList
 
+	// canaryColID is the ID of the column that is used to decide whether to
+	// insert or update each row. If the canary column's value is null, then it's
+	// an insert; otherwise it's an update.
+	canaryColID opt.ColumnID
+
 	// subqueries temporarily stores subqueries that were built during initial
 	// analysis of SET expressions. They will be used later when the subqueries
 	// are joined into larger LEFT OUTER JOIN expressions.
@@ -99,14 +104,6 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 	mb.op = op
 	mb.tab = tab
 	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount())
-
-	if op == opt.InsertOp {
-		mb.insertColList = make(opt.ColList, cap(mb.targetColList))
-	}
-	if op == opt.UpdateOp {
-		mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
-		mb.updateColList = make(opt.ColList, cap(mb.targetColList))
-	}
 
 	if alias != nil {
 		mb.alias = alias
@@ -290,11 +287,12 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 		texpr := mb.outScope.resolveType(expr, tabCol.DatumType())
-		scopeCol := mb.b.addColumn(projectionsScope, "" /* label */, texpr)
+		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
 		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
 		// Assign name to synthesized column. Computed columns may refer to default
 		// columns in the table by name.
+		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = tabCol.ColName()
 
 		// Store id of newly synthesized column in corresponding list slot.
@@ -404,6 +402,19 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 
 	mb.parsedExprs[ord] = expr
 	return mb.parsedExprs[ord]
+}
+
+// findNotNullIndexCol finds the first not-null column in the given index and
+// returns its ordinal position in the owner table. There must always be such a
+// column, even if it turns out to be an implicit primary key column.
+func findNotNullIndexCol(index cat.Index) int {
+	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
+		indexCol := index.Column(i)
+		if !indexCol.Column.IsNullable() {
+			return indexCol.Ordinal
+		}
+	}
+	panic("should have found not null column in index")
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
