@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -233,15 +232,11 @@ func spanForIndexValues(
 	default:
 		return roachpb.Span{}, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
-	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
+	span, _, err := sqlbase.EncodePartialIndexSpan(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	key := roachpb.Key(keyBytes)
-	if index.ID == table.PrimaryIndex.ID {
-		return roachpb.Span{Key: key, EndKey: encoding.EncodeInterleavedSentinel(key)}, nil
-	}
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+	return span, nil
 }
 
 // batchRequestForIndexValues creates a batch request against an index to
