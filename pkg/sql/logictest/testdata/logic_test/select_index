@@ -433,6 +433,21 @@ SELECT * FROM noncover WHERE b = 2
 ----
 1 2 3 4
 
+query IIII
+SET tracing=on, kv; SELECT * FROM noncover WHERE b = 2; SET tracing=off
+----
+1 2 3 4
+
+# Verify that the index join span created doesn't include any potential child
+# interleaved tables. We look only for spans with the primary prefix to avoid
+# inconsistency between the fakedist and local test configurations.
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE 'Scan /Table/65/1%'
+----
+Scan /Table/65/1/1{-/#}
+
 # Subset of output columns, not including tested column.
 query II
 SELECT a, d FROM noncover WHERE b=2
