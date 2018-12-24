@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -209,15 +208,11 @@ func spanForIndexValues(
 	if nulls {
 		return roachpb.Span{}, nil
 	}
-	keyBytes, _, err := EncodePartialIndexKey(table, index, prefixLen, indexColIDs, values, keyPrefix)
+	span, _, err := EncodePartialIndexSpan(table, index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	key := roachpb.Key(keyBytes)
-	if index.ID == table.PrimaryIndex.ID {
-		return roachpb.Span{Key: key, EndKey: encoding.EncodeInterleavedSentinel(key)}, nil
-	}
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+	return span, nil
 }
 
 // batchRequestForIndexValues creates a batch request against an index to

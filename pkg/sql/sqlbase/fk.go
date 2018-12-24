@@ -695,15 +695,11 @@ func makeBaseFKHelper(
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
-		keyBytes, _, err := EncodePartialIndexKey(
+		span, _, err := EncodePartialIndexSpan(
 			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
-		key = roachpb.Key(keyBytes)
-	} else {
-		key = roachpb.Key(f.searchPrefix)
+		return span, err
 	}
+	key = roachpb.Key(f.searchPrefix)
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
 }
 

@@ -419,12 +419,13 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	}
 
 	info.prefix = sqlbase.MakeIndexKeyPrefix(info.table, info.index.ID)
-	info.key, err = z.produceKeyFromBaseRow()
+	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
 		return err
 	}
-	info.endKey = info.key.PrefixEnd()
+	info.key = span.Key
+	info.endKey = span.EndKey
 	return nil
 }
 
@@ -506,7 +507,7 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
-func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
+func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 	info := z.infos[z.side]
 	neededDatums := info.fixedValues
 	if z.baseRow != nil {
@@ -516,7 +517,7 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	key, err := sqlbase.MakeKeyFromEncDatums(
+	return sqlbase.MakeSpanFromEncDatums(
 		info.prefix,
 		neededDatums,
 		info.indexTypes[:len(neededDatums)],
@@ -525,7 +526,6 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 		info.index,
 		info.alloc,
 	)
-	return key, err
 }
 
 // Returns the column types of the equality columns.
@@ -655,13 +655,13 @@ func (z *zigzagJoiner) nextRow(
 
 		curInfo := z.infos[z.side]
 
-		var err error
 		// Generate a key from the last row seen from the last side. We're about to
 		// use it to jump to the next possible match on the current side.
-		curInfo.key, err = z.produceKeyFromBaseRow()
+		span, err := z.produceSpanFromBaseRow()
 		if err != nil {
 			return nil, z.producerMeta(err)
 		}
+		curInfo.key = span.Key
 
 		err = curInfo.fetcher.StartScan(
 			ctx,

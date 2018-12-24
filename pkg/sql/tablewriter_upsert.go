@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -730,8 +731,8 @@ func (tu *tableUpserter) getConflictingRowPK(
 	return insertRowPK, err
 }
 
-// upsertRowPKs returns the primary key of every row in tu.insertRows
-// with potential upsert conflicts.
+// upsertRowPKSpans returns key spans containing every row in tu.upsertRows
+// that has potential upsert conflicts.
 //
 // - if the conflicting index is the PK, the primary key for every
 //   row in tu.insertRow is computed (with no KV access) and returned.
@@ -747,10 +748,10 @@ func (tu *tableUpserter) getConflictingRowPK(
 // index is a secondary index. It maps each row in insertRow to a PK with which
 // it conflicts. Note that this may not be the PK of the row in insertRow
 // itself -- merely that of _some_ row that's in KV already with the same PK.
-func (tu *tableUpserter) upsertRowPKs(
+func (tu *tableUpserter) upsertRowPKSpans(
 	ctx context.Context, traceKV bool,
-) ([]roachpb.Key, map[int]roachpb.Key, error) {
-	upsertRowPKs := make([]roachpb.Key, 0, tu.insertRows.Len())
+) ([]roachpb.Span, map[int]roachpb.Key, error) {
+	upsertRowPKSpans := make([]roachpb.Span, 0, tu.insertRows.Len())
 	uniquePKs := make(map[string]struct{})
 
 	tableDesc := tu.tableDesc()
@@ -761,8 +762,8 @@ func (tu *tableUpserter) upsertRowPKs(
 		for i := 0; i < tu.insertRows.Len(); i++ {
 			insertRow := tu.insertRows.At(i)
 
-			// Compute the PK for the current row.
-			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
+			// Compute the PK span for the current row.
+			upsertRowPKSpan, _, err := sqlbase.EncodeIndexSpan(
 				tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
 				return nil, nil, err
@@ -771,14 +772,14 @@ func (tu *tableUpserter) upsertRowPKs(
 			// If the row has been seen already, we already know there's a
 			// conflict. There's nothing to do in that case.  Otherwise, we
 			// need to remember there's a conflict by storing that row in
-			// `upsertRowPKs`.
-			if _, ok := uniquePKs[string(upsertRowPK)]; !ok {
+			// `upsertRowPKSpans`.
+			if _, ok := uniquePKs[string(upsertRowPKSpan.Key)]; !ok {
 				// Conflict was not previously known. Remember it.
-				upsertRowPKs = append(upsertRowPKs, upsertRowPK)
-				uniquePKs[string(upsertRowPK)] = struct{}{}
+				upsertRowPKSpans = append(upsertRowPKSpans, upsertRowPKSpan)
+				uniquePKs[string(upsertRowPKSpan.Key)] = struct{}{}
 			}
 		}
-		return upsertRowPKs, nil, nil
+		return upsertRowPKSpans, nil, nil
 	}
 
 	// Otherwise, compute the keys for the conflict index and look them up. The
@@ -815,7 +816,11 @@ func (tu *tableUpserter) upsertRowPKs(
 				}
 				conflictingPKs[i] = upsertRowPK
 				if _, ok := uniquePKs[string(upsertRowPK)]; !ok {
-					upsertRowPKs = append(upsertRowPKs, upsertRowPK)
+					span := roachpb.Span{
+						Key:    upsertRowPK,
+						EndKey: encoding.EncodeInterleavedSentinel(upsertRowPK),
+					}
+					upsertRowPKSpans = append(upsertRowPKSpans, span)
 					uniquePKs[string(upsertRowPK)] = struct{}{}
 				}
 			}
@@ -825,7 +830,7 @@ func (tu *tableUpserter) upsertRowPKs(
 		}
 	}
 
-	return upsertRowPKs, conflictingPKs, nil
+	return upsertRowPKSpans, conflictingPKs, nil
 }
 
 // fetchExisting returns any existing rows in the table that conflict with the
@@ -848,8 +853,8 @@ func (tu *tableUpserter) fetchExisting(
 ) {
 	tableDesc := tu.tableDesc()
 
-	// primaryKeys contains the PK values to check for conflicts.
-	primaryKeys, conflictingPKs, err := tu.upsertRowPKs(ctx, traceKV)
+	// primaryKeySpans contains the PK values to check for conflicts.
+	primaryKeySpans, conflictingPKs, err := tu.upsertRowPKSpans(ctx, traceKV)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -857,15 +862,15 @@ func (tu *tableUpserter) fetchExisting(
 	// pkToRowIdx maps the PK values to positions in existingRows.
 	pkToRowIdx = make(map[string]int)
 
-	if len(primaryKeys) == 0 {
+	if len(primaryKeySpans) == 0 {
 		// We know already there is no conflicting row, so there's nothing to fetch.
 		return existingRows, pkToRowIdx, conflictingPKs, nil
 	}
 
-	// pkSpans will contain the spans for every entry in primaryKeys.
-	pkSpans := make(roachpb.Spans, 0, len(primaryKeys))
-	for _, primaryKey := range primaryKeys {
-		pkSpans = append(pkSpans, roachpb.Span{Key: primaryKey, EndKey: primaryKey.PrefixEnd()})
+	// pkSpans will contain the spans for every entry in primaryKeySpans.
+	pkSpans := make(roachpb.Spans, 0, len(primaryKeySpans))
+	for _, primaryKeySpan := range primaryKeySpans {
+		pkSpans = append(pkSpans, primaryKeySpan)
 	}
 
 	// Start retrieving the PKs.
