@@ -168,7 +168,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-sql txn           Scan /Table/54/1/{2-3}
+sql txn           Scan /Table/54/1/2{-/#}
 dist sender send  querying next range at /Table/54/1/2
 dist sender send  r1: sending batch 1 Scan to (n1,s1):1
 sql txn           CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3
@@ -184,7 +184,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-sql txn           Scan /Table/54/1/{1-2}
+sql txn           Scan /Table/54/1/1{-/#}
 dist sender send  querying next range at /Table/54/1/1
 dist sender send  r1: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/1/v -> /2
@@ -201,7 +201,7 @@ query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-sql txn           Scan /Table/54/1/{2-3}
+sql txn           Scan /Table/54/1/2{-/#}
 dist sender send  querying next range at /Table/54/1/2
 dist sender send  r1: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/2/v -> /3
