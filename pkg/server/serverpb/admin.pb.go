@@ -67,6 +67,7 @@
 		CertificateDetails
 		CertificatesResponse
 		DetailsRequest
+		SystemInfo
 		DetailsResponse
 		NodesRequest
 		NodesResponse

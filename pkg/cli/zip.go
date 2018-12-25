@@ -238,6 +238,19 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				{
 					ctx, cancel := timeoutCtx(baseCtx)
 					defer cancel()
+					details, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
+					if err != nil {
+						if err := z.createError(prefix+"/details", err); err != nil {
+							return err
+						}
+					} else if err := z.createJSON(prefix+"/details", details); err != nil {
+						return err
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
 					if gossip, err := status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id}); err != nil {
 						if err := z.createError(prefix+"/gossip", err); err != nil {
 							return err

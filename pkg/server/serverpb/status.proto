@@ -87,6 +87,15 @@ message DetailsRequest {
   bool ready = 2;
 }
 
+// SystemInfo contains information about the host system.
+message SystemInfo {
+  // system_info is the output from `uname -a`
+  string system_info = 1;
+
+  // kernel_info is the output from `uname -r`.
+  string kernel_info = 2;
+}
+
 message DetailsResponse {
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
@@ -95,6 +104,7 @@ message DetailsResponse {
   ];
   util.UnresolvedAddr address = 2 [ (gogoproto.nullable) = false ];
   build.Info build_info = 3 [ (gogoproto.nullable) = false ];
+  SystemInfo system_info = 4 [ (gogoproto.nullable) = false ];
 }
 
 message NodesRequest {}
