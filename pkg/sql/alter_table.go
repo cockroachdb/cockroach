@@ -20,6 +20,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -409,6 +410,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if len(validChecks) != len(n.tableDesc.Checks) {
 				n.tableDesc.Checks = validChecks
 				descriptorChanged = true
+			}
+
+			columnNum, err := n.tableDesc.FindColumnNumberByName(t.Column)
+			if err != nil {
+				return err
+			}
+			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, columnNum); err != nil {
+				return err
 			}
 
 			found := false
@@ -872,4 +881,19 @@ func injectTableStats(
 	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
 
 	return stats.GossipTableStatAdded(params.extendedEvalCtx.ExecCfg.Gossip, desc.ID)
+}
+
+func (p *planner) removeColumnComment(
+	ctx context.Context, tableID sqlbase.ID, columnNum int,
+) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-column-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
+		keys.ColumnCommentType,
+		tableID,
+		columnNum)
+
+	return err
 }

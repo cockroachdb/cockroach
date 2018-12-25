@@ -332,6 +332,6 @@ const (
 
 	// CommentType is type for system.comments
 	// DatabaseCommentType = 0
-	TableCommentType = 1
-	// ColumnCommentType   = 2
+	TableCommentType  = 1
+	ColumnCommentType = 2
 )

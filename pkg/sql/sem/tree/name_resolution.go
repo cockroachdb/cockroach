@@ -59,6 +59,31 @@ func NormalizeTableName(n *UnresolvedName) (res TableName, err error) {
 	return makeTableNameFromUnresolvedName(n), nil
 }
 
+// NormalizeColumnPath transforms an UnresolvedName into a ColumnPath.
+func NormalizeColumnPath(n *UnresolvedName) (columnPath ColumnPath, err error) {
+	if n.NumParts < 1 || n.NumParts > 4 || n.Star {
+		// The Star part of the condition is really an assertion. The
+		// parser should not have let this star propagate to a point where
+		// this method is called.
+		return columnPath, newInvColumnPathError(n)
+	}
+
+	// Check that all the parts specified are not empty.
+	// It's OK if the catalog name is empty.
+	// We allow this in e.g. `COMMENT ON COLUMN "".foo.bar.baz IS qux`.
+	lastCheck := n.NumParts
+	if lastCheck > 3 {
+		lastCheck = 3
+	}
+	for i := 0; i < lastCheck; i++ {
+		if len(n.Parts[i]) == 0 {
+			return columnPath, newInvTableNameError(n)
+		}
+	}
+
+	return makeColumnPathFromUnresolvedName(n), nil
+}
+
 // classifyTablePattern distinguishes between a TableName (last name
 // part is a table name) and an AllTablesSelector.
 // Used e.g. for GRANT.
@@ -514,6 +539,14 @@ func newInvColRef(fmt string, n *UnresolvedName) error {
 func newInvTableNameError(n *UnresolvedName) error {
 	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidNameError,
 		"invalid table name: %s", n)
+}
+
+func newInvColumnPathError(n *UnresolvedName) error {
+	return pgerror.NewErrorWithDepthf(
+		1,
+		pgerror.CodeFdwInvalidColumnNameError,
+		"invalid column name: %s",
+		n)
 }
 
 func newSourceNotFoundError(fmt string, args ...interface{}) error {

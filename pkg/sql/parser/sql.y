@@ -2008,7 +2008,12 @@ comment_stmt:
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
-    return unimplementedWithIssueDetail(sqllex, 19472, "column")
+    columnPath, err := tree.NormalizeColumnPath($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.CommentOnColumn{ColumnPath: columnPath, Comment: $6.strPtr()}
   }
 | COMMENT ON error
   {

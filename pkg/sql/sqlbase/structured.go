@@ -1921,6 +1921,19 @@ func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor,
 	return ColumnDescriptor{}, false, NewUndefinedColumnError(string(name))
 }
 
+// FindColumnNumberByName finds the column number with the specified name.
+func (desc *TableDescriptor) FindColumnNumberByName(name tree.Name) (int, error) {
+	colNum := 0
+	for _, column := range desc.Columns {
+		colNum++
+		if column.Name == string(name) {
+			return colNum, nil
+		}
+	}
+
+	return 0, NewUndefinedColumnError(string(name))
+}
+
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
 // column.
 func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {
