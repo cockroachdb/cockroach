@@ -128,10 +128,25 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	var ep execPlan
 	var err error
 
-	// Raise error if a mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
-		return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
-			"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
+	// This will set the system DB trigger for transactions containing
+	// schema-modifying statements that have no effect, such as
+	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
+	// where the table already exists. This will generate some false
+	// refreshes, but that's expected to be quite rare in practice.
+	isDDL := opt.IsDDLOp(e)
+	if isDDL {
+		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
+			return execPlan{}, errors.Wrap(err,
+				"schema change statement cannot follow a statement that has written in the same transaction")
+		}
+	}
+
+	// Raise error if a DDL or mutation op is part of a read-only transaction.
+	if isDDL || opt.IsMutationOp(e) {
+		if b.evalCtx.TxnReadOnly {
+			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
+		}
 	}
 
 	// Handle read-only operators which never write data or modify schema.
@@ -195,6 +210,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.UpdateExpr:
 		ep, err = b.buildUpdate(t)
+
+	case *memo.CreateTableExpr:
+		ep, err = b.buildCreateTable(t)
 
 	default:
 		if opt.IsSetOp(e) {
@@ -1170,6 +1188,28 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		ep.outputCols = mutationOutputColMap(upd)
 	}
 	return ep, nil
+}
+
+func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
+	var root exec.Node
+	if ct.Syntax.As() {
+		// Construct AS input to CREATE TABLE.
+		input, err := b.buildRelational(ct.Input)
+		if err != nil {
+			return execPlan{}, err
+		}
+		// Impose ordering on input columns, so that they match the order of the
+		// table columns into which values will be inserted.
+		input, err = b.ensureColumns(input, ct.InputCols, nil /* colNames */, nil /* provided */)
+		if err != nil {
+			return execPlan{}, err
+		}
+		root = input.root
+	}
+
+	schema := b.mem.Metadata().Schema(ct.Schema)
+	root, err := b.factory.ConstructCreateTable(root, schema, ct.Syntax)
+	return execPlan{root: root}, err
 }
 
 // needProjection figures out what projection is needed on top of the input plan

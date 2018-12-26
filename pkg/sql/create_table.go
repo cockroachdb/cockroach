@@ -80,7 +80,9 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		}
 	}
 
-	return &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+	ct := &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}
+	ct.run.addRowID = true
+	return ct, nil
 }
 
 // createTableRun contains the run-time state of createTableNode
@@ -88,6 +90,11 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 type createTableRun struct {
 	autoCommit   autoCommitOpt
 	rowsAffected int
+
+	// addRowID indicates whether a rowid column needs to be synthesized during
+	// execution. The heuristic planner does this, while the optimizer instead
+	// adds it as part of the input query.
+	addRowID bool
 }
 
 func (n *createTableNode) startExec(params runParams) error {
@@ -114,12 +121,20 @@ func (n *createTableNode) startExec(params runParams) error {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
+	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
+		asCols = planColumns(n.sourcePlan)
+		if !n.run.addRowID {
+			// rowID column is already present in the input as the last column, so
+			// ignore it for the purpose of creating column metadata (because
+			// makeTableDescIfAs does it automatically).
+			asCols = asCols[:len(asCols)-1]
+		}
 		desc, err = makeTableDescIfAs(
-			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan),
+			n.n, n.dbDesc.ID, id, creationTime, asCols,
 			privs, &params.p.semaCtx, params.EvalContext())
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
@@ -224,22 +239,28 @@ func (n *createTableNode) startExec(params runParams) error {
 		rowBuffer := make(tree.Datums, len(desc.Columns))
 		pkColIdx := len(desc.Columns) - 1
 
-		// Prepare the rowID expression.
-		defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
-		defExpr, err := parser.ParseExpr(defExprSQL)
-		if err != nil {
-			return err
-		}
-		defTypedExpr, err := params.p.analyzeExpr(
-			params.ctx,
-			defExpr,
-			nil, /*sources*/
-			tree.IndexedVarHelper{},
-			types.Any,
-			false, /*requireType*/
-			"CREATE TABLE AS")
-		if err != nil {
-			return err
+		// The optimizer includes the rowID expression as part of the input
+		// expression. But the heuristic planner does not do this, so construct
+		// a rowID expression to be evaluated separately.
+		var defTypedExpr tree.TypedExpr
+		if n.run.addRowID {
+			// Prepare the rowID expression.
+			defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
+			defExpr, err := parser.ParseExpr(defExprSQL)
+			if err != nil {
+				return err
+			}
+			defTypedExpr, err = params.p.analyzeExpr(
+				params.ctx,
+				defExpr,
+				nil, /*sources*/
+				tree.IndexedVarHelper{},
+				types.Any,
+				false, /*requireType*/
+				"CREATE TABLE AS")
+			if err != nil {
+				return err
+			}
 		}
 
 		for {
@@ -260,9 +281,11 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Populate the buffer and generate the PK value.
 			copy(rowBuffer, n.sourcePlan.Values())
-			rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
-			if err != nil {
-				return err
+			if n.run.addRowID {
+				rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
+				if err != nil {
+					return err
+				}
 			}
 
 			_, err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
