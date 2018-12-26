@@ -393,6 +393,32 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	}
 }
 
+// resolveSchemaForCreate returns the schema that will contain a newly created
+// catalog object with the given name. If the current user does not have the
+// CREATE privilege, then resolveSchemaForCreate raises an error.
+func (b *Builder) resolveSchemaForCreate(name *tree.TableName) cat.Schema {
+	sch, err := b.catalog.ResolveSchema(b.ctx, &name.TableNamePrefix)
+	if err != nil {
+		// Remap invalid schema name error text so that it references the catalog
+		// object that could not be created.
+		if pgerr, ok := err.(*pgerror.Error); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+				"cannot create %q because the target database or schema does not exist",
+				tree.ErrString(name)).
+				SetHintf("verify that the current database and search_path are valid and/or the target database exists")})
+		}
+	}
+
+	// Only allow creation of objects in the public schema.
+	if name.Schema() != tree.PublicSchema {
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"schema cannot be modified: %q", tree.ErrString(&name.TableNamePrefix))})
+	}
+
+	b.checkPrivilege(sch, privilege.CREATE)
+	return sch
+}
+
 // resolveTable returns the data source in the catalog with the given name. If
 // the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveTable raises an error.
@@ -430,12 +456,12 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 }
 
 // checkPrivilege ensures that the current user has the privilege needed to
-// access the given data source in the catalog. If not, then checkPrivilege
-// raises an error. It also adds the data source as a dependency to the
-// metadata, so that the privileges can be re-checked on reuse of the memo.
-func (b *Builder) checkPrivilege(ds cat.DataSource, priv privilege.Kind) {
+// access the given object in the catalog. If not, then checkPrivilege raises an
+// error. It also adds the object as a dependency to the metadata, so that the
+// privileges can be re-checked on reuse of the memo.
+func (b *Builder) checkPrivilege(o cat.Object, priv privilege.Kind) {
 	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, o, priv)
 		if err != nil {
 			panic(builderError{err})
 		}
@@ -444,7 +470,7 @@ func (b *Builder) checkPrivilege(ds cat.DataSource, priv privilege.Kind) {
 		priv = 0
 	}
 
-	// Add dependency on this data source to the metadata, so that the metadata
-	// can be cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(ds, priv)
+	// Add dependency on this object to the metadata, so that the metadata can be
+	// cached and later checked for freshness.
+	b.factory.Metadata().AddDependency(o, priv)
 }
