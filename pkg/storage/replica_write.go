@@ -74,7 +74,7 @@ func (r *Replica) executeWriteBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	spans, err := r.collectSpans(&ba)
+	spans, _, err := r.collectSpans(&ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -87,7 +87,7 @@ func (r *Replica) executeWriteBatch(
 		// after preceding commands have been run to successful completion.
 		log.Event(ctx, "acquire latches")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		endCmds, err = r.beginCmds(ctx, &ba, spans, false /* optimistic */)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}

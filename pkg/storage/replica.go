@@ -1033,7 +1033,92 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 type endCmds struct {
 	repl *Replica
 	lg   *spanlatch.Guard
+	sn   *spanlatch.Snapshot
 	ba   roachpb.BatchRequest
+}
+
+// optimistic returns whether the batch should execute optimistically.
+func (ec *endCmds) optimistic() bool { return ec.sn != nil }
+
+// checkOptimisticConflicts determines whether any earlier requests that held
+// latches at the time that this request optimistically evaluated conflict with
+// the span of keys that this request interacted with. On conflict, the method
+// waits to successfully acquire all latches. After that, the request needs to
+// be retried because the optimistic evaluation may or may not have observed the
+// effect of the earlier requests.
+//
+// To call, ec.optimistic must be true. After the method is called, ec.optimistic
+// will return false.
+func (ec *endCmds) checkOptimisticConflicts(
+	ctx context.Context, br *roachpb.BatchResponse, pErr *roachpb.Error, spans *spanset.SpanSet,
+) (bool, error) {
+	// We only use the latch manager snapshot once.
+	defer func() {
+		ec.sn.Close()
+		ec.sn = nil
+	}()
+
+	// If the optimistic evaluation didn't run into an error, create a copy of
+	// the batch with the scan bounds of all requests constrained to the spans
+	// that they actually scanned over. If it did, check for conflicts over the
+	// entire original span set.
+	if pErr == nil {
+		baCopy := ec.ba
+		baCopy.Requests = append([]roachpb.RequestUnion(nil), baCopy.Requests...)
+		for i := 0; i < len(baCopy.Requests); i++ {
+			req := baCopy.Requests[i].GetInner()
+			header := req.Header()
+
+			resp := br.Responses[i].GetInner()
+			if resp.Header().ResumeSpan == nil {
+				continue
+			}
+
+			switch t := resp.(type) {
+			case *roachpb.ScanResponse:
+				if header.Key.Equal(t.ResumeSpan.Key) {
+					// The request did not evaluate. Ignore it.
+					baCopy.Requests = append(baCopy.Requests[:i], baCopy.Requests[i+1:]...)
+					i--
+					continue
+				}
+				header.EndKey = t.ResumeSpan.Key
+			case *roachpb.ReverseScanResponse:
+				if header.EndKey.Equal(t.ResumeSpan.EndKey) {
+					// The request did not evaluate. Ignore it.
+					baCopy.Requests = append(baCopy.Requests[:i], baCopy.Requests[i+1:]...)
+					i--
+					continue
+				}
+				header.Key = t.ResumeSpan.EndKey
+			default:
+				continue
+			}
+			req = req.ShallowCopy()
+			req.SetHeader(header)
+			baCopy.Requests[i].MustSetInner(req)
+		}
+
+		// Collect the batch's declared spans again, this time with the
+		// constrained span bounds.
+		var err error
+		spans, _, err = ec.repl.collectSpans(&baCopy)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// Determine whether any actively held latch at the time of evaluation
+	// overlaps this constraint span set. If so, we have a conflict.
+	conflict := ec.repl.latchMgr.Overlaps(spans, ec.ba.Timestamp, ec.sn)
+	if !conflict {
+		return false, nil
+	}
+
+	// If there were conflicts, wait for latches to be released, like
+	// we should have in the first place.
+	log.Event(ctx, "optimistic evaluation failed, latching and re-evaluating")
+	return true, ec.repl.latchMgr.Wait(ctx, ec.lg, ec.sn)
 }
 
 // done releases the latches acquired by the command and updates
@@ -1051,10 +1136,30 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	if ec.lg != nil {
 		ec.repl.latchMgr.Release(ec.lg)
 	}
+
+	// Close the snapshot to release any resources that it holds.
+	if ec.sn != nil {
+		ec.sn.Close()
+		ec.sn = nil
+	}
 }
 
-func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
-	spans := &spanset.SpanSet{}
+// collectSpans collects all of the spans that the batch may touch into a
+// SpanSet.
+//
+// It also determines whether the batch should evaluate optimistically based on
+// the key limits on the batch header. When a batch evaluates optimistically, it
+// doesn't wait to acquire all of its latches. Instead, if begins evaluating
+// immediately and verifies that it would not have needed to wait on any latch
+// acquisitions after-the-fact. This is useful for requests that need to declare
+// a much larger set of keys than they expect to touch in practice (e.g. limited
+// scans).
+func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, bool, error) {
+	r.mu.RLock()
+	desc := r.descRLocked()
+	liveCount := r.mu.state.Stats.LiveCount
+	r.mu.RUnlock()
+
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -1065,6 +1170,7 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	//
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
+	spans := &spanset.SpanSet{}
 	if ba.IsReadOnly() {
 		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
@@ -1076,14 +1182,13 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
-	desc := r.Desc()
 	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
-			return nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, false, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
@@ -1094,9 +1199,23 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// If any command gave us spans that are invalid, bail out early
 	// (before passing them to the spanlatch manager, which may panic).
 	if err := spans.Validate(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return spans, nil
+
+	// Evaluate batches optimistically if they have a key limit which is less
+	// than the number of live keys on the Range. Ignoring write latches can be
+	// massively beneficial because it can help avoid waiting on writes to keys
+	// that the batch will never actually need to read due to the overestimate
+	// of its key bounds. Only after it is clear exactly what spans were read do
+	// we verify whether there were any conflicts with concurrent writes.
+	//
+	// This case is not uncommon; for example, a Scan which requests the entire
+	// range but has a limit of 1 result. We want to avoid allowing overly broad
+	// spans from backing up the latch manager.
+	limit := ba.Header.MaxSpanRequestKeys
+	optimistic := limit > 0 && limit < liveCount
+
+	return spans, optimistic, nil
 }
 
 // beginCmds waits for any in-flight, conflicting commands to complete. This
@@ -1109,11 +1228,17 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 // returns a cleanup function to be called when the commands are done and can be
 // removed from the queue, and whose returned error is to be used in place of
 // the supplied error.
+//
+// See collectSpans for a discussion on optimistic evaluation.
 func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, optimistic bool,
 ) (*endCmds, error) {
+	ec := endCmds{
+		repl: r,
+		ba:   *ba,
+	}
+
 	// Only acquire latches for consistent operations.
-	var lg *spanlatch.Guard
 	if ba.ReadConsistency == roachpb.CONSISTENT {
 		// Check for context cancellation before acquiring latches.
 		if err := ctx.Err(); err != nil {
@@ -1129,10 +1254,16 @@ func (r *Replica) beginCmds(
 		// Acquire latches for all the request's declared spans to ensure
 		// protected access and to avoid interacting requests from operating at
 		// the same time. The latches will be held for the duration of request.
-		var err error
-		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
-		if err != nil {
-			return nil, err
+		if optimistic {
+			// Optimistic acquisition does not wait for existing latches to be
+			// released.
+			ec.lg, ec.sn = r.latchMgr.AcquireOptimistic(spans, ba.Timestamp)
+		} else {
+			var err error
+			ec.lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if !beforeLatch.IsZero() {
@@ -1142,7 +1273,7 @@ func (r *Replica) beginCmds(
 
 		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
 			if pErr := filter(*ba); pErr != nil {
-				r.latchMgr.Release(lg)
+				ec.done(nil, pErr)
 				return nil, pErr.GoError()
 			}
 		}
@@ -1191,8 +1322,9 @@ func (r *Replica) beginCmds(
 			// The store will catch that error and resubmit the request after
 			// mergeCompleteCh closes. See #27442 for the full context.
 			log.Event(ctx, "waiting on in-progress merge")
-			r.latchMgr.Release(lg)
-			return nil, &roachpb.MergeInProgressError{}
+			err := &roachpb.MergeInProgressError{}
+			ec.done(nil, roachpb.NewError(err))
+			return nil, err
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
@@ -1208,12 +1340,7 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	ec := &endCmds{
-		repl: r,
-		lg:   lg,
-		ba:   *ba,
-	}
-	return ec, nil
+	return &ec, nil
 }
 
 // executeAdminBatch executes the command directly. There is no interaction

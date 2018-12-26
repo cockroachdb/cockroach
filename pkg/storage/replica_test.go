@@ -2701,6 +2701,122 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
+// TestReplicaLatchingOptimisticEvaluation verifies that limited scans evaluate
+// optimistically without waiting for latches to be acquired. In some cases,
+// this allows them to avoid waiting on writes that their over-estimated
+// declared spans overlapped with.
+func TestReplicaLatchingOptimisticEvaluation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sArgs1 := scanArgs([]byte("a"), []byte("c"))
+	sArgs2 := scanArgs([]byte("c"), []byte("e"))
+	baScan := roachpb.BatchRequest{}
+	baScan.Add(&sArgs1, &sArgs2)
+
+	var blockKey, blockWriter atomic.Value
+	blockKey.Store(roachpb.Key("a"))
+	blockWriter.Store(false)
+	blockCh := make(chan struct{}, 1)
+	blockedCh := make(chan struct{}, 1)
+
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			// Make sure the direct GC path doesn't interfere with this test.
+			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+				return nil
+			}
+			if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
+				blockedCh <- struct{}{}
+				<-blockCh
+			}
+			return nil
+		}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	// Write initial keys.
+	for _, k := range []string{"a", "b", "c", "d"} {
+		pArgs := putArgs([]byte(k), []byte("value"))
+		if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	testCases := []struct {
+		writeKey   string
+		limit      int64
+		interferes bool
+	}{
+		// No limit.
+		{"a", 0, true},
+		{"b", 0, true},
+		{"c", 0, true},
+		{"d", 0, true},
+		{"e", 0, false}, // Only scanning from [a,e)
+		// Limited.
+		{"a", 1, true},
+		{"b", 1, false},
+		{"b", 2, true},
+		{"c", 2, false},
+		{"c", 3, true},
+		{"d", 3, false},
+		{"d", 4, true},
+		{"e", 4, false}, // Only scanning from [a,e)
+		{"e", 5, false},
+	}
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
+			errCh := make(chan *roachpb.Error, 2)
+			pArgs := putArgs([]byte(test.writeKey), []byte("value"))
+			blockKey.Store(roachpb.Key(test.writeKey))
+			blockWriter.Store(true)
+			go func() {
+				_, pErr := tc.SendWrapped(&pArgs)
+				errCh <- pErr
+			}()
+			<-blockedCh
+			blockWriter.Store(false)
+
+			baScanCopy := baScan
+			baScanCopy.MaxSpanRequestKeys = test.limit
+			go func() {
+				_, pErr := tc.Sender().Send(context.Background(), baScanCopy)
+				errCh <- pErr
+			}()
+
+			if test.interferes {
+				// Neither request should complete until the write is unblocked.
+				select {
+				case <-time.After(10 * time.Millisecond):
+					// Expected.
+				case pErr := <-errCh:
+					t.Fatalf("expected interference: got error %s", pErr)
+				}
+				// Verify no errors on waiting read and write.
+				blockCh <- struct{}{}
+				for j := 0; j < 2; j++ {
+					if pErr := <-errCh; pErr != nil {
+						t.Errorf("error %d: unexpected error: %s", j, pErr)
+					}
+				}
+			} else {
+				// The read should complete first.
+				if pErr := <-errCh; pErr != nil {
+					t.Errorf("unexpected error: %s", pErr)
+				}
+				// The write should complete next, after it is unblocked.
+				blockCh <- struct{}{}
+				if pErr := <-errCh; pErr != nil {
+					t.Errorf("unexpected error: %s", pErr)
+				}
+			}
+		})
+	}
+}
+
 // TestReplicaUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestReplicaUseTSCache(t *testing.T) {

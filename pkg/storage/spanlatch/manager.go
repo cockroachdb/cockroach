@@ -197,14 +197,14 @@ func newGuard(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
 // be released, it stops waiting and releases all latches that it has already
 // acquired.
 //
-// It returns a Guard which must be provided to Release.
+// The method returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
 	ctx context.Context, spans *spanset.SpanSet, ts hlc.Timestamp,
 ) (*Guard, error) {
 	lg, snap := m.sequence(spans, ts)
-	defer snap.close()
+	defer snap.Close()
 
-	err := m.wait(ctx, lg, &snap)
+	err := m.Wait(ctx, lg, &snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -212,11 +212,28 @@ func (m *Manager) Acquire(
 	return lg, nil
 }
 
+// AcquireOptimistic is like Acquire, except it does not wait for latches over
+// overlapping spans to be released before returning. Instead, it optimistically
+// assumes that there are no currently held latches that need to be waited on.
+// This can be verified after the fact by passing the returned Snapshot to
+// Overlaps.
+//
+// Regardless of whether existing latches are ignored or not by this method,
+// future calls to Acquire will observe the latches acquired here and will wait
+// for them to be Released, as usual.
+//
+// The method returns a Guard which must be provided to Release. It also returns
+// a Snapshot which must be Closed when no longer in use.
+func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet, ts hlc.Timestamp) (*Guard, *Snapshot) {
+	lg, snap := m.sequence(spans, ts)
+	return lg, &snap
+}
+
 // sequence locks the manager, captures an immutable snapshot, inserts latches
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *spanset.SpanSet, ts hlc.Timestamp) (*Guard, snapshot) {
+func (m *Manager) sequence(spans *spanset.SpanSet, ts hlc.Timestamp) (*Guard, Snapshot) {
 	lg := newGuard(spans, ts)
 
 	m.mu.Lock()
@@ -226,13 +243,14 @@ func (m *Manager) sequence(spans *spanset.SpanSet, ts hlc.Timestamp) (*Guard, sn
 	return lg, snap
 }
 
-// snapshot is an immutable view into the latch manager's state.
-type snapshot struct {
+// Snapshot is an immutable view into the latch manager's state.
+type Snapshot struct {
 	trees [spanset.NumSpanScope][spanset.NumSpanAccess]btree
 }
 
-// close closes the snapshot and releases any associated resources.
-func (sn *snapshot) close() {
+// Close closes the Snapshot and releases any associated resources. The method
+// can be called multiple times.
+func (sn *Snapshot) Close() {
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			sn.trees[s][a].Reset()
@@ -242,8 +260,8 @@ func (sn *snapshot) close() {
 
 // snapshotLocked captures an immutable snapshot of the latch manager. It takes
 // a spanset to limit the amount of state captured.
-func (m *Manager) snapshotLocked(spans *spanset.SpanSet) snapshot {
-	var snap snapshot
+func (m *Manager) snapshotLocked(spans *spanset.SpanSet) Snapshot {
+	var snap Snapshot
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		sm := &m.scopes[s]
 		reading := len(spans.GetSpans(spanset.SpanReadOnly, s)) > 0
@@ -329,9 +347,9 @@ func ifGlobal(ts hlc.Timestamp, s spanset.SpanScope) hlc.Timestamp {
 	}
 }
 
-// wait waits for all interfering latches in the provided snapshot to complete
+// Wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
-func (m *Manager) wait(ctx context.Context, lg *Guard, snap *snapshot) error {
+func (m *Manager) Wait(ctx context.Context, lg *Guard, snap *Snapshot) error {
 	timer := timeutil.NewTimer()
 	timer.Reset(base.SlowRequestThreshold)
 	defer timer.Stop()
@@ -420,6 +438,58 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 			return &roachpb.NodeUnavailableError{}
 		}
 	}
+}
+
+// Overlaps determines if any of the spans in the provided spanset, at the
+// specified timestamp, overlap with any of the latches in the snapshot.
+func (m *Manager) Overlaps(spans *spanset.SpanSet, ts hlc.Timestamp, sn *Snapshot) bool {
+	// NB: the function has a similar structure to Manager.wait, but any attempt
+	// at code deduplication causes allocations and obscures the code. Avoiding
+	// these allocations would require further obfuscation.
+	var search latch
+	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
+		tr := &sn.trees[s]
+		search.ts = ifGlobal(ts, s)
+		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
+			ss := spans.GetSpans(a, s)
+			for _, sp := range ss {
+				search.span = sp
+				switch a {
+				case spanset.SpanReadOnly:
+					// Search for writes at equal or lower timestamps.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreLater) {
+						return true
+					}
+				case spanset.SpanReadWrite:
+					// Search for all other writes.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreNothing) {
+						return true
+					}
+					// Search for reads at equal or higher timestamps.
+					it = tr[spanset.SpanReadOnly].MakeIter()
+					if overlaps(&it, &search, ignoreEarlier) {
+						return true
+					}
+				default:
+					panic("unknown access")
+				}
+			}
+		}
+	}
+	return false
+}
+
+func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
+	for it.FirstOverlap(search); it.Valid(); it.NextOverlap() {
+		held := it.Cur()
+		if ignore(search.ts, held.ts) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // Release releases the latches held by the provided Guard. After being called,

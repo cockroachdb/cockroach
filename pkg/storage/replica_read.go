@@ -42,7 +42,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
-	spans, err := r.collectSpans(&ba)
+	spans, optimistic, err := r.collectSpans(&ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -50,14 +50,10 @@ func (r *Replica) executeReadOnlyBatch(
 	// Acquire latches to prevent overlapping commands from executing
 	// until this command completes.
 	log.Event(ctx, "acquire latches")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	endCmds, err := r.beginCmds(ctx, &ba, spans, optimistic)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-
-	log.Event(ctx, "waiting for read lock")
-	r.readOnlyCmdMu.RLock()
-	defer r.readOnlyCmdMu.RUnlock()
 
 	// Guarantee we release the latches that we just acquired. It is
 	// important that this is inside the readOnlyCmdMu lock so that the
@@ -67,31 +63,53 @@ func (r *Replica) executeReadOnlyBatch(
 		endCmds.done(br, pErr)
 	}()
 
-	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
-	if _, err := r.IsDestroyed(); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	rSpan, err := keys.Range(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// Evaluate read-only batch command. It checks for matching key range; note
-	// that holding readOnlyCmdMu throughout is important to avoid reads from the
-	// "wrong" key range being served after the range has been split.
+	// Loop to support optimistic evaluation. We'll only evalute up to twice.
 	var result result.Result
-	rec := NewReplicaEvalContext(r, spans)
-	readOnly := r.store.Engine().NewReadOnly()
-	if util.RaceEnabled {
-		readOnly = spanset.NewReadWriter(readOnly, spans)
+	for {
+		br, result, pErr = r.evaluateReadOnlyBatch(ctx, ba, spans)
+		if !endCmds.optimistic() {
+			// If this was not an optimistic evaluation, break.
+			break
+		}
+
+		// If this was an optimistic evaluation, determine whether the keys
+		// that it touched conflict with in-flight requests that were ignored.
+		if conflict, err := endCmds.checkOptimisticConflicts(ctx, br, pErr, spans); err != nil {
+			pErr = roachpb.NewError(err)
+		} else if conflict {
+			// If they do, retry the evaluation. This time, we will not be
+			// evaluating optimistically because checkOptimisticConflicts
+			// waited for all latch acquisitions to succeed.
+			continue
+		}
+		break
 	}
-	defer readOnly.Close()
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
+
+	// // TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
+	// if _, err := r.IsDestroyed(); err != nil {
+	// 	return nil, roachpb.NewError(err)
+	// }
+
+	// rSpan, err := keys.Range(ba)
+	// if err != nil {
+	// 	return nil, roachpb.NewError(err)
+	// }
+
+	// if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+	// 	return nil, roachpb.NewError(err)
+	// }
+
+	// // Evaluate read-only batch command. It checks for matching key range; note
+	// // that holding readOnlyCmdMu throughout is important to avoid reads from the
+	// // "wrong" key range being served after the range has been split.
+	// var result result.Result
+	// rec := NewReplicaEvalContext(r, spans)
+	// readOnly := r.store.Engine().NewReadOnly()
+	// if util.RaceEnabled {
+	// 	readOnly = spanset.NewReadWriter(readOnly, spans)
+	// }
+	// defer readOnly.Close()
+	// br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
 
 	// A merge is (likely) about to be carried out, and this replica
 	// needs to block all traffic until the merge either commits or
@@ -123,4 +141,38 @@ func (r *Replica) executeReadOnlyBatch(
 		log.Event(ctx, "read completed")
 	}
 	return br, pErr
+}
+
+// evaluateReadOnlyBatch evaluates the provided read-only batch and returns its
+// results. It expects that latches have already been acquired for the spans
+// that it will touch.
+func (r *Replica) evaluateReadOnlyBatch(
+	ctx context.Context, ba roachpb.BatchRequest, spans *spanset.SpanSet,
+) (*roachpb.BatchResponse, result.Result, *roachpb.Error) {
+	log.Event(ctx, "waiting for read lock")
+	r.readOnlyCmdMu.RLock()
+	defer r.readOnlyCmdMu.RUnlock()
+
+ 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
+	if _, err := r.IsDestroyed(); err != nil {
+		return nil, result.Result{}, roachpb.NewError(err)
+	}
+	rSpan, err := keys.Range(ba)
+	if err != nil {
+		return nil, result.Result{}, roachpb.NewError(err)
+	}
+	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+		return nil, result.Result{}, roachpb.NewError(err)
+	}
+
+ 	// Evaluate read-only batch command. It checks for matching key range; note
+	// that holding readOnlyCmdMu throughout is important to avoid reads from the
+	// "wrong" key range being served after the range has been split.
+	rec := NewReplicaEvalContext(r, spans)
+	readOnly := r.store.Engine().NewReadOnly()
+	defer readOnly.Close()
+	if util.RaceEnabled {
+		readOnly = spanset.NewReadWriter(readOnly, spans)
+	}
+	return evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
 }
