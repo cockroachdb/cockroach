@@ -117,7 +117,7 @@ func checkOptSupportForTopStatement(AST tree.Statement) error {
 	switch AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
 		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
-		*tree.Insert, *tree.Update, *tree.CreateTable:
+		*tree.Insert, *tree.Update, *tree.Delete, *tree.CreateTable:
 		return nil
 
 	default:

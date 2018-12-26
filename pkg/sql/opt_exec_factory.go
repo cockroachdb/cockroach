@@ -1142,6 +1142,75 @@ func (ef *execFactory) ConstructUpsert(
 	return &rowCountNode{source: ups}, nil
 }
 
+func (ef *execFactory) ConstructDelete(
+	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+) (exec.Node, error) {
+	// Derive table and column descriptors.
+	tabDesc := table.(*optTable).desc
+	fetchColDescs := makeColDescList(table, fetchCols)
+
+	// Determine the foreign key tables involved in the update.
+	fkTables, err := row.TablesNeededForFKs(
+		ef.planner.extendedEvalCtx.Context,
+		*tabDesc,
+		row.CheckDeletes,
+		ef.planner.LookupTableByID,
+		ef.planner.CheckPrivilege,
+		ef.planner.analyzeExpr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table deleter, which does the bulk of the work. In the HP,
+	// the deleter derives the columns that need to be fetched. By contrast, the
+	// CBO will have already determined the set of fetch columns, and passes
+	// those sets into the deleter (which will basically be a no-op).
+	rd, err := row.MakeDeleter(
+		ef.planner.txn,
+		tabDesc,
+		fkTables,
+		fetchColDescs,
+		row.CheckFKs,
+		ef.planner.EvalContext(),
+		&ef.planner.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine the relational type of the generated delete node.
+	// If rows are not needed, no columns are returned.
+	var returnCols sqlbase.ResultColumns
+	if rowsNeeded {
+		// Delete always returns all non-mutation columns, in the same order they
+		// are defined in the table.
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+	}
+
+	// Now make a delete node. We use a pool.
+	del := deleteNodePool.Get().(*deleteNode)
+	*del = deleteNode{
+		source:  input.(planNode),
+		columns: returnCols,
+		run: deleteRun{
+			td:         tableDeleter{rd: rd, alloc: &ef.planner.alloc},
+			rowsNeeded: rowsNeeded,
+		},
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{source: &serializeNode{source: del}}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: del}, nil
+}
+
 func (ef *execFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
