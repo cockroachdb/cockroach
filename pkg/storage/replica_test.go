@@ -2638,18 +2638,29 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 			}
 
 			if test.interferes {
+				// Neither request should complete until the write is unblocked.
 				select {
 				case <-time.After(10 * time.Millisecond):
 					// Expected.
 				case pErr := <-errCh:
 					t.Fatalf("expected interference: got error %s", pErr)
 				}
-			}
-			// Verify no errors on waiting read and write.
-			blockCh <- struct{}{}
-			for j := 0; j < 2; j++ {
+				// Verify no errors on waiting read and write.
+				blockCh <- struct{}{}
+				for j := 0; j < 2; j++ {
+					if pErr := <-errCh; pErr != nil {
+						t.Errorf("error %d: unexpected error: %s", j, pErr)
+					}
+				}
+			} else {
+				// The read should complete first.
 				if pErr := <-errCh; pErr != nil {
-					t.Errorf("error %d: unexpected error: %s", j, pErr)
+					t.Errorf("unexpected error: %s", pErr)
+				}
+				// The write should complete next, after it is unblocked.
+				blockCh <- struct{}{}
+				if pErr := <-errCh; pErr != nil {
+					t.Errorf("unexpected error: %s", pErr)
 				}
 			}
 		})
