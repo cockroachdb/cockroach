@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -434,13 +433,13 @@ func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
 	}
 }
 
-func (h *hasher) HashTableID(val opt.TableID) {
+func (h *hasher) HashSchemaID(val opt.SchemaID) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
 }
 
-func (h *hasher) HashConstraint(val *constraint.Constraint) {
-	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
+func (h *hasher) HashTableID(val opt.TableID) {
+	h.hash ^= internHash(val)
 	h.hash *= prime64
 }
 
@@ -456,11 +455,6 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.hash *= prime64
 }
 
-func (h *hasher) HashSubquery(val *tree.Subquery) {
-	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
-	h.hash *= prime64
-}
-
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.HashColSet(val.Flags)
 	h.hash ^= internHash(val.Mode)
@@ -469,16 +463,6 @@ func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 
 func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
-}
-
-func (h *hasher) HashFuncProps(val *tree.FunctionProperties) {
-	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
-	h.hash *= prime64
-}
-
-func (h *hasher) HashFuncOverload(val *tree.Overload) {
-	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
-	h.hash *= prime64
 }
 
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
@@ -539,6 +523,11 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 		h.HashColList(item.Cols)
 		h.HashScalarExpr(item.Func)
 	}
+}
+
+func (h *hasher) HashPointer(val unsafe.Pointer) {
+	h.hash ^= internHash(uintptr(val))
+	h.hash *= prime64
 }
 
 // ----------------------------------------------------------------------
@@ -683,11 +672,11 @@ func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
 	return l.Equals(&r)
 }
 
-func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
+func (h *hasher) IsSchemaIDEqual(l, r opt.SchemaID) bool {
 	return l == r
 }
 
-func (h *hasher) IsConstraintEqual(l, r *constraint.Constraint) bool {
+func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
 	return l == r
 }
 
@@ -699,10 +688,6 @@ func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
 	return l == r
 }
 
-func (h *hasher) IsSubqueryEqual(l, r *tree.Subquery) bool {
-	return l == r
-}
-
 func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
 	return l.Mode == r.Mode && l.Flags.Equals(r.Flags)
 }
@@ -711,20 +696,16 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 	return bytes.Equal([]byte(l), []byte(r))
 }
 
-func (h *hasher) IsFuncPropsEqual(l, r *tree.FunctionProperties) bool {
-	return l == r
-}
-
-func (h *hasher) IsFuncOverloadEqual(l, r *tree.Overload) bool {
-	return l == r
-}
-
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
 	return l == r
 }
 
 func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
+}
+
+func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {
+	return l == r
 }
 
 func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
