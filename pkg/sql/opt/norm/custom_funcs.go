@@ -672,6 +672,19 @@ func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 	return opt.ColSet{}
 }
 
+// ProjectExtraCol constructs a new Project operator that passes through all
+// columns in the given "in" expression, and then adds the given "extra"
+// expression as an additional column.
+func (c *CustomFuncs) ProjectExtraCol(
+	in memo.RelExpr, extra opt.ScalarExpr, extraID opt.ColumnID,
+) memo.RelExpr {
+	projections := memo.ProjectionsExpr{{
+		Element:    extra,
+		ColPrivate: memo.ColPrivate{Col: extraID}},
+	}
+	return c.f.ConstructProject(in, projections, in.Relational().OutputCols)
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules

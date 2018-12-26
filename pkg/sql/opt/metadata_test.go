@@ -64,6 +64,7 @@ func TestMetadata(t *testing.T) {
 	if mdNew.ColumnMeta(colID).Alias != "col2" {
 		t.Fatalf("unexpected column")
 	}
+
 	if mdNew.TableMeta(tabID).Table != tab {
 		t.Fatalf("unexpected table")
 	}
