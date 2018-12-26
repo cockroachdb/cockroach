@@ -512,16 +512,14 @@ render               ·            ·                                           
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-count                ·         ·                            ()              ·
- └── delete          ·         ·                            ()              ·
-      │              from      t                            ·               ·
-      │              strategy  deleter                      ·               ·
-      └── render     ·         ·                            (k int)         k!=NULL; key(k)
-           │         render 0  (k)[int]                     ·               ·
-           └── scan  ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
-·                    table     t@primary                    ·               ·
-·                    spans     ALL                          ·               ·
-·                    filter    ((v)[int] > (1)[int])[bool]  ·               ·
+count           ·         ·                            ()              ·
+ └── delete     ·         ·                            ()              ·
+      │         from      t                            ·               ·
+      │         strategy  deleter                      ·               ·
+      └── scan  ·         ·                            (k int, v int)  ·
+·               table     t@primary                    ·               ·
+·               spans     ALL                          ·               ·
+·               filter    ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
