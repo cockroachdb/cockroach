@@ -119,6 +119,54 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 	}
 }
 
+// buildInputForUpdateOrDelete constructs a Select expression from the fields in
+// the Update or Delete operator, similar to this:
+//
+//   SELECT <cols>
+//   FROM <table>
+//   WHERE <where>
+//   ORDER BY <order-by>
+//   LIMIT <limit>
+//
+// All columns from the table to update are added to fetchColList.
+// TODO(andyk): Do needed column analysis to project fewer columns if possible.
+func (mb *mutationBuilder) buildInputForUpdateOrDelete(
+	inScope *scope, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
+) {
+	// FROM
+	mb.outScope = mb.b.buildScan(
+		mb.tab,
+		mb.alias,
+		nil, /* ordinals */
+		nil, /* indexFlags */
+		includeMutations,
+		inScope,
+	)
+
+	// WHERE
+	mb.b.buildWhere(where, mb.outScope)
+
+	// SELECT + ORDER BY (which may add projected expressions)
+	projectionsScope := mb.outScope.replace()
+	projectionsScope.appendColumnsFromScope(mb.outScope)
+	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope)
+	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
+	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+
+	// LIMIT
+	if limit != nil {
+		mb.b.buildLimit(limit, inScope, projectionsScope)
+	}
+
+	mb.outScope = projectionsScope
+
+	// Set list of columns that will be fetched by the input expression.
+	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
+	for i := range mb.outScope.cols {
+		mb.fetchColList[i] = mb.outScope.cols[i].id
+	}
+}
+
 // addTargetColsByName adds one target column for each of the names in the given
 // list.
 func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
