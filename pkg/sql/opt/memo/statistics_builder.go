@@ -332,7 +332,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
-	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp:
+	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
 		return sb.colStatMutation(colSet, e)
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
@@ -1877,9 +1877,9 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	return colStat
 }
 
-// +------------------------+
-// | Insert, Update, Upsert |
-// +------------------------+
+// +--------------------------------+
+// | Insert, Update, Upsert, Delete |
+// +--------------------------------+
 
 func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Relational) {
 	s := &relProps.Stats

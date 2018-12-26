@@ -1,0 +1,376 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (abcde.b + c + 1) STORED,
+    e INT AS (a) STORED
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
+TABLE xyz
+ ├── x string not null
+ ├── y int
+ ├── z float
+ └── INDEX primary
+      └── x string not null
+
+exec-ddl
+CREATE TABLE uv (
+    u DECIMAL,
+    v BYTES
+)
+----
+TABLE uv
+ ├── u decimal
+ ├── v bytes
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE mutation (
+    m INT PRIMARY KEY,
+    n INT,
+    "o:write-only" INT DEFAULT(10),
+    "p:delete-only" INT AS (o + n) STORED
+)
+----
+TABLE mutation
+ ├── m int not null
+ ├── n int
+ ├── o int
+ ├── p int
+ └── INDEX primary
+      └── m int not null
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+# No extra clauses.
+build
+DELETE FROM abcde
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ └── scan abcde
+      └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+
+# Use WHERE, ORDER BY, LIMIT.
+build
+DELETE FROM abcde WHERE a>0 ORDER BY a LIMIT 10
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ └── limit
+      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── internal-ordering: +7
+      ├── sort
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── ordering: +7
+      │    └── select
+      │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         ├── scan abcde
+      │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         └── filters
+      │              └── gt [type=bool]
+      │                   ├── variable: a [type=int]
+      │                   └── const: 0 [type=int]
+      └── const: 10 [type=int]
+
+# Use aliased table name.
+build
+DELETE FROM abcde AS foo WHERE foo.a>0 ORDER BY foo.a LIMIT 10
+----
+delete foo
+ ├── columns: <none>
+ ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ └── limit
+      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── internal-ordering: +7
+      ├── sort
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── ordering: +7
+      │    └── select
+      │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         ├── scan foo
+      │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         └── filters
+      │              └── gt [type=bool]
+      │                   ├── variable: a [type=int]
+      │                   └── const: 0 [type=int]
+      └── const: 10 [type=int]
+
+# Use placeholders.
+build
+DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
+----
+delete xyz
+ ├── columns: <none>
+ ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ └── limit
+      ├── columns: x:4(string!null) y:5(int) z:6(float) column7:7(int)
+      ├── internal-ordering: -7
+      ├── sort
+      │    ├── columns: x:4(string!null) y:5(int) z:6(float) column7:7(int)
+      │    ├── ordering: -7
+      │    └── project
+      │         ├── columns: column7:7(int) x:4(string!null) y:5(int) z:6(float)
+      │         ├── select
+      │         │    ├── columns: x:4(string!null) y:5(int) z:6(float)
+      │         │    ├── scan xyz
+      │         │    │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │         │    └── filters
+      │         │         └── eq [type=bool]
+      │         │              ├── variable: x [type=string]
+      │         │              └── placeholder: $1 [type=string]
+      │         └── projections
+      │              └── plus [type=int]
+      │                   ├── variable: y [type=int]
+      │                   └── placeholder: $2 [type=int]
+      └── const: 2 [type=int]
+
+# Correlated subquery.
+build
+SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [DELETE FROM abcde WHERE b=y RETURNING *])
+----
+select
+ ├── columns: x:1(string!null) y:2(int) z:3(float)
+ ├── scan xyz
+ │    └── columns: x:1(string!null) y:2(int) z:3(float)
+ └── filters
+      └── exists [type=bool]
+           └── project
+                ├── columns: a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int)
+                └── delete abcde
+                     ├── columns: a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int) rowid:9(int!null)
+                     ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+                     └── select
+                          ├── columns: a:10(int!null) b:11(int!null) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                          ├── scan abcde
+                          │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+                          └── filters
+                               └── eq [type=bool]
+                                    ├── variable: b [type=int]
+                                    └── variable: y [type=int]
+
+# Use CTE within WHERE clause.
+build
+WITH cte AS (SELECT x FROM xyz) DELETE FROM abcde WHERE EXISTS(SELECT * FROM cte)
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+ └── select
+      ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+      ├── scan abcde
+      │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+      └── filters
+           └── exists [type=bool]
+                └── project
+                     ├── columns: x:1(string!null)
+                     └── scan xyz
+                          └── columns: x:1(string!null) y:2(int) z:3(float)
+
+# Unknown target table.
+build
+DELETE FROM unknown WHERE x=1
+----
+error: no data source matches prefix: "unknown"
+
+# Try to use non-returning UPDATE as expression.
+build
+SELECT * FROM [DELETE FROM abcde WHERE a=1]
+----
+error (0A000): statement source "DELETE FROM abcde WHERE a = 1" does not return any columns
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FROM abcde WHERE a=b
+----
+error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+
+# With alias, original table name should be inaccessible.
+build
+DELETE FROM abcde AS foo WHERE a=abcde.b
+----
+error (42P01): no data source matches prefix: abcde
+
+# ORDER BY can only be used with LIMIT.
+build
+DELETE FROM abcde WHERE b=1 ORDER BY c
+----
+error: DELETE statement requires LIMIT when ORDER BY is used
+
+# ------------------------------------------------------------------------------
+# Test RETURNING.
+# ------------------------------------------------------------------------------
+
+# Return values from delete.
+build
+DELETE FROM abcde WHERE a=1 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ └── delete abcde
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      └── select
+           ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           ├── scan abcde
+           │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: a [type=int]
+                     └── const: 1 [type=int]
+
+# Return values from aliased table.
+build
+DELETE FROM abcde AS foo WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
+----
+project
+ ├── columns: "?column?":13(int) "?column?":14(int)
+ ├── delete foo
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+ │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ │    └── select
+ │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         ├── scan foo
+ │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         └── filters
+ │              └── eq [type=bool]
+ │                   ├── variable: a [type=int]
+ │                   └── const: 1 [type=int]
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: a [type=int]
+      │    └── const: 1 [type=int]
+      └── mult [type=int]
+           ├── variable: b [type=int]
+           └── variable: d [type=int]
+
+# Use returning DELETE as a FROM expression.
+build
+SELECT a, d FROM [DELETE FROM abcde WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
+----
+project
+ ├── columns: a:1(int!null) d:4(int)
+ └── project
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+      └── delete abcde
+           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+           └── limit
+                ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                ├── internal-ordering: +8
+                ├── sort
+                │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │    ├── ordering: +8
+                │    └── select
+                │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │         ├── scan abcde
+                │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+                │         └── filters
+                │              └── gt [type=bool]
+                │                   ├── variable: a [type=int]
+                │                   └── const: 0 [type=int]
+                └── const: 10 [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with mutations.
+# ------------------------------------------------------------------------------
+
+# Without RETURNING clause.
+build
+DELETE FROM mutation WHERE m=1
+----
+delete mutation
+ ├── columns: <none>
+ ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ └── select
+      ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      ├── scan mutation
+      │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: m [type=int]
+                └── const: 1 [type=int]
+
+# With RETURNING clause.
+build
+DELETE FROM mutation WHERE m=1 RETURNING *
+----
+delete mutation
+ ├── columns: m:1(int!null) n:2(int)
+ ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ └── select
+      ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      ├── scan mutation
+      │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: m [type=int]
+                └── const: 1 [type=int]
+
+# Use column "p" from higher scope that is shadowed by mutation column "p".
+build
+SELECT *
+FROM abcde AS mno(m, n, p)
+WHERE EXISTS(SELECT * FROM [DELETE FROM mutation WHERE m=p RETURNING *])
+----
+project
+ ├── columns: m:1(int!null) n:2(int) p:3(int) d:4(int) e:5(int)
+ └── select
+      ├── columns: mno.m:1(int!null) mno.n:2(int) mno.p:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      ├── scan mno
+      │    └── columns: mno.m:1(int!null) mno.n:2(int) mno.p:3(int) d:4(int) e:5(int) rowid:6(int!null)
+      └── filters
+           └── exists [type=bool]
+                └── delete mutation
+                     ├── columns: mutation.m:7(int!null) mutation.n:8(int)
+                     ├── fetch columns: mutation.m:11(int) mutation.n:12(int) o:13(int) mutation.p:14(int)
+                     └── select
+                          ├── columns: mutation.m:11(int!null) mutation.n:12(int) o:13(int) mutation.p:14(int)
+                          ├── scan mutation
+                          │    └── columns: mutation.m:11(int!null) mutation.n:12(int) o:13(int) mutation.p:14(int)
+                          └── filters
+                               └── eq [type=bool]
+                                    ├── variable: mutation.m [type=int]
+                                    └── variable: mno.p [type=int]
+
+# Try to return a mutation column.
+build
+DELETE FROM mutation RETURNING o
+----
+error (42703): column "o" does not exist
+
+# Try to use mutation column in WHERE clause.
+build
+DELETE FROM mutation WHERE o=10
+----
+error (42P10): column "o" is being backfilled
+
+# Try to use mutation column in ORDER BY expression.
+build
+DELETE FROM mutation ORDER BY p LIMIT 2
+----
+error (42P10): column "p" is being backfilled
