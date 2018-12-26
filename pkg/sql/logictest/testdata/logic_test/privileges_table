@@ -24,7 +24,7 @@ statement ok
 REVOKE ALL ON t FROM bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * from t
@@ -70,7 +70,7 @@ statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
@@ -117,7 +117,10 @@ statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement error user testuser does not have INSERT privilege on relation t
+UPSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * FROM t
@@ -161,7 +164,7 @@ statement ok
 REVOKE ALL ON t FROM bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
@@ -205,7 +208,7 @@ statement ok
 REVOKE ALL ON t FROM bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * FROM t
@@ -243,7 +246,29 @@ GRANT INSERT ON t TO testuser
 user testuser
 
 statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement error user testuser does not have SELECT privilege on relation t
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have SELECT privilege on relation t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+statement error user testuser does not have SELECT privilege on relation t
+UPSERT INTO t VALUES (1, 2)
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPSERT INTO t VALUES (1, 2)
 
 statement error user testuser does not have UPDATE privilege on relation t
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
@@ -257,7 +282,7 @@ GRANT UPDATE ON t TO testuser
 user testuser
 
 statement ok
-INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+UPSERT INTO t VALUES (1, 2)
 
 statement ok
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
