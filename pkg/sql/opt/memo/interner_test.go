@@ -19,10 +19,10 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -275,9 +275,9 @@ func TestInterner(t *testing.T) {
 			{val1: opt.TableID(0), val2: opt.TableID(1), equal: false},
 		}},
 
-		{hashFn: in.hasher.HashConstraint, eqFn: in.hasher.IsConstraintEqual, variations: []testVariation{
-			{val1: (*constraint.Constraint)(nil), val2: (*constraint.Constraint)(nil), equal: true},
-			{val1: &constraint.Constraint{}, val2: &constraint.Constraint{}, equal: false},
+		{hashFn: in.hasher.HashSchemaID, eqFn: in.hasher.IsSchemaIDEqual, variations: []testVariation{
+			{val1: opt.SchemaID(0), val2: opt.SchemaID(0), equal: true},
+			{val1: opt.SchemaID(0), val2: opt.SchemaID(1), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashScanLimit, eqFn: in.hasher.IsScanLimitEqual, variations: []testVariation{
@@ -292,9 +292,9 @@ func TestInterner(t *testing.T) {
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: false, Index: 1}, equal: false},
 		}},
 
-		{hashFn: in.hasher.HashSubquery, eqFn: in.hasher.IsSubqueryEqual, variations: []testVariation{
-			{val1: (*tree.Subquery)(nil), val2: (*tree.Subquery)(nil), equal: true},
-			{val1: &tree.Subquery{}, val2: &tree.Subquery{}, equal: false},
+		{hashFn: in.hasher.HashPointer, eqFn: in.hasher.IsPointerEqual, variations: []testVariation{
+			{val1: unsafe.Pointer((*tree.Subquery)(nil)), val2: unsafe.Pointer((*tree.Subquery)(nil)), equal: true},
+			{val1: unsafe.Pointer(&tree.Subquery{}), val2: unsafe.Pointer(&tree.Subquery{}), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashExplainOptions, eqFn: in.hasher.IsExplainOptionsEqual, variations: []testVariation{
@@ -307,16 +307,6 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashShowTraceType, eqFn: in.hasher.IsShowTraceTypeEqual, variations: []testVariation{
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceKV, equal: true},
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceRaw, equal: false},
-		}},
-
-		{hashFn: in.hasher.HashFuncProps, eqFn: in.hasher.IsFuncPropsEqual, variations: []testVariation{
-			{val1: &tree.FunDefs["length"].FunctionProperties, val2: &tree.FunDefs["length"].FunctionProperties, equal: true},
-			{val1: &tree.FunDefs["max"].FunctionProperties, val2: &tree.FunDefs["min"].FunctionProperties, equal: false},
-		}},
-
-		{hashFn: in.hasher.HashFuncOverload, eqFn: in.hasher.IsFuncOverloadEqual, variations: []testVariation{
-			{val1: tree.FunDefs["min"].Definition[0], val2: tree.FunDefs["min"].Definition[0], equal: true},
-			{val1: tree.FunDefs["min"].Definition[0], val2: tree.FunDefs["min"].Definition[1], equal: false},
 		}},
 
 		{hashFn: in.hasher.HashTupleOrdinal, eqFn: in.hasher.IsTupleOrdinalEqual, variations: []testVariation{

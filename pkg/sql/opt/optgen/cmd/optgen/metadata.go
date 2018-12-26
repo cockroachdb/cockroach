@@ -85,6 +85,11 @@ type typeDef struct {
 	// memo.RelExpr, *tree.Subquery, etc.).
 	isPointer bool
 
+	// usePointerIntern is true if the type should be treated as a pointer during
+	// interning, meaning that an instance will be hashed by address rather than
+	// by value.
+	usePointerIntern bool
+
 	// passByVal is true if the type should be passed by value to custom functions,
 	// as well as stored by value in structs and variables.
 	passByVal bool
@@ -146,6 +151,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ColSet":         {fullName: "opt.ColSet", passByVal: true},
 		"ColList":        {fullName: "opt.ColList", passByVal: true},
 		"TableID":        {fullName: "opt.TableID", passByVal: true},
+		"SchemaID":       {fullName: "opt.SchemaID", passByVal: true},
 		"Ordering":       {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice": {fullName: "physical.OrderingChoice", passByVal: true},
 		"TupleOrdinal":   {fullName: "memo.TupleOrdinal", passByVal: true},
@@ -160,10 +166,11 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ColType":        {fullName: "coltypes.T", isPointer: true},
 		"Datum":          {fullName: "tree.Datum", isPointer: true},
 		"TypedExpr":      {fullName: "tree.TypedExpr", isPointer: true},
-		"Subquery":       {fullName: "*tree.Subquery", isPointer: true},
-		"Constraint":     {fullName: "*constraint.Constraint", isPointer: true},
-		"FuncProps":      {fullName: "*tree.FunctionProperties", isPointer: true},
-		"FuncOverload":   {fullName: "*tree.Overload", isPointer: true},
+		"Subquery":       {fullName: "*tree.Subquery", isPointer: true, usePointerIntern: true},
+		"CreateTable":    {fullName: "*tree.CreateTable", isPointer: true, usePointerIntern: true},
+		"Constraint":     {fullName: "*constraint.Constraint", isPointer: true, usePointerIntern: true},
+		"FuncProps":      {fullName: "*tree.FunctionProperties", isPointer: true, usePointerIntern: true},
+		"FuncOverload":   {fullName: "*tree.Overload", isPointer: true, usePointerIntern: true},
 		"PhysProps":      {fullName: "*physical.Required", isPointer: true},
 		"RelProps":       {fullName: "props.Relational"},
 		"ScalarProps":    {fullName: "props.Scalar"},

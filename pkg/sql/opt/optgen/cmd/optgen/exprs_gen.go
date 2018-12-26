@@ -686,7 +686,11 @@ func (g *exprsGen) genInternFuncs() {
 					continue
 				}
 				fieldTyp := g.md.typeOf(field)
-				fmt.Fprintf(g.w, "  in.hasher.Hash%s(val.%s)\n", title(fieldTyp.friendlyName), fieldName)
+				if fieldTyp.usePointerIntern {
+					fmt.Fprintf(g.w, "  in.hasher.HashPointer(unsafe.Pointer(val.%s))\n", fieldName)
+				} else {
+					fmt.Fprintf(g.w, "  in.hasher.Hash%s(val.%s)\n", title(fieldTyp.friendlyName), fieldName)
+				}
 			}
 		}
 		fmt.Fprintf(g.w, "\n")
@@ -716,8 +720,13 @@ func (g *exprsGen) genInternFuncs() {
 				}
 
 				fieldTyp := g.md.typeOf(field)
-				fmt.Fprintf(g.w, "in.hasher.Is%sEqual(val.%s, existing.%s)",
-					title(fieldTyp.friendlyName), fieldName, fieldName)
+				if fieldTyp.usePointerIntern {
+					fmt.Fprintf(g.w, "in.hasher.IsPointerEqual(unsafe.Pointer(val.%s), unsafe.Pointer(existing.%s))",
+						fieldName, fieldName)
+				} else {
+					fmt.Fprintf(g.w, "in.hasher.Is%sEqual(val.%s, existing.%s)",
+						title(fieldTyp.friendlyName), fieldName, fieldName)
+				}
 			}
 		}
 
