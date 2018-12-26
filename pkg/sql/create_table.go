@@ -61,6 +61,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	n.HoistConstraints()
 
 	var sourcePlan planNode
+	var synthRowID bool
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below.
@@ -78,9 +79,15 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 				numColNames, util.Pluralize(int64(numColNames)),
 				numColumns, util.Pluralize(int64(numColumns))))
 		}
+
+		// Synthesize an input column that provides the default value for the
+		// hidden rowid column.
+		synthRowID = true
 	}
 
-	return &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+	ct := &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}
+	ct.run.synthRowID = synthRowID
+	return ct, nil
 }
 
 // createTableRun contains the run-time state of createTableNode
@@ -88,6 +95,12 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 type createTableRun struct {
 	autoCommit   autoCommitOpt
 	rowsAffected int
+
+	// synthRowID indicates whether an input column needs to be synthesized to
+	// provide the default value for the hidden rowid column. The optimizer's
+	// plan already includes this column (so synthRowID is false), whereas the
+	// heuristic planner's plan does not (so synthRowID is true).
+	synthRowID bool
 }
 
 func (n *createTableNode) startExec(params runParams) error {
@@ -114,12 +127,20 @@ func (n *createTableNode) startExec(params runParams) error {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
+	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
+		asCols = planColumns(n.sourcePlan)
+		if !n.run.synthRowID {
+			// rowID column is already present in the input as the last column, so
+			// ignore it for the purpose of creating column metadata (because
+			// makeTableDescIfAs does it automatically).
+			asCols = asCols[:len(asCols)-1]
+		}
 		desc, err = makeTableDescIfAs(
-			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan),
+			n.n, n.dbDesc.ID, id, creationTime, asCols,
 			privs, &params.p.semaCtx, params.EvalContext())
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
@@ -224,22 +245,28 @@ func (n *createTableNode) startExec(params runParams) error {
 		rowBuffer := make(tree.Datums, len(desc.Columns))
 		pkColIdx := len(desc.Columns) - 1
 
-		// Prepare the rowID expression.
-		defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
-		defExpr, err := parser.ParseExpr(defExprSQL)
-		if err != nil {
-			return err
-		}
-		defTypedExpr, err := params.p.analyzeExpr(
-			params.ctx,
-			defExpr,
-			nil, /*sources*/
-			tree.IndexedVarHelper{},
-			types.Any,
-			false, /*requireType*/
-			"CREATE TABLE AS")
-		if err != nil {
-			return err
+		// The optimizer includes the rowID expression as part of the input
+		// expression. But the heuristic planner does not do this, so construct
+		// a rowID expression to be evaluated separately.
+		var defTypedExpr tree.TypedExpr
+		if n.run.synthRowID {
+			// Prepare the rowID expression.
+			defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
+			defExpr, err := parser.ParseExpr(defExprSQL)
+			if err != nil {
+				return err
+			}
+			defTypedExpr, err = params.p.analyzeExpr(
+				params.ctx,
+				defExpr,
+				nil, /*sources*/
+				tree.IndexedVarHelper{},
+				types.Any,
+				false, /*requireType*/
+				"CREATE TABLE AS")
+			if err != nil {
+				return err
+			}
 		}
 
 		for {
@@ -260,9 +287,11 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Populate the buffer and generate the PK value.
 			copy(rowBuffer, n.sourcePlan.Values())
-			rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
-			if err != nil {
-				return err
+			if n.run.synthRowID {
+				rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
+				if err != nil {
+					return err
+				}
 			}
 
 			_, err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())

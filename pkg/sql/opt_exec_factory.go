@@ -1025,6 +1025,16 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+func (ef *execFactory) ConstructCreateTable(
+	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
+) (exec.Node, error) {
+	nd := &createTableNode{n: ct, dbDesc: schema.(*optSchema).desc}
+	if input != nil {
+		nd.sourcePlan = input.(planNode)
+	}
+	return nd, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode
