@@ -24,6 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// SchemaID uniquely identifies the usage of a schema within the scope of a
+// query. SchemaID 0 is reserved to mean "unknown schema". Internally, the
+// SchemaID consists of an index into the Metadata.schemas slice.
+//
+// See the comment for Metadata for more details on identifiers.
+type SchemaID int32
+
 // privilegeBitmap stores a union of zero or more privileges. Each privilege
 // that is present in the bitmap is represented by a bit that is shifted by
 // 1 << privilege.Kind, so that multiple privileges can be stored.
@@ -57,6 +64,9 @@ type privilegeBitmap uint32
 //   -- [0] -> x
 //   -- [1] -> y
 type Metadata struct {
+	// schemas stores each schema used in the query, indexed by SchemaID.
+	schemas []cat.Schema
+
 	// cols stores information about each metadata column, indexed by ColumnID.
 	cols []ColumnMeta
 
@@ -67,19 +77,23 @@ type Metadata struct {
 	// query, as well as the privileges required to access those data sources.
 	// The map key is the data source so that each data source is referenced at
 	// most once. The map value is the union of all required privileges.
-	deps map[cat.DataSource]privilegeBitmap
+	deps map[cat.Object]privilegeBitmap
 }
 
 // Init prepares the metadata for use (or reuse).
 func (md *Metadata) Init() {
-	// Clear the columns and tables to release memory (this clearing pattern is
+	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
+	for i := range md.schemas {
+		md.schemas[i] = nil
+	}
 	for i := range md.cols {
 		md.cols[i] = ColumnMeta{}
 	}
 	for i := range md.tables {
 		md.tables[i] = TableMeta{}
 	}
+	md.schemas = md.schemas[:0]
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
 	md.deps = nil
@@ -91,28 +105,28 @@ func (md *Metadata) AddMetadata(from *Metadata) {
 	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
 		panic("AddMetadata not supported when destination metadata is not empty")
 	}
+	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
-	md.deps = make(map[cat.DataSource]privilegeBitmap, len(from.deps))
+	md.deps = make(map[cat.Object]privilegeBitmap, len(from.deps))
 	for ds, privs := range from.deps {
 		md.deps[ds] = privs
 	}
 }
 
-// AddDependency tracks one of the data sources on which the query depends, as
-// well as the privilege required to access that data source. If the Memo using
+// AddDependency tracks one of the catalog objects on which the query depends,
+// as well as the privilege required to access that object. If the Memo using
 // this metadata is cached, then a call to CheckDependencies can detect if
-// changes to schema or permissions on the data source has invalidated the
-// cached metadata.
-func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
+// changes to schema or permissions on the object has invalidated the cached
+// metadata.
+func (md *Metadata) AddDependency(o cat.Object, priv privilege.Kind) {
 	if md.deps == nil {
-		md.deps = make(map[cat.DataSource]privilegeBitmap)
+		md.deps = make(map[cat.Object]privilegeBitmap)
 	}
 
-	// Use shift operator to store union of privileges required of the data
-	// source.
-	existing := md.deps[ds]
-	md.deps[ds] = existing | (1 << priv)
+	// Use shift operator to store union of privileges required of the object.
+	existing := md.deps[o]
+	md.deps[o] = existing | (1 << priv)
 }
 
 // CheckDependencies resolves each data source on which this metadata depends,
@@ -121,14 +135,30 @@ func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
 // sufficient privileges to access the data source.
 func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) bool {
 	for dep, privs := range md.deps {
-		ds, err := catalog.ResolveDataSource(ctx, dep.Name())
-		if err != nil {
-			return false
+		var toCheck cat.Object
+		if old, ok := dep.(cat.DataSource); ok {
+			// Resolve data source object.
+			new, err := catalog.ResolveDataSource(ctx, old.Name())
+			if err != nil {
+				return false
+			}
+			if new.Version() != old.Version() {
+				return false
+			}
+			toCheck = new
+		} else if old, ok := dep.(cat.Schema); ok {
+			// Resolve schema object.
+			new, err := catalog.ResolveSchema(ctx, old.Name())
+			if err != nil {
+				return false
+			}
+			toCheck = new
+		} else {
+			panic(fmt.Sprintf("unknown dependency type: %v", dep))
 		}
-		if dep.ID() != ds.ID() {
-			return false
-		}
-		if dep.Version() != ds.Version() {
+
+		// Ensure that dependency's ID has not changed.
+		if toCheck.ID() != dep.ID() {
 			return false
 		}
 
@@ -139,7 +169,7 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) 
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err = catalog.CheckPrivilege(ctx, ds, priv); err != nil {
+				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false
 				}
 			}
@@ -149,6 +179,18 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) 
 		}
 	}
 	return true
+}
+
+// AddSchema indexes a new reference to a schema used by the query.
+func (md *Metadata) AddSchema(sch cat.Schema) SchemaID {
+	md.schemas = append(md.schemas, sch)
+	return SchemaID(len(md.schemas))
+}
+
+// Schema looks up the metadata for the schema associated with the given schema
+// id.
+func (md *Metadata) Schema(schID SchemaID) cat.Schema {
+	return md.schemas[schID-1]
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
