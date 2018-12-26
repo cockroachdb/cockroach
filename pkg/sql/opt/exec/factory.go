@@ -297,6 +297,18 @@ type Factory interface {
 		rowsNeeded bool,
 	) (Node, error)
 
+	// ConstructDelete creates a node that implements a DELETE statement. The
+	// input contains columns that were fetched from the target table, and that
+	// will be deleted.
+	//
+	// The fetchCols set contains the ordinal positions of the fetch columns in
+	// the target table. The input must contain those columns in the same order
+	// as they appear in the table schema. The rowsNeeded parameter is true if a
+	// RETURNING clause needs the deleted row(s) as output.
+	ConstructDelete(
+		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
+	) (Node, error)
+
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
