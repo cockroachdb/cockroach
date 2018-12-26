@@ -30,8 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
+const (
+	// testDB is the default current database for testing purposes.
+	testDB = "t"
+)
+
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
+	testSchema  Schema
 	dataSources map[string]cat.DataSource
 	counter     int
 }
@@ -40,17 +46,55 @@ var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
 func New() *Catalog {
-	return &Catalog{dataSources: make(map[string]cat.DataSource)}
+	return &Catalog{
+		testSchema: Schema{
+			SchemaID: 1,
+			SchemaName: cat.SchemaName{
+				CatalogName:     testDB,
+				SchemaName:      tree.PublicSchemaName,
+				ExplicitSchema:  true,
+				ExplicitCatalog: true,
+			},
+		},
+		dataSources: make(map[string]cat.DataSource),
+	}
 }
 
-const (
-	// testDB is the default current database for testing purposes.
-	testDB = "t"
-)
+// ResolveSchema is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveSchema(_ context.Context, name *cat.SchemaName) (cat.Schema, error) {
+	// This is a simplified version of tree.TableName.ResolveTarget() from
+	// sql/tree/name_resolution.go.
+	toResolve := *name
+	if name.ExplicitSchema {
+		if name.ExplicitCatalog {
+			// Already 2 parts: nothing to do.
+			return tc.resolveSchema(&toResolve, name)
+		}
+
+		// Only one part specified; assume it's a schema name and determine
+		// whether the current database has that schema.
+		toResolve.CatalogName = testDB
+		if sch, err := tc.resolveSchema(&toResolve, name); err == nil {
+			return sch, nil
+		}
+
+		// No luck so far. Compatibility with CockroachDB v1.1: use D.public
+		// instead.
+		toResolve.CatalogName = name.SchemaName
+		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.ExplicitCatalog = true
+		return tc.resolveSchema(&toResolve, name)
+	}
+
+	// Neither schema or catalog was specified, so use t.public.
+	toResolve.CatalogName = tree.Name(testDB)
+	toResolve.SchemaName = tree.PublicSchemaName
+	return tc.resolveSchema(&toResolve, name)
+}
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSource(
-	_ context.Context, name *tree.TableName,
+	_ context.Context, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
@@ -108,7 +152,7 @@ func (tc *Catalog) ResolveDataSourceByID(
 	ctx context.Context, id cat.StableID,
 ) (cat.DataSource, error) {
 	for _, ds := range tc.dataSources {
-		if tab, ok := ds.(*Table); ok && tab.StableID == id {
+		if tab, ok := ds.(*Table); ok && tab.TabID == id {
 			return ds, nil
 		}
 	}
@@ -117,10 +161,12 @@ func (tc *Catalog) ResolveDataSourceByID(
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckPrivilege(
-	ctx context.Context, ds cat.DataSource, priv privilege.Kind,
-) error {
-	switch t := ds.(type) {
+func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+	switch t := o.(type) {
+	case *Schema:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.SchemaName)
+		}
 	case *Table:
 		if t.Revoked {
 			return fmt.Errorf("user does not have privilege to access %v", t.TabName)
@@ -130,21 +176,42 @@ func (tc *Catalog) CheckPrivilege(
 			return fmt.Errorf("user does not have privilege to access %v", t.ViewName)
 		}
 	default:
-		panic("invalid DataSource")
+		panic("invalid Object")
+	}
+	return nil
+}
+
+func (tc *Catalog) resolveSchema(toResolve, name *cat.SchemaName) (cat.Schema, error) {
+	if string(toResolve.CatalogName) != testDB {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+			"cannot create %q because the target database or schema does not exist",
+			tree.ErrString(&toResolve.CatalogName)).
+			SetHintf("verify that the current database and search_path are valid and/or the target database exists")
 	}
 
-	return nil
+	if string(toResolve.SchemaName) != tree.PublicSchema {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"schema cannot be modified: %q", tree.ErrString(toResolve))
+	}
+
+	*name = *toResolve
+	return &tc.testSchema, nil
 }
 
 // resolveDataSource checks if `toResolve` exists among the data sources in this
 // Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
 // and returns the corresponding data source. Otherwise, it returns an error.
-func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (cat.DataSource, error) {
+func (tc *Catalog) resolveDataSource(toResolve, name *cat.DataSourceName) (cat.DataSource, error) {
 	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
 		*name = *toResolve
 		return table, nil
 	}
 	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
+}
+
+// Schema returns the singleton test schema.
+func (tc *Catalog) Schema() *Schema {
+	return &tc.testSchema
 }
 
 // Table returns the test table that was previously added with the given name.
@@ -169,7 +236,7 @@ func (tc *Catalog) AddTable(tab *Table) {
 }
 
 // View returns the test view that was previously added with the given name.
-func (tc *Catalog) View(name *tree.TableName) *View {
+func (tc *Catalog) View(name *cat.DataSourceName) *View {
 	ds, err := tc.ResolveDataSource(context.TODO(), name)
 	if err != nil {
 		panic(err)
@@ -264,11 +331,32 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	name.SchemaName = tree.PublicSchemaName
 }
 
+// Schema implements the cat.Schema interface for testing purposes.
+type Schema struct {
+	SchemaID   cat.StableID
+	SchemaName cat.SchemaName
+
+	// If Revoked is true, then the user has had privileges on the schema revoked.
+	Revoked bool
+}
+
+var _ cat.Schema = &Schema{}
+
+// ID is part of the cat.Schema interface.
+func (s *Schema) ID() cat.StableID {
+	return s.SchemaID
+}
+
+// Name is part of the cat.Schema interface.
+func (s *Schema) Name() *cat.SchemaName {
+	return &s.SchemaName
+}
+
 // View implements the cat.View interface for testing purposes.
 type View struct {
 	ViewID      cat.StableID
 	ViewVersion cat.Version
-	ViewName    tree.TableName
+	ViewName    cat.DataSourceName
 	QueryText   string
 	ColumnNames tree.NameList
 
@@ -295,7 +383,7 @@ func (tv *View) Version() cat.Version {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tv *View) Name() *tree.TableName {
+func (tv *View) Name() *cat.DataSourceName {
 	return &tv.ViewName
 }
 
@@ -316,7 +404,7 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
-	StableID   cat.StableID
+	TabID      cat.StableID
 	TabVersion cat.Version
 	TabName    tree.TableName
 	Columns    []*Column
@@ -340,7 +428,7 @@ func (tt *Table) String() string {
 
 // ID is part of the cat.DataSource interface.
 func (tt *Table) ID() cat.StableID {
-	return tt.StableID
+	return tt.TabID
 }
 
 // Version is part of the cat.DataSource interface.
@@ -349,7 +437,7 @@ func (tt *Table) Version() cat.Version {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tt *Table) Name() *tree.TableName {
+func (tt *Table) Name() *cat.DataSourceName {
 	return &tt.TabName
 }
 

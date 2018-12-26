@@ -51,14 +51,24 @@ type StableID uint32
 // For sqlbase data sources, the version is the 32-bit descriptor version.
 type Version uint32
 
+// SchemaName is an alias for tree.TableNamePrefix, since it consists of the
+// catalog + schema name.
+type SchemaName = tree.TableNamePrefix
+
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
 type Catalog interface {
+	// ResolveSchema locates a schema with the given name. If no such schema
+	// exists, then ResolveSchema returns an error. As a side effect, the name
+	// parameter is updated to be fully qualified if it was not before (i.e. to
+	// include catalog and schema names).
+	ResolveSchema(ctx context.Context, name *SchemaName) (Schema, error)
+
 	// ResolveDataSource locates a data source with the given name and returns it.
 	// If no such data source exists, then ResolveDataSource returns an error. As
 	// a side effect, the name parameter is updated to be fully qualified if it
 	// was not before (i.e. to include catalog and schema names).
-	ResolveDataSource(ctx context.Context, name *tree.TableName) (DataSource, error)
+	ResolveDataSource(ctx context.Context, name *DataSourceName) (DataSource, error)
 
 	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
 	// locates a data source by its StableID. See the comment for StableID for
@@ -66,6 +76,6 @@ type Catalog interface {
 	ResolveDataSourceByID(ctx context.Context, id StableID) (DataSource, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
-	// the given data source. If not, then CheckPrivilege returns an error.
-	CheckPrivilege(ctx context.Context, ds DataSource, priv privilege.Kind) error
+	// the given catalog object. If not, then CheckPrivilege returns an error.
+	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
 }
