@@ -141,8 +141,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// Raise error if a DDL or mutation op is part of a read-only transaction.
-	if isDDL || opt.IsMutationOp(e) {
+	// Raise error if mutation op is part of a read-only transaction.
+	if opt.IsMutationOp(e) {
 		if b.evalCtx.TxnReadOnly {
 			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
