@@ -114,3 +114,27 @@ define Update {
 
     _ MutationPrivate
 }
+
+# CreateTable represents a CREATE TABLE statement.
+[Relational, DDL]
+define CreateTable {
+    # Input is only used if the AS clause was used in the CREATE TABLE
+    # statement. If it was not used, then the Input is a dummy zero row, zero
+    # column Values expression (and nil inputs are not allowed).
+    Input RelExpr
+
+    _ CreateTablePrivate
+}
+
+[Private]
+define CreateTablePrivate {
+    # Schema is the ID of the catalog schema into which the new table goes.
+    Schema SchemaID
+
+    # InputCols gives the ordering of input columns. It is only defined when the
+    # AS clause was used in the CREATE TABLE statement.
+    InputCols ColList
+
+    # Syntax is the CREATE TABLE AST node.
+    Syntax CreateTable
+}

@@ -196,7 +196,7 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableName("t", "abc")).TabID = 1
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
 		t.Fatal(err)
-	} else if isStale {
+	} else if !isStale {
 		t.Errorf("expected table ID to be stale")
 	}
 	catalog.Table(tree.NewTableName("t", "abc")).TabID = 53
@@ -205,7 +205,7 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 1
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
 		t.Fatal(err)
-	} else if isStale {
+	} else if !isStale {
 		t.Errorf("expected table version to be stale")
 	}
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 0
@@ -214,16 +214,14 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Schema().SchemaID = 2
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
 		t.Fatal(err)
-	} else if isStale {
+	} else if !isStale {
 		t.Errorf("expected schema ID to be stale")
 	}
 	catalog.Schema().SchemaID = 1
 
 	// User no longer has access to schema.
 	catalog.Schema().Revoked = true
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if isStale {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err == nil || !isStale {
 		t.Errorf("expected user not to have CREATE privilege on schema")
 	}
 	catalog.Schema().Revoked = false

@@ -133,13 +133,15 @@ func (md *Metadata) AddDependency(o cat.Object, priv privilege.Kind) {
 // CheckDependencies resolves each data source and schema on which this metadata
 // depends, in order to check that the fully qualified object names still
 // resolve to the same version of the same objects, and that the user still has
-// sufficient privileges to access the objects. If the dependencies have
-// changed, then CheckDependencies returns false.
+// sufficient privileges to access the objects. If the dependencies are no
+// longer up-to-date, then CheckDependencies returns false.
 //
 // This function cannot swallow errors and return only a boolean, as it may
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
-func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) (bool, error) {
+func (md *Metadata) CheckDependencies(
+	ctx context.Context, catalog cat.Catalog,
+) (upToDate bool, err error) {
 	for dep, privs := range md.deps {
 		var toCheck cat.Object
 		if old, ok := dep.(cat.DataSource); ok {
