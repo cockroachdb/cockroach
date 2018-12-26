@@ -149,6 +149,12 @@ func (r *Replica) updateTimestampCache(
 		case *roachpb.ScanRequest:
 			resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 			if resp.ResumeSpan != nil {
+				if start.Equal(resp.ResumeSpan.Key) {
+					// If the forward scan was evaluated with a key limit of zero
+					// then it will return a resume span equal to its request
+					// span. In this case, don't update the timestamp cache.
+					continue
+				}
 				// Note that for forward scan, the resume span will start at
 				// the (last key read).Next(), which is actually the correct
 				// end key for the span to update the timestamp cache.
@@ -158,6 +164,12 @@ func (r *Replica) updateTimestampCache(
 		case *roachpb.ReverseScanRequest:
 			resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 			if resp.ResumeSpan != nil {
+				if end.Equal(resp.ResumeSpan.EndKey) {
+					// If the reverse scan was evaluated with a key limit of zero
+					// then it will return a resume span equal to its request
+					// span. In this case, don't update the timestamp cache.
+					continue
+				}
 				// Note that for reverse scans, the resume span's end key is
 				// an open interval. That means it was read as part of this op
 				// and won't be read on resume. It is the correct start key for
