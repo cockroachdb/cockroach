@@ -104,7 +104,8 @@ func (m *Manager) MustAcquireChCtx(
 	ch := make(chan *Guard)
 	lg, snap := m.sequence(spans, ts)
 	go func() {
-		err := m.wait(ctx, lg, &snap)
+		defer snap.Close()
+		err := m.Wait(ctx, lg, &snap)
 		if err != nil {
 			m.Release(lg)
 			lg = nil
@@ -424,14 +425,23 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 
 				var m Manager
 				lg1 := m.MustAcquire(c.sp1, c.ts1)
-				lg2C := m.MustAcquireCh(c.sp2, c.ts2)
+				lg2, snap2 := m.sequence(c.sp2, c.ts2)
+				lg2C := make(chan *Guard)
+				defer snap2.Close()
+				go func() {
+					err := m.Wait(context.Background(), lg2, &snap2)
+					require.Nil(t, err)
+					lg2C <- lg2
+				}()
+
+				require.Equal(t, c.dependent, m.Overlaps(c.sp2, c.ts2, &snap2))
 				if c.dependent {
 					testLatchBlocks(t, lg2C)
 					m.Release(lg1)
-					lg2 := testLatchSucceeds(t, lg2C)
+					testLatchSucceeds(t, lg2C)
 					m.Release(lg2)
 				} else {
-					lg2 := testLatchSucceeds(t, lg2C)
+					testLatchSucceeds(t, lg2C)
 					m.Release(lg1)
 					m.Release(lg2)
 				}
@@ -512,7 +522,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 			b.ResetTimer()
 			for i := range spans {
 				lg, snap := m.sequence(&spans[i], zeroTS)
-				snap.close()
+				snap.Close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)
 				}
