@@ -707,8 +707,7 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (
 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1 WITH resolved`, targets)
 	extraArgs := []interface{}{sinkURL}
 	if !initialScan {
-		createStmt += `, cursor=$2`
-		extraArgs = append(extraArgs, timeutil.Now().Add(-time.Second).UnixNano())
+		createStmt += `, cursor='-1s'`
 	}
 	if err := db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
 		return 0, err
