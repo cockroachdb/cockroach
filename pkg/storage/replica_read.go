@@ -36,11 +36,13 @@ func (r *Replica) executeReadOnlyBatch(
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
 	var status storagepb.LeaseStatus
+	var isFollowerRead bool
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
 				return nil, nErr
 			}
+			isFollowerRead = true
 		}
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
@@ -124,6 +126,9 @@ func (r *Replica) executeReadOnlyBatch(
 		log.VErrEvent(ctx, 3, pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
+		if isFollowerRead {
+			r.store.metrics.FollowerReadsCount.Inc(1)
+		}
 	}
 	return br, pErr
 }

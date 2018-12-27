@@ -29,7 +29,7 @@ SELECT * FROM t AS OF SYSTEM TIME -( ('1' || 'ns')::INTERVAL )
 ----
 2
 
-statement error pq: AS OF SYSTEM TIME: only constant expressions are allowed
+statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
 
 statement error pq: subqueries are not allowed in AS OF SYSTEM TIME

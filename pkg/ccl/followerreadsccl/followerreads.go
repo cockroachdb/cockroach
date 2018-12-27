@@ -1,0 +1,130 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+// Package followerreadsccl implements and injects the functionality needed to
+// expose follower reads to clients.
+package followerreadsccl
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
+// followerReadMultiple is the multiple of kv.closed_timestmap.target_duration
+// which the implementation of the follower read capable replica policy ought
+// to use to determine if a request can be used for reading.
+// FollowerReadMultiple is a hidden setting.
+var followerReadMultiple = settings.RegisterValidatedFloatSetting(
+	"kv.follower_read.target_multiple",
+	"if above 1, encourages the distsender to perform a read against the "+
+		"closest replica if a request is older than kv.closed_timestamp.target_duration"+
+		" * (1 + kv.closed_timestamp.close_fraction * this) less a clock uncertainty "+
+		"interval. This value also is used to create follower_timestamp().",
+	3,
+	func(v float64) error {
+		if v < 1 {
+			return fmt.Errorf("%v is not >= 1", v)
+		}
+		return nil
+	},
+)
+
+func init() { followerReadMultiple.Hide() }
+
+// getFollowerReadOffset returns the offset duration which should be used to as
+// the offset from now to request a follower read. The same value less the clock
+// uncertainty, then is used to determine at the kv layer if a query can use a
+// follower read.
+func getFollowerReadDuration(st *cluster.Settings) time.Duration {
+	targetMultiple := followerReadMultiple.Get(&st.SV)
+	targetDuration := closedts.TargetDuration.Get(&st.SV)
+	closeFraction := closedts.CloseFraction.Get(&st.SV)
+	return -1 * time.Duration(float64(targetDuration)*
+		(1+closeFraction*targetMultiple))
+}
+
+func checkEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) error {
+	org := sql.ClusterOrganization.Get(&st.SV)
+	return utilccl.CheckEnterpriseEnabled(st, clusterID, org, "follower reads")
+}
+
+func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Duration, error) {
+	if err := checkEnterpriseEnabled(clusterID, st); err != nil {
+		return 0, err
+	}
+	return getFollowerReadDuration(st), nil
+}
+
+// canUseFollowerRead determines if a query can be sent to a follower
+func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timestamp) bool {
+	if !storage.FollowerReadsEnabled.Get(&st.SV) {
+		return false
+	}
+	threshold := (-1 * getFollowerReadDuration(st)) - base.DefaultMaxClockOffset
+	if timeutil.Since(ts.GoTime()) < threshold {
+		return false
+	}
+	return checkEnterpriseEnabled(clusterID, st) == nil
+}
+
+// canSendToFollower implements the logic for checking whether a batch request
+// may be sent to a follower.
+func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
+	return ba.IsReadOnly() && ba.Txn != nil &&
+		canUseFollowerRead(clusterID, st, ba.Txn.OrigTimestamp)
+}
+
+type oracleFactory struct {
+	clusterID *base.ClusterIDContainer
+	st        *cluster.Settings
+
+	binPacking replicaoracle.OracleFactory
+	closest    replicaoracle.OracleFactory
+}
+
+func newOracleFactory(cfg replicaoracle.Config) replicaoracle.OracleFactory {
+	return &oracleFactory{
+		clusterID:  &cfg.RPCContext.ClusterID,
+		st:         cfg.Settings,
+		binPacking: replicaoracle.NewOracleFactory(replicaoracle.BinPackingChoice, cfg),
+		closest:    replicaoracle.NewOracleFactory(replicaoracle.ClosestChoice, cfg),
+	}
+}
+
+func (f oracleFactory) Oracle(txn *client.Txn) replicaoracle.Oracle {
+	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.OrigTimestamp()) {
+		return f.closest.Oracle(txn)
+	}
+	return f.binPacking.Oracle(txn)
+}
+
+// followerReadAwareChoice is a leaseholder choosing policy that detects
+// whether a query can be used with a follower read.
+var followerReadAwareChoice = replicaoracle.RegisterPolicy(newOracleFactory)
+
+func init() {
+	sql.ReplicaOraclePolicy = followerReadAwareChoice
+	builtins.EvalFollowerReadOffset = evalFollowerReadOffset
+	kv.CanSendToFollower = canSendToFollower
+}

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,7 +86,8 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
-	// gossip handle used to check node version compatibility.
+	// gossip handle used to check node version compatibility and to construct
+	// the spanResolver.
 	gossip *gossip.Gossip
 
 	nodeDialer *nodedialer.Dialer
@@ -93,9 +95,17 @@ type DistSQLPlanner struct {
 	// nodeHealth encapsulates the various node health checks to avoid planning
 	// on unhealthy nodes.
 	nodeHealth distSQLNodeHealth
+
+	// distSender is used to construct the spanResolver upon SetNodeDesc.
+	distSender *kv.DistSender
+	// rpcCtx is used to construct the spanResolver upon SetNodeDesc.
+	rpcCtx *rpc.Context
 }
 
-const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
+// ReplicaOraclePolicy controls which policy the physical planner uses to choose
+// a replica for a given range. It is exported so that it may be overwritten
+// during initialization by CCL code to enable follower reads.
+var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
 
 // If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
@@ -146,18 +156,19 @@ func NewDistSQLPlanner(
 		log.Fatal(ctx, "must specify liveness")
 	}
 	dsp := &DistSQLPlanner{
-		planVersion:  planVersion,
-		st:           st,
-		nodeDesc:     nodeDesc,
-		stopper:      stopper,
-		distSQLSrv:   distSQLSrv,
-		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
-		gossip:       gossip,
-		nodeDialer:   nodeDialer,
+		planVersion: planVersion,
+		st:          st,
+		nodeDesc:    nodeDesc,
+		stopper:     stopper,
+		distSQLSrv:  distSQLSrv,
+		gossip:      gossip,
+		nodeDialer:  nodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:     gossip,
 			connHealth: nodeDialer.ConnHealth,
 		},
+		distSender:            distSender,
+		rpcCtx:                rpcCtx,
 		metadataTestTolerance: distsqlrun.NoExplain,
 	}
 	dsp.nodeHealth.isLive = liveness.IsLive
@@ -171,8 +182,14 @@ func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
 }
 
 // SetNodeDesc sets the planner's node descriptor.
+// The first call to SetNodeDesc leads to the construction of the SpanResolver.
 func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
 	dsp.nodeDesc = desc
+	if dsp.spanResolver == nil {
+		sr := distsqlplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.gossip, desc,
+			dsp.rpcCtx, ReplicaOraclePolicy)
+		dsp.SetSpanResolver(sr)
+	}
 }
 
 // SetSpanResolver switches to a different SpanResolver. It is the caller's

@@ -37,6 +37,7 @@ func registerTests(r *registry) {
 	registerDrop(r)
 	registerElectionAfterRestart(r)
 	registerEncryption(r)
+	registerFollowerReads(r)
 	registerGossip(r)
 	registerHibernate(r)
 	registerHotSpotSplits(r)
