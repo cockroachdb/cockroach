@@ -138,6 +138,12 @@ func (s *Store) ForceRaftSnapshotQueueProcess() {
 	forceScanAndProcess(s, s.raftSnapshotQueue.baseQueue)
 }
 
+// ForceConsistencyQueueProcess runs all the ranges through the consistency
+// queue.
+func (s *Store) ForceConsistencyQueueProcess() {
+	forceScanAndProcess(s, s.consistencyQueue.baseQueue)
+}
+
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
 func (s *Store) ConsistencyQueueShouldQueue(
