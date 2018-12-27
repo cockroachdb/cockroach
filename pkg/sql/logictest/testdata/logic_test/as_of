@@ -29,7 +29,7 @@ SELECT * FROM t AS OF SYSTEM TIME -( ('1' || 'ns')::INTERVAL )
 ----
 2
 
-statement error pq: AS OF SYSTEM TIME: only constant expressions are allowed
+statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
 
 statement error pq: subqueries are not allowed in AS OF SYSTEM TIME
@@ -37,6 +37,12 @@ SELECT * FROM t AS OF SYSTEM TIME (SELECT '-1h'::INTERVAL)
 
 statement error pq: relation "t" does not exist
 SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement error pq: follower_read_timestamp\(\): follower_read_timestamp is only available in ccl distribution
+SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
+
+statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+SELECT * FROM t AS OF SYSTEM TIME now()
 
 statement error cannot specify timestamp in the future
 SELECT * FROM t AS OF SYSTEM TIME '10s'

@@ -737,7 +737,6 @@ func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp
 	default:
 		return nil, nil
 	}
-
 	ts, err := p.EvalAsOfTimestamp(asOf, max)
 	return &ts, err
 }

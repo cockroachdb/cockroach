@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1734,6 +1735,31 @@ CockroachDB supports the following flags:
 				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 			Info: "Returns the start time of the current statement.",
+		},
+	),
+
+	tree.FollowerReadTimestampFunctionName: makeBuiltin(
+		tree.FunctionProperties{Impure: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts, err := recentTimestamp(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDTimestampTZ(ts, time.Microsecond), nil
+			},
+			Info: `Returns a timestamp which is very likely to be safe to perform
+against a follower replica.
+
+This function is intended to be used with an AS OF SYSTEM TIME clause to perform
+historical reads against a time which is recent but sufficiently old for reads
+to be performed against the closest replica as opposed to the currently
+leaseholder for a given range.
+
+Note that this function requires an enterprise license on a CCL distribution to
+return without an error.`,
 		},
 	),
 
@@ -4493,4 +4519,23 @@ func checkPrivilegedUser(ctx *tree.EvalContext) error {
 		return errInsufficientPriv
 	}
 	return nil
+}
+
+// EvalFollowerReadOffset is a function used often with AS OF SYSTEM TIME queries
+// to determine the appropriate offset from now which is likely to be safe for
+// follower reads. It is injected by followerreadsccl. An error may be returned
+// if an enterprise license is not installed.
+var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
+
+func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
+	if EvalFollowerReadOffset == nil {
+		return time.Time{}, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			tree.FollowerReadTimestampFunctionName+
+				" is only available in ccl distribution")
+	}
+	offset, err := EvalFollowerReadOffset(ctx.ClusterID, ctx.Settings)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return ctx.StmtTimestamp.Add(offset), nil
 }

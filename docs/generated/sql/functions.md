@@ -340,6 +340,15 @@ hour, minute, second, millisecond, microsecond, epoch</p>
 <tr><td><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
 Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
+<tr><td><code>follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a timestamp which is very likely to be safe to perform
+against a follower replica.</p>
+<p>This function is intended to be used with an AS OF SYSTEM TIME clause to perform
+historical reads against a time which is recent but sufficiently old for reads
+to be performed against the closest replica as opposed to the currently
+leaseholder for a given range.</p>
+<p>Note that this function requires an enterprise license on a CCL distribution to
+return without an error.</p>
+</span></td></tr>
 <tr><td><code>now() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
