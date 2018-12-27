@@ -36,6 +36,53 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 	return nil
 }
 
+// wrapRowSource, given an input exec.Operator, integrates toWrap into a
+// columnar execution flow and returns toWrap's output as an exec.Operator.
+func wrapRowSource(
+	flowCtx *FlowCtx,
+	input exec.Operator,
+	inputTypes []sqlbase.ColumnType,
+	newToWrap func(RowSource) (RowSource, error),
+) (exec.Operator, error) {
+	var (
+		toWrapInput RowSource
+		// TODO(asubiotto): Plumb proper processorIDs once we have stats.
+		processorID int32
+	)
+	// Optimization: if the input is a columnarizer, its input is necessarily a
+	// RowSource, so remove the unnecessary conversion.
+	if c, ok := input.(*columnarizer); ok {
+		// TODO(asubiotto): We might need to do some extra work to remove references
+		// to this operator (e.g. streamIDToOp).
+		toWrapInput = c.input
+	} else {
+		outputToInputColIdx := make([]int, len(inputTypes))
+		for i := range outputToInputColIdx {
+			outputToInputColIdx[i] = i
+		}
+		var err error
+		toWrapInput, err = newMaterializer(
+			flowCtx,
+			processorID,
+			input,
+			inputTypes,
+			outputToInputColIdx,
+			&distsqlpb.PostProcessSpec{},
+			nil, /* output */
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	toWrap, err := newToWrap(toWrapInput)
+	if err != nil {
+		return nil, err
+	}
+
+	return newColumnarizer(flowCtx, processorID, toWrap)
+}
+
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
 ) (exec.Operator, error) {
@@ -199,6 +246,31 @@ func newColOperator(
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
 		)
+
+	case core.JoinReader != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+
+		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
+			var (
+				jr  RowSource
+				err error
+			)
+			if len(core.JoinReader.LookupColumns) == 0 {
+				jr, err = newIndexJoiner(
+					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil /* output */)
+			} else {
+				jr, err = newJoinReader(
+					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
+				)
+			}
+			if err != nil {
+				return nil, err
+			}
+			columnTypes = jr.OutputTypes()
+			return jr, nil
+		})
 
 	case core.Sorter != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
