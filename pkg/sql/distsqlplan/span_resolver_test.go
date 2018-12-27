@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -89,8 +90,9 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	s3 := tc.Servers[3]
 
 	lr := distsqlplan.NewSpanResolver(
-		s3.DistSender(), s3.Gossip(), s3.GetNode().Descriptor,
-		distsqlplan.BinPackingLeaseHolderChoice)
+		s3.Cfg.Settings,
+		s3.DistSender(), s3.Gossip(), s3.GetNode().Descriptor, nil,
+		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
 	for i := 0; i < 3; i++ {
@@ -194,9 +196,10 @@ func TestSpanResolver(t *testing.T) {
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
+		s.(*server.TestServer).Cfg.Settings,
 		s.DistSender(), s.Gossip(),
-		s.(*server.TestServer).GetNode().Descriptor,
-		distsqlplan.BinPackingLeaseHolderChoice)
+		s.(*server.TestServer).GetNode().Descriptor, nil,
+		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
 	it := lr.NewSpanResolverIterator(nil)
@@ -287,9 +290,11 @@ func TestMixedDirections(t *testing.T) {
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
+		s.(*server.TestServer).Cfg.Settings,
 		s.DistSender(), s.Gossip(),
 		s.(*server.TestServer).GetNode().Descriptor,
-		distsqlplan.BinPackingLeaseHolderChoice)
+		nil,
+		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
 	it := lr.NewSpanResolverIterator(nil)

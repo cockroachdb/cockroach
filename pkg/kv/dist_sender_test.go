@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -588,9 +589,9 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	}
 }
 
-// TestRetryOnNotLeaseHolderError verifies that the DistSender backs off upon
-// receiving multiple NotLeaseHolderErrors without observing an increase in
-// LeaseSequence.
+// TestBackoffOnNotLeaseHolderErrorDuringTransfer verifies that the DistSender
+// backs off upon receiving multiple NotLeaseHolderErrors without observing an
+// increase in LeaseSequence.
 func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -2577,5 +2578,105 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 	}
 	if wrapped.Index.Index != 4 {
 		t.Errorf("expected error index to be %d, instead got %d", 3, wrapped.Index.Index)
+	}
+}
+
+// TestCanSendToFollower tests that the DistSender abides by the result it
+// get from CanSendToFollower.
+func TestCanSendToFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	old := CanSendToFollower
+	defer func() { CanSendToFollower = old }()
+	canSend := true
+	CanSendToFollower = func(_ uuid.UUID, _ *cluster.Settings, ba roachpb.BatchRequest) bool {
+		return ba.IsReadOnly() && canSend
+	}
+
+	g, clock := makeGossip(t, stopper)
+	leaseHolders := testUserRangeDescriptor3Replicas.Replicas
+	for _, n := range leaseHolders {
+		if err := g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var sentTo ReplicaInfo
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		r ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		sentTo = r[0]
+		reply := &roachpb.BatchResponse{}
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
+		RPCRetryOptions: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     time.Microsecond,
+		},
+	}
+	for i, c := range []struct {
+		canSendToFollower bool
+		header            roachpb.Header
+		msg               roachpb.Request
+		expectedNode      roachpb.NodeID
+	}{
+		{
+			true,
+			roachpb.Header{
+				Txn: &roachpb.Transaction{},
+			},
+			roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}),
+			2,
+		},
+		{
+			true,
+			roachpb.Header{
+				Txn: &roachpb.Transaction{},
+			},
+			roachpb.NewGet(roachpb.Key("a")),
+			1,
+		},
+		{
+			true,
+			roachpb.Header{},
+			roachpb.NewGet(roachpb.Key("a")),
+			1,
+		},
+		{
+			false,
+			roachpb.Header{},
+			roachpb.NewGet(roachpb.Key("a")),
+			2,
+		},
+	} {
+		sentTo = ReplicaInfo{}
+		canSend = c.canSendToFollower
+		ds := NewDistSender(cfg, g)
+		ds.clusterID = &base.ClusterIDContainer{}
+		// set 2 to be the leaseholder
+		ds.LeaseHolderCache().Update(context.TODO(), 2, 2)
+		if _, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
+			t.Fatalf("%d: unexpected error: %v", i, pErr)
+		}
+		if sentTo.NodeID != c.expectedNode {
+			t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
+		}
 	}
 }
