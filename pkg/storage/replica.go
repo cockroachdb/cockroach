@@ -135,12 +135,6 @@ const (
 	// proposalIllegalLeaseIndex indicates the proposal failed to apply at
 	// a Lease index it was not legal for. The command should be retried.
 	proposalIllegalLeaseIndex
-	// proposalAmbiguousShouldBeReevaluated indicates that it's ambiguous whether
-	// the command was committed (and possibly even applied) or not. The command
-	// should be retried. However, the original proposal may have succeeded, so if
-	// the retry does not succeed, care must be taken to correctly inform the
-	// caller via an AmbiguousResultError.
-	proposalAmbiguousShouldBeReevaluated
 	// proposalErrorReproposing indicates that re-proposal
 	// failed. Because the original proposal may have succeeded, an
 	// AmbiguousResultError must be returned. The command should not be
@@ -3059,7 +3053,7 @@ func (r *Replica) executeReadOnlyBatch(
 }
 
 // executeWriteBatch is the entry point for client requests which may mutate the
-// range's replicated state. Requests taking this path are ultimately
+// range's replicated state. Requests taking this path are evaluated and ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
 // to allow commands which commute to be proposed in parallel. The naive
 // alternative, submitting requests to Raft one after another, paying massive
@@ -3067,20 +3061,17 @@ func (r *Replica) executeReadOnlyBatch(
 //
 // Internally, multiple iterations of the above process may take place
 // due to the Raft proposal failing retryably, possibly due to proposal
-// reordering or re-proposals.
+// reordering or re-proposals. We call these retry "re-evaluations" since the
+// request is evaluated again (against a fresh engine snapshot).
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	var ambiguousResult bool
 	for count := 0; ; count++ {
+		var ambiguousResult bool
 		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
 		switch retry {
 		case proposalIllegalLeaseIndex:
 			log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
-			continue // retry
-		case proposalAmbiguousShouldBeReevaluated:
-			log.VEventf(ctx, 2, "retry: proposalAmbiguousShouldBeReevaluated")
-			ambiguousResult = true
 			continue // retry
 		case proposalRangeNoLongerExists, proposalErrorReproposing:
 			ambiguousResult = true
@@ -4775,6 +4766,9 @@ const (
 	noReason refreshRaftReason = iota
 	reasonNewLeader
 	reasonNewLeaderOrConfigChange
+	// A snapshot was just applied and so it may have contained commands that we
+	// proposed whose proposal we still consider to be inflight. These commands
+	// will never receive a response through the regular channel.
 	reasonSnapshotApplied
 	reasonReplicaIDChanged
 	reasonTicks
@@ -4825,14 +4819,14 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
 			// applied, but we're not watching for every proposal when applying a
 			// snapshot, so nobody removed p from r.mu.proposals). In this
-			// ambiguous case, we'll also send the command back to the proposer for a
-			// retry, but the proposer needs to be aware that, if the retry fails, an
-			// AmbiguousResultError needs to be returned to the higher layers.
-			// We're relying on the fact that all commands are either idempotent
-			// (generally achieved through the wonders of MVCC) or, if they aren't,
-			// the 2nd application will somehow fail to apply (e.g. a command
-			// resulting from a RequestLease is not idempotent, but the 2nd
-			// application will be rejected by the ProposerLease verification).
+			// ambiguous case, we return an ambiguous error.
+			// NOTE: We used to perform a re-evaluation here in order to avoid the
+			// ambiguity, but it was cumbersome because the higher layer needed to be
+			// aware that if the re-evaluation failed in any way, it must rewrite the
+			// error to reflect the ambiguity. This mechanism also proved very hard to
+			// test and also is of questionable utility since snapshots are only
+			// applied in the first place if the leaseholder is diverced from the Raft
+			// leader.
 			//
 			// Note that we can't use the commit index here (which is typically a
 			// little ahead), because a pending command is removed only as it
@@ -4841,7 +4835,10 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			r.cleanupFailedProposalLocked(p)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
-				p.finishApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
+				p.finishApplication(proposalResult{Err: roachpb.NewError(
+					roachpb.NewAmbiguousResultError(
+						fmt.Sprintf("unknown status for command; " +
+							"snapshot application caused us to lose track of proposal")))})
 			} else {
 				p.finishApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}
