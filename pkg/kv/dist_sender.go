@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -101,6 +102,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 )
+
+// CanSendToFollower is used by the DistSender to determine if it needs to look
+// up the current lease holder for a request. It is used by the
+// followerreadsccl code to inject logic to check if follower reads are enabled.
+// By default, without CCL code, this function returns false.
+var CanSendToFollower = func(
+	clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest,
+) bool {
+	return false
+}
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	"kv.range_descriptor_cache.size",
@@ -176,6 +187,10 @@ type DistSender struct {
 	nodeDialer       *nodedialer.Dialer
 	rpcRetryOptions  retry.Options
 	asyncSenderSem   chan struct{}
+	// clusterID is used to verify access to enterprise features.
+	// It is copied out of the rpcContext at construction time and used in
+	// testing.
+	clusterID *base.ClusterIDContainer
 
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
@@ -252,6 +267,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		if ds.rpcRetryOptions.Closer == nil {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
+		ds.clusterID = &cfg.RPCContext.ClusterID
 	}
 	ds.nodeDialer = cfg.NodeDialer
 	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
@@ -457,7 +473,9 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	var cachedLeaseHolder roachpb.ReplicaDescriptor
-	if ba.RequiresLeaseHolder() {
+	canSendToFollower := ds.clusterID != nil &&
+		CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
+	if !canSendToFollower && ba.RequiresLeaseHolder() {
 		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
 			if i := replicas.FindReplica(storeID); i >= 0 {
 				replicas.MoveToFront(i)
@@ -1343,7 +1361,6 @@ func (ds *DistSender) sendToReplicas(
 		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, ba.Summary(), curReplica)
 	}
 	br, err := transport.SendNext(ctx, ba)
-
 	// maxSeenLeaseSequence tracks the maximum LeaseSequence seen in a
 	// NotLeaseHolderError. If we encounter a sequence number less than or equal
 	// to maxSeenLeaseSequence number in a subsequent NotLeaseHolderError then
