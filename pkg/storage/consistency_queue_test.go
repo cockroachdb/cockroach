@@ -35,10 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -433,32 +431,25 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pg0 := tc.ServerConn(0)
+	// Force a run of the consistency queue, otherwise it might take a while.
+	ts := tc.Servers[0]
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	store.ForceConsistencyQueueProcess()
 
-	// Make the consistency checker run aggressively.
-	if _, err := pg0.Exec("SET CLUSTER SETTING server.consistency_check.interval = '50ms'"); err != nil {
+	// The stats should magically repair themselves. We'll first do a quick check
+	// and then a full recomputation.
+	repl, err := ts.Stores().GetReplicaForRangeID(rangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
+	ms := repl.GetMVCCStats()
+	if ms.SysCount >= sysCountGarbage {
+		t.Fatalf("still have a SysCount of %d", ms.SysCount)
+	}
 
-	// The stats should magically repair themselves. Run a cheap check to see when
-	// it happened.
-	testutils.SucceedsSoon(t, func() error {
-		// Run a cheap check first.
-		repl, err := tc.Servers[0].GetStores().(*storage.Stores).GetReplicaForRangeID(rangeID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ms := repl.GetMVCCStats()
-		if ms.SysCount >= sysCountGarbage {
-			err := errors.Errorf("still have a SysCount of %d", ms.SysCount)
-			log.Info(ctx, err)
-			return err
-		}
-		return nil
-	})
-
-	// Only run the expensive recomputation check now that we're positive that
-	// it should succeed.
 	if delta := computeDelta(db0); delta != (enginepb.MVCCStats{}) {
 		t.Fatalf("stats still in need of adjustment: %+v", delta)
 	}
