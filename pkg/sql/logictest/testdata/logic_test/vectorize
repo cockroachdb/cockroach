@@ -131,3 +131,64 @@ SELECT sum_int(a), b from b group by b
 ----
 1 a
 1 b
+
+# Test that lookup joins run fine through columnar execution.
+
+statement ok
+CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b))
+
+statement ok
+CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a))
+
+statement ok
+INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0)
+
+statement ok
+INSERT INTO d VALUES (1, 1), (1, 2)
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+SET optimizer = on
+
+# Ensure that a lookup join is used.
+query I
+SELECT count(*) FROM [EXPLAIN SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE tree LIKE '%lookup-join%'
+----
+1
+
+statement ok
+SET experimental_vectorize = always
+
+# Simple lookup join.
+query I
+SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+1
+2
+
+# Index join.
+query I
+SELECT c.d FROM c@sec
+----
+0
+0
+
+# Lookup join on secondary index, requires an index join into the primary
+# index. Both of these should be wrapped and work fine.
+query I
+SELECT c.d FROM c@sec JOIN d ON d.b = c.b
+----
+0
+0
+
+statement ok
+RESET optimizer; RESET experimental_vectorize
