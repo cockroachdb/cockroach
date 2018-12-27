@@ -128,23 +128,13 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
-type proposalRetryReason int
+type proposalReevaluationReason int
 
 const (
-	proposalNoRetry proposalRetryReason = iota
+	proposalNoReevaluation proposalReevaluationReason = iota
 	// proposalIllegalLeaseIndex indicates the proposal failed to apply at
-	// a Lease index it was not legal for. The command should be retried.
+	// a Lease index it was not legal for. The command should be re-evaluated.
 	proposalIllegalLeaseIndex
-	// proposalErrorReproposing indicates that re-proposal
-	// failed. Because the original proposal may have succeeded, an
-	// AmbiguousResultError must be returned. The command should not be
-	// retried.
-	proposalErrorReproposing
-	// proposalRangeNoLongerExists indicates the proposal was for a
-	// range that no longer exists. Because the original proposal may
-	// have succeeded, an AmbiguousResultError must be returned. The
-	// command should not be retried.
-	proposalRangeNoLongerExists
 )
 
 // proposalResult indicates the result of a proposal. Exactly one of
@@ -153,7 +143,7 @@ const (
 type proposalResult struct {
 	Reply         *roachpb.BatchResponse
 	Err           *roachpb.Error
-	ProposalRetry proposalRetryReason
+	ProposalRetry proposalReevaluationReason
 	Intents       []result.IntentsWithArg
 	EndTxns       []result.EndTxnIntents
 }
@@ -920,8 +910,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
 		p.finishApplication(proposalResult{
-			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
-			ProposalRetry: proposalRangeNoLongerExists,
+			Err: roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 		})
 	}
 }
@@ -2204,12 +2193,13 @@ type endCmds struct {
 
 // done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
-func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
-	// Update the timestamp cache if the command is not being
-	// retried. Each request is considered in turn; only those marked as
-	// affecting the cache are processed. Inconsistent reads are
-	// excluded.
-	if retry == proposalNoRetry && ec.ba.ReadConsistency == roachpb.CONSISTENT {
+func (ec *endCmds) done(
+	br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalReevaluationReason,
+) {
+	// Update the timestamp cache if the request is not being re-evaluated. Each
+	// request is considered in turn; only those marked as affecting the cache are
+	// processed. Inconsistent reads are excluded.
+	if retry == proposalNoReevaluation && ec.ba.ReadConsistency == roachpb.CONSISTENT {
 		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
@@ -2994,7 +2984,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		endCmds.done(br, pErr, proposalNoRetry)
+		endCmds.done(br, pErr, proposalNoReevaluation)
 	}()
 
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
@@ -3066,50 +3056,22 @@ func (r *Replica) executeReadOnlyBatch(
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	for count := 0; ; count++ {
-		var ambiguousResult bool
+	for {
 		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
-		switch retry {
-		case proposalIllegalLeaseIndex:
+		if retry == proposalIllegalLeaseIndex {
 			log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
+			if pErr != nil {
+				log.Fatal(ctx, "both error and retry returned: %s", pErr)
+			}
 			continue // retry
-		case proposalRangeNoLongerExists, proposalErrorReproposing:
-			ambiguousResult = true
-		}
-		if pErr != nil {
-			// If this is a transactional request but doesn't include an
-			// EndTransaction with commit=true, return error immediately.
-			if etArg, ok := ba.GetArg(roachpb.EndTransaction); ba.Txn != nil &&
-				(!ok || !etArg.(*roachpb.EndTransactionRequest).Commit) {
-				return nil, pErr
-			}
-			// If we've gotten an indication of possible ambiguous result,
-			// we must return an AmbiguousResultError to prevent callers
-			// from retrying thinking this batch could not have succeeded.
-			//
-			// TODO(spencer): add metrics for how often the re-proposed
-			// commands succeed and how often we return errors.
-			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok && ambiguousResult {
-				log.VEventf(ctx, 2, "received error after %d retries; returning ambiguous result: %s",
-					count, pErr)
-				are := roachpb.NewAmbiguousResultError(
-					fmt.Sprintf("Raft re-proposal failed: %s", pErr))
-				are.WrappedErr = pErr
-				return nil, roachpb.NewError(are)
-			}
 		}
 		return br, pErr
 	}
 }
 
 // tryExecuteWriteBatch is invoked by executeWriteBatch, which will
-// call this method until it returns a non-retryable result. Retries
-// may happen if either the proposal was submitted to Raft but did not
-// end up in a legal log position, or the proposal was submitted to
-// Raft and then was re-proposed. On re-proposals, the proposal may
-// have applied successfully and so the caller must be careful to
-// indicate an ambiguous result to the caller in the event
-// proposalReproposed is returned.
+// call this method until it returns a non-retryable result (i.e. no
+// proposalRetryReason is returned).
 //
 // Concretely,
 //
@@ -3139,16 +3101,16 @@ func (r *Replica) executeWriteBatch(
 // call to applyTimestampCache).
 func (r *Replica) tryExecuteWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
+) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalReevaluationReason) {
 	startTime := timeutil.Now()
 
 	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err), proposalNoRetry
+		return nil, roachpb.NewError(err), proposalNoReevaluation
 	}
 
 	spans, err := r.collectSpans(&ba)
 	if err != nil {
-		return nil, roachpb.NewError(err), proposalNoRetry
+		return nil, roachpb.NewError(err), proposalNoReevaluation
 	}
 
 	var endCmds *endCmds
@@ -3161,7 +3123,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		var err error
 		endCmds, err = r.beginCmds(ctx, &ba, spans)
 		if err != nil {
-			return nil, roachpb.NewError(err), proposalNoRetry
+			return nil, roachpb.NewError(err), proposalNoReevaluation
 		}
 	}
 
@@ -3182,7 +3144,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		// Other write commands require that this replica has the range
 		// lease.
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr, proposalNoRetry
+			return nil, pErr, proposalNoReevaluation
 		}
 		lease = status.Lease
 	}
@@ -3196,7 +3158,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
 	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
-		return nil, pErr, proposalNoRetry
+		return nil, pErr, proposalNoReevaluation
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
@@ -3226,7 +3188,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				maxLeaseIndex, ba, pErr,
 			)
 		}
-		return nil, pErr, proposalNoRetry
+		return nil, pErr, proposalNoReevaluation
 	}
 	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
 	// In both cases, we don't need to communicate a MLAI.
@@ -3292,7 +3254,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			if tryAbandon() {
 				log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoReevaluation
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
@@ -3305,7 +3267,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			if tryAbandon() {
 				log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown")), proposalNoRetry
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown")), proposalNoReevaluation
 			}
 			shouldQuiesce = nil
 		}
@@ -4892,7 +4854,9 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// https://github.com/cockroachdb/cockroach/issues/21849
 		} else if err != nil {
 			r.cleanupFailedProposalLocked(p)
-			p.finishApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
+			p.finishApplication(proposalResult{
+				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
+			})
 		}
 	}
 }
@@ -5123,7 +5087,7 @@ func (r *Replica) checkForcedErrLocked(
 	raftCmd storagepb.RaftCommand,
 	proposal *ProposalData,
 	proposedLocally bool,
-) (uint64, proposalRetryReason, *roachpb.Error) {
+) (uint64, proposalReevaluationReason, *roachpb.Error) {
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
@@ -5137,7 +5101,7 @@ func (r *Replica) checkForcedErrLocked(
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		return leaseIndex, proposalNoRetry, roachpb.NewErrorf("no-op on empty Raft entry")
+		return leaseIndex, proposalNoReevaluation, roachpb.NewErrorf("no-op on empty Raft entry")
 	}
 
 	// Verify the lease matches the proposer's expectation. We rely on
@@ -5200,7 +5164,7 @@ func (r *Replica) checkForcedErrLocked(
 			// For lease requests we return a special error that
 			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
-			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "proposed under invalid lease",
@@ -5212,7 +5176,7 @@ func (r *Replica) checkForcedErrLocked(
 		nlhe.CustomMsg = fmt.Sprintf(
 			"stale proposal: command was proposed under lease #%d but is being applied "+
 				"under lease: %s", raftCmd.ProposerLeaseSequence, r.mu.state.Lease)
-		return leaseIndex, proposalNoRetry, roachpb.NewError(nlhe)
+		return leaseIndex, proposalNoReevaluation, roachpb.NewError(nlhe)
 	}
 
 	if isLeaseRequest {
@@ -5224,7 +5188,7 @@ func (r *Replica) checkForcedErrLocked(
 		// However, leases get special vetting to make sure we don't give one to a replica that was
 		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
 		if _, ok := r.mu.state.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
-			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "replica not part of range",
@@ -5246,7 +5210,7 @@ func (r *Replica) checkForcedErrLocked(
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; the client on the proposer will try
 		// again. Note that in this situation, the leaseIndex does not advance.
-		retry := proposalNoRetry
+		retry := proposalNoReevaluation
 		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
@@ -5259,7 +5223,7 @@ func (r *Replica) checkForcedErrLocked(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
 	}
-	return leaseIndex, proposalNoRetry, nil
+	return leaseIndex, proposalNoReevaluation, nil
 }
 
 // processRaftCommand processes a raft command by unpacking the
@@ -5500,7 +5464,7 @@ func (r *Replica) processRaftCommand(
 
 		var lResult *result.LocalResult
 		if proposedLocally {
-			if proposalRetry != proposalNoRetry {
+			if proposalRetry != proposalNoReevaluation {
 				response.ProposalRetry = proposalRetry
 				if pErr == nil {
 					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
