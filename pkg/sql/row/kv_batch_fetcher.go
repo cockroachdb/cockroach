@@ -69,7 +69,9 @@ type txnKVFetcher struct {
 	// getRangeInfo(), to be used for updating caches.
 	// rangeInfos are deduped, so they're not ordered in any particular way and
 	// they don't map to kvBatchFetcher.spans in any particular way.
-	rangeInfos []roachpb.RangeInfo
+	rangeInfos       []roachpb.RangeInfo
+	origSpan         roachpb.Span
+	remainingBatches [][]byte
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -291,31 +293,38 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 // keys returned.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (
-	ok bool,
-	kvs []roachpb.KeyValue,
-	batchResponse []byte,
-	numKvs int64,
-	origSpan roachpb.Span,
-	err error,
-) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, origSpan roachpb.Span, err error) {
+	if len(f.remainingBatches) > 0 {
+		batch := f.remainingBatches[0]
+		f.remainingBatches = f.remainingBatches[1:]
+		return true, nil, batch, f.origSpan, nil
+	}
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
 		origSpan := f.requestSpans[0]
 		f.requestSpans = f.requestSpans[1:]
+		var batchResp []byte
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			return true, t.Rows, t.BatchResponse, t.NumKeys, origSpan, nil
+			if len(t.BatchResponses) > 0 {
+				batchResp = t.BatchResponses[0]
+				f.remainingBatches = t.BatchResponses[1:]
+			}
+			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.ReverseScanResponse:
-			return true, t.Rows, t.BatchResponse, t.NumKeys, origSpan, nil
+			if len(t.BatchResponses) > 0 {
+				batchResp = t.BatchResponses[0]
+				f.remainingBatches = t.BatchResponses[1:]
+			}
+			return true, t.Rows, batchResp, origSpan, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil, 0, roachpb.Span{}, nil
+		return false, nil, nil, roachpb.Span{}, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, 0, roachpb.Span{}, err
+		return false, nil, nil, roachpb.Span{}, err
 	}
 	return f.nextBatch(ctx)
 }

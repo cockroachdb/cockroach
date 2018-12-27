@@ -43,7 +43,7 @@ type kvBatchFetcher interface {
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, origSpan roachpb.Span, err error)
+		batchResponse []byte, origSpan roachpb.Span, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
