@@ -150,7 +150,10 @@ statement ok
 INSERT INTO orders VALUES (1, 1, '780', 2)
 
 statement error foreign key violation: value \['fake'\] not found in products@primary
-SET tracing = on,kv,results; INSERT INTO orders VALUES (2, 2, 'fake', 2); SET tracing = off
+SET tracing = on,kv,results; INSERT INTO orders VALUES (2, 2, 'fake', 2)
+
+statement ok
+SET tracing = off
 
 query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
