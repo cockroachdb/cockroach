@@ -453,60 +453,6 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplitConcurrent verifies that concurrent range splits
-// of the same range are executed serially, and all but the first fail
-// because the split key is invalid after the first split succeeds.
-func TestStoreRangeSplitConcurrent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	storeCfg.TestingKnobs.DisableMergeQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
-
-	splitKey := roachpb.Key("a")
-	concurrentCount := 10
-	errCh := make(chan *roachpb.Error, concurrentCount)
-	for i := 0; i < concurrentCount; i++ {
-		go func() {
-			args := adminSplitArgs(splitKey)
-			_, pErr := client.SendWrapped(context.Background(), store.TestSender(), args)
-			errCh <- pErr
-		}()
-	}
-
-	var failureCount int
-	for i := 0; i < concurrentCount; i++ {
-		pErr := <-errCh
-		if pErr != nil {
-			// The only expected error from concurrent splits is the split key being
-			// outside the bounds for the range. Note that conflicting range
-			// descriptor errors are retried internally.
-			if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-				t.Fatalf("unexpected error: %v", pErr)
-			}
-			failureCount++
-		}
-	}
-	if failureCount != concurrentCount-1 {
-		t.Fatalf("concurrent splits succeeded unexpectedly; failureCount=%d", failureCount)
-	}
-
-	// Verify everything ended up as expected.
-	if a, e := store.ReplicaCount(), 2; a != e {
-		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
-	}
-	rngDesc := store.LookupReplica(roachpb.RKeyMin).Desc()
-	newRngDesc := store.LookupReplica(roachpb.RKey(splitKey)).Desc()
-	if !bytes.Equal(newRngDesc.StartKey, splitKey) || !bytes.Equal(splitKey, rngDesc.EndKey) {
-		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRngDesc.StartKey, splitKey, rngDesc.EndKey)
-	}
-	if !bytes.Equal(newRngDesc.EndKey, roachpb.RKeyMax) || !bytes.Equal(rngDesc.StartKey, roachpb.RKeyMin) {
-		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rngDesc.StartKey, newRngDesc.EndKey)
-	}
-}
-
 // TestSplitTriggerRaftSnapshotRace verifies that when an uninitialized Replica
 // resulting from a split hasn't been initialized via the split trigger yet, a
 // grace period prevents the replica from requesting an errant Raft snapshot.
