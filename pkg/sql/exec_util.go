@@ -305,6 +305,15 @@ var (
 	}
 )
 
+func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
+	if internal {
+		meta.Name += ".internal"
+		meta.Help += " (internal queries)"
+		meta.Measurement = "SQL Internal Statements"
+	}
+	return meta
+}
+
 // NodeInfo contains metadata about the executing node and cluster.
 type NodeInfo struct {
 	ClusterID func() uuid.UUID

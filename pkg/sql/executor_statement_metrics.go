@@ -100,12 +100,7 @@ func (ex *connExecutor) recordStatementSummary(
 	automaticRetryCount int,
 	rowsAffected int,
 	err error,
-	m *EngineMetrics,
 ) {
-	if ex.stmtCounterDisabled {
-		return
-	}
-
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
 	// Compute the run latency. This is always recorded in the
@@ -130,6 +125,7 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	if automaticRetryCount == 0 {
+		m := &ex.metrics.EngineMetrics
 		if planFlags.IsSet(planFlagOptUsed) {
 			m.SQLOptCount.Inc(1)
 		} else if planFlags.IsSet(planFlagOptFallback) {
