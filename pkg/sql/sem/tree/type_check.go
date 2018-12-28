@@ -699,6 +699,15 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
 func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+	if def.UnsupportedWithIssue != 0 {
+		// Note: no need to embed the function name in the message; the
+		// caller will add the function name as prefix.
+		const msg = "this function is not supported"
+		if def.UnsupportedWithIssue < 0 {
+			return pgerror.Unimplemented(def.Name+"()", msg)
+		}
+		return pgerror.UnimplementedWithIssueDetailError(def.UnsupportedWithIssue, def.Name, msg)
+	}
 	if def.Private {
 		return errors.Wrapf(errPrivateFunction, "%s()", def.Name)
 	}
