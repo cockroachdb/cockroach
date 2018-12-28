@@ -17,6 +17,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,15 +148,23 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#33268")
-
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
+
+	// sem will be fired every time pg_sleep(1337666) is called.
+	sem := make(chan struct{})
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel*/ bool) {
+			if strings.Contains(stmt, "(1.337666") {
+				sem <- struct{}{}
+			}
+		},
+	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	t.Run("root internal exec", func(t *testing.T) {
-		testInternalExecutorAppNameInitialization(t,
+		testInternalExecutorAppNameInitialization(t, sem,
 			sql.InternalAppNamePrefix+"internal-test-query",
 			s.InternalExecutor().(*sql.InternalExecutor))
 	})
@@ -173,7 +182,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
 	t.Run("session bound exec", func(t *testing.T) {
-		testInternalExecutorAppNameInitialization(t,
+		testInternalExecutorAppNameInitialization(t, sem,
 			"appname_findme",
 			&ie)
 	})
@@ -189,7 +198,7 @@ type testInternalExecutor interface {
 }
 
 func testInternalExecutorAppNameInitialization(
-	t *testing.T, expectedAppName string, ie testInternalExecutor,
+	t *testing.T, sem chan struct{}, expectedAppName string, ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
 	if rows, _, err := ie.Query(context.TODO(), "test-query", nil,
@@ -203,10 +212,8 @@ func testInternalExecutorAppNameInitialization(
 
 	// Start a background query using the internal executor. We want to
 	// have this keep running until we cancel it below.
-	sem := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		sem <- struct{}{}
 		_, _, err := ie.Query(context.TODO(),
 			"test-query",
 			nil, /* txn */
