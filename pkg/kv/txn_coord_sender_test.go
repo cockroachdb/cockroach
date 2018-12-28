@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -890,67 +889,6 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderErrorWithIntent validates that if a transactional request
-// returns an error but also indicates a Writing transaction, the coordinator
-// tracks it just like a successful request.
-//
-// Note(andrei): This test was written at a time when the Writing status
-// returned by the server mattered for the client. As of June 2018, that's no
-// longer the case. The test doesn't hurt, though.
-func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
-
-	testCases := []struct {
-		roachpb.Error
-		errMsg string
-	}{
-		{*roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)), "retry txn"},
-		{
-			*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4()}}),
-			), "failed to push",
-		},
-		{*roachpb.NewErrorf("testError"), "testError"},
-	}
-	for i, test := range testCases {
-		t.Run("", func(t *testing.T) {
-			var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				txn := ba.Txn.Clone()
-				txn.Writing = true
-				pErr := &roachpb.Error{}
-				*pErr = test.Error
-				pErr.SetTxn(&txn)
-				return nil, pErr
-			}
-			factory := NewTxnCoordSenderFactory(
-				TxnCoordSenderFactoryConfig{
-					AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-					Clock:      clock,
-					Stopper:    stopper,
-				},
-				senderFn,
-			)
-
-			var ba roachpb.BatchRequest
-			key := roachpb.Key("test")
-			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
-			ba.Add(&roachpb.EndTransactionRequest{})
-			txn := roachpb.MakeTransaction("test", key, 0, clock.Now(), 0)
-			meta := roachpb.MakeTxnCoordMeta(txn)
-			tc := factory.TransactionalSender(client.RootTxn, meta)
-			ba.Txn = &txn
-			_, pErr := tc.Send(context.Background(), ba)
-			if !testutils.IsPError(pErr, test.errMsg) {
-				t.Errorf("%d: error did not match %s: %v", i, test.errMsg, pErr)
-			}
-		})
-	}
-}
-
 // TestTxnCoordSenderNoDuplicateIntents verifies that TxnCoordSender does not
 // generate duplicate intents and that it merges intents for overlapping ranges.
 func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
@@ -973,7 +911,6 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		br := ba.CreateReply()
 		txnClone := ba.Txn.Clone()
 		br.Txn = &txnClone
-		br.Txn.Writing = true
 		return br, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1332,7 +1269,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					if ba.Txn != nil && br.Txn == nil {
 						txnClone := ba.Txn.Clone()
 						br.Txn = &txnClone
-						br.Txn.Writing = true
 						br.Txn.Status = roachpb.PENDING
 					}
 				} else if et, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
