@@ -726,4 +726,4 @@ x
 2
 
 statement ok
-COMMIT;
+COMMIT
