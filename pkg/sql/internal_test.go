@@ -147,8 +147,6 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#33268")
-
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, _, _ := serverutils.StartServer(t, params)
@@ -206,11 +204,11 @@ func testInternalExecutorAppNameInitialization(
 	sem := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		sem <- struct{}{}
 		_, _, err := ie.Query(context.TODO(),
 			"test-query",
 			nil, /* txn */
 			"SELECT pg_sleep(1337666)")
+		sem <- struct{}{}
 		if err != nil {
 			errChan <- err
 			return
