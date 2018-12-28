@@ -232,6 +232,12 @@ func (p *planNodeToRowSource) ConsumerClosed() {
 	p.InternalClose()
 }
 
+// IsException implements the vectorizeAlwaysException interface.
+func (p *planNodeToRowSource) IsException() bool {
+	_, ok := p.node.(*setVarNode)
+	return ok
+}
+
 // forwardMetadata will be called by any upstream rowSourceToPlanNode processors
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
