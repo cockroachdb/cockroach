@@ -64,6 +64,16 @@ type EvalContext interface {
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
 
+	// CanCreateTxnRecord determines whether a transaction record can be
+	// created for the provided transaction. If not, it returns the reason
+	// that transaction record was rejected. If the method ever determines
+	// that a transaction record must be rejected, it will continue to
+	// reject that transaction going forwards.
+	//
+	// NOTE: To call this method, a command must delare (at least) a read
+	// on both the transaction's key and on the txn span GC threshold key.
+	CanCreateTxnRecord(*roachpb.Transaction) (bool, roachpb.TransactionAbortedReason)
+
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
 	// entire range, the stats will be consistent with the data that is
@@ -72,6 +82,7 @@ type EvalContext interface {
 	GetMVCCStats() enginepb.MVCCStats
 
 	// GetSplitQPS returns the queries/s request rate for this range.
+	//
 	// NOTE: This should not be used when the load based splitting cluster
 	// setting is disabled.
 	GetSplitQPS() float64
