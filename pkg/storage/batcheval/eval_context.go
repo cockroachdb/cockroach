@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
 )
@@ -79,6 +80,14 @@ type EvalContext interface {
 	// NOTE: This should not be used when the load based splitting cluster
 	// setting is disabled.
 	GetSplitQPS() float64
+
+	// GetTxnTombstoneFromTimestampCache returns the tombstone timestamp for the
+	// provided transaction, along with an associated txnID marker. If the txnID
+	// is not empty then the tombstone was explicitly set by an EndTxn req. If
+	// it is empty then the tombstone is an implicit artifact of the timestamp
+	// cache's low-water mark. Either way, transactions should not write records
+	// at or below this timestamp.
+	GetTxnTombstoneFromTimestampCache(*roachpb.Transaction) (hlc.Timestamp, uuid.UUID)
 
 	GetGCThreshold() hlc.Timestamp
 	GetTxnSpanGCThreshold() hlc.Timestamp

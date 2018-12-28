@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -90,4 +92,86 @@ func SetAbortSpan(
 func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 	return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
 		(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
+}
+
+// CanCreateTxnRecord determines whether a transaction record can be created
+// for the provided transaction. If not, it returns an updated transaction
+// that would be allowed to write a transaction record, along with an error.
+//
+// TODO(nvanbenschoten): This function can be used in cmd_push_txn.go and
+// cmd_query_txn.go to determine whether a transaction record is allowed to be
+// synthesized to get around the complications of eagerly GCed transaction
+// records. I believe this is exactly what @andreimatei was suggesting. To do
+// this, we'll need to address the TODO comment in below. If we do make this the
+// case, update this comment to reflect that once this method returns false, it
+// will never return true for the same txn.
+func CanCreateTxnRecord(
+	ctx context.Context, rec EvalContext, txn *roachpb.Transaction,
+) (ok bool, errTxn *roachpb.Transaction, err error) {
+	// We look in the timestamp cache to see if there is a tombstone entry for
+	// this transaction, which would indicate this transaction has already been
+	// finalized. If there is one, then we return a retriable into an ambiguous
+	// one higher up. Otherwise, if the client is still waiting for a result,
+	// then this cannot be a "replay" of any sort.
+	//
+	// The retriable error we return is a TransactionAbortedError, instructing
+	// the client to create a new transaction. Since a transaction record
+	// doesn't exist, there's no point in the client to continue with the
+	// existing transaction at a new epoch.
+	tombTS, tombTxnID := rec.GetTxnTombstoneFromTimestampCache(txn)
+	// GetTxnTombstoneFromTimestampCache will only find a timestamp interval
+	// with an associated txnID on the TransactionKey if an EndTxnReq has been
+	// processed. All other timestamp intervals will have no associated txnID
+	// and will be due to the low-water mark.
+	switch tombTxnID {
+	case txn.ID:
+		newTxn := txn.Clone()
+		newTxn.Status = roachpb.ABORTED
+		newTxn.Timestamp.Forward(tombTS.Next())
+		return false, &newTxn, roachpb.NewTransactionAbortedError(
+			roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY,
+		)
+	case uuid.UUID{} /* noTxnID */ :
+		// TODO(nvanbenschoten): I think we should be comparing against
+		// txn.OrigTimestamp, not txn.Timestamp, if we want this to make
+		// definitive decisions about whether a transaction record will *never*
+		// be able to be written. We can't allow a concurrent txn to use this to
+		// decided that a transaction can never write a txn record, then have
+		// that txn bump its timestamp and squeeze around this protection.
+		if !tombTS.Less(txn.Timestamp) {
+			// On lease transfers the timestamp cache is reset with the transfer
+			// time as the low-water mark, so if this replica recently obtained
+			// the lease, this case will be true for new txns, even if they're
+			// not a replay. We move the timestamp forward and return retry.
+			newTxn := txn.Clone()
+			newTxn.Status = roachpb.ABORTED
+			newTxn.Timestamp.Forward(tombTS.Next())
+			return false, &newTxn, roachpb.NewTransactionAbortedError(
+				roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY,
+			)
+		}
+	default:
+		log.Fatalf(ctx, "unexpected tscache interval (%s,%s) for txn %s",
+			tombTS, tombTxnID, txn)
+	}
+
+	// Disallow creation or modification of a transaction record if its original
+	// timestamp is before the TxnSpanGCThreshold, as in that case our transaction
+	// may already have been aborted by a concurrent actor which encountered one
+	// of our intents (which may have been written before this entry). We compare
+	// against the original timestamp because the transaction's provisional commit
+	// timestamp may be moved forward over the course of a single epoch.
+	//
+	// See #9265.
+	threshold := rec.GetTxnSpanGCThreshold()
+	if txn.OrigTimestamp.Less(threshold) {
+		newTxn := txn.Clone()
+		newTxn.Status = roachpb.ABORTED
+		newTxn.Timestamp.Forward(threshold)
+		return false, &newTxn, roachpb.NewTransactionAbortedError(
+			roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD,
+		)
+	}
+
+	return true, nil, nil
 }

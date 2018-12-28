@@ -109,6 +109,11 @@ func (m *mockEvalCtx) GetMVCCStats() enginepb.MVCCStats {
 func (m *mockEvalCtx) GetSplitQPS() float64 {
 	return m.qps
 }
+func (m *mockEvalCtx) GetTxnTombstoneFromTimestampCache(
+	*roachpb.Transaction,
+) (hlc.Timestamp, uuid.UUID) {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
 }

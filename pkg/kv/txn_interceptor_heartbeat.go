@@ -97,6 +97,16 @@ type txnHeartbeat struct {
 		// EndTransaction can be elided - we want to allow multiple rollback attempts
 		// to be sent and the first one stops the heartbeat loop.
 		everSentBeginTxn bool
+
+		// sendingEndTxn is set when an EndTransactionRequest is in flight to the
+		// server. It is used to signify to the heartbeat loop that it should ignore
+		// the results of any heartbeat request.
+		//
+		// The field is not needed for client-perceived correctness, but prevents the
+		// coordinator's local transaction status from flipping to ABORTED after a
+		// heartbeat that observes the effect of a concurrent EndTransactionRequest
+		// and then over to COMMITTED after the EndTransactionRequest returns.
+		sendingEndTxn bool
 	}
 }
 
@@ -203,6 +213,7 @@ func (h *txnHeartbeat) SendLocked(
 	var elideEndTxn bool
 	var commitTurnedToRollback bool
 	if haveEndTxn {
+		h.mu.sendingEndTxn = true
 		// Are we writing now or have we written in the past?
 		elideEndTxn = !h.mu.everSentBeginTxn
 		if elideEndTxn {
@@ -250,6 +261,10 @@ func (h *txnHeartbeat) SendLocked(
 				pErr.SetErrorIndex(idx - 1)
 			}
 		}
+	}
+
+	if haveEndTxn {
+		h.mu.sendingEndTxn = false
 	}
 
 	if pErr != nil {
@@ -451,6 +466,13 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
 
+	// If there is an in-flight EndTransaction request, avoid updating our local
+	// state based on the result of heartbeat requests. Instead, wait for the
+	// EndTransaction to return.
+	if h.mu.sendingEndTxn {
+		return true
+	}
+
 	var respTxn *roachpb.Transaction
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
@@ -459,20 +481,14 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 		// then we ignore the error. This is possible if the heartbeat loop was
 		// started before a BeginTxn request succeeds because of ambiguity in the
 		// first write request's response.
+		//
+		// TODO(nvanbenschoten): Remove this in 2.3.
 		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
 			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
 			return true
 		}
 
-		if pErr.GetTxn() != nil {
-			// It is not expected for a 2.1 node to return an error with a transaction
-			// in it. For one, heartbeats are not supposed to return
-			// TransactionAbortedErrors.
-			// TODO(andrei): Remove this in 2.2.
-			respTxn = pErr.GetTxn()
-		} else {
-			return true
-		}
+		respTxn = pErr.GetTxn()
 	} else {
 		respTxn = br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn
 	}
@@ -494,12 +510,6 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 // abortTxnAsyncLocked send an EndTransaction(commmit=false) asynchronously.
 // The asyncAbortCallbackLocked callback is also called.
 func (h *txnHeartbeat) abortTxnAsyncLocked(ctx context.Context) {
-	// Stop the heartbeat loop if it is still running.
-	if h.mu.txnEnd != nil {
-		close(h.mu.txnEnd)
-		h.mu.txnEnd = nil
-	}
-
 	if h.mu.txn.Status != roachpb.ABORTED {
 		log.Fatalf(ctx, "abortTxnAsyncLocked called for non-aborted txn: %s", h.mu.txn)
 	}

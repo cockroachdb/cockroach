@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -146,6 +147,18 @@ func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 // GetSplitQPS returns the Replica's queries/s rate for splitting purposes.
 func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
 	return rec.i.GetSplitQPS()
+}
+
+// GetTxnTombstoneFromTimestampCache returns the tombstone timestamp for the
+// provided transaction, along with an associated txnID marker. If the txnID
+// is not empty then the tombstone was explicitly set by an EndTxn req. If
+// it is empty then the tombstone is an implicit artifact of the timestamp
+// cache's low-water mark. Either way, transactions should not write records
+// at or below this timestamp.
+func (rec SpanSetReplicaEvalContext) GetTxnTombstoneFromTimestampCache(
+	txn *roachpb.Transaction,
+) (hlc.Timestamp, uuid.UUID) {
+	return rec.i.GetTxnTombstoneFromTimestampCache(txn)
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when

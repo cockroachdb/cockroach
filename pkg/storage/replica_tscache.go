@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -65,8 +64,17 @@ func (r *Replica) updateTimestampCache(
 			switch t := args.(type) {
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds the transaction key to the write
-				// timestamp cache to ensure replays create a transaction
-				// record with WriteTooOld set.
+				// timestamp cache as a tombstone to ensure replays and
+				// concurrent requests aren't able to create a new
+				// transaction record.
+				//
+				// It inserts the timestamp of the final batch in the
+				// transaction. This timestamp must necessarily be equal
+				// to or greater than all other batch timestamps used
+				// throughout the transaction.
+				// TODO(nvanbenschoten): This assumption wouldn't be needed
+				// if we compared against for the OrigTimestamp. See
+				// CanCreateTxnRecord.
 				key := keys.TransactionKey(start, txnID)
 				tc.Add(key, nil, ts, txnID, false /* readCache */)
 			case *roachpb.ConditionalPutRequest:
@@ -157,51 +165,6 @@ func (r *Replica) applyTimestampCache(
 		args := union.GetInner()
 		if roachpb.ConsultsTimestampCache(args) {
 			header := args.Header()
-			// BeginTransaction is a special case. We use the transaction
-			// key to look for an entry which would indicate this transaction
-			// has already been finalized, in which case this BeginTxn might be a
-			// replay (it might also be delayed, coming in behind an async EndTxn).
-			// If the request hits the timestamp cache, then we return a retriable
-			// error: if this is a re-evaluation, then the error will be transformed
-			// into an ambiguous one higher up. Otherwise, if the client is still
-			// waiting for a result, then this cannot be a "replay" of any sort.
-			//
-			// The retriable error we return is a TransactionAbortedError, instructing
-			// the client to create a new transaction. Since a transaction record
-			// doesn't exist, there's no point in the client to continue with the
-			// existing transaction at a new epoch.
-			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
-				key := keys.TransactionKey(header.Key, ba.Txn.ID)
-				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
-				// GetMaxWrite will only find a timestamp interval with an
-				// associated txnID on the TransactionKey if an EndTxnReq has
-				// been processed. All other timestamp intervals will have no
-				// associated txnID and will be due to the low-water mark.
-				switch wTxnID {
-				case ba.Txn.ID:
-					newTxn := ba.Txn.Clone()
-					newTxn.Status = roachpb.ABORTED
-					newTxn.Timestamp.Forward(wTS.Next())
-					return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
-						roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY), &newTxn)
-				case uuid.UUID{} /* noTxnID */ :
-					if !wTS.Less(ba.Txn.Timestamp) {
-						// On lease transfers the timestamp cache is reset with the transfer
-						// time as the low-water mark, so if this replica recently obtained
-						// the lease, this case will be true for new txns, even if they're
-						// not a replay. We move the timestamp forward and return retry.
-						newTxn := ba.Txn.Clone()
-						newTxn.Status = roachpb.ABORTED
-						newTxn.Timestamp.Forward(wTS.Next())
-						return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
-							roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY), &newTxn)
-					}
-				default:
-					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
-						wTS, wTxnID, key)
-				}
-				continue
-			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
@@ -241,4 +204,18 @@ func (r *Replica) applyTimestampCache(
 		}
 	}
 	return bumped, nil
+}
+
+// GetTxnTombstoneFromTimestampCache returns the tombstone timestamp for the
+// provided transaction, along with an associated txnID marker. If the txnID
+// is not empty then the tombstone was explicitly set by an EndTxn req. If
+// it is empty then the tombstone is an implicit artifact of the timestamp
+// cache's low-water mark. Either way, transactions should not write records
+// at or below this timestamp.
+func (r *Replica) GetTxnTombstoneFromTimestampCache(
+	txn *roachpb.Transaction,
+) (hlc.Timestamp, uuid.UUID) {
+	// Use the transaction key to look for an entry in the write timestamp cache.
+	key := keys.TransactionKey(txn.Key, txn.ID)
+	return r.store.tsCache.GetMaxWrite(key, nil /* end */)
 }

@@ -177,90 +177,92 @@ func evalEndTransaction(
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		if args.Commit {
-			return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
-		}
-		// For rollbacks, we don't consider not finding the txn record an error;
-		// we accept without fuss rollbacks for transactions where the txn record
-		// was never written (because the BeginTransaction's batch failed, or
-		// even where the BeginTransaction was never sent to server).
+		// No existing transaction record was found - create one.
 		txn := h.Txn.Clone()
 		reply.Txn = &txn
-		return result.Result{}, nil
-	}
-	// We're using existingTxn on the reply, although it can be stale
-	// compared to the Transaction in the request (e.g. the Sequence,
-	// and various timestamps). We must be careful to update it with the
-	// supplied ba.Txn if we return it with an error which might be
-	// retried, as for example to avoid client-side serializable restart.
-	reply.Txn = &existingTxn
 
-	// Verify that we can either commit it or abort it (according
-	// to args.Commit), and also that the Timestamp and Epoch have
-	// not suffered regression.
-	switch reply.Txn.Status {
-	case roachpb.COMMITTED:
-		return result.Result{}, roachpb.NewTransactionCommittedStatusError()
-
-	case roachpb.ABORTED:
-		if !args.Commit {
-			// The transaction has already been aborted by other.
-			// Do not return TransactionAbortedError since the client anyway
-			// wanted to abort the transaction.
-			desc := cArgs.EvalCtx.Desc()
-			externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
-			if err != nil {
+		// Verify that it is safe to create the transaction record.
+		if args.Commit {
+			if ok, errTxn, err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, reply.Txn); !ok {
+				reply.Txn = errTxn
 				return result.Result{}, err
 			}
-			if err := updateTxnWithExternalIntents(
-				ctx, batch, ms, *args, reply.Txn, externalIntents,
-			); err != nil {
-				return result.Result{}, err
+		}
+	} else {
+		// We're using existingTxn on the reply, although it can be stale
+		// compared to the Transaction in the request (e.g. the Sequence,
+		// and various timestamps). We must be careful to update it with the
+		// supplied ba.Txn if we return it with an error which might be
+		// retried, as for example to avoid client-side serializable restart.
+		reply.Txn = &existingTxn
+
+		// Verify that we can either commit it or abort it (according
+		// to args.Commit), and also that the Timestamp and Epoch have
+		// not suffered regression.
+		switch reply.Txn.Status {
+		case roachpb.COMMITTED:
+			return result.Result{}, roachpb.NewTransactionCommittedStatusError()
+
+		case roachpb.ABORTED:
+			if !args.Commit {
+				// The transaction has already been aborted by other.
+				// Do not return TransactionAbortedError since the client anyway
+				// wanted to abort the transaction.
+				desc := cArgs.EvalCtx.Desc()
+				externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
+				if err != nil {
+					return result.Result{}, err
+				}
+				if err := updateTxnWithExternalIntents(
+					ctx, batch, ms, *args, reply.Txn, externalIntents,
+				); err != nil {
+					return result.Result{}, err
+				}
+				// Use alwaysReturn==true because the transaction is definitely
+				// aborted, no matter what happens to this command.
+				return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
 			}
-			// Use alwaysReturn==true because the transaction is definitely
-			// aborted, no matter what happens to this command.
-			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
-		}
-		// If the transaction was previously aborted by a concurrent writer's
-		// push, any intents written are still open. It's only now that we know
-		// them, so we return them all for asynchronous resolution (we're
-		// currently not able to write on error, but see #1989).
-		//
-		// Similarly to above, use alwaysReturn==true. The caller isn't trying
-		// to abort, but the transaction is definitely aborted and its intents
-		// can go.
-		reply.Txn.Intents = args.IntentSpans
-		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
-			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+			// If the transaction was previously aborted by a concurrent writer's
+			// push, any intents written are still open. It's only now that we know
+			// them, so we return them all for asynchronous resolution (we're
+			// currently not able to write on error, but see #1989).
+			//
+			// Similarly to above, use alwaysReturn==true. The caller isn't trying
+			// to abort, but the transaction is definitely aborted and its intents
+			// can go.
+			reply.Txn.Intents = args.IntentSpans
+			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
+				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
-	case roachpb.PENDING:
-		if h.Txn.Epoch < reply.Txn.Epoch {
-			// TODO(tschottdorf): this leaves the Txn record (and more
-			// importantly, intents) dangling; we can't currently write on
-			// error. Would panic, but that makes TestEndTransactionWithErrors
-			// awkward.
+		case roachpb.PENDING:
+			if h.Txn.Epoch < reply.Txn.Epoch {
+				// TODO(tschottdorf): this leaves the Txn record (and more
+				// importantly, intents) dangling; we can't currently write on
+				// error. Would panic, but that makes TestEndTransactionWithErrors
+				// awkward.
+				return result.Result{}, roachpb.NewTransactionStatusError(
+					fmt.Sprintf("epoch regression: %d", h.Txn.Epoch),
+				)
+			} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
+				// The transaction record can only ever be pushed forward, so it's an
+				// error if somehow the transaction record has an earlier timestamp
+				// than the original transaction timestamp.
+
+				// TODO(tschottdorf): see above comment on epoch regression.
+				return result.Result{}, roachpb.NewTransactionStatusError(
+					fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp),
+				)
+			}
+
+		default:
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("epoch regression: %d", h.Txn.Epoch),
-			)
-		} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
-			// The transaction record can only ever be pushed forward, so it's an
-			// error if somehow the transaction record has an earlier timestamp
-			// than the original transaction timestamp.
-
-			// TODO(tschottdorf): see above comment on epoch regression.
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp),
+				fmt.Sprintf("bad txn status: %s", reply.Txn),
 			)
 		}
 
-	default:
-		return result.Result{}, roachpb.NewTransactionStatusError(
-			fmt.Sprintf("bad txn status: %s", reply.Txn),
-		)
+		// Update the existing txn with the supplied txn.
+		reply.Txn.Update(h.Txn)
 	}
-
-	// Update the existing txn with the supplied txn.
-	reply.Txn.Update(h.Txn)
 
 	var pd result.Result
 
