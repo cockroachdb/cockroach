@@ -29,6 +29,9 @@ type tableUpdater struct {
 	ru row.Updater
 }
 
+// desc is part of the tableWriter interface.
+func (*tableUpdater) desc() string { return "updater" }
+
 // init is part of the tableWriter interface.
 func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)

@@ -29,6 +29,9 @@ type tableInserter struct {
 	ri row.Inserter
 }
 
+// desc is part of the tableWriter interface.
+func (*tableInserter) desc() string { return "inserter" }
+
 // init is part of the tableWriter interface.
 func (ti *tableInserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 	ti.tableWriterBase.init(txn)

@@ -1417,26 +1417,28 @@ render     ·         ·
 query TTT
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-count                ·      ·
- └── update          ·      ·
-      │              table  t4
-      │              set    c
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t4@primary
-·                    spans  /10/20-/10/20/#
+count                ·         ·
+ └── update          ·         ·
+      │              table     t4
+      │              set       c
+      │              strategy  updater
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     t4@primary
+·                    spans     /10/20-/10/20/#
 
 # Optimization should not be applied for deletes.
 query TTT
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
-count                ·      ·
- └── delete          ·      ·
-      │              from   t4
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t4@primary
-·                    spans  /10/20-/10/20/#
+count                ·         ·
+ └── delete          ·         ·
+      │              from      t4
+      │              strategy  fast deleter
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     t4@primary
+·                    spans     /10/20-/10/20/#
 
 # Optimization should not be applied for non point lookups.
 query TTT

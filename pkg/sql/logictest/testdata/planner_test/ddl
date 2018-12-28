@@ -245,6 +245,7 @@ render                    ·         ·                 (k)                    �
       └── update          ·         ·                 (k, v, z)              ·
            │              table     kv                ·                      ·
            │              set       v                 ·                      ·
+           │              strategy  updater           ·                      ·
            └── render     ·         ·                 (k, v, z, "?column?")  "?column?"=CONST; k!=NULL; key(k)
                 │         render 0  test.public.kv.k  ·                      ·
                 │         render 1  test.public.kv.v  ·                      ·
