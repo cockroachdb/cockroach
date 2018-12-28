@@ -6702,6 +6702,8 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}
+
+		log.Fatalf(ctx, "replica is corrupted: %s", pErr)
 	}
 	return pErr
 }
