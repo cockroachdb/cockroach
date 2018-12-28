@@ -3391,13 +3391,6 @@ func (r *Replica) evaluateProposal(
 		if txn != nil && ba.Txn == nil {
 			log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
 		}
-		if txn != nil && !r.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
-			// Restore the original txn's Writing bool if the error specifies a
-			// transaction.
-			if txn.ID == ba.Txn.ID {
-				txn.Writing = ba.Txn.Writing
-			}
-		}
 
 		// Failed proposals can't have any Result except for what's
 		// whitelisted here.
@@ -5967,9 +5960,6 @@ func (r *Replica) evaluateWriteBatch(
 			// timestamp. This can be different if the stripped batch was
 			// executed at the server's hlc now timestamp.
 			clonedTxn.Timestamp = br.Timestamp
-			if !r.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
-				clonedTxn.Writing = true
-			}
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
 			if !etArg.Commit {

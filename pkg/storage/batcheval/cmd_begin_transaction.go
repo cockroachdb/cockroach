@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -129,10 +128,6 @@ func BeginTransaction(
 	// transaction record to survive for a while regardless of when the first
 	// heartbeat arrives.
 	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
-
-	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
-		reply.Txn.Writing = true
-	}
 
 	// Write the txn record.
 	txnRecord := reply.Txn.AsRecord()
