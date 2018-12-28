@@ -134,7 +134,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "search_path",
 	"seed",
 	"seq_page_cost",
-	"session_authorization",
+	// "session_authorization",
 	"session_preload_libraries",
 	"session_replication_role",
 	// "ssl_renegotiation_limit",

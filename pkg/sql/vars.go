@@ -587,6 +587,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User },
 	},
 
+	// See pg sources src/backend/utils/misc/guc.c. The variable is defined
+	// but is hidden from SHOW ALL.
+	`session_authorization`: {
+		Hidden: true,
+		Get:    func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User },
+	},
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 	`standard_conforming_strings`: makeCompatStringVar(`standard_conforming_strings`, "on"),
