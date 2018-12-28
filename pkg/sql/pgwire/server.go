@@ -267,19 +267,15 @@ func (s *Server) IsDraining() bool {
 	return s.mu.draining
 }
 
-// Metrics returns the metrics struct.
-func (s *Server) Metrics() *ServerMetrics {
-	return &s.metrics
-}
-
-// StatementCounters returns the Server's StatementCounters.
-func (s *Server) StatementCounters() *sql.StatementCounters {
-	return &s.SQLServer.StatementCounters
-}
-
-// EngineMetrics returns the Server's EngineMetrics.
-func (s *Server) EngineMetrics() *sql.EngineMetrics {
-	return &s.SQLServer.EngineMetrics
+// Metrics returns the set of metrics structs.
+func (s *Server) Metrics() (res []interface{}) {
+	return []interface{}{
+		&s.metrics,
+		&s.SQLServer.Metrics.StatementCounters,
+		&s.SQLServer.Metrics.EngineMetrics,
+		&s.SQLServer.InternalMetrics.StatementCounters,
+		&s.SQLServer.InternalMetrics.EngineMetrics,
+	}
 }
 
 // Drain prevents new connections from being served and waits for drainWait for

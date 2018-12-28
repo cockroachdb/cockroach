@@ -297,11 +297,16 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 	return s.getStmtStats(vt, false /* scrub */)
 }
 
-// InternalAppNamePrefix designates that an application name is internal to
+// InternalAppNamePrefix indicates that the application name is internal to
 // CockroachDB and therefore can be reported without scrubbing. (Note this only
 // applies to the application name itself. Query data is still scrubbed as
 // usual.)
 const InternalAppNamePrefix = "$ "
+
+// DelegatedAppNamePrefix is added to a regular client application name
+// for SQL queries that are ran internally on behalf of other SQL queries
+// inside that application. The application name should be scrubbed in reporting.
+const DelegatedAppNamePrefix = "$$ "
 
 func (s *sqlStats) getStmtStats(
 	vt *VirtualSchemaHolder, scrub bool,

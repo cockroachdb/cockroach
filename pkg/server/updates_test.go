@@ -662,7 +662,12 @@ func TestReportUsage(t *testing.T) {
 
 	var foundKeys []string
 	for _, s := range r.last.SqlStats {
-		foundKeys = append(foundKeys, fmt.Sprintf("[%v,%v,%v] %s", s.Key.Opt, s.Key.DistSQL, s.Key.Failed, s.Key.Query))
+		if strings.HasPrefix(s.Key.App, sql.InternalAppNamePrefix+"internal") {
+			// Let's ignore all internal queries for this test.
+			continue
+		}
+		foundKeys = append(foundKeys,
+			fmt.Sprintf("[%v,%v,%v] %s", s.Key.Opt, s.Key.DistSQL, s.Key.Failed, s.Key.Query))
 	}
 	sort.Strings(foundKeys)
 	expectedKeys := []string{
@@ -707,6 +712,10 @@ func TestReportUsage(t *testing.T) {
 
 	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
 	for _, s := range r.last.SqlStats {
+		if strings.HasPrefix(s.Key.App, sql.InternalAppNamePrefix+"internal") {
+			// Let's ignore all internal queries for this test.
+			continue
+		}
 		bucketByApp[s.Key.App] = append(bucketByApp[s.Key.App], s)
 	}
 

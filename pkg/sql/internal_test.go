@@ -160,30 +160,38 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 			}
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
 
 	t.Run("root internal exec", func(t *testing.T) {
+		s, _, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.TODO())
+
 		testInternalExecutorAppNameInitialization(t, sem,
-			sql.InternalAppNamePrefix+"internal-test-query",
+			sql.InternalAppNamePrefix+"internal-test-query", // app name in SHOW
+			sql.InternalAppNamePrefix+"internal-test-query", // app name in stats
 			s.InternalExecutor().(*sql.InternalExecutor))
 	})
 
-	ie := sql.MakeSessionBoundInternalExecutor(
-		context.TODO(),
-		&sessiondata.SessionData{
-			User:            security.RootUser,
-			Database:        "defaultdb",
-			ApplicationName: "appname_findme",
-			SequenceState:   &sessiondata.SequenceState{},
-		},
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
+	// We are running the second test with a new server so
+	// as to reset the statement statistics properly.
 	t.Run("session bound exec", func(t *testing.T) {
+		s, _, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.TODO())
+
+		ie := sql.MakeSessionBoundInternalExecutor(
+			context.TODO(),
+			&sessiondata.SessionData{
+				User:            security.RootUser,
+				Database:        "defaultdb",
+				ApplicationName: "appname_findme",
+				SequenceState:   &sessiondata.SequenceState{},
+			},
+			s.(*server.TestServer).Server.PGServer().SQLServer,
+			sql.MemoryMetrics{},
+			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		)
 		testInternalExecutorAppNameInitialization(t, sem,
-			"appname_findme",
+			"appname_findme",                            // app name in SHOW
+			sql.DelegatedAppNamePrefix+"appname_findme", // app name in stats
 			&ie)
 	})
 }
@@ -198,7 +206,10 @@ type testInternalExecutor interface {
 }
 
 func testInternalExecutorAppNameInitialization(
-	t *testing.T, sem chan struct{}, expectedAppName string, ie testInternalExecutor,
+	t *testing.T,
+	sem chan struct{},
+	expectedAppName, expectedAppNameInStats string,
+	ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
 	if rows, _, err := ie.Query(context.TODO(), "test-query", nil,
@@ -283,17 +294,14 @@ func testInternalExecutorAppNameInitialization(
 		t.Fatal("no error received from query supposed to be canceled")
 	}
 
-	// TODO(knz): remove this skip when we log internal queries in stats.
-	t.Skip("#32215")
-
 	// Now check that it was properly registered in statistics.
 	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
-		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep('"); err != nil {
+		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
 		t.Fatalf("expected 1 query, got: %+v", rows)
-	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
-		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppNameInStats {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppNameInStats, appName)
 	}
 }
 
