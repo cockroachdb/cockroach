@@ -78,7 +78,7 @@ type SessionData struct {
 	// TODO(bob): Remove this once the 2.2 release branch is cut.
 	DurationAdditionMode duration.AdditionMode
 	// Vectorize enables automatic planning of vectorized operators.
-	Vectorize bool
+	Vectorize VectorizeExecMode
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic
@@ -255,6 +255,51 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 	default:
 		return 0, false
 	}
+}
+
+// VectorizeExecMode controls if an when the Executor executes queries using the
+// columnar execution engine.
+type VectorizeExecMode int64
+
+const (
+	// VectorizeOff means that columnar execution is disabled.
+	VectorizeOff VectorizeExecMode = iota
+	// VectorizeOn means that any supported queries will be run using the columnar
+	// execution on.
+	VectorizeOn
+	// VectorizeAlways means that we attempt to vectorize all queries; unsupported
+	// queries will fail. Mostly used for testing.
+	VectorizeAlways
+)
+
+func (m VectorizeExecMode) String() string {
+	switch m {
+	case VectorizeOff:
+		return "off"
+	case VectorizeOn:
+		return "on"
+	case VectorizeAlways:
+		return "always"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// VectorizeExecModeFromString converts a string into a VectorizeExecMode. False
+// is returned if the conversion was unsuccessful.
+func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
+	var m VectorizeExecMode
+	switch strings.ToUpper(val) {
+	case "OFF":
+		m = VectorizeOff
+	case "ON":
+		m = VectorizeOn
+	case "ALWAYS":
+		m = VectorizeAlways
+	default:
+		return 0, false
+	}
+	return m, true
 }
 
 // OptimizerMode controls if and when the Executor uses the optimizer.

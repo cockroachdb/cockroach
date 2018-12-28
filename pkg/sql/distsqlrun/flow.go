@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
@@ -515,11 +516,31 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		return err
 	}
 
-	if f.EvalCtx.SessionData.Vectorize {
+	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		err := f.setupVectorized(ctx)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
+		}
+		// Vectorization attempt failed with an error.
+		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
+			// Only return the error if we are running a local planNode that is an
+			// exception to the rule that failures to set up a vectorized flow when
+			// experimental_vectorize=always should return an error.
+			var isException bool
+			if len(spec.Processors) == 1 &&
+				spec.Processors[0].Core.LocalPlanNode != nil {
+				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+				if rsidx != nil {
+					lp := f.localProcessors[*rsidx]
+					if z, ok := lp.(vectorizeAlwaysException); ok {
+						isException = z.IsException()
+					}
+				}
+			}
+			if !isException {
+				return err
+			}
 		}
 		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	}
