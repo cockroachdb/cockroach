@@ -775,3 +775,4 @@ id   a
 
 statement ok
 DROP TABLE test_table;
+
