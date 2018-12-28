@@ -195,7 +195,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'database'
       └── values  ·       ·
-·                 size    3 columns, 39 rows
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -204,7 +204,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'timezone'
       └── values  ·       ·
-·                 size    3 columns, 39 rows
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -213,7 +213,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'default_transaction_isolation'
       └── values  ·       ·
-·                 size    3 columns, 39 rows
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -222,7 +222,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_isolation'
       └── values  ·       ·
-·                 size    3 columns, 39 rows
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -231,7 +231,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_priority'
       └── values  ·       ·
-·                 size    3 columns, 39 rows
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo

@@ -307,6 +307,12 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		// If the function ever gets supported, change to pick one that is not supported yet.
+		if _, err := db.Exec(`SELECT json_object_agg()`); !testutils.IsError(
+			err, "this function is not supported",
+		) {
+			t.Fatal(err)
+		}
 		// If the vtable ever gets supported, change to pick one that is not supported yet.
 		if _, err := db.Exec(`SELECT * FROM pg_catalog.pg_stat_wal_receiver`); !testutils.IsError(
 			err, "virtual schema table not implemented",
@@ -533,6 +539,7 @@ func TestReportUsage(t *testing.T) {
 		"test.b": 2,
 		"test.c": 3,
 
+		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#32555":                   10,
 		"unimplemented.syntax.#32564":                   10,

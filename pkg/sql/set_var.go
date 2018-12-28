@@ -48,6 +48,11 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 
 	name := strings.ToLower(n.Name)
 
+	if _, ok := UnsupportedVars[name]; ok {
+		return nil, pgerror.Unimplemented("set."+name,
+			"the configuration setting %q is not supported", name)
+	}
+
 	var typedValues []tree.TypedExpr
 	if len(n.Values) > 0 {
 		isReset := false
