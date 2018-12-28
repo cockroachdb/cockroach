@@ -33,6 +33,12 @@ type FunctionDefinition struct {
 // FunctionProperties defines the properties of the built-in
 // functions that are common across all overloads.
 type FunctionProperties struct {
+	// UnsupportedWithIssue, if non-zero indicates the built-in is not
+	// really supported; the name is a placeholder. Value -1 just says
+	// "not supported" without an issue to link; values > 0 provide an
+	// issue number to link.
+	UnsupportedWithIssue int
+
 	// NullableArgs is set to true when a function's definition can
 	// handle NULL arguments. When set, the function will be given the
 	// chance to see NULL arguments. When not, the function will

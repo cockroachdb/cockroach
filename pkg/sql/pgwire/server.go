@@ -540,6 +540,9 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 				args.SessionDefaults[key] = value
 			} else {
 				if !exists {
+					if _, ok := sql.UnsupportedVars[key]; ok {
+						telemetry.Count("unimplemented.pgwire.parameter." + key)
+					}
 					log.Warningf(ctx, "unknown configuration parameter: %q", key)
 				} else {
 					return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,

@@ -287,6 +287,9 @@ var aggregates = map[string]builtinDefinition{
 			"Aggregates values as a JSON or JSONB array."),
 	),
 
+	"json_object_agg":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
+	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
+
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
 			[]types.T{types.Any},

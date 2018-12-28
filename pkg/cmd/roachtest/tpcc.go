@@ -134,7 +134,8 @@ func registerTPCC(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses, Duration: 120 * time.Minute,
+				Warehouses: warehouses,
+				Duration:   120 * time.Minute,
 			})
 		},
 	})
@@ -146,6 +147,18 @@ func registerTPCC(r *registry) {
 				Warehouses: 1,
 				Duration:   10 * time.Minute,
 				Extra:      "--wait=false",
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:  "weekly/tpcc-max",
+		Tags:  []string{`weekly`},
+		Nodes: nodes(4, cpu(16)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			warehouses := 1500
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Duration:   6 * 24 * time.Hour,
 			})
 		},
 	})
