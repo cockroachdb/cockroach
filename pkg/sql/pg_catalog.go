@@ -1825,6 +1825,9 @@ CREATE TABLE pg_catalog.pg_settings (
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
+			if gen.Hidden {
+				continue
+			}
 			value := gen.Get(&p.extendedEvalCtx)
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull

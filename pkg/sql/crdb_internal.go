@@ -692,7 +692,8 @@ var crdbInternalSessionVariablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.session_variables (
   variable STRING NOT NULL,
-  value    STRING NOT NULL
+  value    STRING NOT NULL,
+  hidden   BOOL   NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
@@ -701,6 +702,7 @@ CREATE TABLE crdb_internal.session_variables (
 			if err := addRow(
 				tree.NewDString(vName),
 				tree.NewDString(value),
+				tree.MakeDBool(tree.DBool(gen.Hidden)),
 			); err != nil {
 				return err
 			}
