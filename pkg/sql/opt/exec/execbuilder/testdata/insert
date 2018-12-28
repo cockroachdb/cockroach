@@ -301,6 +301,7 @@ EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 count                          ·         ·
  └── insert                    ·         ·
       │                        into      insert_t(x, v, rowid)
+      │                        strategy  inserter
       └── render               ·         ·
            │                   render 0  x
            │                   render 1  v
@@ -322,6 +323,7 @@ EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 count                ·         ·
  └── insert          ·         ·
       │              into      insert_t(x, v, rowid)
+      │              strategy  inserter
       └── render     ·         ·
            │         render 0  x
            │         render 1  v
@@ -335,56 +337,60 @@ count                ·         ·
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-count                       ·      ·
- └── insert                 ·      ·
-      │                     into   insert_t(x, v, rowid)
-      └── render            ·      ·
-           └── limit        ·      ·
-                │           count  1
-                └── values  ·      ·
-·                           size   2 columns, 2 rows
+count                       ·         ·
+ └── insert                 ·         ·
+      │                     into      insert_t(x, v, rowid)
+      │                     strategy  inserter
+      └── render            ·         ·
+           └── limit        ·         ·
+                │           count     1
+                └── values  ·         ·
+·                           size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-count                            ·      ·
- └── insert                      ·      ·
-      │                          into   insert_t(x, v, rowid)
-      └── render                 ·      ·
-           └── limit             ·      ·
-                │                count  1
-                └── sort         ·      ·
-                     │           order  +column2
-                     └── values  ·      ·
-·                                size   2 columns, 2 rows
+count                            ·         ·
+ └── insert                      ·         ·
+      │                          into      insert_t(x, v, rowid)
+      │                          strategy  inserter
+      └── render                 ·         ·
+           └── limit             ·         ·
+                │                count     1
+                └── sort         ·         ·
+                     │           order     +column2
+                     └── values  ·         ·
+·                                size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-count                            ·      ·
- └── insert                      ·      ·
-      │                          into   insert_t(x, v, rowid)
-      └── render                 ·      ·
-           └── limit             ·      ·
-                │                count  1
-                └── sort         ·      ·
-                     │           order  +column2
-                     └── values  ·      ·
-·                                size   2 columns, 2 rows
+count                            ·         ·
+ └── insert                      ·         ·
+      │                          into      insert_t(x, v, rowid)
+      │                          strategy  inserter
+      └── render                 ·         ·
+           └── limit             ·         ·
+                │                count     1
+                └── sort         ·         ·
+                     │           order     +column2
+                     └── values  ·         ·
+·                                size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-count                            ·      ·
- └── insert                      ·      ·
-      │                          into   insert_t(x, v, rowid)
-      └── render                 ·      ·
-           └── limit             ·      ·
-                │                count  1
-                └── sort         ·      ·
-                     │           order  +column2
-                     └── values  ·      ·
-·                                size   2 columns, 2 rows
+count                            ·         ·
+ └── insert                      ·         ·
+      │                          into      insert_t(x, v, rowid)
+      │                          strategy  inserter
+      └── render                 ·         ·
+           └── limit             ·         ·
+                │                count     1
+                └── sort         ·         ·
+                     │           order     +column2
+                     └── values  ·         ·
+·                                size      2 columns, 2 rows
 
 # ORDER BY expression that's not inserted into table.
 query TTTTT
@@ -396,6 +402,7 @@ render                                   ·         ·                      ("?c
  └── run                                 ·         ·                      (x, v, rowid[hidden])          ·
       └── insert                         ·         ·                      (x, v, rowid[hidden])          ·
            │                             into      insert_t(x, v, rowid)  ·                              ·
+           │                             strategy  inserter               ·                              ·
            └── render                    ·         ·                      (length, "?column?", column9)  ·
                 │                        render 0  length                 ·                              ·
                 │                        render 1  "?column?"             ·                              ·
@@ -431,6 +438,7 @@ render                 ·              ·                      (x)              
  └── run               ·              ·                      (x, rowid[hidden])           ·
       └── insert       ·              ·                      (x, rowid[hidden])           ·
            │           into           mutation(x, rowid, y)  ·                            ·
+           │           strategy       inserter               ·                            ·
            └── values  ·              ·                      (column1, column5, column6)  ·
 ·                      size           3 columns, 1 row       ·                            ·
 ·                      row 0, expr 0  2                      ·                            ·
@@ -450,6 +458,7 @@ EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 count             ·              ·                      ()                           ·
  └── insert       ·              ·                      ()                           ·
       │           into           mutation(x, y, rowid)  ·                            ·
+      │           strategy       inserter               ·                            ·
       └── values  ·              ·                      (column1, column2, column7)  ·
 ·                 size           3 columns, 1 row       ·                            ·
 ·                 row 0, expr 0  2                      ·                            ·

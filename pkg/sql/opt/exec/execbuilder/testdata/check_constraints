@@ -26,6 +26,7 @@ count                ·         ·             ()                         ·
  └── update          ·         ·             ()                         ·
       │              table     t9            ·                          ·
       │              set       b             ·                          ·
+      │              strategy  updater       ·                          ·
       │              check 0   t9.a > t9.b   ·                          ·
       │              check 1   t9.d IS NULL  ·                          ·
       └── render     ·         ·             (a, b, c, d, e, column11)  ·
@@ -46,6 +47,7 @@ count                ·         ·             ()                         ·
  └── update          ·         ·             ()                         ·
       │              table     t9            ·                          ·
       │              set       a             ·                          ·
+      │              strategy  updater       ·                          ·
       │              check 0   t9.a > t9.b   ·                          ·
       │              check 1   t9.d IS NULL  ·                          ·
       └── render     ·         ·             (a, b, c, d, e, column11)  ·

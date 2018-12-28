@@ -272,6 +272,9 @@ type tableUpserter struct {
 	fetcher               row.Fetcher
 }
 
+// desc is part of the tableWriter interface.
+func (*tableUpserter) desc() string { return "upserter" }
+
 // init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
