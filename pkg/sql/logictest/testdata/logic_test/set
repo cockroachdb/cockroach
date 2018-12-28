@@ -283,3 +283,6 @@ SET blah.blah = 123
 
 statement error unrecognized configuration parameter "tracing.blah"
 SET tracing.blah = 123
+
+statement error invalid value for parameter "ssl_renegotiation_limit"
+SET ssl_renegotiation_limit = 123
