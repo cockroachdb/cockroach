@@ -60,7 +60,7 @@ const (
 	VersionRangeAppliedStateKey
 	VersionImportFormats
 	VersionSecondaryLookupJoins
-	VersionClientSideWritingFlag
+	VersionClientSideWritingFlag // unused
 	VersionColumnarTimeSeries
 	VersionTxnCoordMetaInvalidField
 	VersionAsyncConsensus

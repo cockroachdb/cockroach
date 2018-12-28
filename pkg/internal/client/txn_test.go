@@ -102,7 +102,6 @@ func newTestTxnFactory(
 			if pErr != nil {
 				return nil, pErr
 			}
-			var writing bool
 			status := roachpb.PENDING
 			for i, req := range ba.Requests {
 				args := req.GetInner()
@@ -111,13 +110,9 @@ func newTestTxnFactory(
 					union := &br.Responses[i] // avoid operating on copy
 					union.MustSetInner(&testPutRespCopy)
 				}
-				if roachpb.IsTransactionWrite(args) {
-					writing = true
-				}
 			}
 			if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
 				et := args.(*roachpb.EndTransactionRequest)
-				writing = true
 				if et.Commit {
 					status = roachpb.COMMITTED
 				} else {
@@ -128,7 +123,6 @@ func newTestTxnFactory(
 				txnClone := ba.Txn.Clone()
 				br.Txn = &txnClone
 				if pErr == nil {
-					br.Txn.Writing = writing
 					br.Txn.Status = status
 				}
 				// Update the MockTxnSender's proto.
