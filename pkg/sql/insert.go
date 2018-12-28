@@ -81,9 +81,16 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
-	if n.OnConflict != nil && !n.OnConflict.DoNothing {
-		if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.UPDATE); err != nil {
+	if n.OnConflict != nil {
+		// UPSERT and INDEX ON CONFLICT will read from the table to check for duplicates.
+		if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.SELECT); err != nil {
 			return nil, err
+		}
+		if !n.OnConflict.DoNothing {
+			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows.
+			if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.UPDATE); err != nil {
+				return nil, err
+			}
 		}
 	}
 
