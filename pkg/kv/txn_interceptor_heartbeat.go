@@ -459,20 +459,14 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 		// then we ignore the error. This is possible if the heartbeat loop was
 		// started before a BeginTxn request succeeds because of ambiguity in the
 		// first write request's response.
+		//
+		// TODO(nvanbenschoten): Remove this in 2.3.
 		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
 			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
 			return true
 		}
 
-		if pErr.GetTxn() != nil {
-			// It is not expected for a 2.1 node to return an error with a transaction
-			// in it. For one, heartbeats are not supposed to return
-			// TransactionAbortedErrors.
-			// TODO(andrei): Remove this in 2.2.
-			respTxn = pErr.GetTxn()
-		} else {
-			return true
-		}
+		respTxn = pErr.GetTxn()
 	} else {
 		respTxn = br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn
 	}
@@ -480,6 +474,15 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 	// Update our txn. In particular, we need to make sure that the client will
 	// notice when the txn has been aborted (in which case we'll give them an
 	// error on their next request).
+	//
+	// TODO(nvanbenschoten): It's possible for a HeartbeatTxn request to observe
+	// the result of an EndTransaction request and beat it back to the client.
+	// This is an issue when a COMMITTED txn record is GCed and later re-written
+	// as ABORTED. The coordinator's local status could flip from PENDING to
+	// ABORTED (after heartbeat response) to COMMITTED (after commit response).
+	// This appears to be benign, but it's still somewhat disconcerting. If this
+	// ever causes any issues, we'll need to be smarter about detecting this race
+	// on the client and conditionally ignoring the result of heartbeat responses.
 	h.mu.txn.Update(respTxn)
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txn.Status == roachpb.ABORTED {
@@ -494,12 +497,6 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 // abortTxnAsyncLocked send an EndTransaction(commmit=false) asynchronously.
 // The asyncAbortCallbackLocked callback is also called.
 func (h *txnHeartbeat) abortTxnAsyncLocked(ctx context.Context) {
-	// Stop the heartbeat loop if it is still running.
-	if h.mu.txnEnd != nil {
-		close(h.mu.txnEnd)
-		h.mu.txnEnd = nil
-	}
-
 	if h.mu.txn.Status != roachpb.ABORTED {
 		log.Fatalf(ctx, "abortTxnAsyncLocked called for non-aborted txn: %s", h.mu.txn)
 	}

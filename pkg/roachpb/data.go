@@ -959,7 +959,7 @@ func (t *Transaction) BumpEpoch() {
 func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 	min := t.OrigTimestamp
 	max := t.Timestamp
-	if t.Epoch != 0 {
+	if t.Epoch != 0 && t.EpochZeroTimestamp != (hlc.Timestamp{}) {
 		if min.Less(t.EpochZeroTimestamp) {
 			panic(fmt.Sprintf("orig timestamp %s less than epoch zero %s", min, t.EpochZeroTimestamp))
 		}

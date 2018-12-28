@@ -131,10 +131,11 @@ enum TransactionAbortedReason {
   // another txn (of any priority) considered us abandoned and pushed us.
   ABORT_REASON_ABORTED_RECORD_FOUND = 1;
 
-  // The BeginTransaction has a timestamp below the TxnSpanGCThreshold, so there
-  // might have been an ABORTED txn record that got GCed (so, we might be in the
-  // ABORT_REASON_ABORTED_RECORD_FOUND case and not know).
-  ABORT_REASON_BEGIN_TOO_OLD = 2;
+  // The request attempting to create a transaction record has a timestamp below
+  // the TxnSpanGCThreshold, so there might have been an ABORTED txn record that
+  // got GCed (so, we might be in the ABORT_REASON_ABORTED_RECORD_FOUND case and
+  // not know).
+  ABORT_REASON_NEW_TXN_RECORD_TOO_OLD = 2;
 
   // The client is trying to use a transaction that's already been aborted. The
   // TxnCoordSender detects this. Either the client is misusing a txn, or the
@@ -205,6 +206,7 @@ enum TransactionRetryReason {
   RETRY_SERIALIZABLE = 3;
   // A possible replay caused by duplicate begin txn or out-of-order
   // txn sequence number.
+  // TODO(nvanbenschoten): This is no longer in use. Remove in 2.4.
   RETRY_POSSIBLE_REPLAY = 4;
   // An asynchronous write was observed to have failed.
   RETRY_ASYNC_WRITE_FAILURE = 5;

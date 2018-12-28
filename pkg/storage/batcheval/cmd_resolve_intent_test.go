@@ -105,6 +105,11 @@ func (m *mockEvalCtx) GetMVCCStats() enginepb.MVCCStats {
 func (m *mockEvalCtx) GetSplitQPS() float64 {
 	return m.qps
 }
+func (m *mockEvalCtx) CanCreateTxnRecord(
+	txn *roachpb.Transaction,
+) (bool, roachpb.TransactionAbortedReason) {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
 }
