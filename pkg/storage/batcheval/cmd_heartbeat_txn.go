@@ -62,11 +62,19 @@ func HeartbeatTxn(
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		// If no existing transaction record was found, skip heartbeat.
-		// This could mean the heartbeat is a delayed relic or it could
-		// mean that the BeginTransaction call was delayed. In either
-		// case, there's no reason to persist a new transaction record.
-		return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
+		// No existing transaction record was found - create one by writing
+		// it below.
+		txn = h.Txn.Clone()
+		if txn.Status != roachpb.PENDING {
+			return result.Result{}, roachpb.NewTransactionStatusError(
+				fmt.Sprintf("cannot heartbeat txn with status %v: %s", txn.Status, txn),
+			)
+		}
+
+		// Verify that it is safe to create the transaction record.
+		if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(&txn); !ok {
+			return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+		}
 	}
 
 	if txn.Status == roachpb.PENDING {

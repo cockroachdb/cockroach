@@ -148,6 +148,16 @@ func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
 	return rec.i.GetSplitQPS()
 }
 
+// CanCreateTxnRecord determines whether a transaction record can be created for
+// the provided transaction. If not, it returns the reason that transaction
+// record was rejected. If the method ever determines that a transaction record
+// must be rejected, it will continue to reject that transaction going forwards.
+func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
+	txn *roachpb.Transaction,
+) (bool, roachpb.TransactionAbortedReason) {
+	return rec.i.CanCreateTxnRecord(txn)
+}
+
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.

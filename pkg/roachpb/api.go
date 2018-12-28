@@ -1015,7 +1015,7 @@ func (*ScanRequest) flags() int       { return isRead | isRange | isTxn | update
 func (*ReverseScanRequest) flags() int {
 	return isRead | isRange | isReverse | isTxn | updatesReadTSCache | needsRefresh
 }
-func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }
+func (*BeginTransactionRequest) flags() int { return isWrite | isTxn }
 
 // EndTransaction updates the write timestamp cache to prevent
 // replays. Replays for the same transaction key and timestamp will
