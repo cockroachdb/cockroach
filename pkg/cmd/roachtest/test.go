@@ -939,7 +939,7 @@ func (r *registry) runAsync(
 			} else {
 				if teamCity {
 					fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
-						t.Name(), t.spec.Skip)
+						t.Name(), teamCityEscape(t.spec.Skip))
 				}
 				fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
 			}
