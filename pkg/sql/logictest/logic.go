@@ -416,7 +416,7 @@ var logicTestConfigs = []testClusterConfig{
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
 	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
-	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "true"},
+	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
@@ -1045,7 +1045,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 	if cfg.overrideExpVectorize != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1", cfg.overrideExpVectorize,
+			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1::string", cfg.overrideExpVectorize,
 		); err != nil {
 			t.Fatal(err)
 		}

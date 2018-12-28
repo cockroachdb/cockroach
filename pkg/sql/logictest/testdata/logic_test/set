@@ -175,6 +175,18 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
+SET experimental_vectorize = on
+
+statement ok
+SET experimental_vectorize = off
+
+statement ok
+SET experimental_vectorize = always
+
+statement error invalid value for parameter "experimental_vectorize": "bogus"
+SET experimental_vectorize = bogus
+
+statement ok
 SET optimizer = on
 
 statement ok
