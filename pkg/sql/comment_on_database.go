@@ -20,39 +20,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-type commentOnTableNode struct {
-	n         *tree.CommentOnTable
-	tableDesc *MutableTableDescriptor
+type commentOnDatabaseNode struct {
+	n      *tree.CommentOnDatabase
+	dbDesc *sqlbase.DatabaseDescriptor
 }
 
-// CommentOnTable add comment on a table.
-// Privileges: CREATE on table.
-//   notes: postgres requires CREATE on the table.
-//          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (planNode, error) {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, true, requireTableDesc)
+// CommentOnDatabase add comment on a database.
+// Privileges: CREATE on database.
+//   notes: postgres requires CREATE on the database.
+func (p *planner) CommentOnDatabase(
+	ctx context.Context, n *tree.CommentOnDatabase,
+) (planNode, error) {
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
-	return &commentOnTableNode{n: n, tableDesc: tableDesc}, nil
+	return &commentOnDatabaseNode{n: n, dbDesc: dbDesc}, nil
 }
 
-func (n *commentOnTableNode) startExec(params runParams) error {
+func (n *commentOnDatabaseNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
-			"set-table-comment",
+			"set-db-comment",
 			params.p.Txn(),
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.TableCommentType,
-			n.tableDesc.ID,
+			keys.DatabaseCommentType,
+			n.dbDesc.ID,
 			*n.n.Comment)
 		if err != nil {
 			return err
@@ -60,11 +62,11 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 	} else {
 		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
-			"delete-table-comment",
+			"delete-db-comment",
 			params.p.Txn(),
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-			keys.TableCommentType,
-			n.tableDesc.ID)
+			keys.DatabaseCommentType,
+			n.dbDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -73,22 +75,22 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
-		EventLogCommentOnTable,
-		int32(n.tableDesc.ID),
+		EventLogCommentOnDatabase,
+		int32(n.dbDesc.ID),
 		int32(params.extendedEvalCtx.NodeID),
 		struct {
-			TableName string
-			Statement string
-			User      string
-			Comment   *string
+			DatabaseName string
+			Statement    string
+			User         string
+			Comment      *string
 		}{
-			n.n.Table.FQString(),
+			n.n.Name.String(),
 			n.n.String(),
 			params.SessionData().User,
 			n.n.Comment},
 	)
 }
 
-func (n *commentOnTableNode) Next(runParams) (bool, error) { return false, nil }
-func (n *commentOnTableNode) Values() tree.Datums          { return tree.Datums{} }
-func (n *commentOnTableNode) Close(context.Context)        {}
+func (n *commentOnDatabaseNode) Next(runParams) (bool, error) { return false, nil }
+func (n *commentOnDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *commentOnDatabaseNode) Close(context.Context)        {}
