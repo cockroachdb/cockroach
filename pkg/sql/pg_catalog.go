@@ -1012,7 +1012,7 @@ CREATE TABLE pg_catalog.pg_description (
 		}
 
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(
+		err = forEachTableDescWithTableLookup(
 			ctx,
 			p,
 			dbContext,
@@ -1032,6 +1032,21 @@ CREATE TABLE pg_catalog.pg_description (
 
 				return nil
 			})
+		if err != nil {
+			return err
+		}
+
+		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
+			if comment, ok := commentMap[tree.DInt(db.ID)]; ok {
+				return addRow(
+					h.DBOid(db),
+					oidZero,
+					comment[1],
+					comment[2])
+			}
+
+			return nil
+		})
 	},
 }
 
