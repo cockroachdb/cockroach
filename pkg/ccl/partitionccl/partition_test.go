@@ -846,19 +846,21 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		// Tuples are not valid types for table creation
-		if semTypeID == int32(sqlbase.ColumnType_TUPLE) {
+		semType := sqlbase.ColumnType_SemanticType(semTypeID)
+		switch semType {
+		case sqlbase.ColumnType_ARRAY,
+			sqlbase.ColumnType_TUPLE,
+			sqlbase.ColumnType_JSONB:
+			// Not indexable.
 			continue
 		}
-		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+
+		typ := sqlbase.ColumnType{SemanticType: semType}
 		colType := semTypeName
 		switch typ.SemanticType {
 		case sqlbase.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
-		case sqlbase.ColumnType_JSONB:
-			// Not indexable.
-			continue
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
@@ -1081,8 +1083,16 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 			return err
 		}
 		traceLines = append(traceLines, traceLine.String)
-		if strings.Contains(traceLine.String, "read completed") && !strings.Contains(traceLine.String, node) {
-			scansWrongNode = append(scansWrongNode, traceLine.String)
+		if strings.Contains(traceLine.String, "read completed") {
+			if strings.Contains(traceLine.String, "SystemCon") {
+				// Ignore trace lines for the system config range (abbreviated as
+				// "SystemCon" in pretty printing of the range descriptor). A read might
+				// be performed to the system config range to update the table lease.
+				continue
+			}
+			if !strings.Contains(traceLine.String, node) {
+				scansWrongNode = append(scansWrongNode, traceLine.String)
+			}
 		}
 	}
 	if len(scansWrongNode) > 0 {
@@ -1147,8 +1157,6 @@ func setupPartitioningTestCluster(
 
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("#28789")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
@@ -1250,8 +1258,6 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("#28786")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
