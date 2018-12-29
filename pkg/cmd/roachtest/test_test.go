@@ -43,7 +43,7 @@ func TestMatchOrSkip(t *testing.T) {
 		expectedSkip string
 	}{
 		{nil, "foo", nil, true, ""},
-		{nil, "foo", []string{"bar"}, true, ""},
+		{nil, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
 		{[]string{"tag:b"}, "foo", []string{"bar"}, true, ""},
 		{[]string{"tag:b"}, "foo", nil, true, "[tag:b] does not match [default]"},
 		{[]string{"tag:default"}, "foo", nil, true, ""},
