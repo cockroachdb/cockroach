@@ -563,7 +563,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.StartAsync(ctx, func() {}); err != nil {
+	if err := flow.Start(ctx, func() {}); err != nil {
 		t.Fatal(err)
 	}
 	flow.Wait()
