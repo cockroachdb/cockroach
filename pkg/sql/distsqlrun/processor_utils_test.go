@@ -162,7 +162,7 @@ func (p *ProcessorTest) RunTestCases(
 			p.config.BeforeTestCase(processor, inputs, output)
 		}
 
-		processor.Run(ctx, nil)
+		processor.Run(ctx)
 
 		if p.config.AfterTestCase != nil {
 			p.config.AfterTestCase(processor, inputs, output)

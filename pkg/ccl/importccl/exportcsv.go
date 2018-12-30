@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -199,13 +198,9 @@ func (sp *csvWriter) OutputTypes() []sqlbase.ColumnType {
 	return sql.ExportPlanResultTypes
 }
 
-func (sp *csvWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer tracing.FinishSpan(span)
-
-	if wg != nil {
-		defer wg.Done()
-	}
 
 	err := func() error {
 		pattern := exportFilePatternDefault

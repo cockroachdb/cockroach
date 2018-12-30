@@ -16,7 +16,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -390,15 +389,11 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	return false
 }
 
-func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
 
-	if wg != nil {
-		defer wg.Done()
-	}
-
-	if err := cp.doRun(ctx, wg); err != nil {
+	if err := cp.doRun(ctx); err != nil {
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
 	} else {
 		cp.out.Close()
@@ -408,7 +403,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 // doRun uses a more familiar error return API, allowing concise early returns
 // on errors in setup that all then are handled by the actual DistSQL Run method
 // wrapper, doing the correct DrainAndClose error handling logic.
-func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup) error {
+func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan kvBatch)
 	evalCtx := cp.flowCtx.NewEvalCtx()

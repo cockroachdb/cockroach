@@ -162,7 +162,7 @@ type RowSource interface {
 // RowSourcedProcessor is the union of RowSource and Processor.
 type RowSourcedProcessor interface {
 	RowSource
-	Run(_ context.Context, wg *sync.WaitGroup)
+	Run(context.Context)
 }
 
 // Run reads records from the source and outputs them to the receiver, properly
