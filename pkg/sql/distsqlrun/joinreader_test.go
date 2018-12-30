@@ -329,7 +329,7 @@ func TestJoinReader(t *testing.T) {
 				// Set a lower batch size to force multiple batches.
 				jr.batchSize = 2
 
-				jr.Run(ctx, nil /* wg */)
+				jr.Run(ctx)
 
 				if !in.Done {
 					t.Fatal("joinReader didn't consume all the rows")
@@ -449,7 +449,7 @@ INSERT INTO test.t VALUES
 			// Set a lower batch size to force multiple batches.
 			jr.batchSize = 2
 
-			jr.Run(ctx, nil /* wg */)
+			jr.Run(ctx)
 
 			// Check results.
 			var res sqlbase.EncDatumRows
@@ -524,7 +524,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx, nil /* wg */)
+		jr.Run(ctx)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
@@ -545,7 +545,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx, nil /* wg */)
+		jr.Run(ctx)
 		row, meta := out.Next()
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
@@ -621,7 +621,7 @@ func BenchmarkJoinReader(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				jr.Run(ctx, nil /* wg */)
+				jr.Run(ctx)
 				input.Reset()
 			}
 		})

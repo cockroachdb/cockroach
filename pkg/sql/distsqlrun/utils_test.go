@@ -369,7 +369,7 @@ func runProcessorTest(
 		pt.batchSize = 2
 	}
 
-	p.Run(context.Background(), nil /* wg */)
+	p.Run(context.Background())
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
 	}

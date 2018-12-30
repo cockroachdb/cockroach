@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -89,11 +88,7 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
+func (sp *sstWriter) Run(ctx context.Context) {
 	sp.input.Start(ctx)
 
 	ctx, span := tracing.ChildSpan(ctx, "sstWriter")

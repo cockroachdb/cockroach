@@ -331,7 +331,7 @@ func TestSorter(t *testing.T) {
 								t.Fatal(err)
 							}
 						}
-						s.Run(context.Background(), nil /* wg */)
+						s.Run(context.Background())
 						if !out.ProducerClosed {
 							t.Fatalf("output RowReceiver not closed")
 						}
@@ -408,7 +408,7 @@ func BenchmarkSortAll(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				s.Run(context.Background(), nil /* wg */)
+				s.Run(context.Background())
 				input.Reset()
 			}
 		})
@@ -450,7 +450,7 @@ func BenchmarkSortLimit(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					s.Run(context.Background(), nil /* wg */)
+					s.Run(context.Background())
 					input.Reset()
 				}
 			})
@@ -498,7 +498,7 @@ func BenchmarkSortChunks(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					s.Run(context.Background(), nil /* wg */)
+					s.Run(context.Background())
 					input.Reset()
 				}
 			})

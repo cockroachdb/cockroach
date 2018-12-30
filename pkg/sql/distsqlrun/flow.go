@@ -566,7 +566,10 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	}
 	for i := 0; i < len(f.processors)-1; i++ {
 		f.waitGroup.Add(1)
-		go f.processors[i].Run(ctx, &f.waitGroup)
+		go func(i int) {
+			f.processors[i].Run(ctx)
+			f.waitGroup.Done()
+		}(i)
 	}
 	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 1 || !f.isLocal()
 	return nil
@@ -595,7 +598,10 @@ func (f *Flow) StartAsync(ctx context.Context, doneFn func()) error {
 	}
 	if len(f.processors) > 0 {
 		f.waitGroup.Add(1)
-		go f.processors[len(f.processors)-1].Run(ctx, &f.waitGroup)
+		go func() {
+			f.processors[len(f.processors)-1].Run(ctx)
+			f.waitGroup.Done()
+		}()
 		f.startedGoroutines = true
 	}
 	return nil
@@ -615,7 +621,7 @@ func (f *Flow) StartSync(ctx context.Context, doneFn func()) error {
 		return err
 	}
 	if len(f.processors) > 0 {
-		f.processors[len(f.processors)-1].Run(ctx, nil)
+		f.processors[len(f.processors)-1].Run(ctx)
 	}
 	return nil
 }

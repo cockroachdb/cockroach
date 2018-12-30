@@ -714,7 +714,7 @@ func TestMergeJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background(), nil /* wg */)
+			m.Run(context.Background())
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -820,7 +820,7 @@ func TestConsumerClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background(), nil /* wg */)
+			m.Run(context.Background())
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -867,7 +867,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background(), nil /* wg */)
+				m.Run(context.Background())
 				leftInput.Reset()
 				rightInput.Reset()
 			}
@@ -886,7 +886,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background(), nil /* wg */)
+				m.Run(context.Background())
 				leftInput.Reset()
 				rightInput.Reset()
 			}
@@ -906,7 +906,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background(), nil /* wg */)
+				m.Run(context.Background())
 				leftInput.Reset()
 				rightInput.Reset()
 			}
