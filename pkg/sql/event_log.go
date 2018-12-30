@@ -44,6 +44,8 @@ const (
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
 	// EventLogCommentOnTable is recorded when a table is commented.
+	EventLogCommentOnDatabase EventLogType = "comment_on_database"
+	// EventLogCommentOnTable is recorded when a table is commented.
 	EventLogCommentOnTable EventLogType = "comment_on_table"
 
 	// EventLogCreateIndex is recorded when an index is created.

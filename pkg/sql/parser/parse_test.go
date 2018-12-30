@@ -1151,6 +1151,8 @@ func TestParse(t *testing.T) {
 
 		{`COMMENT ON TABLE foo IS 'a'`},
 		{`COMMENT ON TABLE foo IS NULL`},
+		{`COMMENT ON DATABASE foo IS 'a'`},
+		{`COMMENT ON DATABASE foo IS NULL`},
 
 		{`ALTER SEQUENCE a RENAME TO b`},
 		{`EXPLAIN ALTER SEQUENCE a RENAME TO b`},
@@ -2697,7 +2699,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 32555, ``},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`, 19472, `column`},
-		{`COMMENT ON DATABASE a IS 'b'`, 19472, ``},
 
 		{`CREATE AGGREGATE a`, 0, `create aggregate`},
 		{`CREATE CAST a`, 0, `create cast`},

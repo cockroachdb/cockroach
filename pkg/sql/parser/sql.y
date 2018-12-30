@@ -1997,7 +1997,11 @@ cancel_sessions_stmt:
 | CANCEL SESSIONS error // SHOW HELP: CANCEL SESSIONS
 
 comment_stmt:
-  COMMENT ON TABLE table_name IS comment_text
+  COMMENT ON DATABASE database_name IS comment_text
+  {
+    $$.val = &tree.CommentOnDatabase{Name: tree.Name($4), Comment: $6.strPtr()}
+  }
+| COMMENT ON TABLE table_name IS comment_text
   {
     name, err := tree.NormalizeTableName($4.unresolvedName())
     if err != nil {

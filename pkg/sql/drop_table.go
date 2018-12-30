@@ -314,7 +314,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.removeComment(ctx, tableDesc)
+	err := p.removeTableComment(ctx, tableDesc)
 	if err != nil {
 		return droppedViews, err
 	}
@@ -482,12 +482,12 @@ func removeMatchingReferences(
 	return updatedRefs
 }
 
-func (p *planner) removeComment(
+func (p *planner) removeTableComment(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 		ctx,
-		"delete-comment",
+		"delete-table-comment",
 		p.txn,
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.TableCommentType,
