@@ -258,7 +258,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
-	if err := flow.StartSync(ctx, func() {}); err != nil {
+	if err := flow.Run(ctx, func() {}); err != nil {
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}
@@ -267,8 +267,6 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil && !planCtx.ignoreClose {
 		planCtx.planner.curPlan.close(ctx)
 	}
-
-	flow.Wait()
 	flow.Cleanup(ctx)
 }
 

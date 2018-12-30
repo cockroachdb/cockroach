@@ -96,7 +96,7 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) error {
 	)
 	fs.mu.numRunning++
 	fs.metrics.FlowStart()
-	if err := f.StartAsync(ctx, func() { fs.flowDoneCh <- f }); err != nil {
+	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
 		return err
 	}
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
