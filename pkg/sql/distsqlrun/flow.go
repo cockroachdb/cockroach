@@ -528,9 +528,9 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	return f.setupProcessors(ctx, inputSyncs)
 }
 
-// startInternal starts the flow. All processors apart from the last one are
-// started, each in their own goroutine. The caller must forward any returned
-// error to syncFlowConsumer if set.
+// startInternal starts the flow. All processors are started, each in their own
+// goroutine. The caller must forward any returned error to syncFlowConsumer if
+// set.
 func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
@@ -564,11 +564,11 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	for _, s := range f.startables {
 		s.start(ctx, &f.waitGroup, f.ctxCancel)
 	}
-	for i := 0; i < len(f.processors)-1; i++ {
+	for i := 0; i < len(f.processors); i++ {
 		f.waitGroup.Add(1)
 		go f.processors[i].Run(ctx, &f.waitGroup)
 	}
-	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 1 || !f.isLocal()
+	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.isLocal()
 	return nil
 }
 
@@ -595,15 +595,6 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	if len(f.processors) > 0 {
-		// Everything but the last processor was started by startInternal(). We need
-		// to manuall start the last one.
-		// TODO(asubiotto): Find something nicer to do than declare that the last
-		// processor is special w.r.t. startInternal().
-		f.waitGroup.Add(1)
-		go f.processors[len(f.processors)-1].Run(ctx, &f.waitGroup)
-		f.startedGoroutines = true
-	}
 	return nil
 }
 
@@ -615,6 +606,14 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 // The caller needs to call f.Cleanup().
 func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	defer f.Wait()
+
+	// We'll take care of the last processor in particular.
+	var headProc Processor
+	if len(f.processors) > 0 {
+		headProc = f.processors[len(f.processors)-1]
+		f.processors = f.processors[:len(f.processors)-1]
+	}
+
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
@@ -624,8 +623,8 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	if len(f.processors) > 0 {
-		f.processors[len(f.processors)-1].Run(ctx, nil)
+	if headProc != nil {
+		headProc.Run(ctx, nil)
 	}
 	return nil
 }
