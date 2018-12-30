@@ -2008,7 +2008,19 @@ comment_stmt:
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
-    return unimplementedWithIssueDetail(sqllex, 19472, "column")
+    varName, err := $4.unresolvedName().NormalizeVarName()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+
+    columnItem, ok := varName.(*tree.ColumnItem)
+    if !ok {
+      sqllex.Error("select all column is not allowed")
+      return 1
+    }
+
+    $$.val = &tree.CommentOnColumn{ColumnItem: *columnItem, Comment: $6.strPtr()}
   }
 | COMMENT ON error
   {
