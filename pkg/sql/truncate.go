@@ -386,7 +386,7 @@ func reassignReferencedTables(
 func reassignComment(ctx context.Context, p *planner, oldID, newID sqlbase.ID) error {
 	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 		ctx,
-		"select-comment",
+		"select-table-comment",
 		p.txn,
 		`SELECT comment FROM system.comments WHERE object_id=$1`,
 		oldID)
@@ -397,7 +397,7 @@ func reassignComment(ctx context.Context, p *planner, oldID, newID sqlbase.ID) e
 	if comment != nil {
 		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 			ctx,
-			"upsert-comment",
+			"set-table-comment",
 			p.txn,
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.TableCommentType,
@@ -410,7 +410,7 @@ func reassignComment(ctx context.Context, p *planner, oldID, newID sqlbase.ID) e
 
 	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 		ctx,
-		"delete-comment",
+		"delete-table-comment",
 		p.txn,
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.TableCommentType,
