@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -69,15 +68,11 @@ func (*backfiller) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Run is part of the Processor interface.
-func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := processorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
-
-	if wg != nil {
-		defer wg.Done()
-	}
 
 	if err := b.mainLoop(ctx); err != nil {
 		b.output.Push(nil /* row */, &ProducerMetadata{Err: err})

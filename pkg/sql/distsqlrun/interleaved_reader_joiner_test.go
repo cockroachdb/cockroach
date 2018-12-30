@@ -411,7 +411,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			irj.Run(ctx, nil /* wg */)
+			irj.Run(ctx)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -612,7 +612,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	irj.Run(ctx, nil /* wg */)
+	irj.Run(ctx)
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
 	}

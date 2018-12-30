@@ -509,7 +509,7 @@ func TestZigzagJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			z.Run(ctx, nil /* wg */)
+			z.Run(ctx)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -590,7 +590,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		zz.Run(ctx, nil /* wg */)
+		zz.Run(ctx)
 	})
 
 	//TODO(pbardea): When RowSource inputs are added, ensure that meta is

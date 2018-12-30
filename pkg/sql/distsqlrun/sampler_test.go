@@ -58,7 +58,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background(), nil /* wg */)
+	p.Run(context.Background())
 
 	// Verify we have numSamples distinct rows.
 	res := make([]int, 0, numSamples)
@@ -187,7 +187,7 @@ func TestSamplerSketch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background(), nil /* wg */)
+	p.Run(context.Background())
 
 	rows = out.GetRowsNoMeta(t)
 	// We expect one sampled row and two sketch rows.

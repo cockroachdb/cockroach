@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -116,11 +115,7 @@ func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
 }
 
 // Run is part of the Processor interface.
-func (s *sampleAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
+func (s *sampleAggregator) Run(ctx context.Context) {
 	s.input.Start(ctx)
 	s.StartInternal(ctx, sampleAggregatorProcName)
 	defer tracing.FinishSpan(s.span)
