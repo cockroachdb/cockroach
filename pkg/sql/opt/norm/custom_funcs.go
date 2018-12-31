@@ -277,6 +277,11 @@ func (c *CustomFuncs) CanHaveZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.CanBeZero()
 }
 
+// ColsAreEmpty returns true if the column set is empty.
+func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
+	return cols.Empty()
+}
+
 // ColsAreSubset returns true if the left columns are a subset of the right
 // columns.
 func (c *CustomFuncs) ColsAreSubset(left, right opt.ColSet) bool {
@@ -286,6 +291,12 @@ func (c *CustomFuncs) ColsAreSubset(left, right opt.ColSet) bool {
 // ColsAreEqual returns true if left and right contain the same set of columns.
 func (c *CustomFuncs) ColsAreEqual(left, right opt.ColSet) bool {
 	return left.Equals(right)
+}
+
+// ColsIntersect returns true if at least one column appears in both the left
+// and right sets.
+func (c *CustomFuncs) ColsIntersect(left, right opt.ColSet) bool {
+	return left.Intersects(right)
 }
 
 // UnionCols returns the union of the left and right column sets.

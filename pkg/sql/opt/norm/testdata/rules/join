@@ -822,30 +822,26 @@ project
 
 # Ensure that we do not map filters for types with composite key encoding.
 opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
-SELECT * FROM (VALUES (1.0)) AS t1(x), (VALUES (1.00)) AS t2(y) WHERE x=y AND x::text = '1.0'
+SELECT *
+FROM (VALUES (1.0), (2.0)) AS t1(x), (VALUES (1.00), (2.00)) AS t2(y)WHERE x=y AND x::text = '1.0'
 ----
 inner-join
  ├── columns: x:1(decimal!null) y:2(decimal!null)
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1,2)
+ ├── cardinality: [0 - 4]
+ ├── fd: (1)==(2), (2)==(1)
  ├── values
  │    ├── columns: column1:2(decimal)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(2)
- │    └── (1.00,) [type=tuple{decimal}]
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1.00,) [type=tuple{decimal}]
+ │    └── (2.00,) [type=tuple{decimal}]
  ├── select
  │    ├── columns: column1:1(decimal)
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
+ │    ├── cardinality: [0 - 2]
  │    ├── values
  │    │    ├── columns: column1:1(decimal)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1)
- │    │    └── (1.0,) [type=tuple{decimal}]
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1.0,) [type=tuple{decimal}]
+ │    │    └── (2.0,) [type=tuple{decimal}]
  │    └── filters
  │         └── column1::STRING = '1.0' [type=bool, outer=(1)]
  └── filters
