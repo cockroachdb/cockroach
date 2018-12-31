@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1158,6 +1159,12 @@ func setupPartitioningTestCluster(
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// This test configures many sub-tests and is too slow to run under nightly
+	// race stress.
+	if testutils.NightlyStress() && util.RaceEnabled {
+		t.Skip()
+	}
+
 	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
 
@@ -1258,6 +1265,12 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// This test configures many sub-tests and is too slow to run under nightly
+	// race stress.
+	if testutils.NightlyStress() && util.RaceEnabled {
+		t.Skip()
+	}
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
