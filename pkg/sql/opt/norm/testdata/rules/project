@@ -214,19 +214,21 @@ project
 
 # Don't trigger rule when Project column depends on Values column.
 opt expect-not=MergeProjectWithValues
-SELECT column1+1, 3 FROM (VALUES (1, 2))
+SELECT column1+1, 3 FROM (VALUES ($1::int, $2::int))
 ----
 project
  ├── columns: "?column?":3(int) "?column?":4(int!null)
  ├── cardinality: [1 - 1]
+ ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [1 - 1]
+ │    ├── has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
+ │    └── ($1::INT8,) [type=tuple{int}]
  └── projections
       ├── column1 + 1 [type=int, outer=(1)]
       └── const: 3 [type=int]
