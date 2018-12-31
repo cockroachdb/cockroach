@@ -849,6 +849,8 @@ func (p *planner) newPlan(
 		return p.CancelQueries(ctx, n)
 	case *tree.CancelSessions:
 		return p.CancelSessions(ctx, n)
+	case *tree.CommentOnColumn:
+		return p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnDatabase:
 		return p.CommentOnDatabase(ctx, n)
 	case *tree.CommentOnTable:
