@@ -43,6 +43,8 @@ const (
 	EventLogTruncateTable EventLogType = "truncate_table"
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
+	// EventLogCommentOnColumn is recorded when a column is commented.
+	EventLogCommentOnColumn EventLogType = "comment_on_column"
 	// EventLogCommentOnTable is recorded when a table is commented.
 	EventLogCommentOnDatabase EventLogType = "comment_on_database"
 	// EventLogCommentOnTable is recorded when a table is commented.
