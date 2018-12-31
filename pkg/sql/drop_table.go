@@ -492,6 +492,17 @@ func (p *planner) removeTableComment(
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.TableCommentType,
 		tableDesc.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2",
+		keys.ColumnCommentType,
+		tableDesc.ID)
 
 	return err
 }

@@ -711,8 +711,25 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid, ok := args[0].(*tree.DOid)
+				if !ok {
+					return tree.DNull, nil
+				}
+
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_coldesc",
+					ctx.Txn,
+					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 AND objsubid=$2 LIMIT 1;",
+					oid.DInt,
+					args[1])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
 			},
 			Info: notUsableInfo,
 		},
