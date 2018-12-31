@@ -47,6 +47,7 @@ copy_from_stmt ::=
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 
 execute_stmt ::=
 	'EXECUTE' table_alias_name execute_param_clause
@@ -206,6 +207,10 @@ database_name ::=
 comment_text ::=
 	'SCONST'
 	| 'NULL'
+
+column_path ::=
+	name
+	| prefixed_column_path
 
 table_alias_name ::=
 	name
@@ -535,6 +540,11 @@ set_clause_list ::=
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
+
+prefixed_column_path ::=
+	db_object_name_component '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
 expr_list ::=
 	( a_expr ) ( ( ',' a_expr ) )*
@@ -1145,18 +1155,6 @@ complex_db_object_name ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
-
-kv_option ::=
-	name '=' string_or_placeholder
-	| name
-	| 'SCONST' '=' string_or_placeholder
-	| 'SCONST'
-
 db_object_name_component ::=
 	name
 	| cockroachdb_extra_type_func_name_keyword
@@ -1168,6 +1166,18 @@ unrestricted_name ::=
 	| col_name_keyword
 	| type_func_name_keyword
 	| reserved_keyword
+
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
+kv_option ::=
+	name '=' string_or_placeholder
+	| name
+	| 'SCONST' '=' string_or_placeholder
+	| 'SCONST'
 
 transaction_mode ::=
 	transaction_user_priority
@@ -1481,6 +1491,13 @@ single_set_clause ::=
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
 
+cockroachdb_extra_type_func_name_keyword ::=
+	'FAMILY'
+
+cockroachdb_extra_reserved_keyword ::=
+	'INDEX'
+	| 'NOTHING'
+
 type_func_name_keyword ::=
 	'COLLATION'
 	| 'CROSS'
@@ -1499,13 +1516,6 @@ type_func_name_keyword ::=
 	| 'RIGHT'
 	| 'SIMILAR'
 	| cockroachdb_extra_type_func_name_keyword
-
-cockroachdb_extra_type_func_name_keyword ::=
-	'FAMILY'
-
-cockroachdb_extra_reserved_keyword ::=
-	'INDEX'
-	| 'NOTHING'
 
 reserved_keyword ::=
 	'ALL'
@@ -1921,10 +1931,6 @@ opt_interval ::=
 	interval_qualifier
 	| 
 
-column_path ::=
-	name
-	| prefixed_column_path
-
 func_application ::=
 	func_name '(' ')'
 	| func_name '(' expr_list ')'
@@ -2100,11 +2106,6 @@ interval_qualifier ::=
 	| 'HOUR' 'TO' 'MINUTE'
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
-
-prefixed_column_path ::=
-	db_object_name_component '.' unrestricted_name
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
 func_name ::=
 	type_function_name
