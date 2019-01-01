@@ -20,20 +20,22 @@ import (
 )
 
 // HasDuplicateRefs returns true if the target projection expressions or
-// passthrough columns reference any outer column more than one time, or if the
-// projection expressions contain a correlated subquery. For example:
+// passthrough columns reference any column in the given target set more than
+// one time, or if the projection expressions contain a correlated subquery.
+// For example:
 //
 //   SELECT x+1, x+2, y FROM a
 //
 // HasDuplicateRefs would be true, since the x column is referenced twice.
 //
 // Correlated subqueries are disallowed since it introduces additional
-// complexity for a case that's not too important for inlining.
+// complexity for a case that's not too important for inlining. Also, skipping
+// correlated subqueries minimizes expensive searching in deep trees.
 func (c *CustomFuncs) HasDuplicateRefs(
-	projections memo.ProjectionsExpr, passthrough opt.ColSet,
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, targetCols opt.ColSet,
 ) bool {
-	// Start with copy of passthrough columns, as they each count as a ref.
-	refs := passthrough.Copy()
+	// Passthrough columns that reference a target column count as refs.
+	refs := passthrough.Intersection(targetCols)
 	for i := range projections {
 		item := &projections[i]
 		if item.ScalarProps(c.mem).HasCorrelatedSubquery {
@@ -41,13 +43,19 @@ func (c *CustomFuncs) HasDuplicateRefs(
 			return true
 		}
 
-		// When a column reference is found, add it to the refs set. If the set
-		// already contains a reference to that column, then there is a duplicate.
-		// findDupRefs returns true if the subtree contains at least one duplicate.
+		// When a target column reference is found, add it to the refs set. If
+		// the set already contains a reference to that column, then there is a
+		// duplicate. findDupRefs returns true if the subtree contains at least
+		// one duplicate.
 		var findDupRefs func(e opt.Expr) bool
 		findDupRefs = func(e opt.Expr) bool {
 			switch t := e.(type) {
 			case *memo.VariableExpr:
+				// Ignore references to non-target columns.
+				if !targetCols.Contains(int(t.Col)) {
+					return false
+				}
+
 				// Count Variable references.
 				if refs.Contains(int(t.Col)) {
 					return true

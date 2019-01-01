@@ -239,6 +239,40 @@ project
       ├── k != 1 [type=bool, outer=(1)]
       └── i + 1 [type=int, outer=(2)]
 
+# Multiple synthesized column references to same inner passthrough column
+# (should still inline).
+opt expect=InlineProjectInProject
+SELECT x+1, x+2, y1+2 FROM (SELECT x, y+1 AS y1 FROM xy)
+----
+project
+ ├── columns: "?column?":4(int) "?column?":5(int) "?column?":6(int)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      ├── x + 1 [type=int, outer=(1)]
+      ├── x + 2 [type=int, outer=(1)]
+      └── (y + 1) + 2 [type=int, outer=(2)]
+
+# Synthesized and passthrough references to same inner passthrough column
+# (should still inline).
+opt expect=InlineProjectInProject
+SELECT x+y1 FROM (SELECT x, y+1 AS y1 FROM xy) ORDER BY x
+----
+project
+ ├── columns: "?column?":4(int)  [hidden: x:1(int!null)]
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ ├── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ └── projections
+      └── x + (y + 1) [type=int, outer=(1,2)]
+
 # Inline multiple expressions.
 opt expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
