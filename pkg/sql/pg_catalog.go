@@ -333,7 +333,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 					defSrc := tree.NewDString(*column.DefaultExpr)
 					return addRow(
 						h.ColumnOid(db, scName, table, column), // oid
-						h.TableOid(db, scName, table),          // adrelid
+						h.TableOid(table.ID),                   // adrelid
 						tree.NewDInt(tree.DInt(colNum)),        // adnum
 						defSrc, // adbin
 						defSrc, // adsrc
@@ -402,7 +402,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 
 			// Columns for table.
 			if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-				tableID := h.TableOid(db, scName, table)
+				tableID := h.TableOid(table.ID)
 				return addColumn(column, tableID, column.ID)
 			}); err != nil {
 				return err
@@ -498,18 +498,18 @@ CREATE TABLE pg_catalog.pg_class (
 				}
 				namespaceOid := h.NamespaceOid(db, scName)
 				if err := addRow(
-					h.TableOid(db, scName, table), // oid
-					tree.NewDName(table.Name),     // relname
-					namespaceOid,                  // relnamespace
-					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
-					tree.DNull,                    // relowner
-					tree.DNull,                    // relam
-					oidZero,                       // relfilenode
-					oidZero,                       // reltablespace
-					tree.DNull,                    // relpages
-					tree.DNull,                    // reltuples
-					zeroVal,                       // relallvisible
-					oidZero,                       // reltoastrelid
+					h.TableOid(table.ID),      // oid
+					tree.NewDName(table.Name), // relname
+					namespaceOid,              // relnamespace
+					oidZero,                   // reltype (PG creates a composite type in pg_type for each table)
+					tree.DNull,                // relowner
+					tree.DNull,                // relam
+					oidZero,                   // relfilenode
+					oidZero,                   // reltablespace
+					tree.DNull,                // relpages
+					tree.DNull,                // reltuples
+					zeroVal,                   // relallvisible
+					oidZero,                   // reltoastrelid
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 					tree.DBoolFalse,                                     // relisshared
 					relPersistencePermanent,                             // relPersistence
@@ -688,7 +688,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 				return err
 			}
 			namespaceOid := h.NamespaceOid(db, scName)
-			tblOid := h.TableOid(db, scName, table)
+			tblOid := h.TableOid(table.ID)
 			for conName, con := range conInfo {
 				oid := tree.DNull
 				contype := tree.DNull
@@ -726,7 +726,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
 					contype = conTypeFK
 					conindid = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, con.ReferencedIndex)
-					confrelid = h.TableOid(referencedDB, tree.PublicSchema, con.ReferencedTable)
+					confrelid = h.TableOid(con.ReferencedTable.ID)
 					confupdtype = fkActionNone
 					confdeltype = fkActionNone
 					confmatchtype = fkMatchTypeSimple
@@ -867,7 +867,7 @@ CREATE TABLE pg_catalog.pg_database (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				h.DBOid(db),                // oid
+				h.DBOid(db.ID),             // oid
 				tree.NewDName(db.Name),     // datname
 				tree.DNull,                 // datdba
 				builtins.DatEncodingUTFId,  // encoding
@@ -947,8 +947,8 @@ CREATE TABLE pg_catalog.pg_depend (
 			if err != nil {
 				return err
 			}
-			pgConstraintTableOid := h.TableOid(db, pgCatalogName, pgConstraintsDesc)
-			pgClassTableOid := h.TableOid(db, pgCatalogName, pgClassDesc)
+			pgConstraintTableOid := h.TableOid(pgConstraintsDesc.ID)
+			pgClassTableOid := h.TableOid(pgClassDesc.ID)
 			for _, con := range conInfo {
 				if con.Kind != sqlbase.ConstraintTypeFK {
 					continue
@@ -1020,7 +1020,7 @@ CREATE TABLE pg_catalog.pg_description (
 				tableLookup tableLookupFn) error {
 				if comment, ok := commentMap[tree.DInt(table.ID)]; ok {
 					return addRow(
-						h.TableOid(db, scName, table),
+						h.TableOid(table.ID),
 						oidZero,
 						comment[1],
 						comment[2])
@@ -1035,7 +1035,7 @@ CREATE TABLE pg_catalog.pg_description (
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
 			if comment, ok := commentMap[tree.DInt(db.ID)]; ok {
 				return addRow(
-					h.DBOid(db),
+					h.DBOid(db.ID),
 					oidZero,
 					comment[1],
 					comment[2])
@@ -1192,7 +1192,7 @@ CREATE TABLE pg_catalog.pg_index (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				tableOid := h.TableOid(db, scName, table)
+				tableOid := h.TableOid(table.ID)
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.ID)
@@ -1793,7 +1793,7 @@ CREATE TABLE pg_catalog.pg_sequence (
 				}
 				opts := table.SequenceOpts
 				return addRow(
-					h.TableOid(db, scName, table),           // seqrelid
+					h.TableOid(table.ID),                    // seqrelid
 					tree.NewDOid(tree.DInt(oid.T_int8)),     // seqtypid
 					tree.NewDInt(tree.DInt(opts.Start)),     // seqstart
 					tree.NewDInt(tree.DInt(opts.Increment)), // seqincrement
@@ -2407,8 +2407,6 @@ type oidTypeTag uint8
 const (
 	_ oidTypeTag = iota
 	namespaceTypeTag
-	databaseTypeTag
-	tableTypeTag
 	indexTypeTag
 	columnTypeTag
 	checkConstraintTypeTag
@@ -2472,20 +2470,12 @@ func (h oidHasher) NamespaceOid(db *sqlbase.DatabaseDescriptor, scName string) *
 	return h.getOid()
 }
 
-func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *tree.DOid {
-	h.writeTypeTag(databaseTypeTag)
-	h.writeDB(db)
-	return h.getOid()
+func (h oidHasher) DBOid(dbID sqlbase.ID) *tree.DOid {
+	return tree.NewDOid(tree.DInt(dbID))
 }
 
-func (h oidHasher) TableOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor,
-) *tree.DOid {
-	h.writeTypeTag(tableTypeTag)
-	h.writeDB(db)
-	h.writeSchema(scName)
-	h.writeTable(table)
-	return h.getOid()
+func (h oidHasher) TableOid(tableID sqlbase.ID) *tree.DOid {
+	return tree.NewDOid(tree.DInt(tableID))
 }
 
 func (h oidHasher) IndexOid(

@@ -1115,7 +1115,7 @@ var informationSchemaTablesTable = virtualSchemaTable{
 				}
 				tableType := tableTypeBaseTable
 				insertable := yesString
-				if isVirtualDescriptor(table) {
+				if table.IsVirtualTable() {
 					tableType = tableTypeSystemView
 					insertable = noString
 				} else if table.IsView() {

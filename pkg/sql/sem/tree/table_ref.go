@@ -17,6 +17,9 @@ package tree
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID uint32
 
+// SignedID is a custom type for signed version of ID.
+type SignedID int32
+
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID uint32
 

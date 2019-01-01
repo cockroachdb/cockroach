@@ -54,7 +54,7 @@ type virtualSchema struct {
 type virtualSchemaDef interface {
 	getSchema() string
 	initVirtualTableDesc(
-		ctx context.Context, st *cluster.Settings,
+		ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 	) (sqlbase.TableDescriptor, error)
 }
 
@@ -92,7 +92,7 @@ func (t virtualSchemaTable) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (t virtualSchemaTable) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings,
+	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
@@ -117,7 +117,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		st,
 		create,
 		0, /* parentID */
-		keys.VirtualDescriptorID,
+		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
 		nil, /* affected */
@@ -134,7 +134,7 @@ func (v virtualSchemaView) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings,
+	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
 	if err != nil {
@@ -147,7 +147,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		create,
 		v.resultColumns,
 		0,
-		keys.VirtualDescriptorID,
+		id,
 		hlc.Timestamp{},
 		publicSelectPrivileges,
 		nil, // semaCtx
@@ -301,8 +301,10 @@ func NewVirtualSchemaHolder(
 		defs := make(map[string]virtualDefEntry, len(schema.tableDefs))
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
+		var id sqlbase.ID
 		for _, def := range schema.tableDefs {
-			tableDesc, err := def.initVirtualTableDesc(ctx, st)
+			id--
+			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to initialize %s", def.getSchema())
@@ -407,10 +409,4 @@ func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 		return nil, err
 	}
 	return t.desc, nil
-}
-
-// isVirtualDescriptor checks if the provided DescriptorProto is an instance of
-// a Virtual Descriptor.
-func isVirtualDescriptor(desc sqlbase.DescriptorProto) bool {
-	return desc.GetID() == keys.VirtualDescriptorID
 }
