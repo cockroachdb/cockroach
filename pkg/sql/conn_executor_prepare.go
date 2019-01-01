@@ -127,10 +127,7 @@ func (ex *connExecutor) addPreparedStmt(
 	if err := prepared.memAcc.Grow(ctx, int64(len(name))); err != nil {
 		return nil, err
 	}
-	ex.prepStmtsNamespace.prepStmts[name] = prepStmtEntry{
-		PreparedStatement: prepared,
-		portals:           make(map[string]struct{}),
-	}
+	ex.prepStmtsNamespace.prepStmts[name] = prepared
 	return prepared, nil
 }
 
@@ -151,6 +148,7 @@ func (ex *connExecutor) prepare(
 	prepared := &PreparedStatement{
 		TypeHints: placeholderHints,
 		memAcc:    ex.sessionMon.MakeBoundAccount(),
+		refCount:  1,
 	}
 	// NB: if we start caching the plan, we'll want to keep around the memory
 	// account used for the plan, rather than clearing it.
@@ -370,7 +368,7 @@ func (ex *connExecutor) execBind(
 
 	// Create the new PreparedPortal.
 	if err := ex.addPortal(
-		ctx, portalName, bindCmd.PreparedStatementName, ps.PreparedStatement, qargs, columnFormatCodes,
+		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes,
 	); err != nil {
 		return retErr(err)
 	}
@@ -404,27 +402,20 @@ func (ex *connExecutor) addPortal(
 		return err
 	}
 
-	ex.prepStmtsNamespace.portals[portalName] = portalEntry{
-		PreparedPortal: portal,
-		psName:         psName,
-	}
-	ex.prepStmtsNamespace.prepStmts[psName].portals[portalName] = struct{}{}
+	ex.prepStmtsNamespace.portals[portalName] = portal
 	return nil
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
-	psEntry, ok := ex.prepStmtsNamespace.prepStmts[name]
+	ps, ok := ex.prepStmtsNamespace.prepStmts[name]
 	if !ok {
 		return
 	}
 	// If the prepared statement only exists in prepStmtsNamespace, it's up to us
 	// to close it.
 	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.prepStmts[name]
-	if !inBase || (baseP.PreparedStatement != psEntry.PreparedStatement) {
-		psEntry.close(ctx)
-	}
-	for portalName := range psEntry.portals {
-		ex.deletePortal(ctx, portalName)
+	if !inBase || (baseP != ps) {
+		ps.decRef(ctx)
 	}
 	delete(ex.prepStmtsNamespace.prepStmts, name)
 }
@@ -436,11 +427,10 @@ func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
 	}
 	// If the portal only exists in prepStmtsNamespace, it's up to us to close it.
 	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals[name]
-	if !inBase || (baseP.PreparedPortal != portalEntry.PreparedPortal) {
+	if !inBase || (baseP != portalEntry) {
 		portalEntry.close(ctx)
 	}
 	delete(ex.prepStmtsNamespace.portals, name)
-	delete(ex.prepStmtsNamespace.prepStmts[portalEntry.psName].portals, name)
 }
 
 func (ex *connExecutor) execDelPrepStmt(

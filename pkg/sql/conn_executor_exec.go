@@ -318,13 +318,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ps.PreparedStatement, name, s.Params, ex.sessionData.SearchPath)
+		pinfo, err = fillInPlaceholders(ps, name, s.Params, ex.sessionData.SearchPath)
 		if err != nil {
 			return makeErrEvent(err)
 		}
 
 		stmt.AST = ps.Statement
-		stmt.Prepared = ps.PreparedStatement
+		stmt.Prepared = ps
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.Statement)
