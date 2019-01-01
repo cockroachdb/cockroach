@@ -495,8 +495,8 @@ func (s *Server) newConnExecutor(
 		sessionMon:  &sessionMon,
 		sessionData: sd,
 		prepStmtsNamespace: prepStmtNamespace{
-			prepStmts: make(map[string]prepStmtEntry),
-			portals:   make(map[string]portalEntry),
+			prepStmts: make(map[string]*PreparedStatement),
+			portals:   make(map[string]*PreparedPortal),
 		},
 		state: txnState{
 			mon:     &txnMon,
@@ -956,29 +956,13 @@ func (ch *ctxHolder) unhijack() {
 type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
-	prepStmts map[string]prepStmtEntry
+	prepStmts map[string]*PreparedStatement
 	// portals contains the portals currently available on the session.
-	portals map[string]portalEntry
-}
-
-type prepStmtEntry struct {
-	*PreparedStatement
-	portals map[string]struct{}
-}
-
-func (pe *prepStmtEntry) copy() prepStmtEntry {
-	cpy := prepStmtEntry{}
-	cpy.PreparedStatement = pe.PreparedStatement
-	cpy.portals = make(map[string]struct{})
-	for pname := range pe.portals {
-		cpy.portals[pname] = struct{}{}
-	}
-	return cpy
-}
-
-type portalEntry struct {
-	*PreparedPortal
-	psName string
+	// TODO(andrei): The lifetime of portals is different from the Postgres. In
+	// Postgres portals are tied to a transaction, and also one can't be reused
+	// after exhausting its results. Everything we do about portals is nonsense
+	// because we didn't understand them when we implemented them.
+	portals map[string]*PreparedPortal
 }
 
 // resetTo resets a namespace to equate another one (`to`). Prep stmts and portals
@@ -990,15 +974,15 @@ func (ns *prepStmtNamespace) resetTo(ctx context.Context, to *prepStmtNamespace)
 		bps, ok := to.prepStmts[name]
 		// If the prepared statement didn't exist before (including if a statement
 		// with the same name existed, but it was different), close it.
-		if !ok || bps.PreparedStatement != ps.PreparedStatement {
-			ps.close(ctx)
+		if !ok || bps != ps {
+			ps.decRef(ctx)
 		}
 	}
 	for name, p := range ns.portals {
 		bp, ok := to.portals[name]
-		// If the prepared statement didn't exist before (including if a statement
-		// with the same name existed, but it was different), close it.
-		if !ok || bp.PreparedPortal != p.PreparedPortal {
+		// If the portal didn't exist before (including if a portal with the same
+		// name existed, but it was different), close it.
+		if !ok || bp != p {
 			p.close(ctx)
 		}
 	}
@@ -1007,11 +991,11 @@ func (ns *prepStmtNamespace) resetTo(ctx context.Context, to *prepStmtNamespace)
 
 func (ns *prepStmtNamespace) copy() prepStmtNamespace {
 	var cpy prepStmtNamespace
-	cpy.prepStmts = make(map[string]prepStmtEntry)
-	for name, psEntry := range ns.prepStmts {
-		cpy.prepStmts[name] = psEntry.copy()
+	cpy.prepStmts = make(map[string]*PreparedStatement)
+	for name, pp := range ns.prepStmts {
+		cpy.prepStmts[name] = pp
 	}
-	cpy.portals = make(map[string]portalEntry)
+	cpy.portals = make(map[string]*PreparedPortal)
 	for name, p := range ns.portals {
 		cpy.portals[name] = p
 	}
@@ -2193,7 +2177,7 @@ var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 // Get is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
 	s, ok := ps.ex.prepStmtsNamespace.prepStmts[name]
-	return s.PreparedStatement, ok
+	return s, ok
 }
 
 // Delete is part of the preparedStatementsAccessor interface.
@@ -2209,8 +2193,8 @@ func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool 
 // DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
 	ps.ex.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]prepStmtEntry),
-		portals:   make(map[string]portalEntry),
+		prepStmts: make(map[string]*PreparedStatement),
+		portals:   make(map[string]*PreparedPortal),
 	}
 }
 

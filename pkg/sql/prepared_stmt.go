@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
 )
@@ -58,11 +59,31 @@ type PreparedStatement struct {
 	// identifiers. Used for reporting on Describe.
 	InTypes []oid.Oid
 
-	memAcc mon.BoundAccount
+	// refCount keeps track of the number of references to this PreparedStatement.
+	// New references are registered through incRef().
+	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
+	// closed.
+	// Most references are being held by portals created from this prepared
+	// statement.
+	refCount int
+	memAcc   mon.BoundAccount
 }
 
-func (p *PreparedStatement) close(ctx context.Context) {
-	p.memAcc.Close(ctx)
+func (p *PreparedStatement) decRef(ctx context.Context) {
+	if p.refCount == 0 {
+		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+	}
+	p.refCount--
+	if p.refCount == 0 {
+		p.memAcc.Close(ctx)
+	}
+}
+
+func (p *PreparedStatement) incRef(ctx context.Context) {
+	if p.refCount == 0 {
+		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+	}
+	p.refCount++
 }
 
 // preparedStatementsAccessor gives a planner access to a session's collection
@@ -111,9 +132,12 @@ func (ex *connExecutor) newPreparedPortal(
 	if err := portal.memAcc.Grow(ctx, sz); err != nil {
 		return nil, err
 	}
+	// The portal keeps a reference to the PreparedStatement, so register it.
+	stmt.incRef(ctx)
 	return portal, nil
 }
 
 func (p *PreparedPortal) close(ctx context.Context) {
 	p.memAcc.Close(ctx)
+	p.Stmt.decRef(ctx)
 }
