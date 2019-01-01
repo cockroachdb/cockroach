@@ -329,7 +329,7 @@ const (
 // txnEvent is part of advanceInfo, informing the connExecutor about some
 // transaction events. It is used by the connExecutor to clear state associated
 // with a SQL transaction (other than the state encapsulated in TxnState; e.g.
-// as schema changes).
+// schema changes and portals).
 //
 //go:generate stringer -type=txnEvent
 type txnEvent int
