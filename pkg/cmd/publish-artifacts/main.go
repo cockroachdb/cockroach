@@ -17,7 +17,6 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"flag"
@@ -43,7 +42,11 @@ const (
 	awsAccessKeyIDKey      = "AWS_ACCESS_KEY_ID"
 	awsSecretAccessKeyKey  = "AWS_SECRET_ACCESS_KEY"
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
+
+	provisionalReleasePrefix = "provisional_"
 )
+
+var provisionalReleaseSuffixRE = regexp.MustCompile(`_[0-9a-f]{40}$`)
 
 type s3putter interface {
 	PutObject(*s3.PutObjectInput) (*s3.PutObjectOutput, error)
@@ -107,6 +110,20 @@ func main() {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
 
+	// If the tag starts with "provisional_", then we're building a binary that
+	// we hope will be some final release and the tag will be of the form
+	// `provisional_<semver>_<fullsha>`. If all goes well with the long running
+	// tests, these bits will be released exactly as-is, so the version is set
+	// to <semver> by stripping the prefix and suffix.
+	if strings.HasPrefix(branch, provisionalReleasePrefix) {
+		if provisionalReleaseSuffixRE.FindStringIndex(branch) == nil {
+			log.Fatalf("expected tag of the form provisional_<semver>_<fullsha> got: %s", branch)
+		}
+		branch = strings.TrimPrefix(branch, provisionalReleasePrefix)
+		branch = provisionalReleaseSuffixRE.ReplaceAllLiteralString(branch, "")
+	}
+	log.Print(branch)
+
 	var versionStr string
 	var isStableRelease bool
 	if *isRelease {
@@ -117,7 +134,7 @@ func main() {
 
 		// Prerelease returns anything after the `-` and before metadata. eg: `beta` for `1.0.1-beta+metadata`
 		if ver.PreRelease() == "" {
-			isStableRelease = true
+			// isStableRelease = true
 		}
 		versionStr = branch
 	} else {
@@ -152,13 +169,13 @@ func main() {
 		releaseVersionStrs = append(releaseVersionStrs, latestStr)
 	}
 
-	if *isRelease {
-		buildArchive(svc, opts{
-			PkgDir:             pkg.Dir,
-			BucketName:         bucketName,
-			ReleaseVersionStrs: releaseVersionStrs,
-		})
-	}
+	// if *isRelease {
+	// 	buildArchive(svc, opts{
+	// 		PkgDir:             pkg.Dir,
+	// 		BucketName:         bucketName,
+	// 		ReleaseVersionStrs: releaseVersionStrs,
+	// 	})
+	// }
 
 	for _, target := range []struct {
 		buildType string
@@ -167,10 +184,10 @@ func main() {
 		// TODO(tamird): consider shifting this information into the builder
 		// image; it's conceivable that we'll want to target multiple versions
 		// of a given triple.
-		{buildType: "darwin", suffix: ".darwin-10.9-amd64"},
+		// {buildType: "darwin", suffix: ".darwin-10.9-amd64"},
 		{buildType: "linux-gnu", suffix: ".linux-2.6.32-gnu-amd64"},
-		{buildType: "linux-musl", suffix: ".linux-2.6.32-musl-amd64"},
-		{buildType: "windows", suffix: ".windows-6.2-amd64.exe"},
+		// {buildType: "linux-musl", suffix: ".linux-2.6.32-musl-amd64"},
+		// {buildType: "windows", suffix: ".windows-6.2-amd64.exe"},
 	} {
 		for i, extraArgs := range []struct {
 			goflags string
@@ -183,7 +200,7 @@ func main() {
 			// build cache.
 			//
 			// {suffix: ".deadlock", tags: "deadlock"},
-			{suffix: ".race", goflags: "-race"},
+			// {suffix: ".race", goflags: "-race"},
 		} {
 			var o opts
 			o.ReleaseVersionStrs = releaseVersionStrs
@@ -191,7 +208,6 @@ func main() {
 			o.Branch = branch
 			o.VersionStr = versionStr
 			o.BucketName = bucketName
-			o.Branch = branch
 			o.BuildType = target.buildType
 			o.GoFlags = extraArgs.goflags
 			o.Suffix = extraArgs.suffix + target.suffix
@@ -213,15 +229,6 @@ func main() {
 
 			buildOneCockroach(svc, o)
 		}
-	}
-
-	if !*isRelease {
-		buildOneWorkload(svc, opts{
-			PkgDir:     pkg.Dir,
-			BucketName: bucketName,
-			Branch:     branch,
-			VersionStr: versionStr,
-		})
 	}
 }
 
@@ -276,6 +283,7 @@ func buildOneCockroach(svc s3putter, o opts) {
 		args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix))
 		args = append(args, fmt.Sprintf("%s=%s", "TAGS", o.Tags))
 		args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
+		args = append(args, fmt.Sprintf("%s=%s", "BUILDINFO_TAG", o.VersionStr))
 		if *isRelease {
 			args = append(args, fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true"))
 		}
@@ -307,24 +315,24 @@ func buildOneCockroach(svc s3putter, o opts) {
 		// non-zero.
 		//
 		// TODO(tamird): implement this for all targets.
-		if !strings.HasSuffix(o.BuildType, "linux-musl") {
-			cmd := exec.Command("ldd", binaryName)
-			cmd.Dir = o.PkgDir
-			log.Printf("%s %s", cmd.Env, cmd.Args)
-			out, err := cmd.Output()
-			if err != nil {
-				log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
-			}
-			scanner := bufio.NewScanner(bytes.NewReader(out))
-			for scanner.Scan() {
-				if line := scanner.Text(); !libsRe.MatchString(line) {
-					log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
-				}
-			}
-			if err := scanner.Err(); err != nil {
-				log.Fatal(err)
-			}
-		}
+		// if !strings.HasSuffix(o.BuildType, "linux-musl") {
+		// 	cmd := exec.Command("ldd", binaryName)
+		// 	cmd.Dir = o.PkgDir
+		// 	log.Printf("%s %s", cmd.Env, cmd.Args)
+		// 	out, err := cmd.Output()
+		// 	if err != nil {
+		// 		log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
+		// 	}
+		// 	scanner := bufio.NewScanner(bytes.NewReader(out))
+		// 	for scanner.Scan() {
+		// 		if line := scanner.Text(); !libsRe.MatchString(line) {
+		// 			log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
+		// 		}
+		// 	}
+		// 	if err := scanner.Err(); err != nil {
+		// 		log.Fatal(err)
+		// 	}
+		// }
 	}
 
 	o.Base = "cockroach" + o.Suffix
@@ -343,42 +351,6 @@ func buildOneCockroach(svc s3putter, o opts) {
 	} else {
 		putRelease(svc, o)
 	}
-	if err := o.Binary.Close(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func buildOneWorkload(svc s3putter, o opts) {
-	defer func() {
-		log.Printf("done building workload: %s", pretty.Sprint(o))
-	}()
-
-	if *isRelease {
-		log.Fatalf("refusing to build workload in release mode")
-	}
-
-	{
-		cmd := exec.Command("make", "bin/workload")
-		cmd.Dir = o.PkgDir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("%s: %s", cmd.Args, err)
-		}
-	}
-
-	o.Base = "workload"
-	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", o.Base)
-	{
-		var err error
-		o.Binary, err = os.Open(o.AbsolutePath)
-
-		if err != nil {
-			log.Fatalf("os.Open(%s): %s", o.AbsolutePath, err)
-		}
-	}
-	putNonRelease(svc, o)
 	if err := o.Binary.Close(); err != nil {
 		log.Fatal(err)
 	}
