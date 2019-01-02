@@ -110,11 +110,6 @@ message SuggestedCompaction {
 message ReplicatedEvalResult {
   option (gogoproto.equal) = true;
 
-  // The start and end key of the proposal's range. Since VersionNoRaftProposalKeys
-  // these are no longer used, but the fields are preserved so they can be populated
-  // for versions beneath this. See #16075.
-  bytes deprecated_start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-  bytes deprecated_end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   // Whether to block concurrent readers while processing the proposal data.
   bool block_reads = 1;
   // Updates to the Replica's ReplicaState. By convention and as outlined on
@@ -139,6 +134,7 @@ message ReplicatedEvalResult {
   storage.engine.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
   int64 raft_log_delta = 13;
+  reserved 14, 15;
 
   // AddSSTable is a side effect that must execute before the Raft application
   // is committed. It must be idempotent to account for an ill-timed crash after
