@@ -25,26 +25,28 @@ import (
 )
 
 func registerScrubIndexOnlyTPCC(r *registry) {
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "index-only", 3))
+	// numScrubRuns is set to 5 assuming a single SCRUB run (index only) takes ~20 min
+	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "index-only", 5))
 }
 
 func registerScrubAllChecksTPCC(r *registry) {
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "all-checks", 2))
+	// numScrubRuns is set to 3 assuming a single SCRUB run (all checks) takes ~35 min
+	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "all-checks", 3))
 }
 
 func makeScrubTPCCTest(
 	numNodes, warehouses int, length time.Duration, optionName string, numScrubRuns int,
 ) testSpec {
 	var stmtOptions string
-	// SCRUB checks are run at -5s to avoid contention with TPCC traffic.
+	// SCRUB checks are run at -1m to avoid contention with TPCC traffic.
 	// By the time the SCRUB queries start, the tables will have been loaded for
 	// some time (since it takes some time to run the TPCC consistency checks),
 	// so using a timestamp in the past is fine.
 	switch optionName {
 	case "index-only":
-		stmtOptions = `AS OF SYSTEM TIME '-5s' WITH OPTIONS INDEX ALL`
+		stmtOptions = `AS OF SYSTEM TIME '-1m' WITH OPTIONS INDEX ALL`
 	case "all-checks":
-		stmtOptions = `AS OF SYSTEM TIME '-5s'`
+		stmtOptions = `AS OF SYSTEM TIME '-1m'`
 	default:
 		panic(fmt.Sprintf("Not a valid option: %s", optionName))
 	}
@@ -57,6 +59,16 @@ func makeScrubTPCCTest(
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
+					if !c.isLocal() {
+						// Wait until tpcc has been running for a few minutes to start SCRUB checks
+						sleepInterval := time.Minute * 10
+						maxSleep := length / 2
+						if sleepInterval > maxSleep {
+							sleepInterval = maxSleep
+						}
+						time.Sleep(sleepInterval)
+					}
+
 					conn := c.Conn(ctx, 1)
 					defer conn.Close()
 
