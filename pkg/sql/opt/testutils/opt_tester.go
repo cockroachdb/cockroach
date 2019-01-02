@@ -248,9 +248,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		if err := ot.postProcess(e); err != nil {
-			tb.Fatal(err)
-		}
+		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "norm":
@@ -263,9 +261,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		if err := ot.postProcess(e); err != nil {
-			tb.Fatal(err)
-		}
+		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "opt":
@@ -273,9 +269,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		if err := ot.postProcess(e); err != nil {
-			tb.Fatal(err)
-		}
+		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "optsteps":
@@ -325,7 +319,7 @@ func formatRuleSet(r RuleSet) string {
 	return buf.String()
 }
 
-func (ot *OptTester) postProcess(e opt.Expr) error {
+func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
 	fillInLazyProps(e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
@@ -336,16 +330,14 @@ func (ot *OptTester) postProcess(e opt.Expr) error {
 
 	if !ot.Flags.ExpectedRules.SubsetOf(ot.seenRules) {
 		unseen := ot.Flags.ExpectedRules.Difference(ot.seenRules)
-		return fmt.Errorf("expected to see %s, but was not triggered. Did see %s",
+		d.Fatalf(tb, "expected to see %s, but was not triggered. Did see %s",
 			formatRuleSet(unseen), formatRuleSet(ot.seenRules))
 	}
 
 	if ot.Flags.UnexpectedRules.Intersects(ot.seenRules) {
 		seen := ot.Flags.UnexpectedRules.Intersection(ot.seenRules)
-		return fmt.Errorf("expected not to see %s, but it was triggered", formatRuleSet(seen))
+		d.Fatalf(tb, "expected not to see %s, but it was triggered", formatRuleSet(seen))
 	}
-
-	return nil
 }
 
 // Fills in lazily-derived properties (for display).
