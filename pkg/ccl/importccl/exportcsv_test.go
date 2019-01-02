@@ -72,7 +72,7 @@ func TestExportImportBank(t *testing.T) {
 	db, dir, cleanup := setupExportableBank(t, 3, 100)
 	defer cleanup()
 
-	// Add some unicode to prove FmtParseDatums works as advertised.
+	// Add some unicode to prove FmtExport works as advertised.
 	db.Exec(t, "UPDATE bank SET payload = payload || '✅' WHERE id = 5")
 	db.Exec(t, "UPDATE bank SET payload = NULL WHERE id % 2 = 0")
 

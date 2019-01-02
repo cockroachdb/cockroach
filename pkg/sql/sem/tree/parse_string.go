@@ -54,7 +54,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 }
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
-// round-trip when printing a Datum with FmtParseDatums.
+// round-trip when printing a Datum with FmtExport.
 func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	switch t {
 	case types.Bytes:

@@ -228,7 +228,7 @@ func (sp *csvWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
 		}
-		f := tree.NewFmtCtxWithBuf(tree.FmtParseDatums)
+		f := tree.NewFmtCtxWithBuf(tree.FmtExport)
 		defer f.Close()
 
 		csvRow := make([]string, len(types))
