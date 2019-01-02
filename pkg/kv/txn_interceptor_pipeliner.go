@@ -192,8 +192,7 @@ func (tp *txnPipeliner) SendLocked(
 // outstandingWrites tree. Once this limit is hit, we'll either need to
 // proactively prove outstanding writes or stop pipelining new writes.
 func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
-	asyncConsensus := tp.st.Version.IsActive(cluster.VersionAsyncConsensus) &&
-		pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
+	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove

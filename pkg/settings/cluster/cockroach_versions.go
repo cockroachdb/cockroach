@@ -63,7 +63,7 @@ const (
 	VersionClientSideWritingFlag
 	VersionColumnarTimeSeries
 	VersionTxnCoordMetaInvalidField
-	VersionAsyncConsensus
+	VersionAsyncConsensus // unused
 	VersionBatchResponse
 	VersionCreateChangefeed
 	VersionRangeMerges
