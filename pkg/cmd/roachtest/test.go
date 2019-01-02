@@ -218,7 +218,7 @@ func (r *registry) setBuildVersion(buildTag string) error {
 
 func (r *registry) loadBuildVersion() {
 	getLatestTag := func() (string, error) {
-		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags")
+		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return "", err
