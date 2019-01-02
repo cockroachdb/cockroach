@@ -1894,7 +1894,11 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if testing.Short() {
-		// As of Nov 2018, it takes 7s. #32722.
+		// As of Nov 2018, this test takes 7s. This is because AdminSplit
+		// contains an exponential backoff when performing its retries.
+		// We could plumb a retry policy through the testing knobs, but
+		// that doesn't seem worth it for such a specific test. Instead,
+		// skip this test for the short test suite.
 		t.Skip("short")
 	}
 
