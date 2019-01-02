@@ -54,13 +54,6 @@ type testFilter struct {
 }
 
 func newFilter(filter []string) *testFilter {
-	if len(filter) == 0 {
-		return &testFilter{
-			name: regexp.MustCompile(`.`),
-			tag:  regexp.MustCompile(`.`),
-		}
-	}
-
 	var name []string
 	var tag []string
 	var rawTag []string
