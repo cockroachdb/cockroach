@@ -95,11 +95,32 @@ const (
 
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
-var syncRaftLog = settings.RegisterBoolSetting(
+var disableSyncRaftLog = settings.RegisterBoolSetting(
+	"kv.raft_log.disable_synchronization_unsafe",
+	"set to true to disable synchronization on Raft log writes to persistent storage. "+
+		"Setting to true risks data loss or data corruption on server crashes. "+
+		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
+	false,
+)
+
+var deprecatedSyncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
 	"set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)",
 	true,
 )
+
+func init() {
+	// `kv.raft_log.synchronize` has been deprecated, so hide it. We can't
+	// delete it outright because we still need to honor it if it was set
+	// to its non-default value before it was hidden.
+	deprecatedSyncRaftLog.Hide()
+}
+
+// shouldSyncRaftLog determines whether the Raft log should synchronize writes,
+// based on the state of the provided cluster settings.
+func shouldSyncRaftLog(st *cluster.Settings) bool {
+	return !disableSyncRaftLog.Get(&st.SV) && deprecatedSyncRaftLog.Get(&st.SV)
+}
 
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
 // cluster setting.
@@ -4199,7 +4220,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
-	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV) && rd.MustSync); err != nil {
+	if err := batch.Commit(shouldSyncRaftLog(r.store.cfg.Settings) && rd.MustSync); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
