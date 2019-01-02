@@ -259,6 +259,13 @@ func (s spanSetWriter) Clear(key engine.MVCCKey) error {
 	return s.w.Clear(key)
 }
 
+func (s spanSetWriter) SingleClear(key engine.MVCCKey) error {
+	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		return err
+	}
+	return s.w.SingleClear(key)
+}
+
 func (s spanSetWriter) ClearRange(start, end engine.MVCCKey) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return err
