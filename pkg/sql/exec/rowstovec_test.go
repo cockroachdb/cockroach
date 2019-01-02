@@ -86,15 +86,17 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("bar")}},
 	}
 	vec := newMemColumn(types.Bytes, 2)
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
-	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
-		t.Fatal(err)
-	}
-	expected := newMemColumn(types.Bytes, 2)
-	expected.Bytes()[0] = []byte("foo")
-	expected.Bytes()[1] = []byte("bar")
-	if !reflect.DeepEqual(vec, expected) {
-		t.Errorf("expected vector %+v, got %+v", expected, vec)
+	for _, width := range []int32{0, 25} {
+		ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, Width: width}
+		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
+			t.Fatal(err)
+		}
+		expected := newMemColumn(types.Bytes, 2)
+		expected.Bytes()[0] = []byte("foo")
+		expected.Bytes()[1] = []byte("bar")
+		if !reflect.DeepEqual(vec, expected) {
+			t.Errorf("expected vector %+v, got %+v", expected, vec)
+		}
 	}
 }
 
