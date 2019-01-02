@@ -207,6 +207,14 @@ type Writer interface {
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
 	Clear(key MVCCKey) error
+	// SingleClear removes the most recent write to the item from the db with
+	// the given key. Whether older version of the item will come back to life
+	// if not also removed with SingleClear is undefined. See the following:
+	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
+	// for details on the SingleDelete operation that this method invokes. Note
+	// that clear actually removes entries from the storage engine, rather than
+	// inserting tombstones.
+	SingleClear(key MVCCKey) error
 	// ClearRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear, this method actually removes entries from
 	// the storage engine.

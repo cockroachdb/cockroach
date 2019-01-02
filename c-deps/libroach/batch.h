@@ -32,6 +32,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus SingleDelete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch(bool sync);
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
@@ -63,6 +64,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus SingleDelete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch(bool sync);
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);

@@ -35,7 +35,7 @@ const (
 	// BatchTypeColumnFamilyDeletion                 = 0x4
 	// BatchTypeColumnFamilyValue                    = 0x5
 	// BatchTypeColumnFamilyMerge                    = 0x6
-	// BatchTypeSingleDeletion                       = 0x7
+	BatchTypeSingleDeletion = 0x7
 	// BatchTypeColumnFamilySingleDeletion           = 0x8
 	// BatchTypeBeginPrepareXID                      = 0x9
 	// BatchTypeEndPrepareXID                        = 0xA
@@ -75,10 +75,10 @@ const (
 //      data: uint8[len]
 //
 // The RocksDBBatchBuilder code currently only supports kTypeValue
-// (BatchTypeValue), kTypeDeletion (BatchTypeDeletion)and kTypeMerge
-// (BatchTypeMerge) operations. Before a batch is written to the RocksDB
-// write-ahead-log, the sequence number is 0. The "fixed32" format is little
-// endian.
+// (BatchTypeValue), kTypeDeletion (BatchTypeDeletion), kTypeMerge
+// (BatchTypeMerge), and kTypeSingleDeletion (BatchTypeSingleDeletion)
+// operations. Before a batch is written to the RocksDB write-ahead-log,
+// the sequence number is 0. The "fixed32" format is little endian.
 //
 // The keys encoded into the batch are MVCC keys: a string key with a timestamp
 // suffix. MVCC keys are encoded as:
@@ -262,6 +262,15 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	b.repr[pos] = byte(BatchTypeDeletion)
 }
 
+// SingleClear removes the most recent item from the db with the given key.
+func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
+	b.maybeInit()
+	b.count++
+	pos := len(b.repr)
+	b.encodeKey(key, 0)
+	b.repr[pos] = byte(BatchTypeSingleDeletion)
+}
+
 // LogData adds a blob of log data to the batch. It will be written to the WAL,
 // but otherwise uninterpreted by RocksDB.
 func (b *RocksDBBatchBuilder) LogData(data []byte) {
@@ -385,6 +394,8 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 // 	   fmt.Printf("put(%x,%x)", r.Key(), r.Value())
 // 	 case BatchTypeMerge:
 // 	   fmt.Printf("merge(%x,%x)", r.Key(), r.Value())
+//   case BatchTypeSingleDeletion:
+// 	   fmt.Printf("single_delete(%x)", r.Key())
 // 	 }
 // }
 // if err := r.Error(); err != nil {
@@ -400,7 +411,7 @@ type RocksDBBatchReader struct {
 	count int
 
 	// The following all represent the current entry and are updated by Next.
-	// `value` is not applicable for BatchTypeDeletion.
+	// `value` is not applicable for BatchTypeDeletion or BatchTypeSingleDeletion.
 	offset int
 	typ    BatchType
 	key    []byte
@@ -447,7 +458,7 @@ func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
 // Value returns the value of the current batch entry. Value panics if the
 // BatchType is BatchTypeDeleted.
 func (r *RocksDBBatchReader) Value() []byte {
-	if r.typ == BatchTypeDeletion {
+	if r.typ == BatchTypeDeletion || r.typ == BatchTypeSingleDeletion {
 		panic("cannot call Value on a deletion entry")
 	}
 	return r.value
@@ -471,18 +482,11 @@ func (r *RocksDBBatchReader) Next() bool {
 	r.typ = BatchType(r.repr[0])
 	r.repr = r.repr[1:]
 	switch r.typ {
-	case BatchTypeDeletion:
+	case BatchTypeDeletion, BatchTypeSingleDeletion:
 		if r.key, r.err = r.varstring(); r.err != nil {
 			return false
 		}
-	case BatchTypeValue:
-		if r.key, r.err = r.varstring(); r.err != nil {
-			return false
-		}
-		if r.value, r.err = r.varstring(); r.err != nil {
-			return false
-		}
-	case BatchTypeMerge:
+	case BatchTypeValue, BatchTypeMerge:
 		if r.key, r.err = r.varstring(); r.err != nil {
 			return false
 		}

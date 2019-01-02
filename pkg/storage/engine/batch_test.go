@@ -80,12 +80,20 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
+	// Write an engine value to be single deleted.
+	if err := e.Put(mvccKey("d"), []byte("before")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SingleClear(mvccKey("d")); err != nil {
+		t.Fatal(err)
+	}
 
 	// Check all keys are in initial state (nothing from batch has gone
 	// through to engine until commit).
 	expValues := []MVCCKeyValue{
 		{Key: mvccKey("b"), Value: []byte("value")},
 		{Key: mvccKey("c"), Value: appender("foo")},
+		{Key: mvccKey("d"), Value: []byte("before")},
 	}
 	kvs, err := Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 	if err != nil {
@@ -201,6 +209,7 @@ func TestReadOnlyBasics(t *testing.T) {
 	failureTestCases := []func(){
 		func() { _ = b.ApplyBatchRepr(nil, false) },
 		func() { _ = b.Clear(a) },
+		func() { _ = b.SingleClear(a) },
 		func() { _ = b.ClearRange(a, a) },
 		func() { _ = b.Merge(a, nil) },
 		func() { _ = b.Put(a, nil) },
@@ -222,6 +231,12 @@ func TestReadOnlyBasics(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := e.Merge(mvccKey("c"), appender("bar")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Put(mvccKey("d"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SingleClear(mvccKey("d")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,7 +264,7 @@ func TestBatchRepr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		const expectedCount = 3
+		const expectedCount = 4
 		if count := r.Count(); count != expectedCount {
 			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
 		}
@@ -272,6 +287,8 @@ func TestBatchRepr(t *testing.T) {
 			case BatchTypeMerge:
 				// The merge value is a protobuf and not easily displayable.
 				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.Key())))
+			case BatchTypeSingleDeletion:
+				ops = append(ops, fmt.Sprintf("single_delete(%s)", string(r.Key())))
 			}
 		}
 		if err != nil {
@@ -283,7 +300,7 @@ func TestBatchRepr(t *testing.T) {
 
 		// The keys in the batch have the internal MVCC encoding applied which for
 		// this test implies an appended 0 byte.
-		expOps := []string{"put(a\x00,value)", "delete(b\x00)", "merge(c\x00)"}
+		expOps := []string{"put(a\x00,value)", "delete(b\x00)", "merge(c\x00)", "single_delete(d\x00)"}
 		if !reflect.DeepEqual(expOps, ops) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
 		}
@@ -390,11 +407,21 @@ func TestBatchGet(t *testing.T) {
 	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
+	if err := b.Put(mvccKey("d"), []byte("before")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SingleClear(mvccKey("d")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Put(mvccKey("d"), []byte("after")); err != nil {
+		t.Fatal(err)
+	}
 
 	expValues := []MVCCKeyValue{
 		{Key: mvccKey("a"), Value: []byte("value")},
 		{Key: mvccKey("b"), Value: nil},
 		{Key: mvccKey("c"), Value: appender("foobar")},
+		{Key: mvccKey("d"), Value: []byte("after")},
 	}
 	for i, expKV := range expValues {
 		kv, err := b.Get(expKV.Key)
@@ -751,12 +778,16 @@ func TestBatchBuilder(t *testing.T) {
 		if err := dbClear(batch.batch, key); err != nil {
 			t.Fatal(err)
 		}
+		if err := dbSingleClear(batch.batch, key); err != nil {
+			t.Fatal(err)
+		}
 		if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
 			t.Fatal(err)
 		}
 
 		builder.Put(key, []byte("value"))
 		builder.Clear(key)
+		builder.SingleClear(key)
 		builder.Merge(key, appender("bar"))
 	}
 
@@ -805,7 +836,7 @@ func TestBatchBuilderStress(t *testing.T) {
 					Key:       []byte(fmt.Sprintf("%d", rng.Intn(10000))),
 					Timestamp: ts,
 				}
-				// Generate a random mixture of puts, deletes and merges.
+				// Generate a random mixture of puts, deletes, single deletes, and merges.
 				switch rng.Intn(3) {
 				case 0:
 					if err := dbPut(batch.batch, key, []byte("value")); err != nil {
@@ -818,6 +849,11 @@ func TestBatchBuilderStress(t *testing.T) {
 					}
 					builder.Clear(key)
 				case 2:
+					if err := dbSingleClear(batch.batch, key); err != nil {
+						t.Fatal(err)
+					}
+					builder.SingleClear(key)
+				case 3:
 					if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
 						t.Fatal(err)
 					}
@@ -971,6 +1007,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 		func() { _ = batch.Put(a, nil) },
 		func() { _ = batch.Merge(a, nil) },
 		func() { _ = batch.Clear(a) },
+		func() { _ = batch.SingleClear(a) },
 		func() { _ = batch.ApplyBatchRepr(nil, false) },
 		func() { _, _ = batch.Get(a) },
 		func() { _, _, _, _ = batch.GetProto(a, nil) },

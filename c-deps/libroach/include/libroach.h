@@ -134,8 +134,8 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
 // Disable/enable automatic compactions. Automatic compactions are
 // enabled by default. Disabling is provided for testing purposes so
 // that automatic compactions do not interfere with test expectations.
-DBStatus DBDisableAutoCompaction(DBEngine *db);
-DBStatus DBEnableAutoCompaction(DBEngine *db);
+DBStatus DBDisableAutoCompaction(DBEngine* db);
+DBStatus DBEnableAutoCompaction(DBEngine* db);
 
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
@@ -152,6 +152,11 @@ DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 
 // Deletes the database entry for "key".
 DBStatus DBDelete(DBEngine* db, DBKey key);
+
+// Deletes the most recent database entry for "key". See the following
+// documentation for details on the subtleties of this operation:
+// https://github.com/facebook/rocksdb/wiki/Single-Delete.
+DBStatus DBSingleDelete(DBEngine* db, DBKey key);
 
 // Deletes a range of keys from start (inclusive) to end (exclusive).
 DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
@@ -326,7 +331,8 @@ typedef struct {
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
                       bool inconsistent, bool tombstones);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
-                       int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse, bool tombstones);
+                       int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
+                       bool tombstones);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {

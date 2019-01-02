@@ -411,12 +411,12 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   return kSuccess;
 }
 
-DBStatus DBDisableAutoCompaction(DBEngine *db) {
+DBStatus DBDisableAutoCompaction(DBEngine* db) {
   auto status = db->rep->SetOptions({{"disable_auto_compactions", "true"}});
   return ToDBStatus(status);
 }
 
-DBStatus DBEnableAutoCompaction(DBEngine *db) {
+DBStatus DBEnableAutoCompaction(DBEngine* db) {
   auto status = db->rep->EnableAutoCompaction({db->rep->DefaultColumnFamily()});
   return ToDBStatus(status);
 }
@@ -438,6 +438,8 @@ DBStatus DBMerge(DBEngine* db, DBKey key, DBSlice value) { return db->Merge(key,
 DBStatus DBGet(DBEngine* db, DBKey key, DBString* value) { return db->Get(key, value); }
 
 DBStatus DBDelete(DBEngine* db, DBKey key) { return db->Delete(key); }
+
+DBStatus DBSingleDelete(DBEngine* db, DBKey key) { return db->SingleDelete(key); }
 
 DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end) { return db->DeleteRange(start, end); }
 
