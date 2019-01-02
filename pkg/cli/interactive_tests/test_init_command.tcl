@@ -9,7 +9,8 @@ source [file join [file dirnam $argv0] common.tcl]
 system "$argv start --insecure --pid-file=server_pid -s=path=logs/db --listen-addr=localhost --background --join=localhost:26258 >>logs/expect-cmd.log 2>&1"
 
 start_test "Check that the server has informed us and the log file that it was ready before forking off in the background"
-system "grep -q 'initial startup completed, will now wait' logs/db/logs/cockroach.log"
+system "grep -q 'initial startup completed' logs/db/logs/cockroach.log"
+system "grep -q 'will now attempt to join a running cluster, or wait' logs/db/logs/cockroach.log"
 end_test
 
 start_test "Check that the SQL shell successfully times out upon connecting to an uninitialized node"
