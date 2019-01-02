@@ -367,11 +367,8 @@ func (ex *connExecutor) execBind(
 	}
 
 	// Create the new PreparedPortal.
-	if err := ex.addPortal(
-		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes,
-	); err != nil {
-		return retErr(err)
-	}
+	ex.addPortal(
+		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes)
 
 	if log.V(2) {
 		log.Infof(ctx, "portal: %q for %q, args %q, formats %q",
@@ -392,18 +389,12 @@ func (ex *connExecutor) addPortal(
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
-) error {
+) {
 	if _, ok := ex.prepStmtsNamespace.portals[portalName]; ok {
 		panic(fmt.Sprintf("portal already exists: %q", portalName))
 	}
-
-	portal, err := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
-	if err != nil {
-		return err
-	}
-
+	portal := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
 	ex.prepStmtsNamespace.portals[portalName] = portal
-	return nil
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {

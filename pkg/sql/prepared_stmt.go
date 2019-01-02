@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -108,36 +107,25 @@ type PreparedPortal struct {
 
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
-
-	memAcc mon.BoundAccount
 }
 
 // newPreparedPortal creates a new PreparedPortal.
-//
-// When no longer in use, the PreparedPortal needs to be close()d.
 func (ex *connExecutor) newPreparedPortal(
 	ctx context.Context,
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
-) (*PreparedPortal, error) {
-	portal := &PreparedPortal{
+) *PreparedPortal {
+	// The portal keeps a reference to the PreparedStatement, so register it.
+	stmt.incRef(ctx)
+	return &PreparedPortal{
 		Stmt:       stmt,
 		Qargs:      qargs,
 		OutFormats: outFormats,
-		memAcc:     ex.sessionMon.MakeBoundAccount(),
 	}
-	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := portal.memAcc.Grow(ctx, sz); err != nil {
-		return nil, err
-	}
-	// The portal keeps a reference to the PreparedStatement, so register it.
-	stmt.incRef(ctx)
-	return portal, nil
 }
 
 func (p *PreparedPortal) close(ctx context.Context) {
-	p.memAcc.Close(ctx)
 	p.Stmt.decRef(ctx)
 }
