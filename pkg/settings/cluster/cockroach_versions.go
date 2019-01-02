@@ -49,7 +49,7 @@ const (
 	VersionLeaseSequence            // unused
 	VersionUnreplicatedTombstoneKey // unused
 	VersionRecomputeStats
-	VersionNoRaftProposalKeys
+	VersionNoRaftProposalKeys // unused
 	VersionTxnSpanRefresh
 	VersionReadUncommittedRangeLookups // unused
 	VersionPerReplicaZoneConstraints
