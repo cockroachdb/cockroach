@@ -55,10 +55,6 @@ func TestShowTraceReplica(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	// Make sure all stores are present in the NodeStatus endpoint or else zone
-	// config changes may flake (#25488).
-	tc.WaitForNodeStatuses(t)
-
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `ALTER RANGE "default" CONFIGURE ZONE USING constraints = '[+n4]'`)
 	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING constraints = '[+n4]'`)
