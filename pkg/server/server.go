@@ -1396,10 +1396,11 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
+		// TODO(knz): This may need tweaking when #24118 is addressed.
 		if s.cfg.ReadyFn != nil {
-			s.cfg.ReadyFn(true /*waitForInit*/)
+			s.cfg.ReadyFn(true /* waitForInit */)
 		}
-		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
+		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join from an already initialized node.")
 
 		// Note that when we created the init server, we acquired its semaphore
 		// (to stop anyone from rushing in).
